@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     fmt,
     io::{self, Write},
     process::ExitCode,
@@ -304,14 +305,23 @@ fn print_filtered_json(
     graph: &StorageGraph,
     predicate: fn(&Node) -> bool,
 ) -> Result<(), AppError> {
+    let nodes: Vec<Node> = graph
+        .nodes
+        .iter()
+        .filter(|node| predicate(node))
+        .cloned()
+        .collect();
+    let node_ids: BTreeSet<String> = nodes.iter().map(|node| node.id.0.clone()).collect();
     let filtered = StorageGraph {
-        nodes: graph
-            .nodes
+        nodes,
+        edges: graph
+            .edges
             .iter()
-            .filter(|node| predicate(node))
+            .filter(|edge| {
+                node_ids.contains(edge.from.0.as_str()) && node_ids.contains(edge.to.0.as_str())
+            })
             .cloned()
             .collect(),
-        edges: Vec::new(),
     };
 
     writeln!(

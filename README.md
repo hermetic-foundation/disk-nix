@@ -66,7 +66,9 @@ disk-nix apply --spec ./examples/lifecycle-update.json --json
 ```
 
 The canonical interface is intended to be stable JSON. Human tables and tree
-views are presentation layers over the same model.
+views are presentation layers over the same model. Focused JSON commands such
+as `devices --json` and `filesystems --json` return subgraphs and preserve
+relationships between nodes included in the result.
 
 ## NixOS module
 
