@@ -14,7 +14,7 @@ license = "AGPL-3.0-or-later"
 repository = "https://github.com/midischwarz12/disk-nix"
 homepage = "https://github.com/midischwarz12/disk-nix"
 description = "NixOS-native storage topology and lifecycle manager"
-rust-version = "1.78"
+rust-version = "1.85"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -13,6 +13,7 @@ name = "disk-nix"
 path = "src/main.rs"
 
 [dependencies]
+clap = { version = "4.5.61", features = ["derive"] }
 disk-nix-model = { path = "../disk-nix-model" }
 disk-nix-plan = { path = "../disk-nix-plan" }
 disk-nix-probe = { path = "../disk-nix-probe" }

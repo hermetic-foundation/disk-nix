@@ -1,6 +1,9 @@
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StorageGraph {
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
@@ -23,34 +26,22 @@ impl StorageGraph {
         self.edges.push(edge);
     }
 
-    #[must_use]
-    pub fn to_json(&self) -> String {
-        let mut out = String::from("{\"nodes\":[");
-        for (index, node) in self.nodes.iter().enumerate() {
-            if index > 0 {
-                out.push(',');
-            }
-            out.push_str(&node.to_json());
-        }
-        out.push_str("],\"edges\":[");
-        for (index, edge) in self.edges.iter().enumerate() {
-            if index > 0 {
-                out.push(',');
-            }
-            out.push_str(&edge.to_json());
-        }
-        out.push_str("]}");
-        out
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Node {
     pub id: NodeId,
     pub kind: NodeKind,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
     pub identity: Identity,
     pub properties: Vec<Property>,
@@ -91,37 +82,13 @@ impl Node {
         });
         self
     }
-
-    fn to_json(&self) -> String {
-        let mut fields = vec![
-            format!("\"id\":\"{}\"", escape_json(&self.id.0)),
-            format!("\"kind\":\"{}\"", self.kind),
-            format!("\"name\":\"{}\"", escape_json(&self.name)),
-        ];
-
-        if let Some(path) = &self.path {
-            fields.push(format!("\"path\":\"{}\"", escape_json(path)));
-        }
-        if let Some(size_bytes) = self.size_bytes {
-            fields.push(format!("\"sizeBytes\":{size_bytes}"));
-        }
-        if let Some(usage) = &self.usage {
-            fields.push(format!("\"usage\":{}", usage.to_json()));
-        }
-        fields.push(format!("\"identity\":{}", self.identity.to_json()));
-        fields.push(format!(
-            "\"properties\":{}",
-            properties_to_json(&self.properties)
-        ));
-
-        format!("{{{}}}", fields.join(","))
-    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct NodeId(pub String);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum NodeKind {
     PhysicalDisk,
     Partition,
@@ -197,7 +164,8 @@ impl fmt::Display for NodeKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Edge {
     pub from: NodeId,
     pub to: NodeId,
@@ -213,18 +181,10 @@ impl Edge {
             relationship,
         }
     }
-
-    fn to_json(&self) -> String {
-        format!(
-            "{{\"from\":\"{}\",\"to\":\"{}\",\"relationship\":\"{}\"}}",
-            escape_json(&self.from.0),
-            escape_json(&self.to.0),
-            self.relationship
-        )
-    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Relationship {
     Contains,
     Backs,
@@ -256,94 +216,37 @@ impl fmt::Display for Relationship {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Identity {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub uuid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub partuuid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub serial: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub wwn: Option<String>,
 }
 
-impl Identity {
-    fn to_json(&self) -> String {
-        let mut fields = Vec::new();
-        if let Some(uuid) = &self.uuid {
-            fields.push(format!("\"uuid\":\"{}\"", escape_json(uuid)));
-        }
-        if let Some(partuuid) = &self.partuuid {
-            fields.push(format!("\"partuuid\":\"{}\"", escape_json(partuuid)));
-        }
-        if let Some(label) = &self.label {
-            fields.push(format!("\"label\":\"{}\"", escape_json(label)));
-        }
-        if let Some(serial) = &self.serial {
-            fields.push(format!("\"serial\":\"{}\"", escape_json(serial)));
-        }
-        if let Some(wwn) = &self.wwn {
-            fields.push(format!("\"wwn\":\"{}\"", escape_json(wwn)));
-        }
-        format!("{{{}}}", fields.join(","))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Usage {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub used_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub free_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub allocated_bytes: Option<u64>,
 }
 
-impl Usage {
-    fn to_json(&self) -> String {
-        let mut fields = Vec::new();
-        if let Some(used_bytes) = self.used_bytes {
-            fields.push(format!("\"usedBytes\":{used_bytes}"));
-        }
-        if let Some(free_bytes) = self.free_bytes {
-            fields.push(format!("\"freeBytes\":{free_bytes}"));
-        }
-        if let Some(allocated_bytes) = self.allocated_bytes {
-            fields.push(format!("\"allocatedBytes\":{allocated_bytes}"));
-        }
-        format!("{{{}}}", fields.join(","))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Property {
     pub key: String,
     pub value: String,
-}
-
-fn properties_to_json(properties: &[Property]) -> String {
-    let mut out = String::from("[");
-    for (index, property) in properties.iter().enumerate() {
-        if index > 0 {
-            out.push(',');
-        }
-        out.push_str(&format!(
-            "{{\"key\":\"{}\",\"value\":\"{}\"}}",
-            escape_json(&property.key),
-            escape_json(&property.value)
-        ));
-    }
-    out.push(']');
-    out
-}
-
-fn escape_json(value: &str) -> String {
-    value
-        .chars()
-        .flat_map(|character| match character {
-            '"' => "\\\"".chars().collect::<Vec<_>>(),
-            '\\' => "\\\\".chars().collect::<Vec<_>>(),
-            '\n' => "\\n".chars().collect::<Vec<_>>(),
-            '\r' => "\\r".chars().collect::<Vec<_>>(),
-            '\t' => "\\t".chars().collect::<Vec<_>>(),
-            other => vec![other],
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -353,7 +256,7 @@ mod tests {
     #[test]
     fn renders_empty_graph_json() {
         assert_eq!(
-            StorageGraph::empty().to_json(),
+            StorageGraph::empty().to_json().expect("json should render"),
             "{\"nodes\":[],\"edges\":[]}"
         );
     }
@@ -367,7 +270,9 @@ mod tests {
                 .with_size_bytes(1024),
         );
 
-        assert!(graph.to_json().contains("\"name\":\"disk \\\"0\\\"\""));
-        assert!(graph.to_json().contains("\"sizeBytes\":1024"));
+        let json = graph.to_json().expect("json should render");
+
+        assert!(json.contains("\"name\":\"disk \\\"0\\\"\""));
+        assert!(json.contains("\"sizeBytes\":1024"));
     }
 }

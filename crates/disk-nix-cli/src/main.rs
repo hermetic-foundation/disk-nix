@@ -1,10 +1,11 @@
-use std::{env, process::ExitCode};
+use std::process::ExitCode;
 
+use clap::{Parser, Subcommand};
 use disk_nix_plan::default_capabilities;
 use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeStatus};
 
 fn main() -> ExitCode {
-    match run(env::args().skip(1).collect()) {
+    match run(Cli::parse()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error: {error}");
@@ -13,29 +14,49 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(args: Vec<String>) -> Result<(), String> {
-    match args.as_slice() {
-        [] => {
-            print_help();
-            Ok(())
-        }
-        [command] if command == "help" || command == "--help" || command == "-h" => {
-            print_help();
-            Ok(())
-        }
-        [command] if command == "topology" => {
+#[derive(Debug, Parser)]
+#[command(version, about = "NixOS-native storage topology and lifecycle manager")]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Inspect storage topology.
+    Topology {
+        /// Emit the canonical JSON graph.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show modeled storage operation capabilities and risk classes.
+    Capabilities,
+    /// Plan desired storage changes from a JSON spec.
+    Plan {
+        /// Desired storage specification path.
+        #[arg(long)]
+        spec: String,
+    },
+}
+
+fn run(cli: Cli) -> Result<(), String> {
+    match cli.command {
+        Command::Topology { json: false } => {
             let probe = LinuxProbe::new();
-            let result = probe.collect();
+            let result = probe.collect().map_err(|error| error.to_string())?;
             print_topology_summary(&result);
             Ok(())
         }
-        [command, flag] if command == "topology" && flag == "--json" => {
+        Command::Topology { json: true } => {
             let probe = LinuxProbe::new();
-            let result = probe.collect();
-            println!("{}", result.graph.to_json());
+            let result = probe.collect().map_err(|error| error.to_string())?;
+            println!(
+                "{}",
+                result.graph.to_json().map_err(|error| error.to_string())?
+            );
             Ok(())
         }
-        [command] if command == "capabilities" => {
+        Command::Capabilities => {
             for capability in default_capabilities() {
                 println!(
                     "{:?} {:?} {:?}",
@@ -44,24 +65,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
             }
             Ok(())
         }
-        [command, flag, spec] if command == "plan" && flag == "--spec" => {
+        Command::Plan { spec } => {
             println!("planning is scaffolded; received desired spec at {spec}");
             println!("all future mutation plans will be safety-classified before execution");
             Ok(())
         }
-        [unknown, ..] => Err(format!("unknown command '{unknown}'. Try 'disk-nix help'.")),
     }
-}
-
-fn print_help() {
-    println!(
-        "disk-nix\n\n\
-         Usage:\n\
-           disk-nix topology [--json]\n\
-           disk-nix capabilities\n\
-           disk-nix plan --spec <path>\n\n\
-         Current commands are read-only scaffolding for the storage graph and planner."
-    );
 }
 
 fn print_topology_summary(result: &disk_nix_probe::ProbeResult) {

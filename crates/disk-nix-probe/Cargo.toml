@@ -10,6 +10,7 @@ rust-version.workspace = true
 
 [dependencies]
 disk-nix-model = { path = "../disk-nix-model" }
+thiserror = "2.0.18"
 
 [lints]
 workspace = true

@@ -1,6 +1,7 @@
 use std::process::Command;
 
 use disk_nix_model::{Node, NodeKind, StorageGraph};
+use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProbeStatus {
@@ -19,7 +20,13 @@ pub struct ProbeReport {
 
 pub trait ProbeAdapter {
     fn name(&self) -> &'static str;
-    fn collect(&self) -> ProbeResult;
+    fn collect(&self) -> Result<ProbeResult, ProbeError>;
+}
+
+#[derive(Debug, Error)]
+pub enum ProbeError {
+    #[error("probe adapter failed: {0}")]
+    Adapter(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,14 +60,14 @@ impl ProbeAdapter for LinuxProbe {
         "linux"
     }
 
-    fn collect(&self) -> ProbeResult {
+    fn collect(&self) -> Result<ProbeResult, ProbeError> {
         let mut result = ProbeResult::empty();
 
         collect_lsblk(&mut result);
         collect_findmnt(&mut result);
         collect_optional_tools(&mut result);
 
-        result
+        Ok(result)
     }
 }
 
