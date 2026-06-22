@@ -756,27 +756,30 @@ fn collect_zfs(result: &mut ProbeResult) {
             "name,type,used,available,referenced,mountpoint,origin",
         ],
     );
+    let zpool_status = run_report("zpool", &["status", "-P"]);
 
-    match (zpool_list, zfs_list) {
-        (Ok(zpool_list), Ok(zfs_list)) => match zfs::normalize_zfs(&zpool_list, &zfs_list) {
-            Ok(graph) => {
-                let node_count = graph.nodes.len();
-                merge_graph(&mut result.graph, graph);
-                result.reports.push(ProbeReport {
+    match (zpool_list, zfs_list, zpool_status) {
+        (Ok(zpool_list), Ok(zfs_list), Ok(zpool_status)) => {
+            match zfs::normalize_zfs(&zpool_list, &zfs_list, &zpool_status) {
+                Ok(graph) => {
+                    let node_count = graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                    result.reports.push(ProbeReport {
+                        adapter: "zfs".to_string(),
+                        status: ProbeStatus::Available,
+                        message: Some(format!(
+                            "normalized {node_count} graph nodes from ZFS output"
+                        )),
+                    });
+                }
+                Err(error) => result.reports.push(ProbeReport {
                     adapter: "zfs".to_string(),
-                    status: ProbeStatus::Available,
-                    message: Some(format!(
-                        "normalized {node_count} graph nodes from ZFS output"
-                    )),
-                });
+                    status: ProbeStatus::Failed,
+                    message: Some(error.to_string()),
+                }),
             }
-            Err(error) => result.reports.push(ProbeReport {
-                adapter: "zfs".to_string(),
-                status: ProbeStatus::Failed,
-                message: Some(error.to_string()),
-            }),
-        },
-        (Err(message), _) | (_, Err(message)) => {
+        }
+        (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
             result.reports.push(ProbeReport {
                 adapter: "zfs".to_string(),
                 status: if message.contains("not found") {

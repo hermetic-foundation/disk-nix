@@ -58,8 +58,9 @@ The current probe layer normalizes:
 - VDO `vdo status` output for VDO device path, backing storage device,
   logical/physical size, compression, deduplication, write policy, index, and
   cache settings
-- ZFS `zpool list -H -p` and `zfs list -H -p` output for pool capacity, health,
-  datasets, snapshots, zvols, mountpoints, and clone origins
+- ZFS `zpool list -H -p`, `zpool status -P`, and `zfs list -H -p` output for
+  pool capacity, health, vdev topology, data/log/cache/special/dedup roles,
+  backing devices, datasets, snapshots, zvols, mountpoints, and clone origins
 - Btrfs mounted filesystems through `btrfs filesystem show`, `btrfs filesystem usage -b`, and `btrfs subvolume list -u` for filesystem identity, member
   devices, usage, subvolumes, and snapshot-like subvolume relationships
 - bcache sysfs metadata through `/sys/block/*/bcache` for backing devices,
