@@ -16,6 +16,8 @@ struct LvmReport {
     vg: Vec<VolumeGroup>,
     #[serde(default)]
     lv: Vec<LogicalVolume>,
+    #[serde(default)]
+    seg: Vec<LogicalVolumeSegment>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,7 +55,23 @@ struct LogicalVolume {
     metadata_percent: Option<String>,
 }
 
-pub fn normalize_lvm_json(pvs: &[u8], vgs: &[u8], lvs: &[u8]) -> Result<StorageGraph, ProbeError> {
+#[derive(Debug, Deserialize)]
+struct LogicalVolumeSegment {
+    lv_name: String,
+    vg_name: String,
+    segtype: Option<String>,
+    seg_start: Option<String>,
+    seg_size: Option<String>,
+    devices: Option<String>,
+    seg_pe_ranges: Option<String>,
+}
+
+pub fn normalize_lvm_json(
+    pvs: &[u8],
+    vgs: &[u8],
+    lvs: &[u8],
+    segments: Option<&[u8]>,
+) -> Result<StorageGraph, ProbeError> {
     let mut graph = StorageGraph::empty();
 
     for pv in parse_pvs(pvs)? {
@@ -64,6 +82,11 @@ pub fn normalize_lvm_json(pvs: &[u8], vgs: &[u8], lvs: &[u8]) -> Result<StorageG
     }
     for lv in parse_lvs(lvs)? {
         add_logical_volume(&mut graph, lv);
+    }
+    if let Some(segments) = segments {
+        for (index, segment) in parse_segments(segments)?.into_iter().enumerate() {
+            add_logical_volume_segment(&mut graph, segment, index);
+        }
     }
 
     Ok(graph)
@@ -100,6 +123,15 @@ fn parse_lvs(bytes: &[u8]) -> Result<Vec<LogicalVolume>, ProbeError> {
         .report
         .into_iter()
         .flat_map(|report| report.lv)
+        .collect())
+}
+
+fn parse_segments(bytes: &[u8]) -> Result<Vec<LogicalVolumeSegment>, ProbeError> {
+    let document = parse_document(bytes, "lv segment")?;
+    Ok(document
+        .report
+        .into_iter()
+        .flat_map(|report| report.seg)
         .collect())
 }
 
@@ -231,6 +263,49 @@ fn add_logical_volume(graph: &mut StorageGraph, lv: LogicalVolume) {
     graph.add_node(node);
 }
 
+fn add_logical_volume_segment(
+    graph: &mut StorageGraph,
+    segment: LogicalVolumeSegment,
+    index: usize,
+) {
+    let lv_id = lv_id(&segment.vg_name, &segment.lv_name);
+    let id = format!("lvm-seg:{}/{}:{index}", segment.vg_name, segment.lv_name);
+    let mut node = Node::new(
+        id.clone(),
+        NodeKind::LvmSegment,
+        format!("{}/{}:{index}", segment.vg_name, segment.lv_name),
+    );
+
+    if let Some(size_bytes) = parse_lvm_size(segment.seg_size.as_deref()) {
+        node = node.with_size_bytes(size_bytes);
+    }
+
+    for (key, value) in [
+        ("lvm.segment-type", segment.segtype.clone()),
+        ("lvm.segment-start", segment.seg_start.clone()),
+        ("lvm.segment-size", segment.seg_size.clone()),
+        ("lvm.devices", segment.devices.clone()),
+        ("lvm.segment-pe-ranges", segment.seg_pe_ranges.clone()),
+    ] {
+        if let Some(value) = value.filter(|value| !value.is_empty()) {
+            node = node.with_property(key, value);
+        }
+    }
+
+    graph.add_node(node);
+    graph.add_edge(Edge::new(lv_id.clone(), id.clone(), Relationship::Contains));
+
+    if let Some(devices) = segment.devices {
+        for device in split_lvm_devices(&devices) {
+            graph.add_edge(Edge::new(
+                id.clone(),
+                dependency_id(&segment.vg_name, &device),
+                Relationship::DependsOn,
+            ));
+        }
+    }
+}
+
 fn lv_kind(attributes: Option<&str>) -> NodeKind {
     let Some(attributes) = attributes else {
         return NodeKind::LvmLogicalVolume;
@@ -259,6 +334,31 @@ fn vg_id(name: &str) -> String {
 
 fn lv_id(vg_name: &str, lv_name: &str) -> String {
     format!("lvm-lv:{vg_name}/{lv_name}")
+}
+
+fn dependency_id(vg_name: &str, dependency: &str) -> String {
+    if dependency.starts_with("/dev/") {
+        format!("block:{dependency}")
+    } else {
+        lv_id(vg_name, dependency)
+    }
+}
+
+fn split_lvm_devices(devices: &str) -> Vec<String> {
+    devices
+        .split(',')
+        .filter_map(|device| {
+            let device = device.trim();
+            if device.is_empty() {
+                return None;
+            }
+            let name = device
+                .split_once('(')
+                .map_or(device, |(name, _)| name)
+                .trim();
+            (!name.is_empty()).then(|| name.to_string())
+        })
+        .collect()
 }
 
 fn parse_lvm_size(value: Option<&str>) -> Option<u64> {
@@ -352,9 +452,35 @@ mod tests {
       }]
     }"#;
 
+    const SEGMENTS: &[u8] = br#"{
+      "report": [{
+        "seg": [
+          {
+            "lv_name": "root",
+            "vg_name": "vg0",
+            "segtype": "linear",
+            "seg_start": "0",
+            "seg_size": "40.00g",
+            "devices": "/dev/mapper/cryptroot(0)",
+            "seg_pe_ranges": "/dev/mapper/cryptroot:0-10239"
+          },
+          {
+            "lv_name": "root-snap",
+            "vg_name": "vg0",
+            "segtype": "snapshot",
+            "seg_start": "0",
+            "seg_size": "10.00g",
+            "devices": "root(0)",
+            "seg_pe_ranges": "root:0-2559"
+          }
+        ]
+      }]
+    }"#;
+
     #[test]
     fn normalizes_lvm_reports_into_graph() {
-        let graph = normalize_lvm_json(PVS, VGS, LVS).expect("fixture should parse");
+        let graph =
+            normalize_lvm_json(PVS, VGS, LVS, Some(SEGMENTS)).expect("fixture should parse");
 
         assert!(
             graph
@@ -380,6 +506,22 @@ mod tests {
                 .iter()
                 .any(|edge| edge.relationship == Relationship::SnapshotOf)
         );
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::LvmSegment
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.segment-type" && property.value == "linear"
+                })
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0.starts_with("lvm-seg:vg0/root:")
+                && edge.to.0 == "block:/dev/mapper/cryptroot"
+                && edge.relationship == Relationship::DependsOn
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0.starts_with("lvm-seg:vg0/root-snap:")
+                && edge.to.0 == "lvm-lv:vg0/root"
+                && edge.relationship == Relationship::DependsOn
+        }));
     }
 
     #[test]
@@ -387,5 +529,13 @@ mod tests {
         assert_eq!(parse_lvm_size(Some("1.50g")), Some(1_610_612_736));
         assert_eq!(parse_lvm_size(Some("4.00m")), Some(4_194_304));
         assert_eq!(parse_lvm_size(Some("")), None);
+    }
+
+    #[test]
+    fn splits_lvm_device_references() {
+        assert_eq!(
+            split_lvm_devices("/dev/sda2(0), root_cdata(12)"),
+            vec!["/dev/sda2".to_string(), "root_cdata".to_string()]
+        );
     }
 }

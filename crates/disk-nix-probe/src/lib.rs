@@ -986,24 +986,48 @@ fn collect_lvm(result: &mut ProbeResult) {
             "lv_name,vg_name,lv_uuid,lv_path,lv_size,lv_attr,origin,pool_lv,data_percent,metadata_percent",
         ],
     );
+    let segments = run_report(
+        "lvs",
+        &[
+            "--segments",
+            "--reportformat",
+            "json",
+            "-o",
+            "lv_name,vg_name,segtype,seg_start,seg_size,devices,seg_pe_ranges",
+        ],
+    );
 
     match (pvs, vgs, lvs) {
-        (Ok(pvs), Ok(vgs), Ok(lvs)) => match lvm::normalize_lvm_json(&pvs, &vgs, &lvs) {
-            Ok(graph) => {
-                let node_count = graph.nodes.len();
-                merge_graph(&mut result.graph, graph);
-                result.reports.push(ProbeReport {
+        (Ok(pvs), Ok(vgs), Ok(lvs)) => {
+            let segment_error = segments.as_ref().err().cloned();
+            let segments = segments.as_deref().ok();
+            match lvm::normalize_lvm_json(&pvs, &vgs, &lvs, segments) {
+                Ok(graph) => {
+                    let node_count = graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                    let status = if segment_error.is_some() {
+                        ProbeStatus::Partial
+                    } else {
+                        ProbeStatus::Available
+                    };
+                    let suffix = segment_error
+                        .map(|message| format!("; segment query failed: {message}"))
+                        .unwrap_or_default();
+                    result.reports.push(ProbeReport {
+                        adapter: "lvm".to_string(),
+                        status,
+                        message: Some(format!(
+                            "normalized {node_count} graph nodes from LVM JSON{suffix}"
+                        )),
+                    });
+                }
+                Err(error) => result.reports.push(ProbeReport {
                     adapter: "lvm".to_string(),
-                    status: ProbeStatus::Available,
-                    message: Some(format!("normalized {node_count} graph nodes from LVM JSON")),
-                });
+                    status: ProbeStatus::Failed,
+                    message: Some(error.to_string()),
+                }),
             }
-            Err(error) => result.reports.push(ProbeReport {
-                adapter: "lvm".to_string(),
-                status: ProbeStatus::Failed,
-                message: Some(error.to_string()),
-            }),
-        },
+        }
         (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
             result.reports.push(ProbeReport {
                 adapter: "lvm".to_string(),
