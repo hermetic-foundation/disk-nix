@@ -18,6 +18,7 @@ mod nfs;
 mod nvme;
 mod parted;
 mod swaps;
+mod udev;
 mod vdo;
 mod zfs;
 
@@ -84,6 +85,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_lsblk(&mut result);
         collect_blkid(&mut result);
         collect_parted(&mut result);
+        collect_udev(&mut result);
         collect_findmnt(&mut result);
         collect_swaps(&mut result);
         collect_cryptsetup(&mut result);
@@ -195,6 +197,43 @@ fn collect_parted(result: &mut ProbeResult) {
         },
         Err(message) => result.reports.push(ProbeReport {
             adapter: "parted".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
+    }
+}
+
+fn collect_udev(result: &mut ProbeResult) {
+    match run_report("udevadm", &["info", "--export-db"]) {
+        Ok(output) => match udev::normalize_udev_export_db(&output) {
+            Ok(graph) if graph.nodes.is_empty() => result.reports.push(ProbeReport {
+                adapter: "udev".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("no block device metadata discovered".to_string()),
+            }),
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "udev".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from udev export database"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "udev".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "udev".to_string(),
             status: if message.contains("not found") || message.contains("No such file") {
                 ProbeStatus::Unavailable
             } else {

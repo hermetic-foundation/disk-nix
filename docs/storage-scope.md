@@ -42,6 +42,9 @@ The current probe layer normalizes:
   PARTUUID/PARTLABEL, signature usage, versions, and block sizes
 - `parted -lm` for partition table type, disk sector sizes, partition numbers,
   start/end offsets, partition sizes, names, types, and flags
+- `udevadm info --export-db` for block-device udev identity, by-id/by-path
+  symlinks, serials, WWNs, filesystem IDs, partition metadata, and
+  device-mapper properties
 - `findmnt --json --bytes` for mounted filesystems, pseudo filesystems, and
   NFS exports
 - `/proc/swaps` for active swap devices/files, active size, used/free bytes,
