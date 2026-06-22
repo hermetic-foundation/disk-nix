@@ -61,8 +61,9 @@ The current probe layer normalizes:
 - ZFS `zpool list -H -p`, `zpool status -P`, and `zfs list -H -p` output for
   pool capacity, health, vdev topology, data/log/cache/special/dedup roles,
   backing devices, datasets, snapshots, zvols, mountpoints, and clone origins
-- Btrfs mounted filesystems through `btrfs filesystem show`, `btrfs filesystem usage -b`, and `btrfs subvolume list -u` for filesystem identity, member
-  devices, usage, subvolumes, and snapshot-like subvolume relationships
+- Btrfs mounted filesystems through `btrfs filesystem show`, `btrfs filesystem usage -b`, `btrfs subvolume list -u`, and `btrfs qgroup show --raw -reF` for
+  filesystem identity, member devices, usage, subvolumes, snapshot-like
+  subvolume relationships, and qgroup referenced/exclusive usage and limits
 - bcache sysfs metadata through `/sys/block/*/bcache` for backing devices,
   cache devices, cache sets, mode, state, dirty data, replacement policy,
   writeback settings, and cache relationships

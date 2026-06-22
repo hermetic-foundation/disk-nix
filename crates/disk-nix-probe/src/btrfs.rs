@@ -8,6 +8,7 @@ pub struct BtrfsReport {
     pub show: Vec<u8>,
     pub usage: Vec<u8>,
     pub subvolumes: Vec<u8>,
+    pub qgroups: Vec<u8>,
 }
 
 pub fn normalize_btrfs_reports(reports: &[BtrfsReport]) -> Result<StorageGraph, ProbeError> {
@@ -51,10 +52,20 @@ struct Subvolume {
     path: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Qgroup {
+    id: String,
+    referenced: Option<u64>,
+    exclusive: Option<u64>,
+    max_referenced: Option<String>,
+    max_exclusive: Option<String>,
+}
+
 fn add_report(graph: &mut StorageGraph, report: &BtrfsReport) -> Result<(), ProbeError> {
     let show = parse_filesystem_show(&report.show)?;
     let usage = parse_filesystem_usage(&report.usage)?;
     let subvolumes = parse_subvolumes(&report.subvolumes)?;
+    let qgroups = parse_qgroups(&report.qgroups)?;
     let filesystem_id = show.uuid.as_ref().map_or_else(
         || format!("btrfs:{}", report.target),
         |uuid| format!("btrfs:{uuid}"),
@@ -112,6 +123,9 @@ fn add_report(graph: &mut StorageGraph, report: &BtrfsReport) -> Result<(), Prob
     for subvolume in subvolumes {
         add_subvolume(graph, &filesystem_id, subvolume);
     }
+    for qgroup in qgroups {
+        add_qgroup(graph, &filesystem_id, qgroup);
+    }
 
     Ok(())
 }
@@ -166,6 +180,37 @@ fn add_subvolume(graph: &mut StorageGraph, filesystem_id: &str, subvolume: Subvo
             format!("btrfs-subvolume-parent:{parent_uuid}"),
             Relationship::SnapshotOf,
         ));
+    }
+
+    graph.add_node(node);
+    graph.add_edge(Edge::new(
+        filesystem_id.to_string(),
+        id,
+        Relationship::Contains,
+    ));
+}
+
+fn add_qgroup(graph: &mut StorageGraph, filesystem_id: &str, qgroup: Qgroup) {
+    let id = format!("btrfs-qgroup:{filesystem_id}:{}", qgroup.id);
+    let mut node = Node::new(id.clone(), NodeKind::BtrfsQgroup, qgroup.id.clone())
+        .with_property("btrfs.qgroup-id", qgroup.id);
+
+    let usage = Usage {
+        used_bytes: qgroup.referenced,
+        free_bytes: None,
+        allocated_bytes: qgroup.exclusive,
+    };
+    if !usage.is_empty() {
+        node = node.with_usage(usage);
+    }
+
+    for (key, value) in [
+        ("btrfs.max-referenced", qgroup.max_referenced),
+        ("btrfs.max-exclusive", qgroup.max_exclusive),
+    ] {
+        if let Some(value) = value {
+            node = node.with_property(key, value);
+        }
     }
 
     graph.add_node(node);
@@ -277,6 +322,37 @@ fn parse_subvolume_line(line: &str) -> Option<Subvolume> {
     })
 }
 
+fn parse_qgroups(bytes: &[u8]) -> Result<Vec<Qgroup>, ProbeError> {
+    let text = std::str::from_utf8(bytes).map_err(|error| {
+        ProbeError::Adapter(format!("failed to read btrfs qgroup output: {error}"))
+    })?;
+    let mut qgroups = Vec::new();
+
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        if line.starts_with("qgroupid") || line.starts_with('-') {
+            continue;
+        }
+
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        let Some(id) = fields.first() else {
+            continue;
+        };
+        if !id.contains('/') {
+            continue;
+        }
+
+        qgroups.push(Qgroup {
+            id: (*id).to_string(),
+            referenced: fields.get(1).and_then(|value| parse_u64(value)),
+            exclusive: fields.get(2).and_then(|value| parse_u64(value)),
+            max_referenced: fields.get(3).and_then(|value| nonempty_limit(value)),
+            max_exclusive: fields.get(4).and_then(|value| nonempty_limit(value)),
+        });
+    }
+
+    Ok(qgroups)
+}
+
 fn extract_quoted(line: &str, prefix: &str) -> Option<String> {
     let rest = line.strip_prefix(prefix)?.trim();
     let start = rest.find('\'')? + 1;
@@ -308,6 +384,11 @@ fn parse_u64(value: &str) -> Option<u64> {
     value.trim().parse().ok()
 }
 
+fn nonempty_limit(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty() && value != "none" && value != "-").then(|| value.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use disk_nix_model::{NodeKind, Relationship};
@@ -327,6 +408,10 @@ mod tests {
 
     const SUBVOLUMES: &[u8] = b"ID 256 gen 10 top level 5 uuid subvol-root parent_uuid - path @\n\
 ID 257 gen 11 top level 5 uuid snap-1 parent_uuid subvol-root path @/.snapshots/1/snapshot\n";
+    const QGROUPS: &[u8] = b"qgroupid         rfer         excl     max_rfer     max_excl\n\
+--------         ----         ----     --------     --------\n\
+0/256            4096         2048         none         none\n\
+0/257            1024         512          8192         none\n";
 
     #[test]
     fn normalizes_btrfs_filesystem_devices_and_subvolumes() {
@@ -335,6 +420,7 @@ ID 257 gen 11 top level 5 uuid snap-1 parent_uuid subvol-root path @/.snapshots/
             show: SHOW.to_vec(),
             usage: USAGE.to_vec(),
             subvolumes: SUBVOLUMES.to_vec(),
+            qgroups: QGROUPS.to_vec(),
         }])
         .expect("fixture should parse");
 
@@ -356,6 +442,11 @@ ID 257 gen 11 top level 5 uuid snap-1 parent_uuid subvol-root path @/.snapshots/
                 .iter()
                 .any(|node| node.kind == NodeKind::BtrfsSnapshot)
         );
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::BtrfsQgroup
+                && node.name == "0/257"
+                && node.usage.as_ref().and_then(|usage| usage.used_bytes) == Some(1024)
+        }));
         assert!(
             graph
                 .edges

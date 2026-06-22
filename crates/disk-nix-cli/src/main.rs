@@ -648,6 +648,7 @@ fn is_filesystem_node(node: &Node) -> bool {
             | NodeKind::BtrfsFilesystem
             | NodeKind::BtrfsSubvolume
             | NodeKind::BtrfsSnapshot
+            | NodeKind::BtrfsQgroup
             | NodeKind::ZfsDataset
             | NodeKind::ZfsSnapshot
             | NodeKind::NfsExport
@@ -667,6 +668,7 @@ fn is_volume_node(node: &Node) -> bool {
             | NodeKind::BtrfsFilesystem
             | NodeKind::BtrfsSubvolume
             | NodeKind::BtrfsSnapshot
+            | NodeKind::BtrfsQgroup
             | NodeKind::ZfsPool
             | NodeKind::ZfsDataset
             | NodeKind::ZfsSnapshot
