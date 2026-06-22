@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use disk_nix_model::{Node, NodeKind, StorageGraph};
+use disk_nix_model::StorageGraph;
 use thiserror::Error;
 
 mod btrfs;
@@ -8,6 +8,7 @@ mod findmnt;
 mod iscsi;
 mod lsblk;
 mod lvm;
+mod mdraid;
 mod nfs;
 mod zfs;
 
@@ -78,6 +79,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_btrfs(&mut result);
         collect_iscsi(&mut result);
         collect_nfs(&mut result);
+        collect_mdraid(&mut result);
         collect_optional_tools(&mut result);
 
         Ok(result)
@@ -122,6 +124,82 @@ fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
     }
     for edge in source.edges {
         target.add_edge(edge);
+    }
+}
+
+fn collect_mdraid(result: &mut ProbeResult) {
+    let scan = match run_report("mdadm", &["--detail", "--scan"]) {
+        Ok(scan) => scan,
+        Err(message) => {
+            result.reports.push(ProbeReport {
+                adapter: "mdadm".to_string(),
+                status: if message.contains("not found") || message.contains("No such file") {
+                    ProbeStatus::Unavailable
+                } else {
+                    ProbeStatus::Partial
+                },
+                message: Some(message),
+            });
+            return;
+        }
+    };
+
+    let arrays = match mdraid::arrays_from_scan(&scan) {
+        Ok(arrays) => arrays,
+        Err(error) => {
+            result.reports.push(ProbeReport {
+                adapter: "mdadm".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            });
+            return;
+        }
+    };
+
+    if arrays.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "mdadm".to_string(),
+            status: ProbeStatus::Available,
+            message: Some("no MD RAID arrays discovered".to_string()),
+        });
+        return;
+    }
+
+    let mut reports = Vec::new();
+    for array in arrays {
+        match run_report("mdadm", &["--detail", &array]) {
+            Ok(detail) => reports.push(mdraid::MdArrayReport {
+                name: array,
+                detail,
+            }),
+            Err(message) => {
+                result.reports.push(ProbeReport {
+                    adapter: "mdadm".to_string(),
+                    status: ProbeStatus::Partial,
+                    message: Some(message),
+                });
+                return;
+            }
+        }
+    }
+
+    match mdraid::normalize_md_arrays(&reports) {
+        Ok(graph) => {
+            let node_count = graph.nodes.len();
+            merge_graph(&mut result.graph, graph);
+            result.reports.push(ProbeReport {
+                adapter: "mdadm".to_string(),
+                status: ProbeStatus::Available,
+                message: Some(format!(
+                    "normalized {node_count} graph nodes from MD RAID arrays"
+                )),
+            });
+        }
+        Err(error) => result.reports.push(ProbeReport {
+            adapter: "mdadm".to_string(),
+            status: ProbeStatus::Failed,
+            message: Some(error.to_string()),
+        }),
     }
 }
 
@@ -443,7 +521,6 @@ fn collect_optional_tools(result: &mut ProbeResult) {
     for tool in [
         "cryptsetup",
         "dmsetup",
-        "mdadm",
         "multipath",
         "nvme",
         "vdo",

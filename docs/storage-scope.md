@@ -51,6 +51,8 @@ The current probe layer normalizes:
   IQNs, portals, LUNs, and attached SCSI disks
 - NFS mount metadata through `nfsstat -m` for server, export, protocol,
   version, transfer sizes, locking, client address, and mount options
+- MD RAID arrays through `mdadm --detail --scan` and `mdadm --detail <array>`
+  for array UUID, level, state, size, device counts, and member devices
 
 LVM probing may report `partial` when the process lacks permission to talk to
 device-mapper. That should not prevent the rest of discovery from succeeding.
