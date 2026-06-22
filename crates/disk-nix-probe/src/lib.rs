@@ -5,6 +5,7 @@ use thiserror::Error;
 
 mod findmnt;
 mod lsblk;
+mod lvm;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProbeStatus {
@@ -68,6 +69,7 @@ impl ProbeAdapter for LinuxProbe {
 
         collect_lsblk(&mut result);
         collect_findmnt(&mut result);
+        collect_lvm(&mut result);
         collect_optional_tools(&mut result);
 
         Ok(result)
@@ -111,6 +113,74 @@ fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
     target.edges.extend(source.edges);
 }
 
+fn collect_lvm(result: &mut ProbeResult) {
+    let pvs = run_lvm_report(
+        "pvs",
+        &[
+            "--reportformat",
+            "json",
+            "-o",
+            "pv_name,vg_name,pv_uuid,pv_size,pv_free,pv_used",
+        ],
+    );
+    let vgs = run_lvm_report(
+        "vgs",
+        &[
+            "--reportformat",
+            "json",
+            "-o",
+            "vg_name,vg_uuid,vg_size,vg_free,vg_extent_size,pv_count,lv_count",
+        ],
+    );
+    let lvs = run_lvm_report(
+        "lvs",
+        &[
+            "--reportformat",
+            "json",
+            "-o",
+            "lv_name,vg_name,lv_uuid,lv_path,lv_size,lv_attr,origin,pool_lv,data_percent,metadata_percent",
+        ],
+    );
+
+    match (pvs, vgs, lvs) {
+        (Ok(pvs), Ok(vgs), Ok(lvs)) => match lvm::normalize_lvm_json(&pvs, &vgs, &lvs) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "lvm".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!("normalized {node_count} graph nodes from LVM JSON")),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "lvm".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
+            result.reports.push(ProbeReport {
+                adapter: "lvm".to_string(),
+                status: if message.contains("not found") {
+                    ProbeStatus::Unavailable
+                } else {
+                    ProbeStatus::Partial
+                },
+                message: Some(message),
+            });
+        }
+    }
+}
+
+fn run_lvm_report(command: &str, args: &[&str]) -> Result<Vec<u8>, String> {
+    match Command::new(command).args(args).output() {
+        Ok(output) if output.status.success() => Ok(output.stdout),
+        Ok(output) => Err(String::from_utf8_lossy(&output.stderr).trim().to_string()),
+        Err(error) => Err(format!("{command} not found or failed to run: {error}")),
+    }
+}
+
 fn collect_findmnt(result: &mut ProbeResult) {
     match Command::new("findmnt").args(["--json", "--bytes"]).output() {
         Ok(output) if output.status.success() => {
@@ -144,9 +214,6 @@ fn collect_optional_tools(result: &mut ProbeResult) {
     for tool in [
         "cryptsetup",
         "dmsetup",
-        "pvs",
-        "vgs",
-        "lvs",
         "mdadm",
         "btrfs",
         "zfs",

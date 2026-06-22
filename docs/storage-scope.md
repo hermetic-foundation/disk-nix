@@ -32,6 +32,21 @@ Creation is only one lifecycle operation. The planner should also support:
 - grow LUN-backed devices
 - migrate data when direct mutation is impossible
 
+## Current discovery coverage
+
+The current probe layer normalizes:
+
+- `lsblk --json --bytes --output-all` for block devices, partitions,
+  filesystems, identity, usage, and mount hints
+- `findmnt --json --bytes` for mounted filesystems, pseudo filesystems, and
+  NFS exports
+- LVM `pvs`, `vgs`, and `lvs` JSON reports for PV/VG/LV topology, snapshots,
+  thin pools, cache-like logical volumes, and VDO-like logical volumes where
+  attributes expose them
+
+LVM probing may report `partial` when the process lacks permission to talk to
+device-mapper. That should not prevent the rest of discovery from succeeding.
+
 ## Advice examples
 
 If a user asks to shrink XFS, the planner should explain that XFS does not
