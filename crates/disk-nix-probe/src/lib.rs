@@ -4,6 +4,7 @@ use disk_nix_model::StorageGraph;
 use thiserror::Error;
 
 mod btrfs;
+mod cryptsetup;
 mod findmnt;
 mod iscsi;
 mod lsblk;
@@ -77,6 +78,7 @@ impl ProbeAdapter for LinuxProbe {
 
         collect_lsblk(&mut result);
         collect_findmnt(&mut result);
+        collect_cryptsetup(&mut result);
         collect_lvm(&mut result);
         collect_vdo(&mut result);
         collect_zfs(&mut result);
@@ -122,6 +124,77 @@ fn collect_lsblk(result: &mut ProbeResult) {
             message: Some(error.to_string()),
         }),
     }
+}
+
+fn collect_cryptsetup(result: &mut ProbeResult) {
+    let containers: Vec<String> = result
+        .graph
+        .nodes
+        .iter()
+        .filter(|node| node.kind == disk_nix_model::NodeKind::LuksContainer)
+        .map(|node| node.path.clone().unwrap_or_else(|| node.name.clone()))
+        .collect();
+
+    if containers.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "cryptsetup".to_string(),
+            status: if command_exists("cryptsetup") {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Unavailable
+            },
+            message: Some("no LUKS containers discovered".to_string()),
+        });
+        return;
+    }
+
+    let mut collected = 0usize;
+    for container in containers {
+        let status_arg = cryptsetup_status_arg(&container);
+        match run_report("cryptsetup", &["status", &status_arg]) {
+            Ok(output) => match cryptsetup::normalize_cryptsetup_status(&container, &output) {
+                Ok(graph) => {
+                    collected += graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                }
+                Err(error) => {
+                    result.reports.push(ProbeReport {
+                        adapter: "cryptsetup".to_string(),
+                        status: ProbeStatus::Failed,
+                        message: Some(error.to_string()),
+                    });
+                    return;
+                }
+            },
+            Err(message) => {
+                result.reports.push(ProbeReport {
+                    adapter: "cryptsetup".to_string(),
+                    status: if message.contains("not found") || message.contains("No such file") {
+                        ProbeStatus::Unavailable
+                    } else {
+                        ProbeStatus::Partial
+                    },
+                    message: Some(message),
+                });
+                return;
+            }
+        }
+    }
+
+    result.reports.push(ProbeReport {
+        adapter: "cryptsetup".to_string(),
+        status: ProbeStatus::Available,
+        message: Some(format!(
+            "normalized {collected} graph nodes from cryptsetup status"
+        )),
+    });
+}
+
+fn cryptsetup_status_arg(container: &str) -> String {
+    container
+        .strip_prefix("/dev/mapper/")
+        .unwrap_or(container)
+        .to_string()
 }
 
 fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
@@ -630,7 +703,7 @@ fn parse_lines(bytes: &[u8]) -> Vec<String> {
 }
 
 fn collect_optional_tools(result: &mut ProbeResult) {
-    for tool in ["cryptsetup", "dmsetup", "vdostats"] {
+    for tool in ["dmsetup", "vdostats"] {
         let status = if command_exists(tool) {
             ProbeStatus::Available
         } else {

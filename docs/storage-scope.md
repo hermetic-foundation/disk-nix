@@ -40,6 +40,9 @@ The current probe layer normalizes:
   filesystems, identity, usage, and mount hints
 - `findmnt --json --bytes` for mounted filesystems, pseudo filesystems, and
   NFS exports
+- LUKS mapper status through `cryptsetup status` for active/in-use state,
+  backing device, cipher, key size, key location, sector size/count, offset, and
+  access mode
 - LVM `pvs`, `vgs`, and `lvs` JSON reports for PV/VG/LV topology, snapshots,
   thin pools, cache-like logical volumes, and VDO-like logical volumes where
   attributes expose them
