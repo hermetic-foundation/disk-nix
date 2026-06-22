@@ -4,6 +4,7 @@ use disk_nix_model::StorageGraph;
 use thiserror::Error;
 
 mod bcache;
+mod blkid;
 mod btrfs;
 mod cryptsetup;
 mod dmsetup;
@@ -80,6 +81,7 @@ impl ProbeAdapter for LinuxProbe {
         let mut result = ProbeResult::empty();
 
         collect_lsblk(&mut result);
+        collect_blkid(&mut result);
         collect_parted(&mut result);
         collect_findmnt(&mut result);
         collect_cryptsetup(&mut result);
@@ -128,6 +130,43 @@ fn collect_lsblk(result: &mut ProbeResult) {
             adapter: "lsblk".to_string(),
             status: ProbeStatus::Unavailable,
             message: Some(error.to_string()),
+        }),
+    }
+}
+
+fn collect_blkid(result: &mut ProbeResult) {
+    match run_report("blkid", &["-o", "export"]) {
+        Ok(output) => match blkid::normalize_blkid_export(&output) {
+            Ok(graph) if graph.nodes.is_empty() => result.reports.push(ProbeReport {
+                adapter: "blkid".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("no block signatures discovered".to_string()),
+            }),
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "blkid".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from blkid export"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "blkid".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "blkid".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
         }),
     }
 }

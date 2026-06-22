@@ -38,6 +38,8 @@ The current probe layer normalizes:
 
 - `lsblk --json --bytes --output-all` for block devices, partitions,
   filesystems, identity, usage, and mount hints
+- `blkid -o export` for filesystem and block signatures, UUIDs, labels,
+  PARTUUID/PARTLABEL, signature usage, versions, and block sizes
 - `parted -lm` for partition table type, disk sector sizes, partition numbers,
   start/end offsets, partition sizes, names, types, and flags
 - `findmnt --json --bytes` for mounted filesystems, pseudo filesystems, and
