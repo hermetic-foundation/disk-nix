@@ -47,6 +47,9 @@ The current probe layer normalizes:
   device-mapper properties
 - `findmnt --json --bytes` for mounted filesystems, pseudo filesystems, and
   NFS exports
+- `tune2fs -l` for ext2/ext3/ext4 superblock metadata, feature flags,
+  filesystem state, mount/check counters, inode and block counts, UUIDs, labels,
+  and computed capacity/usage where device access is permitted
 - `/proc/swaps` for active swap devices/files, active size, used/free bytes,
   swap type, and priority
 - LUKS mapper status through `cryptsetup status` for active/in-use state,

@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{collections::BTreeSet, process::Command};
 
 use disk_nix_model::StorageGraph;
 use thiserror::Error;
@@ -8,6 +8,7 @@ mod blkid;
 mod btrfs;
 mod cryptsetup;
 mod dmsetup;
+mod ext;
 mod findmnt;
 mod iscsi;
 mod lsblk;
@@ -87,6 +88,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_parted(&mut result);
         collect_udev(&mut result);
         collect_findmnt(&mut result);
+        collect_ext(&mut result);
         collect_swaps(&mut result);
         collect_cryptsetup(&mut result);
         collect_dmsetup(&mut result);
@@ -242,6 +244,90 @@ fn collect_udev(result: &mut ProbeResult) {
             message: Some(message),
         }),
     }
+}
+
+fn collect_ext(result: &mut ProbeResult) {
+    let targets = ext_targets(&result.graph);
+    if targets.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "ext".to_string(),
+            status: if command_exists("tune2fs") {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Unavailable
+            },
+            message: Some("no ext filesystems discovered".to_string()),
+        });
+        return;
+    }
+
+    let mut collected = 0usize;
+    let mut failures = Vec::new();
+    for target in targets {
+        match run_report("tune2fs", &["-l", &target]) {
+            Ok(output) => match ext::normalize_tune2fs(&target, &output) {
+                Ok(graph) => {
+                    collected += graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                }
+                Err(error) => {
+                    failures.push(format!("{target}: {error}"));
+                }
+            },
+            Err(message) => {
+                failures.push(format!("{target}: {message}"));
+            }
+        }
+    }
+
+    match (collected, failures.is_empty()) {
+        (0, false) => result.reports.push(ProbeReport {
+            adapter: "ext".to_string(),
+            status: if failures
+                .iter()
+                .any(|message| message.contains("not found") || message.contains("No such file"))
+            {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(failures.join("; ")),
+        }),
+        (_, false) => result.reports.push(ProbeReport {
+            adapter: "ext".to_string(),
+            status: ProbeStatus::Partial,
+            message: Some(format!(
+                "normalized {collected} graph nodes from tune2fs; failed targets: {}",
+                failures.join("; ")
+            )),
+        }),
+        _ => result.reports.push(ProbeReport {
+            adapter: "ext".to_string(),
+            status: ProbeStatus::Available,
+            message: Some(format!("normalized {collected} graph nodes from tune2fs")),
+        }),
+    }
+}
+
+fn ext_targets(graph: &StorageGraph) -> Vec<String> {
+    let mut targets = BTreeSet::new();
+    for node in &graph.nodes {
+        let is_ext = node.properties.iter().any(|property| {
+            property.key == "filesystem.type"
+                && matches!(property.value.as_str(), "ext2" | "ext3" | "ext4")
+        });
+        if !is_ext {
+            continue;
+        }
+
+        if let Some(path) = &node.path {
+            if path.starts_with("/dev/") && !path.contains('[') {
+                targets.insert(path.clone());
+            }
+        }
+    }
+
+    targets.into_iter().collect()
 }
 
 fn collect_swaps(result: &mut ProbeResult) {
