@@ -49,6 +49,8 @@ The current probe layer normalizes:
   devices, usage, subvolumes, and snapshot-like subvolume relationships
 - iSCSI sessions through `iscsiadm -m session -P 3` for session ids, target
   IQNs, portals, LUNs, and attached SCSI disks
+- NFS mount metadata through `nfsstat -m` for server, export, protocol,
+  version, transfer sizes, locking, client address, and mount options
 
 LVM probing may report `partial` when the process lacks permission to talk to
 device-mapper. That should not prevent the rest of discovery from succeeding.

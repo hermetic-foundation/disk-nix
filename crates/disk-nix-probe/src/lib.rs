@@ -8,6 +8,7 @@ mod findmnt;
 mod iscsi;
 mod lsblk;
 mod lvm;
+mod nfs;
 mod zfs;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +77,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_zfs(&mut result);
         collect_btrfs(&mut result);
         collect_iscsi(&mut result);
+        collect_nfs(&mut result);
         collect_optional_tools(&mut result);
 
         Ok(result)
@@ -120,6 +122,43 @@ fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
     }
     for edge in source.edges {
         target.add_edge(edge);
+    }
+}
+
+fn collect_nfs(result: &mut ProbeResult) {
+    match run_report("nfsstat", &["-m"]) {
+        Ok(output) if output.is_empty() => result.reports.push(ProbeReport {
+            adapter: "nfs".to_string(),
+            status: ProbeStatus::Available,
+            message: Some("no NFS mounts discovered".to_string()),
+        }),
+        Ok(output) => match nfs::normalize_nfsstat_mounts(&output) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "nfs".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from NFS mounts"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "nfs".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "nfs".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
     }
 }
 
@@ -405,7 +444,6 @@ fn collect_optional_tools(result: &mut ProbeResult) {
         "cryptsetup",
         "dmsetup",
         "mdadm",
-        "nfsstat",
         "multipath",
         "nvme",
         "vdo",
