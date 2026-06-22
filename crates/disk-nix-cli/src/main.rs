@@ -86,6 +86,9 @@ enum Command {
     Inspect {
         /// Query value to inspect.
         query: String,
+        /// Emit JSON for matched nodes and direct relationships.
+        #[arg(long)]
+        json: bool,
     },
     /// Plan desired storage changes from a JSON spec.
     Plan {
@@ -229,9 +232,13 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             print_ids(output, &graph)?;
             Ok(())
         }
-        Command::Inspect { query } => {
+        Command::Inspect { query, json } => {
             let graph = collect_graph()?;
-            print_inspect(output, &graph, &query)?;
+            if json {
+                print_inspect_json(output, &graph, &query)?;
+            } else {
+                print_inspect(output, &graph, &query)?;
+            }
             Ok(())
         }
         Command::Plan { spec, json } => {
@@ -328,6 +335,48 @@ fn print_filtered_json(
         output,
         "{}",
         filtered
+            .to_json()
+            .map_err(|error| AppError::Message(error.to_string()))?
+    )?;
+    Ok(())
+}
+
+fn print_inspect_json(
+    output: &mut impl Write,
+    graph: &StorageGraph,
+    query: &str,
+) -> Result<(), AppError> {
+    let matched_ids: BTreeSet<String> = graph
+        .find_nodes(query)
+        .into_iter()
+        .map(|node| node.id.0.clone())
+        .collect();
+
+    let mut node_ids = matched_ids.clone();
+    let edges = graph
+        .edges
+        .iter()
+        .filter(|edge| {
+            matched_ids.contains(edge.from.0.as_str()) || matched_ids.contains(edge.to.0.as_str())
+        })
+        .inspect(|edge| {
+            node_ids.insert(edge.from.0.clone());
+            node_ids.insert(edge.to.0.clone());
+        })
+        .cloned()
+        .collect();
+    let nodes = graph
+        .nodes
+        .iter()
+        .filter(|node| node_ids.contains(node.id.0.as_str()))
+        .cloned()
+        .collect();
+
+    let subgraph = StorageGraph { nodes, edges };
+    writeln!(
+        output,
+        "{}",
+        subgraph
             .to_json()
             .map_err(|error| AppError::Message(error.to_string()))?
     )?;
