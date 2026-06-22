@@ -103,6 +103,10 @@
                 boot.loader.grub.enable = false;
                 services.disk-nix = {
                   enable = true;
+                  luks.devices.cryptroot = {
+                    device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
+                    allowDiscards = true;
+                  };
                   filesystems.root = {
                     device = "/dev/disk/by-label/nixos-root";
                     fsType = "xfs";

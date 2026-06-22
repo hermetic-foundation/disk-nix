@@ -27,6 +27,16 @@ let
       preserveData
       ;
   }) cfg.swaps;
+  typedLuksSpec = lib.mapAttrs (_: luks: {
+    inherit (luks)
+      device
+      name
+      allowDiscards
+      bypassWorkqueues
+      preLVM
+      preserveData
+      ;
+  }) cfg.luks.devices;
 in
 {
   options.services.disk-nix = {
@@ -153,6 +163,56 @@ in
       description = "Typed swap declarations used to generate both disk-nix spec and NixOS swapDevices.";
     };
 
+    luks.devices = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (
+          { name, ... }:
+          {
+            options = {
+              name = lib.mkOption {
+                type = lib.types.str;
+                default = name;
+                defaultText = lib.literalExpression "<attribute name>";
+                description = "Mapper name for the opened LUKS device.";
+              };
+
+              device = lib.mkOption {
+                type = lib.types.str;
+                description = "Encrypted block device path.";
+                example = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
+              };
+
+              allowDiscards = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Enable discard passthrough for this LUKS device.";
+              };
+
+              bypassWorkqueues = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Enable cryptsetup workqueue bypass options where supported.";
+              };
+
+              preLVM = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Open this device before LVM activation.";
+              };
+
+              preserveData = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Whether the planner must preserve the existing LUKS container.";
+              };
+            };
+          }
+        )
+      );
+      default = { };
+      description = "Typed LUKS declarations used to generate both disk-nix spec and boot.initrd.luks.devices.";
+    };
+
     apply = {
       mode = lib.mkOption {
         type = lib.types.enum [
@@ -204,6 +264,9 @@ in
       spec = cfg.spec // {
         filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec;
         swaps = (cfg.spec.swaps or { }) // typedSwapSpec;
+        luks = (cfg.spec.luks or { }) // {
+          devices = ((cfg.spec.luks or { }).devices or { }) // typedLuksSpec;
+        };
       };
       apply = cfg.apply;
     };
@@ -234,6 +297,15 @@ in
         randomEncryption.enable = true;
       }
     ) cfg.swaps;
+
+    boot.initrd.luks.devices = lib.mapAttrs (_: luks: {
+      inherit (luks)
+        device
+        preLVM
+        allowDiscards
+        bypassWorkqueues
+        ;
+    }) cfg.luks.devices;
 
     systemd.services.disk-nix-plan = {
       description = "Plan disk-nix storage changes";

@@ -25,6 +25,10 @@ The NixOS module is the primary declarative interface.
       allowShrink = false;
       allowDestructive = false;
     };
+    luks.devices.cryptroot = {
+      device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
+      allowDiscards = true;
+    };
     filesystems.root = {
       device = "/dev/disk/by-label/nixos-root";
       fsType = "xfs";
@@ -41,9 +45,9 @@ The NixOS module is the primary declarative interface.
 ```
 
 The module writes `/etc/disk-nix/spec.json`, installs the CLI, and derives the
-matching NixOS `fileSystems` and `swapDevices` entries. Raw `spec` remains
-available for storage domains whose typed NixOS options have not been
-implemented yet.
+matching NixOS `fileSystems`, `swapDevices`, and `boot.initrd.luks.devices`
+entries. Raw `spec` remains available for storage domains whose typed NixOS
+options have not been implemented yet.
 
 Typed filesystem declarations include:
 
@@ -60,6 +64,15 @@ Typed swap declarations include:
 - `device`
 - `priority`
 - `randomEncryption`
+- `preserveData`
+
+Typed LUKS declarations include:
+
+- `name`
+- `device`
+- `allowDiscards`
+- `bypassWorkqueues`
+- `preLVM`
 - `preserveData`
 
 ## Apply modes
