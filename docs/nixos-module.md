@@ -32,13 +32,18 @@ The NixOS module is the primary declarative interface.
       neededForBoot = true;
       resizePolicy = "grow-only";
     };
+    swaps.primary = {
+      device = "/dev/disk/by-label/swap";
+      priority = 5;
+    };
   };
 }
 ```
 
 The module writes `/etc/disk-nix/spec.json`, installs the CLI, and derives the
-matching NixOS `fileSystems` entries. Raw `spec` remains available for storage
-domains whose typed NixOS options have not been implemented yet.
+matching NixOS `fileSystems` and `swapDevices` entries. Raw `spec` remains
+available for storage domains whose typed NixOS options have not been
+implemented yet.
 
 Typed filesystem declarations include:
 
@@ -48,6 +53,13 @@ Typed filesystem declarations include:
 - `options`
 - `neededForBoot`
 - `resizePolicy`
+- `preserveData`
+
+Typed swap declarations include:
+
+- `device`
+- `priority`
+- `randomEncryption`
 - `preserveData`
 
 ## Apply modes

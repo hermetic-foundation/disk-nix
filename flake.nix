@@ -110,6 +110,10 @@
                     neededForBoot = true;
                     resizePolicy = "grow-only";
                   };
+                  swaps.primary = {
+                    device = "/dev/disk/by-label/swap";
+                    priority = 5;
+                  };
                 };
               }
             ]).config.system.build.toplevel;

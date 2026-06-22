@@ -19,6 +19,14 @@ let
       preserveData
       ;
   }) cfg.filesystems;
+  typedSwapSpec = lib.mapAttrs (_: swap: {
+    inherit (swap)
+      device
+      priority
+      randomEncryption
+      preserveData
+      ;
+  }) cfg.swaps;
 in
 {
   options.services.disk-nix = {
@@ -106,6 +114,45 @@ in
       description = "Typed filesystem declarations used to generate both disk-nix spec and NixOS fileSystems.";
     };
 
+    swaps = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (
+          { name, ... }:
+          {
+            options = {
+              device = lib.mkOption {
+                type = lib.types.str;
+                default = name;
+                defaultText = lib.literalExpression "<attribute name>";
+                description = "Swap device path, by-id path, by-uuid path, or generated mapper path.";
+                example = "/dev/disk/by-label/swap";
+              };
+
+              priority = lib.mkOption {
+                type = lib.types.nullOr lib.types.int;
+                default = null;
+                description = "Optional swap priority passed to NixOS swapDevices.";
+              };
+
+              randomEncryption = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Enable NixOS random encryption for this swap device.";
+              };
+
+              preserveData = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Whether the planner should treat existing swap signatures as data to preserve.";
+              };
+            };
+          }
+        )
+      );
+      default = { };
+      description = "Typed swap declarations used to generate both disk-nix spec and NixOS swapDevices.";
+    };
+
     apply = {
       mode = lib.mkOption {
         type = lib.types.enum [
@@ -156,6 +203,7 @@ in
     environment.etc."disk-nix/spec.json".source = json.generate "disk-nix-spec.json" {
       spec = cfg.spec // {
         filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec;
+        swaps = (cfg.spec.swaps or { }) // typedSwapSpec;
       };
       apply = cfg.apply;
     };
@@ -173,6 +221,19 @@ in
         inherit (filesystem) options;
       };
     }) cfg.filesystems;
+
+    swapDevices = lib.mapAttrsToList (
+      _: swap:
+      {
+        inherit (swap) device;
+      }
+      // lib.optionalAttrs (swap.priority != null) {
+        inherit (swap) priority;
+      }
+      // lib.optionalAttrs swap.randomEncryption {
+        randomEncryption.enable = true;
+      }
+    ) cfg.swaps;
 
     systemd.services.disk-nix-plan = {
       description = "Plan disk-nix storage changes";
