@@ -3,6 +3,7 @@ use std::process::Command;
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use thiserror::Error;
 
+mod btrfs;
 mod findmnt;
 mod lsblk;
 mod lvm;
@@ -72,6 +73,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_findmnt(&mut result);
         collect_lvm(&mut result);
         collect_zfs(&mut result);
+        collect_btrfs(&mut result);
         collect_optional_tools(&mut result);
 
         Ok(result)
@@ -116,6 +118,94 @@ fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
     }
     for edge in source.edges {
         target.add_edge(edge);
+    }
+}
+
+fn collect_btrfs(result: &mut ProbeResult) {
+    let targets = match run_findmnt_targets("btrfs") {
+        Ok(targets) => targets,
+        Err(message) => {
+            result.reports.push(ProbeReport {
+                adapter: "btrfs".to_string(),
+                status: ProbeStatus::Partial,
+                message: Some(format!(
+                    "failed to discover mounted Btrfs targets: {message}"
+                )),
+            });
+            return;
+        }
+    };
+
+    if targets.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "btrfs".to_string(),
+            status: if command_exists("btrfs") {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Unavailable
+            },
+            message: Some("no mounted Btrfs filesystems discovered".to_string()),
+        });
+        return;
+    }
+
+    let mut reports = Vec::new();
+    for target in targets {
+        let show = run_report("btrfs", &["filesystem", "show", &target]);
+        let usage = run_report("btrfs", &["filesystem", "usage", "-b", &target]);
+        let subvolumes = run_report("btrfs", &["subvolume", "list", "-u", &target]);
+
+        match (show, usage, subvolumes) {
+            (Ok(show), Ok(usage), Ok(subvolumes)) => reports.push(btrfs::BtrfsReport {
+                target,
+                show,
+                usage,
+                subvolumes,
+            }),
+            (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
+                result.reports.push(ProbeReport {
+                    adapter: "btrfs".to_string(),
+                    status: if message.contains("not found") {
+                        ProbeStatus::Unavailable
+                    } else {
+                        ProbeStatus::Partial
+                    },
+                    message: Some(message),
+                });
+                return;
+            }
+        }
+    }
+
+    match btrfs::normalize_btrfs_reports(&reports) {
+        Ok(graph) => {
+            let node_count = graph.nodes.len();
+            merge_graph(&mut result.graph, graph);
+            result.reports.push(ProbeReport {
+                adapter: "btrfs".to_string(),
+                status: ProbeStatus::Available,
+                message: Some(format!(
+                    "normalized {node_count} graph nodes from Btrfs output"
+                )),
+            });
+        }
+        Err(error) => result.reports.push(ProbeReport {
+            adapter: "btrfs".to_string(),
+            status: ProbeStatus::Failed,
+            message: Some(error.to_string()),
+        }),
+    }
+}
+
+fn run_findmnt_targets(filesystem_type: &str) -> Result<Vec<String>, String> {
+    match Command::new("findmnt")
+        .args(["-rn", "-t", filesystem_type, "-o", "TARGET"])
+        .output()
+    {
+        Ok(output) if output.status.success() => Ok(parse_lines(&output.stdout)),
+        Ok(output) if output.stdout.is_empty() && output.stderr.is_empty() => Ok(Vec::new()),
+        Ok(output) => Err(String::from_utf8_lossy(&output.stderr).trim().to_string()),
+        Err(error) => Err(format!("findmnt not found or failed to run: {error}")),
     }
 }
 
@@ -267,12 +357,20 @@ fn collect_findmnt(result: &mut ProbeResult) {
     }
 }
 
+fn parse_lines(bytes: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(bytes)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
 fn collect_optional_tools(result: &mut ProbeResult) {
     for tool in [
         "cryptsetup",
         "dmsetup",
         "mdadm",
-        "btrfs",
         "iscsiadm",
         "nfsstat",
         "multipath",

@@ -45,6 +45,8 @@ The current probe layer normalizes:
   attributes expose them
 - ZFS `zpool list -H -p` and `zfs list -H -p` output for pool capacity, health,
   datasets, snapshots, zvols, mountpoints, and clone origins
+- Btrfs mounted filesystems through `btrfs filesystem show`, `btrfs filesystem usage -b`, and `btrfs subvolume list -u` for filesystem identity, member
+  devices, usage, subvolumes, and snapshot-like subvolume relationships
 
 LVM probing may report `partial` when the process lacks permission to talk to
 device-mapper. That should not prevent the rest of discovery from succeeding.
