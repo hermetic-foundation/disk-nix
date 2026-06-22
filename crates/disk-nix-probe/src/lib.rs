@@ -12,6 +12,7 @@ mod mdraid;
 mod multipath;
 mod nfs;
 mod nvme;
+mod vdo;
 mod zfs;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,6 +78,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_lsblk(&mut result);
         collect_findmnt(&mut result);
         collect_lvm(&mut result);
+        collect_vdo(&mut result);
         collect_zfs(&mut result);
         collect_btrfs(&mut result);
         collect_iscsi(&mut result);
@@ -128,6 +130,43 @@ fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
     }
     for edge in source.edges {
         target.add_edge(edge);
+    }
+}
+
+fn collect_vdo(result: &mut ProbeResult) {
+    match run_report("vdo", &["status"]) {
+        Ok(output) if output.is_empty() => result.reports.push(ProbeReport {
+            adapter: "vdo".to_string(),
+            status: ProbeStatus::Available,
+            message: Some("no VDO volumes discovered".to_string()),
+        }),
+        Ok(output) => match vdo::normalize_vdo_status(&output) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "vdo".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from VDO status"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "vdo".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "vdo".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
     }
 }
 
@@ -591,7 +630,7 @@ fn parse_lines(bytes: &[u8]) -> Vec<String> {
 }
 
 fn collect_optional_tools(result: &mut ProbeResult) {
-    for tool in ["cryptsetup", "dmsetup", "vdo", "vdostats"] {
+    for tool in ["cryptsetup", "dmsetup", "vdostats"] {
         let status = if command_exists(tool) {
             ProbeStatus::Available
         } else {
