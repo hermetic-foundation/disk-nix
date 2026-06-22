@@ -56,6 +56,9 @@ The current probe layer normalizes:
   datasets, snapshots, zvols, mountpoints, and clone origins
 - Btrfs mounted filesystems through `btrfs filesystem show`, `btrfs filesystem usage -b`, and `btrfs subvolume list -u` for filesystem identity, member
   devices, usage, subvolumes, and snapshot-like subvolume relationships
+- bcache sysfs metadata through `/sys/block/*/bcache` for backing devices,
+  cache devices, cache sets, mode, state, dirty data, replacement policy,
+  writeback settings, and cache relationships
 - iSCSI sessions through `iscsiadm -m session -P 3` for session ids, target
   IQNs, portals, LUNs, and attached SCSI disks
 - NFS mount metadata through `nfsstat -m` for server, export, protocol,

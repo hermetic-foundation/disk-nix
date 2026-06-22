@@ -3,6 +3,7 @@ use std::process::Command;
 use disk_nix_model::StorageGraph;
 use thiserror::Error;
 
+mod bcache;
 mod btrfs;
 mod cryptsetup;
 mod dmsetup;
@@ -85,6 +86,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_vdo(&mut result);
         collect_zfs(&mut result);
         collect_btrfs(&mut result);
+        collect_bcache(&mut result);
         collect_iscsi(&mut result);
         collect_nfs(&mut result);
         collect_mdraid(&mut result);
@@ -581,6 +583,37 @@ fn collect_btrfs(result: &mut ProbeResult) {
         Err(error) => result.reports.push(ProbeReport {
             adapter: "btrfs".to_string(),
             status: ProbeStatus::Failed,
+            message: Some(error.to_string()),
+        }),
+    }
+}
+
+fn collect_bcache(result: &mut ProbeResult) {
+    match bcache::read_sysfs_snapshot(std::path::Path::new("/sys/block")) {
+        Ok(snapshot) if snapshot.devices.is_empty() => result.reports.push(ProbeReport {
+            adapter: "bcache".to_string(),
+            status: if std::path::Path::new("/sys/fs/bcache").exists() {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Unavailable
+            },
+            message: Some("no bcache devices discovered".to_string()),
+        }),
+        Ok(snapshot) => {
+            let graph = bcache::normalize_bcache_snapshot(&snapshot);
+            let node_count = graph.nodes.len();
+            merge_graph(&mut result.graph, graph);
+            result.reports.push(ProbeReport {
+                adapter: "bcache".to_string(),
+                status: ProbeStatus::Available,
+                message: Some(format!(
+                    "normalized {node_count} graph nodes from bcache sysfs"
+                )),
+            });
+        }
+        Err(error) => result.reports.push(ProbeReport {
+            adapter: "bcache".to_string(),
+            status: ProbeStatus::Partial,
             message: Some(error.to_string()),
         }),
     }
