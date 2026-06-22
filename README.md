@@ -48,6 +48,10 @@ nix flake check
 ```sh
 disk-nix topology
 disk-nix topology --json
+disk-nix devices
+disk-nix filesystems
+disk-nix mounts
+disk-nix ids
 disk-nix plan --spec ./examples/simple-root.json
 ```
 
