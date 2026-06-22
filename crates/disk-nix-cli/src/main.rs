@@ -52,6 +52,18 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered volumes, pools, datasets, LUNs, and exports.
+    Volumes {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List discovered mapping layers such as LUKS, dm, LVM, VDO, and multipath.
+    Mappings {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -143,6 +155,24 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_filesystem_node)?;
             } else {
                 print_filesystems(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Volumes { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_volume_node)?;
+            } else {
+                print_volumes(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Mappings { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_mapping_node)?;
+            } else {
+                print_mappings(output, &graph)?;
             }
             Ok(())
         }
@@ -279,6 +309,45 @@ fn print_filesystems(output: &mut impl Write, graph: &StorageGraph) -> io::Resul
             human_bytes(node.usage.as_ref().and_then(|usage| usage.used_bytes)),
             human_bytes(node.usage.as_ref().and_then(|usage| usage.free_bytes)),
             node.identity.uuid.as_deref().unwrap_or("-")
+        )?;
+    }
+    Ok(())
+}
+
+fn print_volumes(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:>12} {:>12}",
+        "KIND", "NAME", "SIZE", "USED", "FREE"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_volume_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>12} {:>12} {:>12}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            human_bytes(node.usage.as_ref().and_then(|usage| usage.used_bytes)),
+            human_bytes(node.usage.as_ref().and_then(|usage| usage.free_bytes))
+        )?;
+    }
+    Ok(())
+}
+
+fn print_mappings(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>8} PATH",
+        "KIND", "NAME", "BACKING"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_mapping_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>8} {}",
+            node.kind,
+            node.name,
+            backing_count(graph, node),
+            node.path.as_deref().unwrap_or("-")
         )?;
     }
     Ok(())
@@ -498,8 +567,62 @@ fn is_filesystem_node(node: &Node) -> bool {
     )
 }
 
+fn is_volume_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::LvmVolumeGroup
+            | NodeKind::LvmLogicalVolume
+            | NodeKind::LvmThinPool
+            | NodeKind::LvmSnapshot
+            | NodeKind::LvmCache
+            | NodeKind::VdoVolume
+            | NodeKind::MdRaid
+            | NodeKind::BtrfsFilesystem
+            | NodeKind::BtrfsSubvolume
+            | NodeKind::BtrfsSnapshot
+            | NodeKind::ZfsPool
+            | NodeKind::ZfsDataset
+            | NodeKind::ZfsSnapshot
+            | NodeKind::Zvol
+            | NodeKind::Lun
+            | NodeKind::NfsExport
+    )
+}
+
+fn is_mapping_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::LuksContainer
+            | NodeKind::DeviceMapper
+            | NodeKind::LvmLogicalVolume
+            | NodeKind::LvmThinPool
+            | NodeKind::LvmSnapshot
+            | NodeKind::LvmCache
+            | NodeKind::VdoVolume
+            | NodeKind::MdRaid
+            | NodeKind::MultipathDevice
+            | NodeKind::CacheDevice
+    )
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
+}
+
+fn backing_count(graph: &StorageGraph, node: &Node) -> usize {
+    graph
+        .edges
+        .iter()
+        .filter(|edge| {
+            edge.to == node.id
+                && matches!(
+                    edge.relationship,
+                    disk_nix_model::Relationship::Backs
+                        | disk_nix_model::Relationship::DependsOn
+                        | disk_nix_model::Relationship::MemberOf
+                )
+        })
+        .count()
 }
 
 fn property_value<'a>(node: &'a Node, key: &str) -> Option<&'a str> {

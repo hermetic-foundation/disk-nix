@@ -50,6 +50,8 @@ disk-nix topology
 disk-nix topology --json
 disk-nix devices
 disk-nix filesystems
+disk-nix volumes
+disk-nix mappings
 disk-nix mounts
 disk-nix ids
 disk-nix inspect /dev/nvme0n1
