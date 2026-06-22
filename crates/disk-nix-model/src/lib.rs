@@ -75,6 +75,18 @@ impl Node {
     }
 
     #[must_use]
+    pub fn with_usage(mut self, usage: Usage) -> Self {
+        self.usage = Some(usage);
+        self
+    }
+
+    #[must_use]
+    pub fn with_identity(mut self, identity: Identity) -> Self {
+        self.identity = identity;
+        self
+    }
+
+    #[must_use]
     pub fn with_property(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.properties.push(Property {
             key: key.into(),
@@ -231,6 +243,17 @@ pub struct Identity {
     pub wwn: Option<String>,
 }
 
+impl Identity {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.uuid.is_none()
+            && self.partuuid.is_none()
+            && self.label.is_none()
+            && self.serial.is_none()
+            && self.wwn.is_none()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Usage {
@@ -240,6 +263,22 @@ pub struct Usage {
     pub free_bytes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allocated_bytes: Option<u64>,
+}
+
+impl Usage {
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            used_bytes: None,
+            free_bytes: None,
+            allocated_bytes: None,
+        }
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.used_bytes.is_none() && self.free_bytes.is_none() && self.allocated_bytes.is_none()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]

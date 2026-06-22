@@ -128,6 +128,8 @@ name = "disk-nix-probe"
 version = "0.1.0"
 dependencies = [
  "disk-nix-model",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 

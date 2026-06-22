@@ -3,6 +3,8 @@ use std::process::Command;
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use thiserror::Error;
 
+mod lsblk;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProbeStatus {
     Available,
@@ -77,15 +79,18 @@ fn collect_lsblk(result: &mut ProbeResult) {
         .output()
     {
         Ok(output) if output.status.success() => {
-            result.reports.push(ProbeReport {
-                adapter: "lsblk".to_string(),
-                status: ProbeStatus::Available,
-                message: Some("captured lsblk JSON for future normalization".to_string()),
-            });
-            result.graph.add_node(
-                Node::new("probe:lsblk", NodeKind::PhysicalDisk, "lsblk")
-                    .with_property("raw-json-bytes", output.stdout.len().to_string()),
-            );
+            match lsblk::normalize_lsblk_json(&output.stdout) {
+                Ok(graph) => {
+                    let node_count = graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                    result.reports.push(lsblk::available_report(node_count));
+                }
+                Err(error) => result.reports.push(ProbeReport {
+                    adapter: "lsblk".to_string(),
+                    status: ProbeStatus::Failed,
+                    message: Some(error.to_string()),
+                }),
+            }
         }
         Ok(output) => result.reports.push(ProbeReport {
             adapter: "lsblk".to_string(),
@@ -98,6 +103,11 @@ fn collect_lsblk(result: &mut ProbeResult) {
             message: Some(error.to_string()),
         }),
     }
+}
+
+fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
+    target.nodes.extend(source.nodes);
+    target.edges.extend(source.edges);
 }
 
 fn collect_findmnt(result: &mut ProbeResult) {
