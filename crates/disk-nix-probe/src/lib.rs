@@ -3,6 +3,7 @@ use std::process::Command;
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use thiserror::Error;
 
+mod findmnt;
 mod lsblk;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,15 +114,18 @@ fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
 fn collect_findmnt(result: &mut ProbeResult) {
     match Command::new("findmnt").args(["--json", "--bytes"]).output() {
         Ok(output) if output.status.success() => {
-            result.reports.push(ProbeReport {
-                adapter: "findmnt".to_string(),
-                status: ProbeStatus::Available,
-                message: Some("captured findmnt JSON for future normalization".to_string()),
-            });
-            result.graph.add_node(
-                Node::new("probe:findmnt", NodeKind::Mountpoint, "findmnt")
-                    .with_property("raw-json-bytes", output.stdout.len().to_string()),
-            );
+            match findmnt::normalize_findmnt_json(&output.stdout) {
+                Ok(graph) => {
+                    let node_count = graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                    result.reports.push(findmnt::available_report(node_count));
+                }
+                Err(error) => result.reports.push(ProbeReport {
+                    adapter: "findmnt".to_string(),
+                    status: ProbeStatus::Failed,
+                    message: Some(error.to_string()),
+                }),
+            }
         }
         Ok(output) => result.reports.push(ProbeReport {
             adapter: "findmnt".to_string(),
