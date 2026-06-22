@@ -49,6 +49,8 @@ Examples:
   replacement capacity, evacuation, and health verification.
 - `replaceDevices = { old = new; }` is classified as reversible because the
   original device can remain available until verification passes.
+- Cache `replace-device` is classified as offline-required because dirty or
+  writeback data must be flushed or detached cleanly before replacement.
 - `properties = { ... }` is classified as safe property-update intent.
 - LUN `operation = "grow"` is classified as offline-required because the
   storage target, host rescan, multipath, and consumers must be coordinated.

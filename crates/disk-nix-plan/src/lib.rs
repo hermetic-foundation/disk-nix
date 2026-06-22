@@ -477,22 +477,14 @@ fn add_device_membership_actions(
             .iter()
             .filter_map(|(from, to)| to.as_str().map(|replacement| (from.as_str(), replacement)))
         {
+            let (risk, advice) = classify_replace_device(collection);
             actions.push(PlannedAction {
                 id: format!("{collection}:{name}:replace-device:{from}"),
                 description: format!("replace device {from} with {to} in {collection} {name}"),
                 operation: Operation::ReplaceDevice,
-                risk: RiskClass::Reversible,
+                risk,
                 destructive: false,
-                advice: Some(Advice {
-                    summary: "replacement should preserve data when the source remains available"
-                        .to_string(),
-                    alternatives: vec![
-                        "attach the replacement and resilver or rebalance before detaching the source"
-                            .to_string(),
-                        "keep the original device untouched until post-apply verification passes"
-                            .to_string(),
-                    ],
-                }),
+                advice: Some(advice),
             });
         }
     }
@@ -652,7 +644,11 @@ fn classify_operation(
         Operation::Grow | Operation::AddDevice | Operation::Rebalance => {
             (RiskClass::Online, false, None)
         }
-        Operation::ReplaceDevice | Operation::Snapshot => (RiskClass::Reversible, false, None),
+        Operation::ReplaceDevice => {
+            let (risk, advice) = classify_replace_device(collection);
+            (risk, false, Some(advice))
+        }
+        Operation::Snapshot => (RiskClass::Reversible, false, None),
         Operation::Shrink | Operation::RemoveDevice | Operation::Rollback => (
             RiskClass::PotentialDataLoss,
             false,
@@ -679,6 +675,36 @@ fn classify_operation(
                 alternatives: destructive_alternatives(collection, object),
             }),
         ),
+    }
+}
+
+fn classify_replace_device(collection: &str) -> (RiskClass, Advice) {
+    if collection == "caches" {
+        (
+            RiskClass::OfflineRequired,
+            Advice {
+                summary: "cache replacement must account for dirty or writeback data".to_string(),
+                alternatives: vec![
+                    "flush dirty data before replacing the cache device".to_string(),
+                    "detach or disable writeback caching before removing the source".to_string(),
+                    "verify the origin or backing volume before re-enabling the cache".to_string(),
+                ],
+            },
+        )
+    } else {
+        (
+            RiskClass::Reversible,
+            Advice {
+                summary: "replacement should preserve data when the source remains available"
+                    .to_string(),
+                alternatives: vec![
+                    "attach the replacement and resilver or rebalance before detaching the source"
+                        .to_string(),
+                    "keep the original device untouched until post-apply verification passes"
+                        .to_string(),
+                ],
+            },
+        )
     }
 }
 
@@ -959,6 +985,35 @@ mod tests {
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("multipath"))
+        }));
+    }
+
+    #[test]
+    fn plan_classifies_cache_replacement_as_offline_required() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "caches": {
+                "vg0/root-cache": {
+                  "operation": "replace-device",
+                  "replaceDevices": {
+                    "/dev/sdb": "/dev/sdc"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert!(plan.actions.iter().all(|action| {
+            action.operation == Operation::ReplaceDevice
+                && action.risk == RiskClass::OfflineRequired
+                && action.advice.as_ref().is_some_and(|advice| {
+                    advice
+                        .alternatives
+                        .iter()
+                        .any(|alternative| alternative.contains("flush dirty data"))
+                })
         }));
     }
 
