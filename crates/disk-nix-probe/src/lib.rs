@@ -11,6 +11,7 @@ mod lvm;
 mod mdraid;
 mod multipath;
 mod nfs;
+mod nvme;
 mod zfs;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +83,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_nfs(&mut result);
         collect_mdraid(&mut result);
         collect_multipath(&mut result);
+        collect_nvme(&mut result);
         collect_optional_tools(&mut result);
 
         Ok(result)
@@ -126,6 +128,38 @@ fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
     }
     for edge in source.edges {
         target.add_edge(edge);
+    }
+}
+
+fn collect_nvme(result: &mut ProbeResult) {
+    match run_report("nvme", &["list", "-o", "json"]) {
+        Ok(output) => match nvme::normalize_nvme_list_json(&output) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "nvme".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from NVMe JSON"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "nvme".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "nvme".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
     }
 }
 
@@ -557,7 +591,7 @@ fn parse_lines(bytes: &[u8]) -> Vec<String> {
 }
 
 fn collect_optional_tools(result: &mut ProbeResult) {
-    for tool in ["cryptsetup", "dmsetup", "nvme", "vdo", "vdostats"] {
+    for tool in ["cryptsetup", "dmsetup", "vdo", "vdostats"] {
         let status = if command_exists(tool) {
             ProbeStatus::Available
         } else {
