@@ -40,6 +40,9 @@ Examples:
 - `resizePolicy = "grow-only"` is classified as online growth intent.
 - `resizePolicy = "shrink-allowed"` is classified as potential data loss and
   recommends migration or backup-first alternatives.
+- XFS shrink intent is classified as unsupported because XFS does not support
+  shrinking in place; the planner recommends creating a smaller filesystem and
+  migrating data.
 - `preserveData = false` is classified as destructive because it permits
   formatting or replacement.
 - `removeDevices = [ ... ]` is classified as potential data loss and recommends
@@ -96,5 +99,7 @@ Policy fields currently supported:
 
 The default policy allows grow and property-change intents, but blocks
 destructive, irreversible, format, shrink, and potential-data-loss actions.
+Unsupported actions are always blocked, even if permissive destructive or
+shrink policy flags are enabled.
 `--execute` is reserved for the future executor and is refused after policy
 validation so the command cannot pretend to have modified storage.

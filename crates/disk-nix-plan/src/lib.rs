@@ -233,7 +233,9 @@ pub fn plan_from_value(value: &Value) -> Plan {
 }
 
 fn blocked_action(action: &PlannedAction, policy: &ApplyPolicy) -> Option<BlockedAction> {
-    let reason = if action.operation == Operation::Format && !policy.allow_format {
+    let reason = if action.risk == RiskClass::Unsupported {
+        Some("unsupported actions cannot be applied")
+    } else if action.operation == Operation::Format && !policy.allow_format {
         Some("format actions require allowFormat=true")
     } else if action.operation == Operation::Shrink {
         (!policy.allow_shrink).then_some("shrink actions require allowShrink=true")
@@ -292,26 +294,7 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             destructive: false,
             advice: None,
         }),
-        "shrink-allowed" => actions.push(PlannedAction {
-            id: format!("filesystem:{name}:shrink"),
-            description: format!(
-                "allow shrink evaluation for {fs_type} filesystem at {mountpoint}"
-            ),
-            operation: Operation::Shrink,
-            risk: RiskClass::PotentialDataLoss,
-            destructive: false,
-            advice: Some(Advice {
-                summary:
-                    "shrinking can require offline checks and filesystem-specific migration paths"
-                        .to_string(),
-                alternatives: vec![
-                    "prefer grow-only policies for live systems".to_string(),
-                    "create a new smaller filesystem and migrate data when shrink support is absent"
-                        .to_string(),
-                    "take and verify a backup before any shrink attempt".to_string(),
-                ],
-            }),
-        }),
+        "shrink-allowed" => actions.push(filesystem_shrink_action(name, mountpoint, fs_type)),
         _ => actions.push(PlannedAction {
             id: format!("filesystem:{name}:inspect"),
             description: format!("inspect {fs_type} filesystem declaration at {mountpoint}"),
@@ -342,6 +325,70 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
                 ],
             }),
         });
+    }
+}
+
+fn filesystem_shrink_action(name: &str, mountpoint: &str, fs_type: &str) -> PlannedAction {
+    let (risk, advice) = match fs_type {
+        "xfs" => (
+            RiskClass::Unsupported,
+            Advice {
+                summary: "XFS does not support shrinking in place".to_string(),
+                alternatives: vec![
+                    "create a new smaller filesystem and migrate data".to_string(),
+                    "snapshot or back up the current filesystem before migration".to_string(),
+                    "switch the mount to the replacement filesystem after verification".to_string(),
+                ],
+            },
+        ),
+        "btrfs" => (
+            RiskClass::PotentialDataLoss,
+            Advice {
+                summary:
+                    "Btrfs shrink requires enough data and metadata slack before resizing"
+                        .to_string(),
+                alternatives: vec![
+                    "run a balance to reduce allocated chunks before shrink".to_string(),
+                    "remove or replace devices only after checking filesystem usage".to_string(),
+                    "take a snapshot or backup before resizing".to_string(),
+                ],
+            },
+        ),
+        "ext2" | "ext3" | "ext4" => (
+            RiskClass::PotentialDataLoss,
+            Advice {
+                summary: format!("{fs_type} shrink requires offline filesystem checks"),
+                alternatives: vec![
+                    "unmount the filesystem and run fsck before resize".to_string(),
+                    "take and verify a backup before shrinking".to_string(),
+                    "create a new smaller filesystem and migrate data when downtime is not acceptable"
+                        .to_string(),
+                ],
+            },
+        ),
+        _ => (
+            RiskClass::PotentialDataLoss,
+            Advice {
+                summary:
+                    "shrinking can require offline checks and filesystem-specific migration paths"
+                        .to_string(),
+                alternatives: vec![
+                    "prefer grow-only policies for live systems".to_string(),
+                    "create a new smaller filesystem and migrate data when shrink support is absent"
+                        .to_string(),
+                    "take and verify a backup before any shrink attempt".to_string(),
+                ],
+            },
+        ),
+    };
+
+    PlannedAction {
+        id: format!("filesystem:{name}:shrink"),
+        description: format!("allow shrink evaluation for {fs_type} filesystem at {mountpoint}"),
+        operation: Operation::Shrink,
+        risk,
+        destructive: false,
+        advice: Some(advice),
     }
 }
 
@@ -792,7 +839,37 @@ mod tests {
 
         assert_eq!(plan.summary.action_count, 2);
         assert_eq!(plan.summary.destructive_count, 1);
+        assert_eq!(plan.summary.potential_data_loss_count, 0);
+        assert_eq!(plan.summary.unsupported_count, 1);
+        assert!(plan.actions.iter().any(|action| {
+            action.operation == Operation::Shrink
+                && action.risk == RiskClass::Unsupported
+                && action
+                    .advice
+                    .as_ref()
+                    .is_some_and(|advice| advice.summary.contains("XFS"))
+        }));
+    }
+
+    #[test]
+    fn plan_keeps_ext_shrink_as_potential_data_loss() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "home": {
+                  "mountpoint": "/home",
+                  "fsType": "ext4",
+                  "resizePolicy": "shrink-allowed"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 1);
         assert_eq!(plan.summary.potential_data_loss_count, 1);
+        assert_eq!(plan.summary.unsupported_count, 0);
+        assert_eq!(plan.actions[0].risk, RiskClass::PotentialDataLoss);
     }
 
     #[test]
@@ -875,6 +952,38 @@ mod tests {
 
         assert_eq!(report.blocked_count, 2);
         assert!(!report.can_execute());
+    }
+
+    #[test]
+    fn apply_policy_blocks_unsupported_actions_even_when_permissive() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "archive": {
+                  "mountpoint": "/archive",
+                  "fsType": "xfs",
+                  "resizePolicy": "shrink-allowed"
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowFormat": true,
+                "allowShrink": true,
+                "allowGrow": true,
+                "allowPropertyChanges": true
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        let report = evaluate_apply_policy(&plan, policy);
+
+        assert_eq!(report.blocked_count, 1);
+        assert_eq!(report.blocked[0].risk, RiskClass::Unsupported);
+        assert_eq!(
+            report.blocked[0].reason,
+            "unsupported actions cannot be applied"
+        );
     }
 
     #[test]
