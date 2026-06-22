@@ -44,6 +44,8 @@ The current probe layer normalizes:
   start/end offsets, partition sizes, names, types, and flags
 - `findmnt --json --bytes` for mounted filesystems, pseudo filesystems, and
   NFS exports
+- `/proc/swaps` for active swap devices/files, active size, used/free bytes,
+  swap type, and priority
 - LUKS mapper status through `cryptsetup status` for active/in-use state,
   backing device, cipher, key size, key location, sector size/count, offset, and
   access mode

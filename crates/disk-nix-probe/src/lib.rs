@@ -17,6 +17,7 @@ mod multipath;
 mod nfs;
 mod nvme;
 mod parted;
+mod swaps;
 mod vdo;
 mod zfs;
 
@@ -84,6 +85,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_blkid(&mut result);
         collect_parted(&mut result);
         collect_findmnt(&mut result);
+        collect_swaps(&mut result);
         collect_cryptsetup(&mut result);
         collect_dmsetup(&mut result);
         collect_lvm(&mut result);
@@ -199,6 +201,39 @@ fn collect_parted(result: &mut ProbeResult) {
                 ProbeStatus::Partial
             },
             message: Some(message),
+        }),
+    }
+}
+
+fn collect_swaps(result: &mut ProbeResult) {
+    match std::fs::read("/proc/swaps") {
+        Ok(output) => match swaps::normalize_proc_swaps(&output) {
+            Ok(graph) if graph.nodes.is_empty() => result.reports.push(ProbeReport {
+                adapter: "swaps".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("no active swap devices discovered".to_string()),
+            }),
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "swaps".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from /proc/swaps"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "swaps".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(error) => result.reports.push(ProbeReport {
+            adapter: "swaps".to_string(),
+            status: ProbeStatus::Unavailable,
+            message: Some(error.to_string()),
         }),
     }
 }
