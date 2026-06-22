@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/disk-nix-cli",
+  "crates/disk-nix-exec",
   "crates/disk-nix-model",
   "crates/disk-nix-plan",
   "crates/disk-nix-probe",

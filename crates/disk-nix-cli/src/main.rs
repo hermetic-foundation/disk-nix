@@ -5,10 +5,10 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
+use disk_nix_exec::{ExecutionMode, ExecutionReport, ExecutionStatus, prepare_execution};
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use disk_nix_plan::{
-    ApplyReport, Plan, default_capabilities, evaluate_apply_policy,
-    plan_and_policy_from_json_bytes, plan_from_json_bytes,
+    Plan, default_capabilities, plan_and_policy_from_json_bytes, plan_from_json_bytes,
 };
 use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeStatus};
 
@@ -234,7 +234,12 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             let bytes = std::fs::read(&spec)?;
             let (plan, policy) = plan_and_policy_from_json_bytes(&bytes)
                 .map_err(|error| AppError::Message(format!("failed to parse {spec}: {error}")))?;
-            let report = evaluate_apply_policy(&plan, policy);
+            let mode = if execute {
+                ExecutionMode::Execute
+            } else {
+                ExecutionMode::DryRun
+            };
+            let report = prepare_execution(&plan, policy, mode);
 
             if json {
                 writeln!(
@@ -245,20 +250,17 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                         .map_err(|error| AppError::Message(error.to_string()))?
                 )?;
             } else {
-                print_apply_report(output, &report, execute)?;
+                print_execution_report(output, &report, execute)?;
             }
 
-            if !report.can_execute() {
+            if report.status == ExecutionStatus::Blocked {
                 return Err(AppError::Message(format!(
                     "apply policy blocked {} action(s)",
-                    report.blocked_count
+                    report.apply.blocked_count
                 )));
             }
-            if execute {
-                return Err(AppError::Message(
-                    "executor is not implemented yet; policy validation passed but no storage commands were run"
-                        .to_string(),
-                ));
+            if report.status == ExecutionStatus::ExecutorUnavailable {
+                return Err(AppError::Message(report.messages.join("; ")));
             }
 
             Ok(())
@@ -582,32 +584,28 @@ fn print_plan(output: &mut impl Write, plan: &Plan) -> io::Result<()> {
     Ok(())
 }
 
-fn print_apply_report(
+fn print_execution_report(
     output: &mut impl Write,
-    report: &ApplyReport,
+    report: &ExecutionReport,
     execute: bool,
 ) -> io::Result<()> {
     writeln!(
         output,
         "Apply policy: {} allowed, {} blocked",
-        report.allowed_count, report.blocked_count
+        report.apply.allowed_count, report.apply.blocked_count
     )?;
-    writeln!(output, "mode: {:?}", report.policy.mode)?;
+    writeln!(output, "mode: {:?}", report.apply.policy.mode)?;
+    writeln!(output, "status: {:?}", report.status)?;
     writeln!(output, "execute requested: {execute}")?;
 
-    if report.blocked.is_empty() {
+    if report.apply.blocked.is_empty() {
         writeln!(output, "No policy blocks detected.")?;
-        if execute {
-            writeln!(
-                output,
-                "Executor unavailable: no storage commands were run."
-            )?;
-        } else {
-            writeln!(output, "Dry run only: no storage commands were run.")?;
+        for message in &report.messages {
+            writeln!(output, "{message}")?;
         }
     } else {
         writeln!(output, "Blocked actions:")?;
-        for blocked in &report.blocked {
+        for blocked in &report.apply.blocked {
             writeln!(
                 output,
                 "- {:?} {:?} {}: {}",

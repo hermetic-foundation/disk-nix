@@ -1,0 +1,17 @@
+[package]
+name = "disk-nix-exec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Policy-gated storage execution boundary for disk-nix"
+rust-version.workspace = true
+
+[dependencies]
+disk-nix-plan = { path = "../disk-nix-plan" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+
+[lints]
+workspace = true

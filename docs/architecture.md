@@ -19,11 +19,11 @@ NixOS module or JSON spec
 - `disk-nix-model`: storage graph types shared by every layer
 - `disk-nix-probe`: read-only adapters for Linux storage tools and sysfs
 - `disk-nix-plan`: capability and advice model for safe lifecycle changes
+- `disk-nix-exec`: policy-gated execution boundary and dry-run reports
 - `disk-nix-cli`: human and machine interfaces
 
 Future crates should keep the same boundary:
 
-- `disk-nix-exec`: command execution and post-checks
 - `disk-nix-nix`: NixOS-specific spec generation and validation helpers
 - `disk-nix-fixtures`: parser and topology fixtures
 
@@ -83,3 +83,7 @@ The planner classifies every action:
 
 Dangerous or unsupported requests should return actionable alternatives instead
 of only failing.
+
+The execution boundary must remain policy-gated. Until a real command runner
+and post-apply verification exist, `disk-nix-exec` only emits dry-run,
+blocked, or executor-unavailable reports.
