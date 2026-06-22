@@ -1,0 +1,12 @@
+[package]
+name = "disk-nix-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Typed storage graph model for disk-nix"
+rust-version.workspace = true
+
+[lints]
+workspace = true

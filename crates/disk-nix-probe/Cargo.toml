@@ -1,0 +1,15 @@
+[package]
+name = "disk-nix-probe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Storage discovery adapters for disk-nix"
+rust-version.workspace = true
+
+[dependencies]
+disk-nix-model = { path = "../disk-nix-model" }
+
+[lints]
+workspace = true

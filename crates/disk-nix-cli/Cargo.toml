@@ -1,0 +1,21 @@
+[package]
+name = "disk-nix-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Command line interface for disk-nix"
+rust-version.workspace = true
+
+[[bin]]
+name = "disk-nix"
+path = "src/main.rs"
+
+[dependencies]
+disk-nix-model = { path = "../disk-nix-model" }
+disk-nix-plan = { path = "../disk-nix-plan" }
+disk-nix-probe = { path = "../disk-nix-probe" }
+
+[lints]
+workspace = true

@@ -1,0 +1,5 @@
+/target/
+/result
+/result-*
+/.direnv/
+/.jj/repo/store/git_target

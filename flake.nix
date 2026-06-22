@@ -1,0 +1,127 @@
+{
+  description = "NixOS-native storage topology and lifecycle manager";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  };
+
+  outputs =
+    {
+      self,
+      nixpkgs,
+    }:
+    let
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+      perSystem = forAllSystems (
+        system:
+        let
+        pkgs = import nixpkgs { inherit system; };
+        formatFiles = ''
+          find . \
+            -path ./.git -prune -o \
+            -path ./target -prune -o \
+            -path ./build -prune -o \
+            -type f -name '*.nix' \
+            -print0
+        '';
+        formatProgram = pkgs.writeShellApplication {
+          name = "disk-nix-format";
+          runtimeInputs = [
+            pkgs.findutils
+            pkgs.nixfmt
+          ];
+          text = ''
+            if [ "$#" -gt 0 ]; then
+              for file in "$@"; do
+                case "$file" in
+                  *.nix) nixfmt "$file" ;;
+                esac
+              done
+              exit 0
+            fi
+
+            while IFS= read -r -d "" file; do
+              case "$file" in
+                *.nix) nixfmt "$file" ;;
+              esac
+            done < <(${formatFiles})
+          '';
+        };
+        diskNix = pkgs.rustPlatform.buildRustPackage {
+          pname = "disk-nix";
+          version = "0.1.0";
+          src = self;
+          cargoLock.lockFile = ./Cargo.lock;
+          cargoBuildFlags = [
+            "-p"
+            "disk-nix-cli"
+          ];
+          cargoTestFlags = [ "--workspace" ];
+          meta = {
+            description = "NixOS-native storage topology and lifecycle manager";
+            homepage = "https://github.com/midischwarz12/disk-nix";
+            license = pkgs.lib.licenses.agpl3Plus;
+            mainProgram = "disk-nix";
+          };
+        };
+      in
+      {
+        formatter = formatProgram;
+
+        packages = {
+          default = diskNix;
+          disk-nix = diskNix;
+        };
+
+        apps.default = {
+          type = "app";
+          program = "${diskNix}/bin/disk-nix";
+        };
+
+        checks = {
+          inherit diskNix;
+          formatting = pkgs.runCommand "disk-nix-formatting-check" { nativeBuildInputs = [ pkgs.findutils pkgs.nixfmt ]; } ''
+            cp -R ${self} source
+            chmod -R u+w source
+            cd source
+            while IFS= read -r -d "" file; do
+              case "$file" in
+                *.nix) nixfmt --check "$file" ;;
+              esac
+            done < <(${formatFiles})
+            touch "$out"
+          '';
+        };
+
+        devShells.default = pkgs.mkShell {
+          packages = [
+            pkgs.cargo
+            pkgs.clippy
+            pkgs.rustc
+            pkgs.rustfmt
+            pkgs.rust-analyzer
+            pkgs.pkg-config
+            pkgs.jujutsu
+            pkgs.just
+            formatProgram
+          ];
+        };
+      }
+      );
+    in
+    {
+      formatter = forAllSystems (system: perSystem.${system}.formatter);
+      packages = forAllSystems (system: perSystem.${system}.packages);
+      apps = forAllSystems (system: perSystem.${system}.apps);
+      checks = forAllSystems (system: perSystem.${system}.checks);
+      devShells = forAllSystems (system: perSystem.${system}.devShells);
+      nixosModules.default = import ./nix/modules/disk-nix.nix self;
+      overlays.default = final: _prev: {
+        disk-nix = self.packages.${final.system}.disk-nix;
+      };
+    };
+}

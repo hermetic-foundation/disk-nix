@@ -1,0 +1,82 @@
+# Architecture
+
+`disk-nix` is built around a typed storage graph.
+
+## Data flow
+
+```text
+NixOS module or JSON spec
+  -> desired storage model
+  -> current topology probe
+  -> planner
+  -> risk-classified action graph
+  -> executor
+  -> post-apply verification
+```
+
+## Core crates
+
+- `disk-nix-model`: storage graph types shared by every layer
+- `disk-nix-probe`: read-only adapters for Linux storage tools and sysfs
+- `disk-nix-plan`: capability and advice model for safe lifecycle changes
+- `disk-nix-cli`: human and machine interfaces
+
+Future crates should keep the same boundary:
+
+- `disk-nix-exec`: command execution and post-checks
+- `disk-nix-nix`: NixOS-specific spec generation and validation helpers
+- `disk-nix-fixtures`: parser and topology fixtures
+
+## Storage graph
+
+The graph is intentionally not a disk tree. Storage is layered and often
+many-to-many:
+
+```text
+iSCSI LUN -> SCSI disk -> partition -> LUKS -> LVM PV -> VG -> LV -> filesystem -> mount
+```
+
+```text
+ZFS pool -> vdevs -> datasets -> snapshots
+```
+
+```text
+Btrfs filesystem -> devices -> subvolumes -> snapshots -> qgroups
+```
+
+Nodes describe storage objects. Edges describe relationships such as
+`contains`, `backs`, `maps-to`, `member-of`, `mounted-at`, `snapshot-of`,
+`cache-for`, and `depends-on`.
+
+## Probe adapters
+
+Probe adapters must be optional and degradation-aware. Missing `zfs`, `btrfs`,
+`lvm`, `iscsiadm`, `vdo`, or `multipath` tooling should not prevent basic
+topology discovery.
+
+Every adapter reports one of:
+
+- `available`
+- `unavailable`
+- `partial`
+- `failed`
+
+The first implementation records adapter availability. Future implementations
+should parse fixture-backed command output and normalize it into graph nodes and
+edges.
+
+## Safety model
+
+The planner classifies every action:
+
+- `safe`
+- `online`
+- `offline_required`
+- `reversible`
+- `potential_data_loss`
+- `destructive`
+- `irreversible`
+- `unsupported`
+
+Dangerous or unsupported requests should return actionable alternatives instead
+of only failing.
