@@ -109,8 +109,12 @@ fn collect_lsblk(result: &mut ProbeResult) {
 }
 
 fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
-    target.nodes.extend(source.nodes);
-    target.edges.extend(source.edges);
+    for node in source.nodes {
+        target.add_node(node);
+    }
+    for edge in source.edges {
+        target.add_edge(edge);
+    }
 }
 
 fn collect_lvm(result: &mut ProbeResult) {

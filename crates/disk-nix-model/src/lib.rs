@@ -19,15 +19,41 @@ impl StorageGraph {
     }
 
     pub fn add_node(&mut self, node: Node) {
-        self.nodes.push(node);
+        if let Some(existing) = self
+            .nodes
+            .iter_mut()
+            .find(|existing| existing.id == node.id)
+        {
+            existing.merge(node);
+        } else {
+            self.nodes.push(node);
+        }
     }
 
     pub fn add_edge(&mut self, edge: Edge) {
-        self.edges.push(edge);
+        if !self.edges.contains(&edge) {
+            self.edges.push(edge);
+        }
     }
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
+    }
+
+    #[must_use]
+    pub fn find_nodes(&self, query: &str) -> Vec<&Node> {
+        self.nodes
+            .iter()
+            .filter(|node| node.matches(query))
+            .collect()
+    }
+
+    #[must_use]
+    pub fn related_edges(&self, node_id: &NodeId) -> Vec<&Edge> {
+        self.edges
+            .iter()
+            .filter(|edge| &edge.from == node_id || &edge.to == node_id)
+            .collect()
     }
 }
 
@@ -93,6 +119,42 @@ impl Node {
             value: value.into(),
         });
         self
+    }
+
+    #[must_use]
+    pub fn matches(&self, query: &str) -> bool {
+        self.id.0 == query
+            || self.name == query
+            || self.path.as_deref() == Some(query)
+            || self.identity.uuid.as_deref() == Some(query)
+            || self.identity.partuuid.as_deref() == Some(query)
+            || self.identity.label.as_deref() == Some(query)
+            || self.identity.serial.as_deref() == Some(query)
+            || self.identity.wwn.as_deref() == Some(query)
+            || self
+                .properties
+                .iter()
+                .any(|property| property.value == query || property.key == query)
+    }
+
+    fn merge(&mut self, other: Node) {
+        if self.path.is_none() {
+            self.path = other.path;
+        }
+        if self.size_bytes.is_none() {
+            self.size_bytes = other.size_bytes;
+        }
+        if self.usage.is_none() {
+            self.usage = other.usage;
+        }
+
+        self.identity.merge(other.identity);
+
+        for property in other.properties {
+            if !self.properties.contains(&property) {
+                self.properties.push(property);
+            }
+        }
     }
 }
 
@@ -252,6 +314,24 @@ impl Identity {
             && self.serial.is_none()
             && self.wwn.is_none()
     }
+
+    fn merge(&mut self, other: Identity) {
+        if self.uuid.is_none() {
+            self.uuid = other.uuid;
+        }
+        if self.partuuid.is_none() {
+            self.partuuid = other.partuuid;
+        }
+        if self.label.is_none() {
+            self.label = other.label;
+        }
+        if self.serial.is_none() {
+            self.serial = other.serial;
+        }
+        if self.wwn.is_none() {
+            self.wwn = other.wwn;
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -313,5 +393,30 @@ mod tests {
 
         assert!(json.contains("\"name\":\"disk \\\"0\\\"\""));
         assert!(json.contains("\"sizeBytes\":1024"));
+    }
+
+    #[test]
+    fn finds_nodes_by_identity_and_path() {
+        let mut graph = StorageGraph::empty();
+        let mut node = Node::new("disk:0", NodeKind::PhysicalDisk, "disk0").with_path("/dev/sda");
+        node.identity.uuid = Some("uuid-0".to_string());
+        graph.add_node(node);
+
+        assert_eq!(graph.find_nodes("/dev/sda").len(), 1);
+        assert_eq!(graph.find_nodes("uuid-0").len(), 1);
+        assert!(graph.find_nodes("missing").is_empty());
+    }
+
+    #[test]
+    fn merges_duplicate_nodes_by_id() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new("mount:/", NodeKind::Mountpoint, "/"));
+        graph.add_node(
+            Node::new("mount:/", NodeKind::Mountpoint, "/")
+                .with_property("filesystem.type", "ext4"),
+        );
+
+        assert_eq!(graph.nodes.len(), 1);
+        assert_eq!(graph.nodes[0].properties.len(), 1);
     }
 }

@@ -48,6 +48,9 @@ Nodes describe storage objects. Edges describe relationships such as
 `contains`, `backs`, `maps-to`, `member-of`, `mounted-at`, `snapshot-of`,
 `cache-for`, and `depends-on`.
 
+Graph nodes can be inspected by id, path, name, UUID, PARTUUID, label, serial,
+WWN, or exact property key/value through `disk-nix inspect <query>`.
+
 ## Probe adapters
 
 Probe adapters must be optional and degradation-aware. Missing `zfs`, `btrfs`,

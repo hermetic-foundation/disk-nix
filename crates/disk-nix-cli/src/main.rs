@@ -60,6 +60,11 @@ enum Command {
     },
     /// List storage identity fields such as UUIDs, labels, serials, and WWNs.
     Ids,
+    /// Inspect a graph node by id, path, name, UUID, label, serial, or property.
+    Inspect {
+        /// Query value to inspect.
+        query: String,
+    },
     /// Plan desired storage changes from a JSON spec.
     Plan {
         /// Desired storage specification path.
@@ -153,6 +158,11 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
         Command::Ids => {
             let graph = collect_graph()?;
             print_ids(output, &graph)?;
+            Ok(())
+        }
+        Command::Inspect { query } => {
+            let graph = collect_graph()?;
+            print_inspect(output, &graph, &query)?;
             Ok(())
         }
         Command::Plan { spec, json } => {
@@ -313,6 +323,113 @@ fn print_ids(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
             hardware_id
         )?;
     }
+    Ok(())
+}
+
+fn print_inspect(output: &mut impl Write, graph: &StorageGraph, query: &str) -> io::Result<()> {
+    let matches = graph.find_nodes(query);
+
+    if matches.is_empty() {
+        writeln!(output, "No storage graph nodes matched '{query}'.")?;
+        return Ok(());
+    }
+
+    for (index, node) in matches.iter().enumerate() {
+        if index > 0 {
+            writeln!(output)?;
+        }
+
+        writeln!(output, "{} {}", node.kind, node.name)?;
+        writeln!(output, "  id: {}", node.id.0)?;
+        if let Some(path) = &node.path {
+            writeln!(output, "  path: {path}")?;
+        }
+        if let Some(size_bytes) = node.size_bytes {
+            writeln!(output, "  size: {}", human_bytes(Some(size_bytes)))?;
+        }
+        if let Some(usage) = &node.usage {
+            if usage.used_bytes.is_some() || usage.free_bytes.is_some() {
+                writeln!(
+                    output,
+                    "  usage: used={} free={}",
+                    human_bytes(usage.used_bytes),
+                    human_bytes(usage.free_bytes)
+                )?;
+            }
+        }
+
+        print_identity(output, node)?;
+        print_properties(output, node)?;
+        print_relationships(output, graph, node)?;
+    }
+
+    Ok(())
+}
+
+fn print_identity(output: &mut impl Write, node: &Node) -> io::Result<()> {
+    if node.identity.is_empty() {
+        return Ok(());
+    }
+
+    writeln!(output, "  identity:")?;
+    for (key, value) in [
+        ("uuid", node.identity.uuid.as_deref()),
+        ("partuuid", node.identity.partuuid.as_deref()),
+        ("label", node.identity.label.as_deref()),
+        ("serial", node.identity.serial.as_deref()),
+        ("wwn", node.identity.wwn.as_deref()),
+    ] {
+        if let Some(value) = value {
+            writeln!(output, "    {key}: {value}")?;
+        }
+    }
+    Ok(())
+}
+
+fn print_properties(output: &mut impl Write, node: &Node) -> io::Result<()> {
+    if node.properties.is_empty() {
+        return Ok(());
+    }
+
+    writeln!(output, "  properties:")?;
+    for property in &node.properties {
+        writeln!(output, "    {}: {}", property.key, property.value)?;
+    }
+    Ok(())
+}
+
+fn print_relationships(
+    output: &mut impl Write,
+    graph: &StorageGraph,
+    node: &Node,
+) -> io::Result<()> {
+    let edges = graph.related_edges(&node.id);
+    if edges.is_empty() {
+        return Ok(());
+    }
+
+    writeln!(output, "  relationships:")?;
+    for edge in edges {
+        let direction = if edge.from == node.id { "out" } else { "in" };
+        let other_id = if edge.from == node.id {
+            &edge.to
+        } else {
+            &edge.from
+        };
+        let other_name = graph
+            .nodes
+            .iter()
+            .find(|candidate| &candidate.id == other_id)
+            .map(|candidate| candidate.name.as_str())
+            .unwrap_or(other_id.0.as_str());
+
+        writeln!(
+            output,
+            "    {direction} {} {} ({})",
+            edge.relationship, other_id.0, other_name
+        )?;
+    }
+
     Ok(())
 }
 
