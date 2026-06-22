@@ -635,6 +635,20 @@ fn classify_operation(
 ) -> (RiskClass, bool, Option<Advice>) {
     match operation {
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
+        Operation::Grow if collection == "luns" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "LUN growth must be coordinated with the storage target and host rescan"
+                    .to_string(),
+                alternatives: vec![
+                    "grow the target LUN before resizing consumers".to_string(),
+                    "rescan SCSI paths and verify multipath before filesystem growth".to_string(),
+                    "confirm every dependent filesystem or volume sees the new capacity"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Grow | Operation::AddDevice | Operation::Rebalance => {
             (RiskClass::Online, false, None)
         }
@@ -922,6 +936,30 @@ mod tests {
         assert_eq!(plan.summary.action_count, 1);
         assert_eq!(plan.summary.potential_data_loss_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Rollback);
+    }
+
+    #[test]
+    fn plan_classifies_lun_growth_as_offline_required() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/root:0": {
+                  "operation": "grow"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.actions[0].operation, Operation::Grow);
+        assert_eq!(plan.actions[0].risk, RiskClass::OfflineRequired);
+        assert!(plan.actions[0].advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("multipath"))
+        }));
     }
 
     #[test]

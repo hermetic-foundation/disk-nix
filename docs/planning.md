@@ -50,6 +50,8 @@ Examples:
 - `replaceDevices = { old = new; }` is classified as reversible because the
   original device can remain available until verification passes.
 - `properties = { ... }` is classified as safe property-update intent.
+- LUN `operation = "grow"` is classified as offline-required because the
+  storage target, host rescan, multipath, and consumers must be coordinated.
 - `destroy = true` is classified as destructive and recommends backup,
   migration, snapshot, rename, or unmount-first alternatives depending on the
   target type.
