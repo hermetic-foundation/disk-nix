@@ -18,6 +18,7 @@ disk-nix-exec = { path = "../disk-nix-exec" }
 disk-nix-model = { path = "../disk-nix-model" }
 disk-nix-plan = { path = "../disk-nix-plan" }
 disk-nix-probe = { path = "../disk-nix-probe" }
+serde_json = "1.0.150"
 
 [lints]
 workspace = true

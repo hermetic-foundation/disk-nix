@@ -21,10 +21,10 @@ The project is licensed under AGPL-3.0-or-later from the beginning.
 
 ## Current status
 
-This repository is an initial scaffold. The CLI currently provides a small
-read-only `topology` command and the crate boundaries needed for the storage
-graph, probing, planning, execution policy, NixOS module integration, and
-documentation.
+This repository is an active implementation. The CLI provides read-only storage
+topology views, adapter status reporting, lifecycle planning, policy-gated apply
+evaluation, NixOS module integration, and fixture-backed parser coverage for the
+storage graph.
 
 ## Development
 
@@ -48,6 +48,8 @@ nix flake check
 ```sh
 disk-nix topology
 disk-nix topology --json
+disk-nix probe-status
+disk-nix probe-status --json
 disk-nix devices
 disk-nix filesystems
 disk-nix volumes

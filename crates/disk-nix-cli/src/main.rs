@@ -41,6 +41,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Show probe adapter availability and degradation status.
+    ProbeStatus {
+        /// Emit JSON probe reports.
+        #[arg(long)]
+        json: bool,
+    },
     /// Show modeled storage operation capabilities and risk classes.
     Capabilities,
     /// List block-like storage devices.
@@ -143,6 +149,23 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                     .to_json()
                     .map_err(|error| AppError::Message(error.to_string()))?
             )?;
+            Ok(())
+        }
+        Command::ProbeStatus { json } => {
+            let probe = LinuxProbe::new();
+            let result = probe
+                .collect()
+                .map_err(|error| AppError::Message(error.to_string()))?;
+            if json {
+                writeln!(
+                    output,
+                    "{}",
+                    serde_json::to_string_pretty(&result.reports)
+                        .map_err(|error| AppError::Message(error.to_string()))?
+                )?;
+            } else {
+                print_probe_reports(output, &result.reports)?;
+            }
             Ok(())
         }
         Command::Capabilities => {
@@ -309,9 +332,18 @@ fn print_topology_summary(
     writeln!(output, "nodes: {}", result.graph.nodes.len())?;
     writeln!(output, "edges: {}", result.graph.edges.len())?;
     writeln!(output)?;
+    print_probe_reports(output, &result.reports)?;
+
+    Ok(())
+}
+
+fn print_probe_reports(
+    output: &mut impl Write,
+    reports: &[disk_nix_probe::ProbeReport],
+) -> io::Result<()> {
     writeln!(output, "Adapters:")?;
 
-    for report in &result.reports {
+    for report in reports {
         let status = match report.status {
             ProbeStatus::Available => "available",
             ProbeStatus::Unavailable => "unavailable",

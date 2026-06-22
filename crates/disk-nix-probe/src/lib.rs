@@ -1,6 +1,7 @@
 use std::{collections::BTreeSet, process::Command};
 
 use disk_nix_model::StorageGraph;
+use serde::Serialize;
 use thiserror::Error;
 
 mod bcache;
@@ -23,7 +24,8 @@ mod udev;
 mod vdo;
 mod zfs;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ProbeStatus {
     Available,
     Unavailable,
@@ -31,7 +33,8 @@ pub enum ProbeStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProbeReport {
     pub adapter: String,
     pub status: ProbeStatus,
@@ -49,7 +52,8 @@ pub enum ProbeError {
     Adapter(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProbeResult {
     pub graph: StorageGraph,
     pub reports: Vec<ProbeReport>,

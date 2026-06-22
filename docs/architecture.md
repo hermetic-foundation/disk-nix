@@ -64,9 +64,9 @@ Every adapter reports one of:
 - `partial`
 - `failed`
 
-The first implementation records adapter availability. Future implementations
-should parse fixture-backed command output and normalize it into graph nodes and
-edges.
+Adapter status is visible in `disk-nix topology` and machine-readable through
+`disk-nix probe-status --json`, so callers can distinguish a complete topology
+from one that is degraded by missing tools or insufficient privileges.
 
 ## Safety model
 
