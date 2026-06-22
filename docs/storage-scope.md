@@ -47,6 +47,8 @@ The current probe layer normalizes:
   datasets, snapshots, zvols, mountpoints, and clone origins
 - Btrfs mounted filesystems through `btrfs filesystem show`, `btrfs filesystem usage -b`, and `btrfs subvolume list -u` for filesystem identity, member
   devices, usage, subvolumes, and snapshot-like subvolume relationships
+- iSCSI sessions through `iscsiadm -m session -P 3` for session ids, target
+  IQNs, portals, LUNs, and attached SCSI disks
 
 LVM probing may report `partial` when the process lacks permission to talk to
 device-mapper. That should not prevent the rest of discovery from succeeding.

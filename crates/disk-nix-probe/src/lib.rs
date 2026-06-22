@@ -5,6 +5,7 @@ use thiserror::Error;
 
 mod btrfs;
 mod findmnt;
+mod iscsi;
 mod lsblk;
 mod lvm;
 mod zfs;
@@ -74,6 +75,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_lvm(&mut result);
         collect_zfs(&mut result);
         collect_btrfs(&mut result);
+        collect_iscsi(&mut result);
         collect_optional_tools(&mut result);
 
         Ok(result)
@@ -118,6 +120,38 @@ fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
     }
     for edge in source.edges {
         target.add_edge(edge);
+    }
+}
+
+fn collect_iscsi(result: &mut ProbeResult) {
+    match run_report("iscsiadm", &["-m", "session", "-P", "3"]) {
+        Ok(output) => match iscsi::normalize_iscsi_session_output(&output) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "iscsi".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from iSCSI sessions"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "iscsi".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "iscsi".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
     }
 }
 
@@ -371,7 +405,6 @@ fn collect_optional_tools(result: &mut ProbeResult) {
         "cryptsetup",
         "dmsetup",
         "mdadm",
-        "iscsiadm",
         "nfsstat",
         "multipath",
         "nvme",
