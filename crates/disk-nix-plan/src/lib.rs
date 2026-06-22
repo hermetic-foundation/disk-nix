@@ -81,9 +81,105 @@ pub struct PlannedAction {
     pub advice: Option<Advice>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub struct ApplyPolicy {
+    pub mode: ApplyMode,
+    pub allow_destructive: bool,
+    pub allow_format: bool,
+    pub allow_shrink: bool,
+    pub allow_grow: bool,
+    pub allow_property_changes: bool,
+}
+
+impl Default for ApplyPolicy {
+    fn default() -> Self {
+        Self {
+            mode: ApplyMode::Manual,
+            allow_destructive: false,
+            allow_format: false,
+            allow_shrink: false,
+            allow_grow: true,
+            allow_property_changes: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ApplyMode {
+    Manual,
+    Activation,
+    Boot,
+    Install,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyReport {
+    pub policy: ApplyPolicy,
+    pub allowed_count: usize,
+    pub blocked_count: usize,
+    pub blocked: Vec<BlockedAction>,
+}
+
+impl ApplyReport {
+    #[must_use]
+    pub fn can_execute(&self) -> bool {
+        self.blocked.is_empty()
+    }
+
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockedAction {
+    pub id: String,
+    pub operation: Operation,
+    pub risk: RiskClass,
+    pub reason: String,
+}
+
 pub fn plan_from_json_bytes(bytes: &[u8]) -> Result<Plan, serde_json::Error> {
     let value: Value = serde_json::from_slice(bytes)?;
     Ok(plan_from_value(&value))
+}
+
+pub fn plan_and_policy_from_json_bytes(
+    bytes: &[u8],
+) -> Result<(Plan, ApplyPolicy), serde_json::Error> {
+    let value: Value = serde_json::from_slice(bytes)?;
+    let plan = plan_from_value(&value);
+    let policy = apply_policy_from_value(&value)?;
+    Ok((plan, policy))
+}
+
+pub fn apply_policy_from_value(value: &Value) -> Result<ApplyPolicy, serde_json::Error> {
+    match value.get("apply") {
+        Some(apply) => serde_json::from_value(apply.clone()),
+        None => Ok(ApplyPolicy::default()),
+    }
+}
+
+#[must_use]
+pub fn evaluate_apply_policy(plan: &Plan, policy: ApplyPolicy) -> ApplyReport {
+    let blocked: Vec<BlockedAction> = plan
+        .actions
+        .iter()
+        .filter_map(|action| blocked_action(action, &policy))
+        .collect();
+    let blocked_count = blocked.len();
+
+    ApplyReport {
+        policy,
+        allowed_count: plan.actions.len().saturating_sub(blocked_count),
+        blocked_count,
+        blocked,
+    }
 }
 
 #[must_use]
@@ -134,6 +230,36 @@ pub fn plan_from_value(value: &Value) -> Plan {
     };
 
     Plan { summary, actions }
+}
+
+fn blocked_action(action: &PlannedAction, policy: &ApplyPolicy) -> Option<BlockedAction> {
+    let reason = if action.operation == Operation::Format && !policy.allow_format {
+        Some("format actions require allowFormat=true")
+    } else if action.operation == Operation::Shrink {
+        (!policy.allow_shrink).then_some("shrink actions require allowShrink=true")
+    } else if action.operation == Operation::Grow {
+        (!policy.allow_grow).then_some("grow actions require allowGrow=true")
+    } else if action.operation == Operation::SetProperty {
+        (!policy.allow_property_changes)
+            .then_some("property changes require allowPropertyChanges=true")
+    } else if action.destructive
+        || action.risk == RiskClass::Destructive
+        || action.risk == RiskClass::Irreversible
+    {
+        (!policy.allow_destructive)
+            .then_some("destructive or irreversible actions require allowDestructive=true")
+    } else if action.risk == RiskClass::PotentialDataLoss {
+        Some("potential data loss actions require a safer workflow or future explicit policy")
+    } else {
+        None
+    }?;
+
+    Some(BlockedAction {
+        id: action.id.clone(),
+        operation: action.operation,
+        risk: action.risk,
+        reason: reason.to_string(),
+    })
 }
 
 fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesystem: &Value) {
@@ -719,5 +845,91 @@ mod tests {
         assert_eq!(plan.summary.action_count, 1);
         assert_eq!(plan.summary.potential_data_loss_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Rollback);
+    }
+
+    #[test]
+    fn apply_policy_blocks_destructive_and_potential_data_loss_actions() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "datasets": {
+                  "tank/old": { "destroy": true }
+                },
+                "pools": {
+                  "tank": { "removeDevices": ["/dev/sdb"] }
+                }
+              },
+              "apply": {
+                "mode": "manual",
+                "allowDestructive": false,
+                "allowFormat": false,
+                "allowShrink": false,
+                "allowGrow": true,
+                "allowPropertyChanges": true
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        let report = evaluate_apply_policy(&plan, policy);
+
+        assert_eq!(report.blocked_count, 2);
+        assert!(!report.can_execute());
+    }
+
+    #[test]
+    fn apply_policy_allows_grow_when_enabled() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "volumes": {
+                  "vg/root": { "operation": "grow" }
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        let report = evaluate_apply_policy(&plan, policy);
+
+        assert_eq!(report.blocked_count, 0);
+        assert!(report.can_execute());
+    }
+
+    #[test]
+    fn apply_policy_requires_format_and_destructive_permission_for_format() {
+        let (plan, mut policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "scratch": {
+                    "mountpoint": "/scratch",
+                    "fsType": "xfs",
+                    "preserveData": false
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowFormat": false
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        let report = evaluate_apply_policy(&plan, policy.clone());
+        assert!(
+            report
+                .blocked
+                .iter()
+                .any(|blocked| blocked.reason == "format actions require allowFormat=true")
+        );
+
+        policy.allow_format = true;
+        let report = evaluate_apply_policy(&plan, policy);
+        assert_eq!(report.blocked_count, 0);
     }
 }

@@ -517,11 +517,11 @@ in
     }) cfg.luks.devices;
 
     systemd.services.disk-nix-plan = {
-      description = "Plan disk-nix storage changes";
+      description = "Validate disk-nix storage apply policy";
       wantedBy = lib.mkIf (cfg.apply.mode == "activation") [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${lib.getExe cfg.package} plan --spec /etc/disk-nix/spec.json";
+        ExecStart = "${lib.getExe cfg.package} apply --spec /etc/disk-nix/spec.json";
       };
     };
 

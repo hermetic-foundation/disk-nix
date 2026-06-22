@@ -6,7 +6,10 @@ use std::{
 
 use clap::{Parser, Subcommand};
 use disk_nix_model::{Node, NodeKind, StorageGraph};
-use disk_nix_plan::{Plan, default_capabilities, plan_from_json_bytes};
+use disk_nix_plan::{
+    ApplyReport, Plan, default_capabilities, evaluate_apply_policy,
+    plan_and_policy_from_json_bytes, plan_from_json_bytes,
+};
 use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeStatus};
 
 fn main() -> ExitCode {
@@ -83,6 +86,18 @@ enum Command {
         #[arg(long)]
         spec: String,
         /// Emit JSON plan output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Evaluate apply policy for a desired storage spec.
+    Apply {
+        /// Desired storage specification path.
+        #[arg(long)]
+        spec: String,
+        /// Attempt execution after policy validation.
+        #[arg(long)]
+        execute: bool,
+        /// Emit JSON apply report.
         #[arg(long)]
         json: bool,
     },
@@ -209,6 +224,43 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             } else {
                 print_plan(output, &plan)?;
             }
+            Ok(())
+        }
+        Command::Apply {
+            spec,
+            execute,
+            json,
+        } => {
+            let bytes = std::fs::read(&spec)?;
+            let (plan, policy) = plan_and_policy_from_json_bytes(&bytes)
+                .map_err(|error| AppError::Message(format!("failed to parse {spec}: {error}")))?;
+            let report = evaluate_apply_policy(&plan, policy);
+
+            if json {
+                writeln!(
+                    output,
+                    "{}",
+                    report
+                        .to_json()
+                        .map_err(|error| AppError::Message(error.to_string()))?
+                )?;
+            } else {
+                print_apply_report(output, &report, execute)?;
+            }
+
+            if !report.can_execute() {
+                return Err(AppError::Message(format!(
+                    "apply policy blocked {} action(s)",
+                    report.blocked_count
+                )));
+            }
+            if execute {
+                return Err(AppError::Message(
+                    "executor is not implemented yet; policy validation passed but no storage commands were run"
+                        .to_string(),
+                ));
+            }
+
             Ok(())
         }
     }
@@ -524,6 +576,43 @@ fn print_plan(output: &mut impl Write, plan: &Plan) -> io::Result<()> {
             for alternative in &advice.alternatives {
                 writeln!(output, "  alternative: {alternative}")?;
             }
+        }
+    }
+
+    Ok(())
+}
+
+fn print_apply_report(
+    output: &mut impl Write,
+    report: &ApplyReport,
+    execute: bool,
+) -> io::Result<()> {
+    writeln!(
+        output,
+        "Apply policy: {} allowed, {} blocked",
+        report.allowed_count, report.blocked_count
+    )?;
+    writeln!(output, "mode: {:?}", report.policy.mode)?;
+    writeln!(output, "execute requested: {execute}")?;
+
+    if report.blocked.is_empty() {
+        writeln!(output, "No policy blocks detected.")?;
+        if execute {
+            writeln!(
+                output,
+                "Executor unavailable: no storage commands were run."
+            )?;
+        } else {
+            writeln!(output, "Dry run only: no storage commands were run.")?;
+        }
+    } else {
+        writeln!(output, "Blocked actions:")?;
+        for blocked in &report.blocked {
+            writeln!(
+                output,
+                "- {:?} {:?} {}: {}",
+                blocked.risk, blocked.operation, blocked.id, blocked.reason
+            )?;
         }
     }
 

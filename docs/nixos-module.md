@@ -124,7 +124,8 @@ Example lifecycle planning through NixOS options:
 ## Apply modes
 
 - `manual`: only install the spec and CLI
-- `activation`: run planning during activation; destructive actions are refused
+- `activation`: run apply-policy validation during activation; destructive and
+  potential-data-loss actions are refused by default
 - `boot`: reserved for boot-time lifecycle work
 - `install`: reserved for installer workflows
 

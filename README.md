@@ -59,6 +59,8 @@ disk-nix inspect /
 disk-nix plan --spec ./examples/simple-root.json
 disk-nix plan --spec ./examples/lifecycle-update.json
 disk-nix plan --spec ./examples/simple-root.json --json
+disk-nix apply --spec ./examples/lifecycle-update.json
+disk-nix apply --spec ./examples/lifecycle-update.json --json
 ```
 
 The canonical interface is intended to be stable JSON. Human tables and tree
@@ -97,3 +99,8 @@ options from the same source of truth.
 1. verify after execution
 
 No destructive operation should be implicit.
+
+`disk-nix apply` is currently a policy-gated dry run. It evaluates the planned
+actions against the `apply` policy in the spec and reports blocked operations.
+The `--execute` flag is intentionally refused until a real executor and
+post-apply verification layer exist.

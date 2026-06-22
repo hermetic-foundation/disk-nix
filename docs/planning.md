@@ -78,3 +78,23 @@ Lifecycle objects may use:
 
 Future planners should compare desired state against the probed topology before
 emitting concrete executor actions.
+
+## Apply policy
+
+`disk-nix apply --spec <path>` reads the same document as `plan`, evaluates the
+planned actions against the top-level `apply` policy, and reports whether each
+action is allowed or blocked. It does not mutate storage yet.
+
+Policy fields currently supported:
+
+- `mode`
+- `allowDestructive`
+- `allowFormat`
+- `allowShrink`
+- `allowGrow`
+- `allowPropertyChanges`
+
+The default policy allows grow and property-change intents, but blocks
+destructive, irreversible, format, shrink, and potential-data-loss actions.
+`--execute` is reserved for the future executor and is refused after policy
+validation so the command cannot pretend to have modified storage.
