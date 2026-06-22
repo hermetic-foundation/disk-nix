@@ -8,6 +8,17 @@ self:
 let
   cfg = config.services.disk-nix;
   json = pkgs.formats.json { };
+  typedFilesystemSpec = lib.mapAttrs (_: filesystem: {
+    inherit (filesystem)
+      device
+      fsType
+      mountpoint
+      options
+      neededForBoot
+      resizePolicy
+      preserveData
+      ;
+  }) cfg.filesystems;
 in
 {
   options.services.disk-nix = {
@@ -28,6 +39,71 @@ in
         This is intentionally broad while the typed NixOS option hierarchy is
         developed.
       '';
+    };
+
+    filesystems = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (
+          { name, ... }:
+          {
+            options = {
+              device = lib.mkOption {
+                type = lib.types.str;
+                description = "Device, mapper path, dataset, or remote source backing the filesystem.";
+                example = "/dev/disk/by-uuid/59b8deb7-5fa0-4eb3-b68c-40ac18d4f648";
+              };
+
+              fsType = lib.mkOption {
+                type = lib.types.str;
+                description = "Filesystem type passed to NixOS fileSystems and disk-nix.";
+                example = "xfs";
+              };
+
+              mountpoint = lib.mkOption {
+                type = lib.types.str;
+                default = name;
+                defaultText = lib.literalExpression "<attribute name>";
+                description = "Mountpoint managed by NixOS.";
+                example = "/";
+              };
+
+              options = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+                description = "Mount options passed to NixOS fileSystems.";
+                example = [
+                  "noatime"
+                  "compress=zstd"
+                ];
+              };
+
+              neededForBoot = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Whether this filesystem is required in the initrd or early boot.";
+              };
+
+              resizePolicy = lib.mkOption {
+                type = lib.types.enum [
+                  "none"
+                  "grow-only"
+                  "shrink-allowed"
+                ];
+                default = "none";
+                description = "Lifecycle resize policy used by the disk-nix planner.";
+              };
+
+              preserveData = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Whether the planner must preserve existing data for this filesystem.";
+              };
+            };
+          }
+        )
+      );
+      default = { };
+      description = "Typed filesystem declarations used to generate both disk-nix spec and NixOS fileSystems.";
     };
 
     apply = {
@@ -78,9 +154,25 @@ in
     environment.systemPackages = [ cfg.package ];
 
     environment.etc."disk-nix/spec.json".source = json.generate "disk-nix-spec.json" {
-      inherit (cfg) spec;
+      spec = cfg.spec // {
+        filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec;
+      };
       apply = cfg.apply;
     };
+
+    fileSystems = lib.mapAttrs' (_: filesystem: {
+      name = filesystem.mountpoint;
+      value = {
+        inherit (filesystem)
+          device
+          fsType
+          neededForBoot
+          ;
+      }
+      // lib.optionalAttrs (filesystem.options != [ ]) {
+        inherit (filesystem) options;
+      };
+    }) cfg.filesystems;
 
     systemd.services.disk-nix-plan = {
       description = "Plan disk-nix storage changes";

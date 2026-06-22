@@ -25,19 +25,30 @@ The NixOS module is the primary declarative interface.
       allowShrink = false;
       allowDestructive = false;
     };
-    spec = {
-      version = 1;
-      filesystems.root = {
-        mountpoint = "/";
-        type = "xfs";
-        resizePolicy = "grow-only";
-      };
+    filesystems.root = {
+      device = "/dev/disk/by-label/nixos-root";
+      fsType = "xfs";
+      mountpoint = "/";
+      neededForBoot = true;
+      resizePolicy = "grow-only";
     };
   };
 }
 ```
 
-The module writes `/etc/disk-nix/spec.json` and installs the CLI.
+The module writes `/etc/disk-nix/spec.json`, installs the CLI, and derives the
+matching NixOS `fileSystems` entries. Raw `spec` remains available for storage
+domains whose typed NixOS options have not been implemented yet.
+
+Typed filesystem declarations include:
+
+- `device`
+- `fsType`
+- `mountpoint`
+- `options`
+- `neededForBoot`
+- `resizePolicy`
+- `preserveData`
 
 ## Apply modes
 

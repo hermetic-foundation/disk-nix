@@ -95,6 +95,24 @@
             done < <(${formatFiles})
             touch "$out"
           '';
+          nixosModule =
+            (pkgs.nixos [
+              self.nixosModules.default
+              {
+                system.stateVersion = "26.05";
+                boot.loader.grub.enable = false;
+                services.disk-nix = {
+                  enable = true;
+                  filesystems.root = {
+                    device = "/dev/disk/by-label/nixos-root";
+                    fsType = "xfs";
+                    mountpoint = "/";
+                    neededForBoot = true;
+                    resizePolicy = "grow-only";
+                  };
+                };
+              }
+            ]).config.system.build.toplevel;
         };
 
         devShells.default = pkgs.mkShell {
