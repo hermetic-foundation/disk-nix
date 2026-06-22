@@ -43,6 +43,9 @@ The current probe layer normalizes:
 - LUKS mapper status through `cryptsetup status` for active/in-use state,
   backing device, cipher, key size, key location, sector size/count, offset, and
   access mode
+- Device-mapper metadata through `dmsetup info` and `dmsetup deps` for mapper
+  UUIDs, major/minor numbers, open counts, segment/event counts, and backing
+  dependency edges
 - LVM `pvs`, `vgs`, and `lvs` JSON reports for PV/VG/LV topology, snapshots,
   thin pools, cache-like logical volumes, and VDO-like logical volumes where
   attributes expose them

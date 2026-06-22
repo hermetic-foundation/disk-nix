@@ -5,6 +5,7 @@ use thiserror::Error;
 
 mod btrfs;
 mod cryptsetup;
+mod dmsetup;
 mod findmnt;
 mod iscsi;
 mod lsblk;
@@ -79,6 +80,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_lsblk(&mut result);
         collect_findmnt(&mut result);
         collect_cryptsetup(&mut result);
+        collect_dmsetup(&mut result);
         collect_lvm(&mut result);
         collect_vdo(&mut result);
         collect_zfs(&mut result);
@@ -195,6 +197,57 @@ fn cryptsetup_status_arg(container: &str) -> String {
         .strip_prefix("/dev/mapper/")
         .unwrap_or(container)
         .to_string()
+}
+
+fn collect_dmsetup(result: &mut ProbeResult) {
+    let info = run_report(
+        "dmsetup",
+        &[
+            "info",
+            "-c",
+            "--noheadings",
+            "--separator",
+            "|",
+            "-o",
+            "name,uuid,major,minor,open,segments,events",
+        ],
+    );
+    let deps = run_report("dmsetup", &["deps", "-o", "devname"]);
+
+    match (info, deps) {
+        (Ok(info), Ok(deps)) if info.is_empty() && deps.is_empty() => {
+            result.reports.push(ProbeReport {
+                adapter: "dmsetup".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("no device-mapper devices discovered".to_string()),
+            });
+        }
+        (Ok(info), Ok(deps)) => match dmsetup::normalize_dmsetup(&info, &deps) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "dmsetup".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!("normalized {node_count} graph nodes from dmsetup")),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "dmsetup".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        (Err(message), _) | (_, Err(message)) => result.reports.push(ProbeReport {
+            adapter: "dmsetup".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
+    }
 }
 
 fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
@@ -703,7 +756,7 @@ fn parse_lines(bytes: &[u8]) -> Vec<String> {
 }
 
 fn collect_optional_tools(result: &mut ProbeResult) {
-    for tool in ["dmsetup", "vdostats"] {
+    for tool in ["vdostats"] {
         let status = if command_exists(tool) {
             ProbeStatus::Available
         } else {
