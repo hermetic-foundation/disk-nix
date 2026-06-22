@@ -90,6 +90,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_dmsetup(&mut result);
         collect_lvm(&mut result);
         collect_vdo(&mut result);
+        collect_vdostats(&mut result);
         collect_zfs(&mut result);
         collect_btrfs(&mut result);
         collect_bcache(&mut result);
@@ -98,7 +99,6 @@ impl ProbeAdapter for LinuxProbe {
         collect_mdraid(&mut result);
         collect_multipath(&mut result);
         collect_nvme(&mut result);
-        collect_optional_tools(&mut result);
 
         Ok(result)
     }
@@ -396,6 +396,43 @@ fn collect_vdo(result: &mut ProbeResult) {
         },
         Err(message) => result.reports.push(ProbeReport {
             adapter: "vdo".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
+    }
+}
+
+fn collect_vdostats(result: &mut ProbeResult) {
+    match run_report("vdostats", &["--human-readable"]) {
+        Ok(output) => match vdo::normalize_vdostats_table(&output) {
+            Ok(graph) if graph.nodes.is_empty() => result.reports.push(ProbeReport {
+                adapter: "vdostats".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("no VDO statistics discovered".to_string()),
+            }),
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "vdostats".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from VDO statistics"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "vdostats".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "vdostats".to_string(),
             status: if message.contains("not found") || message.contains("No such file") {
                 ProbeStatus::Unavailable
             } else {
@@ -900,22 +937,6 @@ fn parse_lines(bytes: &[u8]) -> Vec<String> {
         .filter(|line| !line.is_empty())
         .map(ToOwned::to_owned)
         .collect()
-}
-
-fn collect_optional_tools(result: &mut ProbeResult) {
-    for tool in ["vdostats"] {
-        let status = if command_exists(tool) {
-            ProbeStatus::Available
-        } else {
-            ProbeStatus::Unavailable
-        };
-
-        result.reports.push(ProbeReport {
-            adapter: tool.to_string(),
-            status,
-            message: None,
-        });
-    }
 }
 
 fn command_exists(tool: &str) -> bool {

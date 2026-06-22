@@ -12,12 +12,33 @@ struct VdoVolume {
     properties: Vec<(String, String)>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct VdoStats {
+    device: String,
+    size: Option<String>,
+    used: Option<String>,
+    available: Option<String>,
+    use_percent: Option<String>,
+    saving_percent: Option<String>,
+}
+
 pub fn normalize_vdo_status(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
     let volumes = parse_vdo_status(bytes)?;
     let mut graph = StorageGraph::empty();
 
     for volume in volumes {
         add_volume(&mut graph, volume);
+    }
+
+    Ok(graph)
+}
+
+pub fn normalize_vdostats_table(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
+    let stats = parse_vdostats_table(bytes)?;
+    let mut graph = StorageGraph::empty();
+
+    for stat in stats {
+        add_stats(&mut graph, stat);
     }
 
     Ok(graph)
@@ -95,6 +116,34 @@ fn parse_vdo_status(bytes: &[u8]) -> Result<Vec<VdoVolume>, ProbeError> {
     Ok(volumes)
 }
 
+fn parse_vdostats_table(bytes: &[u8]) -> Result<Vec<VdoStats>, ProbeError> {
+    let text = std::str::from_utf8(bytes)
+        .map_err(|error| ProbeError::Adapter(format!("failed to read vdostats output: {error}")))?;
+    let mut rows = Vec::new();
+
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        if line.starts_with("Device") || line.starts_with('-') {
+            continue;
+        }
+
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 4 {
+            continue;
+        }
+
+        rows.push(VdoStats {
+            device: fields[0].to_string(),
+            size: fields.get(1).map(|value| (*value).to_string()),
+            used: fields.get(2).map(|value| (*value).to_string()),
+            available: fields.get(3).map(|value| (*value).to_string()),
+            use_percent: fields.get(4).map(|value| trim_percent(value)),
+            saving_percent: fields.get(5).map(|value| trim_percent(value)),
+        });
+    }
+
+    Ok(rows)
+}
+
 fn add_volume(graph: &mut StorageGraph, volume: VdoVolume) {
     let id = format!("vdo:{}", volume.name);
     let mut node = Node::new(id.clone(), NodeKind::VdoVolume, volume.name.clone());
@@ -147,6 +196,50 @@ fn add_volume(graph: &mut StorageGraph, volume: VdoVolume) {
     }
 }
 
+fn add_stats(graph: &mut StorageGraph, stats: VdoStats) {
+    let id = vdo_id_from_path(&stats.device);
+    let mut node = Node::new(id, NodeKind::VdoVolume, vdo_name_from_path(&stats.device))
+        .with_path(stats.device.clone());
+
+    if let Some(size_bytes) = parse_stats_size(stats.size.as_deref()) {
+        node = node.with_size_bytes(size_bytes);
+    }
+
+    let usage = Usage {
+        used_bytes: parse_stats_size(stats.used.as_deref()),
+        free_bytes: parse_stats_size(stats.available.as_deref()),
+        allocated_bytes: parse_stats_size(stats.size.as_deref()),
+    };
+    if !usage.is_empty() {
+        node = node.with_usage(usage);
+    }
+
+    for (key, value) in [
+        ("vdo.stats-size", stats.size),
+        ("vdo.stats-used", stats.used),
+        ("vdo.stats-available", stats.available),
+        ("vdo.use-percent", stats.use_percent),
+        ("vdo.space-saving-percent", stats.saving_percent),
+    ] {
+        if let Some(value) = value {
+            node = node.with_property(key, value);
+        }
+    }
+
+    graph.add_node(node);
+}
+
+fn vdo_id_from_path(path: &str) -> String {
+    format!("vdo:{}", vdo_name_from_path(path))
+}
+
+fn vdo_name_from_path(path: &str) -> String {
+    path.strip_prefix("/dev/mapper/")
+        .or_else(|| path.strip_prefix("/dev/"))
+        .unwrap_or(path)
+        .to_string()
+}
+
 fn normalize_key(key: &str) -> String {
     key.trim()
         .to_ascii_lowercase()
@@ -189,6 +282,25 @@ fn parse_size(value: Option<&str>) -> Option<u64> {
     Some((number * multiplier) as u64)
 }
 
+fn parse_stats_size(value: Option<&str>) -> Option<u64> {
+    let value = value?;
+    if value
+        .chars()
+        .any(|character| character.is_ascii_alphabetic())
+    {
+        parse_size(Some(value))
+    } else {
+        value
+            .parse::<u64>()
+            .ok()
+            .map(|blocks| blocks.saturating_mul(1024))
+    }
+}
+
+fn trim_percent(value: &str) -> String {
+    value.trim_end_matches('%').to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use disk_nix_model::{NodeKind, Relationship};
@@ -210,6 +322,11 @@ VDOs:
     Write policy: sync
     Index memory setting: 0.25
     Block map cache size: 128M
+"#;
+    const VDOSTATS: &[u8] = br#"
+Device                    1K-blocks    Used Available Use% Space saving%
+/dev/mapper/archive             1T    250G      750G  25%           60%
+/dev/mapper/raw              1048576  262144    786432  25%            0%
 "#;
 
     #[test]
@@ -241,5 +358,31 @@ VDOs:
         assert_eq!(parse_size(Some("1.5G")), Some(1_610_612_736));
         assert_eq!(parse_size(Some("128 MiB")), Some(134_217_728));
         assert_eq!(parse_size(Some("4096")), Some(4096));
+    }
+
+    #[test]
+    fn normalizes_vdostats_table() {
+        let graph = normalize_vdostats_table(VDOSTATS).expect("fixture should parse");
+        let archive = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "vdo:archive")
+            .expect("archive stats should exist");
+
+        assert_eq!(archive.size_bytes, Some(1_099_511_627_776));
+        assert_eq!(
+            archive.usage.as_ref().and_then(|usage| usage.used_bytes),
+            Some(268_435_456_000)
+        );
+        assert!(archive.properties.iter().any(|property| {
+            property.key == "vdo.space-saving-percent" && property.value == "60"
+        }));
+
+        let raw = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "vdo:raw")
+            .expect("raw stats should exist");
+        assert_eq!(raw.size_bytes, Some(1_073_741_824));
     }
 }
