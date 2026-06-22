@@ -6,7 +6,7 @@ use std::{
 
 use clap::{Parser, Subcommand};
 use disk_nix_model::{Node, NodeKind, StorageGraph};
-use disk_nix_plan::default_capabilities;
+use disk_nix_plan::{Plan, default_capabilities, plan_from_json_bytes};
 use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeStatus};
 
 fn main() -> ExitCode {
@@ -65,6 +65,9 @@ enum Command {
         /// Desired storage specification path.
         #[arg(long)]
         spec: String,
+        /// Emit JSON plan output.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -152,15 +155,20 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             print_ids(output, &graph)?;
             Ok(())
         }
-        Command::Plan { spec } => {
-            writeln!(
-                output,
-                "planning is scaffolded; received desired spec at {spec}"
-            )?;
-            writeln!(
-                output,
-                "all future mutation plans will be safety-classified before execution"
-            )?;
+        Command::Plan { spec, json } => {
+            let bytes = std::fs::read(&spec)?;
+            let plan = plan_from_json_bytes(&bytes)
+                .map_err(|error| AppError::Message(format!("failed to parse {spec}: {error}")))?;
+            if json {
+                writeln!(
+                    output,
+                    "{}",
+                    plan.to_json()
+                        .map_err(|error| AppError::Message(error.to_string()))?
+                )?;
+            } else {
+                print_plan(output, &plan)?;
+            }
             Ok(())
         }
     }
@@ -305,6 +313,34 @@ fn print_ids(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
             hardware_id
         )?;
     }
+    Ok(())
+}
+
+fn print_plan(output: &mut impl Write, plan: &Plan) -> io::Result<()> {
+    writeln!(
+        output,
+        "Plan: {} actions, {} destructive, {} potential data loss, {} unsupported",
+        plan.summary.action_count,
+        plan.summary.destructive_count,
+        plan.summary.potential_data_loss_count,
+        plan.summary.unsupported_count
+    )?;
+
+    for action in &plan.actions {
+        writeln!(
+            output,
+            "- {:?} {:?}: {}",
+            action.risk, action.operation, action.description
+        )?;
+
+        if let Some(advice) = &action.advice {
+            writeln!(output, "  advice: {}", advice.summary)?;
+            for alternative in &advice.alternatives {
+                writeln!(output, "  alternative: {alternative}")?;
+            }
+        }
+    }
+
     Ok(())
 }
 

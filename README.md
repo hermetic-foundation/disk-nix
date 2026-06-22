@@ -53,6 +53,7 @@ disk-nix filesystems
 disk-nix mounts
 disk-nix ids
 disk-nix plan --spec ./examples/simple-root.json
+disk-nix plan --spec ./examples/simple-root.json --json
 ```
 
 The canonical interface is intended to be stable JSON. Human tables and tree

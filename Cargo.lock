@@ -121,6 +121,8 @@ name = "disk-nix-plan"
 version = "0.1.0"
 dependencies = [
  "disk-nix-model",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

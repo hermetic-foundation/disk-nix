@@ -10,6 +10,8 @@ rust-version.workspace = true
 
 [dependencies]
 disk-nix-model = { path = "../disk-nix-model" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
 
 [lints]
 workspace = true
