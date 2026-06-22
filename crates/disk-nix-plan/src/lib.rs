@@ -42,6 +42,7 @@ pub enum Operation {
     RemoveDevice,
     SetProperty,
     Snapshot,
+    Rebalance,
     Rollback,
     Destroy,
 }
@@ -93,6 +94,26 @@ pub fn plan_from_value(value: &Value) -> Plan {
     if let Some(filesystems) = spec.get("filesystems").and_then(Value::as_object) {
         for (name, filesystem) in filesystems {
             add_filesystem_actions(&mut actions, name, filesystem);
+        }
+    }
+    for collection in [
+        "volumes",
+        "volumeGroups",
+        "pools",
+        "datasets",
+        "luns",
+        "exports",
+        "caches",
+    ] {
+        if let Some(objects) = spec.get(collection).and_then(Value::as_object) {
+            for (name, object) in objects {
+                add_lifecycle_actions(&mut actions, collection, name, object);
+            }
+        }
+    }
+    if let Some(snapshots) = spec.get("snapshots").and_then(Value::as_object) {
+        for (name, snapshot) in snapshots {
+            add_snapshot_actions(&mut actions, name, snapshot);
         }
     }
 
@@ -198,6 +219,333 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
     }
 }
 
+fn add_lifecycle_actions(
+    actions: &mut Vec<PlannedAction>,
+    collection: &str,
+    name: &str,
+    object: &Value,
+) {
+    add_requested_operation(actions, collection, name, object);
+    add_device_membership_actions(actions, collection, name, object);
+    add_property_actions(actions, collection, name, object);
+    add_destroy_guard(actions, collection, name, object);
+}
+
+fn add_requested_operation(
+    actions: &mut Vec<PlannedAction>,
+    collection: &str,
+    name: &str,
+    object: &Value,
+) {
+    let Some(operation) = object
+        .get("operation")
+        .or_else(|| object.get("action"))
+        .and_then(Value::as_str)
+        .and_then(parse_operation)
+    else {
+        return;
+    };
+    let (risk, destructive, advice) = classify_operation(collection, operation, object);
+    actions.push(PlannedAction {
+        id: format!("{collection}:{name}:{operation:?}").to_ascii_lowercase(),
+        description: format!(
+            "plan {} operation for {collection} {name}",
+            operation_label(operation)
+        ),
+        operation,
+        risk,
+        destructive,
+        advice,
+    });
+}
+
+fn add_device_membership_actions(
+    actions: &mut Vec<PlannedAction>,
+    collection: &str,
+    name: &str,
+    object: &Value,
+) {
+    if let Some(devices) = object.get("addDevices").and_then(Value::as_array) {
+        for device in devices.iter().filter_map(Value::as_str) {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:add-device:{device}"),
+                description: format!("add device {device} to {collection} {name}"),
+                operation: Operation::AddDevice,
+                risk: RiskClass::Online,
+                destructive: false,
+                advice: None,
+            });
+        }
+    }
+
+    if let Some(devices) = object.get("removeDevices").and_then(Value::as_array) {
+        for device in devices.iter().filter_map(Value::as_str) {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:remove-device:{device}"),
+                description: format!("remove device {device} from {collection} {name}"),
+                operation: Operation::RemoveDevice,
+                risk: RiskClass::PotentialDataLoss,
+                destructive: false,
+                advice: Some(Advice {
+                    summary: "device removal requires enough remaining data and metadata capacity"
+                        .to_string(),
+                    alternatives: vec![
+                        "add replacement capacity before removing the old device".to_string(),
+                        "rebalance or evacuate data before removal".to_string(),
+                        "verify redundancy and current health before applying".to_string(),
+                    ],
+                }),
+            });
+        }
+    }
+
+    if let Some(replacements) = object.get("replaceDevices").and_then(Value::as_object) {
+        for (from, to) in replacements
+            .iter()
+            .filter_map(|(from, to)| to.as_str().map(|replacement| (from.as_str(), replacement)))
+        {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:replace-device:{from}"),
+                description: format!("replace device {from} with {to} in {collection} {name}"),
+                operation: Operation::ReplaceDevice,
+                risk: RiskClass::Reversible,
+                destructive: false,
+                advice: Some(Advice {
+                    summary: "replacement should preserve data when the source remains available"
+                        .to_string(),
+                    alternatives: vec![
+                        "attach the replacement and resilver or rebalance before detaching the source"
+                            .to_string(),
+                        "keep the original device untouched until post-apply verification passes"
+                            .to_string(),
+                    ],
+                }),
+            });
+        }
+    }
+}
+
+fn add_property_actions(
+    actions: &mut Vec<PlannedAction>,
+    collection: &str,
+    name: &str,
+    object: &Value,
+) {
+    let Some(properties) = object.get("properties").and_then(Value::as_object) else {
+        return;
+    };
+
+    for property in properties.keys() {
+        actions.push(PlannedAction {
+            id: format!("{collection}:{name}:set-property:{property}"),
+            description: format!("set property {property} on {collection} {name}"),
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            destructive: false,
+            advice: None,
+        });
+    }
+}
+
+fn add_destroy_guard(
+    actions: &mut Vec<PlannedAction>,
+    collection: &str,
+    name: &str,
+    object: &Value,
+) {
+    let destroy = object
+        .get("destroy")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let preserve_data = object
+        .get("preserveData")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+
+    if destroy || !preserve_data {
+        actions.push(PlannedAction {
+            id: format!("{collection}:{name}:destroy"),
+            description: format!("{collection} {name} may be destroyed or replaced"),
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            destructive: true,
+            advice: Some(Advice {
+                summary: "destroying or replacing storage removes live data".to_string(),
+                alternatives: vec![
+                    "take and verify a backup before destructive changes".to_string(),
+                    "rename, detach, or unmount first when supported".to_string(),
+                    "migrate data to replacement storage before removal".to_string(),
+                ],
+            }),
+        });
+    }
+}
+
+fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: &Value) {
+    let target = snapshot
+        .get("target")
+        .and_then(Value::as_str)
+        .unwrap_or(name);
+    let destroy = snapshot
+        .get("destroy")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let rollback = snapshot
+        .get("rollback")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    if destroy {
+        actions.push(PlannedAction {
+            id: format!("snapshot:{name}:destroy"),
+            description: format!("destroy snapshot {name} for {target}"),
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            destructive: true,
+            advice: Some(Advice {
+                summary: "snapshot destruction removes a recovery point".to_string(),
+                alternatives: vec![
+                    "keep the snapshot until replacement backups are verified".to_string(),
+                    "rename or hold the snapshot before pruning".to_string(),
+                ],
+            }),
+        });
+    } else if rollback {
+        actions.push(PlannedAction {
+            id: format!("snapshot:{name}:rollback"),
+            description: format!("roll back {target} to snapshot {name}"),
+            operation: Operation::Rollback,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            advice: Some(Advice {
+                summary: "rollback can discard changes newer than the snapshot".to_string(),
+                alternatives: vec![
+                    "clone the snapshot and inspect data before rollback".to_string(),
+                    "take a pre-rollback snapshot of the current state".to_string(),
+                ],
+            }),
+        });
+    } else {
+        actions.push(PlannedAction {
+            id: format!("snapshot:{name}:create"),
+            description: format!("create snapshot {name} for {target}"),
+            operation: Operation::Snapshot,
+            risk: RiskClass::Reversible,
+            destructive: false,
+            advice: None,
+        });
+    }
+}
+
+fn parse_operation(value: &str) -> Option<Operation> {
+    match value {
+        "create" => Some(Operation::Create),
+        "format" => Some(Operation::Format),
+        "grow" => Some(Operation::Grow),
+        "shrink" => Some(Operation::Shrink),
+        "replace-device" | "replaceDevice" => Some(Operation::ReplaceDevice),
+        "add-device" | "addDevice" => Some(Operation::AddDevice),
+        "remove-device" | "removeDevice" => Some(Operation::RemoveDevice),
+        "set-property" | "setProperty" => Some(Operation::SetProperty),
+        "snapshot" => Some(Operation::Snapshot),
+        "rebalance" => Some(Operation::Rebalance),
+        "rollback" => Some(Operation::Rollback),
+        "destroy" => Some(Operation::Destroy),
+        _ => None,
+    }
+}
+
+fn classify_operation(
+    collection: &str,
+    operation: Operation,
+    object: &Value,
+) -> (RiskClass, bool, Option<Advice>) {
+    match operation {
+        Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
+        Operation::Grow | Operation::AddDevice | Operation::Rebalance => {
+            (RiskClass::Online, false, None)
+        }
+        Operation::ReplaceDevice | Operation::Snapshot => (RiskClass::Reversible, false, None),
+        Operation::Shrink | Operation::RemoveDevice | Operation::Rollback => (
+            RiskClass::PotentialDataLoss,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} can require evacuation, rollback, or offline validation",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "prefer grow, add, replace, or clone operations where possible".to_string(),
+                    "verify backups and health before applying".to_string(),
+                    "stage the change against a clone or replacement target first".to_string(),
+                ],
+            }),
+        ),
+        Operation::Format | Operation::Destroy => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: format!(
+                    "{} on {collection} removes or overwrites existing storage",
+                    operation_label(operation)
+                ),
+                alternatives: destructive_alternatives(collection, object),
+            }),
+        ),
+    }
+}
+
+fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
+    let mut alternatives = vec![
+        "take and verify a backup before destructive changes".to_string(),
+        "migrate data to replacement storage first".to_string(),
+    ];
+
+    match collection {
+        "pools" | "datasets" => {
+            alternatives.push("take a recursive snapshot before destroy or rollback".to_string());
+            alternatives
+                .push("rename or unmount the dataset while validating consumers".to_string());
+        }
+        "volumes" | "volumeGroups" | "luns" => {
+            alternatives
+                .push("grow or attach replacement capacity instead of reformatting".to_string());
+        }
+        "exports" => {
+            alternatives
+                .push("disable clients or switch exports before removing the source".to_string());
+        }
+        _ => {}
+    }
+
+    if object
+        .get("preserveData")
+        .and_then(Value::as_bool)
+        .is_some_and(|preserve| !preserve)
+    {
+        alternatives.push("set preserveData=true for non-destructive planning".to_string());
+    }
+
+    alternatives
+}
+
+fn operation_label(operation: Operation) -> &'static str {
+    match operation {
+        Operation::Create => "create",
+        Operation::Format => "format",
+        Operation::Grow => "grow",
+        Operation::Shrink => "shrink",
+        Operation::ReplaceDevice => "replace device",
+        Operation::AddDevice => "add device",
+        Operation::RemoveDevice => "remove device",
+        Operation::SetProperty => "set property",
+        Operation::Snapshot => "snapshot",
+        Operation::Rebalance => "rebalance",
+        Operation::Rollback => "rollback",
+        Operation::Destroy => "destroy",
+    }
+}
+
 #[must_use]
 pub fn default_capabilities() -> Vec<Capability> {
     vec![
@@ -257,6 +605,25 @@ pub fn default_capabilities() -> Vec<Capability> {
                 ],
             }),
         },
+        Capability {
+            node_kind: NodeKind::BtrfsFilesystem,
+            operation: Operation::Rebalance,
+            risk: RiskClass::Online,
+            advice: None,
+        },
+        Capability {
+            node_kind: NodeKind::Lun,
+            operation: Operation::Grow,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LUN growth must be coordinated with the storage target and kernel rescan"
+                    .to_string(),
+                alternatives: vec![
+                    "grow the target LUN before resizing consumers".to_string(),
+                    "rescan paths and verify multipath before filesystem growth".to_string(),
+                ],
+            }),
+        },
     ]
 }
 
@@ -300,5 +667,57 @@ mod tests {
         assert_eq!(plan.summary.action_count, 2);
         assert_eq!(plan.summary.destructive_count, 1);
         assert_eq!(plan.summary.potential_data_loss_count, 1);
+    }
+
+    #[test]
+    fn plan_warns_for_pool_device_removal_and_dataset_destroy() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "spec": {
+                "pools": {
+                  "tank": {
+                    "removeDevices": ["/dev/sdb"],
+                    "properties": {
+                      "autotrim": "on"
+                    }
+                  }
+                },
+                "datasets": {
+                  "tank/old": {
+                    "destroy": true
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.destructive_count, 1);
+        assert_eq!(plan.summary.potential_data_loss_count, 1);
+        assert!(plan.actions.iter().any(|action| {
+            action.operation == Operation::RemoveDevice
+                && action.risk == RiskClass::PotentialDataLoss
+                && action.advice.is_some()
+        }));
+    }
+
+    #[test]
+    fn plan_classifies_snapshot_rollback_as_potential_data_loss() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before-upgrade": {
+                  "target": "tank/home",
+                  "rollback": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.summary.potential_data_loss_count, 1);
+        assert_eq!(plan.actions[0].operation, Operation::Rollback);
     }
 }

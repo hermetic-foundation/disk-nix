@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "pools": {
+    "tank": {
+      "operation": "rebalance",
+      "addDevices": [
+        "/dev/disk/by-id/nvme-replacement"
+      ],
+      "removeDevices": [
+        "/dev/disk/by-id/old-disk"
+      ],
+      "properties": {
+        "autotrim": "on"
+      }
+    }
+  },
+  "datasets": {
+    "tank/archive": {
+      "destroy": true
+    }
+  },
+  "volumes": {
+    "vg0/home": {
+      "operation": "grow",
+      "preserveData": true
+    }
+  },
+  "luns": {
+    "iqn.2026-06.example:storage/root:0": {
+      "operation": "grow"
+    }
+  },
+  "snapshots": {
+    "tank/home@before-upgrade": {
+      "target": "tank/home"
+    },
+    "tank/root@rollback-point": {
+      "target": "tank/root",
+      "rollback": true
+    }
+  },
+  "caches": {
+    "tank/l2arc0": {
+      "operation": "replace-device",
+      "replaceDevices": {
+        "/dev/disk/by-id/old-cache": "/dev/disk/by-id/new-cache"
+      }
+    }
+  }
+}

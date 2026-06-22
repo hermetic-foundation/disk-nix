@@ -57,6 +57,7 @@ disk-nix ids
 disk-nix inspect /dev/nvme0n1
 disk-nix inspect /
 disk-nix plan --spec ./examples/simple-root.json
+disk-nix plan --spec ./examples/lifecycle-update.json
 disk-nix plan --spec ./examples/simple-root.json --json
 ```
 
