@@ -38,6 +38,8 @@ The current probe layer normalizes:
 
 - `lsblk --json --bytes --output-all` for block devices, partitions,
   filesystems, identity, usage, and mount hints
+- `parted -lm` for partition table type, disk sector sizes, partition numbers,
+  start/end offsets, partition sizes, names, types, and flags
 - `findmnt --json --bytes` for mounted filesystems, pseudo filesystems, and
   NFS exports
 - LUKS mapper status through `cryptsetup status` for active/in-use state,

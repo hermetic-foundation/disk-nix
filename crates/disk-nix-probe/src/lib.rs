@@ -15,6 +15,7 @@ mod mdraid;
 mod multipath;
 mod nfs;
 mod nvme;
+mod parted;
 mod vdo;
 mod zfs;
 
@@ -79,6 +80,7 @@ impl ProbeAdapter for LinuxProbe {
         let mut result = ProbeResult::empty();
 
         collect_lsblk(&mut result);
+        collect_parted(&mut result);
         collect_findmnt(&mut result);
         collect_cryptsetup(&mut result);
         collect_dmsetup(&mut result);
@@ -126,6 +128,38 @@ fn collect_lsblk(result: &mut ProbeResult) {
             adapter: "lsblk".to_string(),
             status: ProbeStatus::Unavailable,
             message: Some(error.to_string()),
+        }),
+    }
+}
+
+fn collect_parted(result: &mut ProbeResult) {
+    match run_report("parted", &["-lm"]) {
+        Ok(output) => match parted::normalize_parted_machine(&output) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "parted".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from parted machine output"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "parted".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "parted".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
         }),
     }
 }
