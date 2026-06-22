@@ -118,6 +118,31 @@
                     device = "/dev/disk/by-label/swap";
                     priority = 5;
                   };
+                  pools.tank = {
+                    operation = "rebalance";
+                    addDevices = [ "/dev/disk/by-id/nvme-replacement" ];
+                    removeDevices = [ "/dev/disk/by-id/old-disk" ];
+                    properties.autotrim = "on";
+                  };
+                  datasets."tank/archive" = {
+                    destroy = true;
+                  };
+                  luns."iqn.2026-06.example:storage/root:0" = {
+                    operation = "grow";
+                    metadata = {
+                      target = "iqn.2026-06.example:storage/root";
+                      lun = 0;
+                    };
+                  };
+                  caches."tank/l2arc0" = {
+                    operation = "replace-device";
+                    replaceDevices = {
+                      "/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
+                    };
+                  };
+                  snapshots."tank/home@before-upgrade" = {
+                    target = "tank/home";
+                  };
                 };
               }
             ]).config.system.build.toplevel;

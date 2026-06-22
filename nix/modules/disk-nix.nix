@@ -8,6 +8,159 @@ self:
 let
   cfg = config.services.disk-nix;
   json = pkgs.formats.json { };
+  operationType = lib.types.nullOr (
+    lib.types.enum [
+      "create"
+      "format"
+      "grow"
+      "shrink"
+      "replace-device"
+      "add-device"
+      "remove-device"
+      "set-property"
+      "snapshot"
+      "rebalance"
+      "rollback"
+      "destroy"
+    ]
+  );
+  lifecycleSubmodule =
+    { name, ... }:
+    {
+      options = {
+        operation = lib.mkOption {
+          type = operationType;
+          default = null;
+          description = "Requested lifecycle operation for this storage object.";
+          example = "grow";
+        };
+
+        addDevices = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Devices to add to this storage object.";
+          example = [ "/dev/disk/by-id/nvme-replacement" ];
+        };
+
+        removeDevices = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Devices to remove from this storage object.";
+          example = [ "/dev/disk/by-id/old-disk" ];
+        };
+
+        replaceDevices = lib.mkOption {
+          type = lib.types.attrsOf lib.types.str;
+          default = { };
+          description = "Mapping of old device path to replacement device path.";
+          example = {
+            "/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
+          };
+        };
+
+        properties = lib.mkOption {
+          type = lib.types.attrsOf json.type;
+          default = { };
+          description = "Storage-specific properties to set on this object.";
+          example = {
+            autotrim = "on";
+          };
+        };
+
+        destroy = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Request destruction of this object.";
+        };
+
+        preserveData = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Whether disk-nix must preserve data for this object.";
+        };
+
+        metadata = lib.mkOption {
+          type = lib.types.attrsOf json.type;
+          default = { };
+          description = "Domain-specific metadata copied into the planner spec.";
+          example = {
+            target = "iqn.2026-06.example:storage/root";
+            lun = 0;
+          };
+        };
+      };
+    };
+  snapshotSubmodule =
+    { name, ... }:
+    {
+      options = {
+        target = lib.mkOption {
+          type = lib.types.str;
+          default = name;
+          defaultText = lib.literalExpression "<attribute name>";
+          description = "Dataset, volume, or filesystem target for this snapshot.";
+          example = "tank/home";
+        };
+
+        destroy = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Request snapshot destruction.";
+        };
+
+        rollback = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Request rollback of the target to this snapshot.";
+        };
+
+        preserveData = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Whether newer target data should be preserved.";
+        };
+
+        metadata = lib.mkOption {
+          type = lib.types.attrsOf json.type;
+          default = { };
+          description = "Domain-specific snapshot metadata copied into the planner spec.";
+        };
+      };
+    };
+  lifecycleAttrs = lib.types.attrsOf (lib.types.submodule lifecycleSubmodule);
+  snapshotAttrs = lib.types.attrsOf (lib.types.submodule snapshotSubmodule);
+  cleanSpecAttrs = lib.filterAttrs (_: value: value != null && value != [ ] && value != { });
+  normalizeLifecycleSpec = lib.mapAttrs (
+    _: object:
+    cleanSpecAttrs (
+      object.metadata
+      // {
+        inherit (object)
+          operation
+          addDevices
+          removeDevices
+          replaceDevices
+          properties
+          destroy
+          preserveData
+          ;
+      }
+    )
+  );
+  normalizeSnapshotSpec = lib.mapAttrs (
+    _: snapshot:
+    cleanSpecAttrs (
+      snapshot.metadata
+      // {
+        inherit (snapshot)
+          target
+          destroy
+          rollback
+          preserveData
+          ;
+      }
+    )
+  );
   typedFilesystemSpec = lib.mapAttrs (_: filesystem: {
     inherit (filesystem)
       device
@@ -213,6 +366,54 @@ in
       description = "Typed LUKS declarations used to generate both disk-nix spec and boot.initrd.luks.devices.";
     };
 
+    volumes = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed volume lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
+    volumeGroups = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed volume-group lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
+    pools = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed pool lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
+    datasets = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed dataset lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
+    luns = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed LUN lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
+    exports = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed NFS export lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
+    caches = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed cache-layer lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
+    snapshots = lib.mkOption {
+      type = snapshotAttrs;
+      default = { };
+      description = "Typed snapshot lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
     apply = {
       mode = lib.mkOption {
         type = lib.types.enum [
@@ -267,6 +468,14 @@ in
         luks = (cfg.spec.luks or { }) // {
           devices = ((cfg.spec.luks or { }).devices or { }) // typedLuksSpec;
         };
+        volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
+        volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
+        pools = (cfg.spec.pools or { }) // normalizeLifecycleSpec cfg.pools;
+        datasets = (cfg.spec.datasets or { }) // normalizeLifecycleSpec cfg.datasets;
+        luns = (cfg.spec.luns or { }) // normalizeLifecycleSpec cfg.luns;
+        exports = (cfg.spec.exports or { }) // normalizeLifecycleSpec cfg.exports;
+        caches = (cfg.spec.caches or { }) // normalizeLifecycleSpec cfg.caches;
+        snapshots = (cfg.spec.snapshots or { }) // normalizeSnapshotSpec cfg.snapshots;
       };
       apply = cfg.apply;
     };

@@ -75,6 +75,52 @@ Typed LUKS declarations include:
 - `preLVM`
 - `preserveData`
 
+Typed lifecycle declarations are available for:
+
+- `volumes`
+- `volumeGroups`
+- `pools`
+- `datasets`
+- `luns`
+- `exports`
+- `caches`
+
+Each lifecycle declaration includes:
+
+- `operation`
+- `addDevices`
+- `removeDevices`
+- `replaceDevices`
+- `properties`
+- `destroy`
+- `preserveData`
+- `metadata`
+
+Typed snapshot declarations include:
+
+- `target`
+- `destroy`
+- `rollback`
+- `preserveData`
+- `metadata`
+
+Example lifecycle planning through NixOS options:
+
+```nix
+{
+  services.disk-nix = {
+    pools.tank = {
+      operation = "rebalance";
+      addDevices = [ "/dev/disk/by-id/nvme-replacement" ];
+      removeDevices = [ "/dev/disk/by-id/old-disk" ];
+      properties.autotrim = "on";
+    };
+    datasets."tank/archive".destroy = true;
+    snapshots."tank/home@before-upgrade".target = "tank/home";
+  };
+}
+```
+
 ## Apply modes
 
 - `manual`: only install the spec and CLI
