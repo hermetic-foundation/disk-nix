@@ -56,6 +56,7 @@ disk-nix volumes
 disk-nix mappings
 disk-nix mounts
 disk-nix ids
+disk-nix ids --json
 disk-nix inspect /dev/nvme0n1
 disk-nix inspect /
 disk-nix inspect / --json
@@ -68,9 +69,9 @@ disk-nix apply --spec ./examples/lifecycle-update.json --json
 
 The canonical interface is intended to be stable JSON. Human tables and tree
 views are presentation layers over the same model. Focused JSON commands such
-as `devices --json` and `filesystems --json` return subgraphs and preserve
-relationships between nodes included in the result. `inspect --json` returns
-matched nodes plus their direct neighbors and relationship edges.
+as `devices --json`, `filesystems --json`, and `ids --json` return subgraphs
+and preserve relationships between nodes included in the result. `inspect --json` returns matched nodes plus their direct neighbors and relationship
+edges.
 
 ## NixOS module
 

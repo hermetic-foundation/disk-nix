@@ -81,7 +81,11 @@ enum Command {
         json: bool,
     },
     /// List storage identity fields such as UUIDs, labels, serials, and WWNs.
-    Ids,
+    Ids {
+        /// Emit JSON for identity-bearing graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// Inspect a graph node by id, path, name, UUID, label, serial, or property.
     Inspect {
         /// Query value to inspect.
@@ -227,9 +231,13 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             }
             Ok(())
         }
-        Command::Ids => {
+        Command::Ids { json } => {
             let graph = collect_graph()?;
-            print_ids(output, &graph)?;
+            if json {
+                print_filtered_json(output, &graph, has_identity)?;
+            } else {
+                print_ids(output, &graph)?;
+            }
             Ok(())
         }
         Command::Inspect { query, json } => {
@@ -518,7 +526,7 @@ fn print_ids(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
         "{:<22} {:<38} {:<24} {:<24} {:<20} {:<20}",
         "KIND", "NAME", "UUID", "PARTUUID", "LABEL", "SERIAL/WWN"
     )?;
-    for node in graph.nodes.iter().filter(|node| !node.identity.is_empty()) {
+    for node in graph.nodes.iter().filter(|node| has_identity(node)) {
         let hardware_id = node
             .identity
             .serial
@@ -538,6 +546,10 @@ fn print_ids(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
         )?;
     }
     Ok(())
+}
+
+fn has_identity(node: &Node) -> bool {
+    !node.identity.is_empty()
 }
 
 fn print_inspect(output: &mut impl Write, graph: &StorageGraph, query: &str) -> io::Result<()> {
