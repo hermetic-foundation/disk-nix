@@ -9,6 +9,7 @@ mod iscsi;
 mod lsblk;
 mod lvm;
 mod mdraid;
+mod multipath;
 mod nfs;
 mod zfs;
 
@@ -80,6 +81,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_iscsi(&mut result);
         collect_nfs(&mut result);
         collect_mdraid(&mut result);
+        collect_multipath(&mut result);
         collect_optional_tools(&mut result);
 
         Ok(result)
@@ -124,6 +126,43 @@ fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
     }
     for edge in source.edges {
         target.add_edge(edge);
+    }
+}
+
+fn collect_multipath(result: &mut ProbeResult) {
+    match run_report("multipath", &["-ll"]) {
+        Ok(output) if output.is_empty() => result.reports.push(ProbeReport {
+            adapter: "multipath".to_string(),
+            status: ProbeStatus::Available,
+            message: Some("no multipath maps discovered".to_string()),
+        }),
+        Ok(output) => match multipath::normalize_multipath_output(&output) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "multipath".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from multipath maps"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "multipath".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "multipath".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
     }
 }
 
@@ -518,14 +557,7 @@ fn parse_lines(bytes: &[u8]) -> Vec<String> {
 }
 
 fn collect_optional_tools(result: &mut ProbeResult) {
-    for tool in [
-        "cryptsetup",
-        "dmsetup",
-        "multipath",
-        "nvme",
-        "vdo",
-        "vdostats",
-    ] {
+    for tool in ["cryptsetup", "dmsetup", "nvme", "vdo", "vdostats"] {
         let status = if command_exists(tool) {
             ProbeStatus::Available
         } else {

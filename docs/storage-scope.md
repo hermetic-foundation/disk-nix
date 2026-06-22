@@ -53,6 +53,8 @@ The current probe layer normalizes:
   version, transfer sizes, locking, client address, and mount options
 - MD RAID arrays through `mdadm --detail --scan` and `mdadm --detail <array>`
   for array UUID, level, state, size, device counts, and member devices
+- Multipath maps through `multipath -ll` for map name, WWID, dm device,
+  vendor/product, policy metadata, and backing path devices
 
 LVM probing may report `partial` when the process lacks permission to talk to
 device-mapper. That should not prevent the rest of discovery from succeeding.
