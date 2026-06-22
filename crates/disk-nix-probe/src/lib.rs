@@ -6,6 +6,7 @@ use thiserror::Error;
 mod findmnt;
 mod lsblk;
 mod lvm;
+mod zfs;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProbeStatus {
@@ -70,6 +71,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_lsblk(&mut result);
         collect_findmnt(&mut result);
         collect_lvm(&mut result);
+        collect_zfs(&mut result);
         collect_optional_tools(&mut result);
 
         Ok(result)
@@ -117,8 +119,59 @@ fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
     }
 }
 
+fn collect_zfs(result: &mut ProbeResult) {
+    let zpool_list = run_report(
+        "zpool",
+        &["list", "-H", "-p", "-o", "name,size,alloc,free,health"],
+    );
+    let zfs_list = run_report(
+        "zfs",
+        &[
+            "list",
+            "-H",
+            "-p",
+            "-t",
+            "filesystem,volume,snapshot",
+            "-o",
+            "name,type,used,available,referenced,mountpoint,origin",
+        ],
+    );
+
+    match (zpool_list, zfs_list) {
+        (Ok(zpool_list), Ok(zfs_list)) => match zfs::normalize_zfs(&zpool_list, &zfs_list) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "zfs".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from ZFS output"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "zfs".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        (Err(message), _) | (_, Err(message)) => {
+            result.reports.push(ProbeReport {
+                adapter: "zfs".to_string(),
+                status: if message.contains("not found") {
+                    ProbeStatus::Unavailable
+                } else {
+                    ProbeStatus::Partial
+                },
+                message: Some(message),
+            });
+        }
+    }
+}
+
 fn collect_lvm(result: &mut ProbeResult) {
-    let pvs = run_lvm_report(
+    let pvs = run_report(
         "pvs",
         &[
             "--reportformat",
@@ -127,7 +180,7 @@ fn collect_lvm(result: &mut ProbeResult) {
             "pv_name,vg_name,pv_uuid,pv_size,pv_free,pv_used",
         ],
     );
-    let vgs = run_lvm_report(
+    let vgs = run_report(
         "vgs",
         &[
             "--reportformat",
@@ -136,7 +189,7 @@ fn collect_lvm(result: &mut ProbeResult) {
             "vg_name,vg_uuid,vg_size,vg_free,vg_extent_size,pv_count,lv_count",
         ],
     );
-    let lvs = run_lvm_report(
+    let lvs = run_report(
         "lvs",
         &[
             "--reportformat",
@@ -177,7 +230,7 @@ fn collect_lvm(result: &mut ProbeResult) {
     }
 }
 
-fn run_lvm_report(command: &str, args: &[&str]) -> Result<Vec<u8>, String> {
+fn run_report(command: &str, args: &[&str]) -> Result<Vec<u8>, String> {
     match Command::new(command).args(args).output() {
         Ok(output) if output.status.success() => Ok(output.stdout),
         Ok(output) => Err(String::from_utf8_lossy(&output.stderr).trim().to_string()),
@@ -220,8 +273,6 @@ fn collect_optional_tools(result: &mut ProbeResult) {
         "dmsetup",
         "mdadm",
         "btrfs",
-        "zfs",
-        "zpool",
         "iscsiadm",
         "nfsstat",
         "multipath",

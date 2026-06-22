@@ -43,6 +43,8 @@ The current probe layer normalizes:
 - LVM `pvs`, `vgs`, and `lvs` JSON reports for PV/VG/LV topology, snapshots,
   thin pools, cache-like logical volumes, and VDO-like logical volumes where
   attributes expose them
+- ZFS `zpool list -H -p` and `zfs list -H -p` output for pool capacity, health,
+  datasets, snapshots, zvols, mountpoints, and clone origins
 
 LVM probing may report `partial` when the process lacks permission to talk to
 device-mapper. That should not prevent the rest of discovery from succeeding.
