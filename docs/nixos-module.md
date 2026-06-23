@@ -269,6 +269,10 @@ Example lifecycle planning through NixOS options:
       };
     };
     snapshots."tank/home@before-upgrade".target = "tank/home";
+    snapshots."/mnt/persist/@home-before-upgrade" = {
+      target = "/mnt/persist/@home";
+      readOnly = true;
+    };
   };
 }
 ```

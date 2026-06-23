@@ -722,6 +722,8 @@ fn spec_schema() -> serde_json::Value {
                     "target": { "type": "string" },
                     "destroy": { "type": "boolean" },
                     "rollback": { "type": "boolean" },
+                    "readOnly": { "type": "boolean" },
+                    "readonly": { "type": "boolean" },
                     "preserveData": { "type": "boolean", "default": true },
                     "metadata": {
                         "type": "object",

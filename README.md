@@ -185,7 +185,8 @@ iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
 and rescan commands from explicit target IQN and portal declarations.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
-domain.
+domain. Btrfs snapshot declarations with `readOnly = true` render
+`btrfs subvolume snapshot -r`.
 ZFS snapshot rollback plans render reviewed `zfs rollback` details while
 remaining blocked by the potential-data-loss policy gate.
 ZFS dataset apply plans render reviewed `zfs create` commands and

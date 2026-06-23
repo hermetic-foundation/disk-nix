@@ -137,9 +137,11 @@ Examples:
 - snapshot creation is reversible; snapshot rollback is potential data loss;
   snapshot destruction is destructive because it removes a recovery point.
   Generic snapshot names such as `pool/dataset@snap` map to ZFS snapshots;
-  absolute source and snapshot paths map to Btrfs subvolume snapshots. ZFS
-  rollback command rendering is available for review, but apply remains blocked
-  until a safer explicit potential-data-loss policy exists.
+  absolute source and snapshot paths map to Btrfs subvolume snapshots. Btrfs
+  snapshot declarations can set `readOnly = true` to render
+  `btrfs subvolume snapshot -r`. ZFS rollback command rendering is available
+  for review, but apply remains blocked until a safer explicit
+  potential-data-loss policy exists.
 
 The checked-in specs under `examples/` are part of `nix flake check`. The
 flake validates stable plan summaries, selected action ids, allowed simple

@@ -1961,7 +1961,12 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             let snapshot_command = if collection == Some("lvmSnapshots") {
                 lvm_snapshot_create_command(target, snapshot, action.context.desired_size.as_deref())
             } else {
-                snapshot_command(collection, target, snapshot)
+                snapshot_command(
+                    collection,
+                    target,
+                    snapshot,
+                    action.context.read_only.unwrap_or(false),
+                )
             };
             (
                 vec![
@@ -3200,15 +3205,28 @@ fn nfs_export_destroy_command(target: &str, client: Option<&str>) -> ExecutionCo
     }
 }
 
-fn snapshot_command(collection: Option<&str>, target: &str, snapshot: &str) -> ExecutionCommand {
+fn snapshot_command(
+    collection: Option<&str>,
+    target: &str,
+    snapshot: &str,
+    read_only: bool,
+) -> ExecutionCommand {
     if is_zfs_snapshot_name(snapshot) {
         command(["zfs", "snapshot", snapshot], true, "create a ZFS snapshot")
     } else if collection == Some("btrfsSubvolumes") || is_btrfs_snapshot_pair(target, snapshot) {
-        command(
-            ["btrfs", "subvolume", "snapshot", target, snapshot],
-            true,
-            "create a Btrfs subvolume snapshot",
-        )
+        if read_only {
+            command(
+                ["btrfs", "subvolume", "snapshot", "-r", target, snapshot],
+                true,
+                "create a read-only Btrfs subvolume snapshot",
+            )
+        } else {
+            command(
+                ["btrfs", "subvolume", "snapshot", target, snapshot],
+                true,
+                "create a Btrfs subvolume snapshot",
+            )
+        }
     } else {
         command_with_readiness(
             ["<snapshot-tool>", target, snapshot],
@@ -5366,7 +5384,8 @@ mod tests {
                   "target": "tank/home"
                 },
                 "/mnt/persist/@home-before": {
-                  "target": "/mnt/persist/@home"
+                  "target": "/mnt/persist/@home",
+                  "readOnly": true
                 }
               },
               "apply": {
@@ -5416,6 +5435,7 @@ mod tests {
                         "btrfs",
                         "subvolume",
                         "snapshot",
+                        "-r",
                         "/mnt/persist/@home",
                         "/mnt/persist/@home-before",
                     ]

@@ -190,6 +190,8 @@ pub struct ActionContext {
     pub portal: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<bool>,
 }
 
 impl ActionContext {
@@ -214,6 +216,7 @@ impl ActionContext {
             && self.client.is_none()
             && self.portal.is_none()
             && self.options.is_none()
+            && self.read_only.is_none()
     }
 }
 
@@ -1449,6 +1452,10 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
         .get("rollback")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let read_only = snapshot
+        .get("readOnly")
+        .or_else(|| snapshot.get("readonly"))
+        .and_then(Value::as_bool);
 
     if destroy {
         actions.push(PlannedAction {
@@ -1461,6 +1468,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
                 collection: Some("snapshots".to_string()),
                 name: Some(name.to_string()),
                 target: Some(target.to_string()),
+                read_only,
                 ..ActionContext::default()
             },
             advice: Some(Advice {
@@ -1482,6 +1490,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
                 collection: Some("snapshots".to_string()),
                 name: Some(name.to_string()),
                 target: Some(target.to_string()),
+                read_only,
                 ..ActionContext::default()
             },
             advice: Some(Advice {
@@ -1503,6 +1512,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
                 collection: Some("snapshots".to_string()),
                 name: Some(name.to_string()),
                 target: Some(target.to_string()),
+                read_only,
                 ..ActionContext::default()
             },
             advice: None,
@@ -3721,6 +3731,31 @@ mod tests {
         assert_eq!(plan.summary.action_count, 1);
         assert_eq!(plan.summary.potential_data_loss_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Rollback);
+    }
+
+    #[test]
+    fn plan_preserves_btrfs_read_only_snapshot_context() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "/mnt/persist/@home-before": {
+                  "target": "/mnt/persist/@home",
+                  "readOnly": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let action = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:/mnt/persist/@home-before:create")
+            .expect("snapshot action exists");
+
+        assert_eq!(action.operation, Operation::Snapshot);
+        assert_eq!(action.context.target.as_deref(), Some("/mnt/persist/@home"));
+        assert_eq!(action.context.read_only, Some(true));
     }
 
     #[test]

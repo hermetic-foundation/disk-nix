@@ -221,6 +221,13 @@ let
           description = "Request rollback of the target to this snapshot.";
         };
 
+        readOnly = lib.mkOption {
+          type = lib.types.nullOr lib.types.bool;
+          default = null;
+          description = "Create this snapshot read-only when the target domain supports it, such as Btrfs subvolume snapshots.";
+          example = true;
+        };
+
         preserveData = lib.mkOption {
           type = lib.types.bool;
           default = true;
@@ -274,6 +281,7 @@ let
           target
           destroy
           rollback
+          readOnly
           preserveData
           ;
       }

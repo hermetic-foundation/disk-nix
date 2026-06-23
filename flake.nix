@@ -231,6 +231,10 @@
               snapshots."tank/home@before-upgrade" = {
                 target = "tank/home";
               };
+              snapshots."/mnt/persist/@home-before-upgrade" = {
+                target = "/mnt/persist/@home";
+                readOnly = true;
+              };
             };
           }
         ];
@@ -293,6 +297,8 @@
               and (."$defs".specBody.properties.mdRaids["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
+              and ."$defs".snapshot.properties.readOnly.type == "boolean"
+              and ."$defs".snapshot.properties.readonly.type == "boolean"
               and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
               and (."$defs".lifecycleObject.properties.partitionNumber.type | index("string") != null)
@@ -460,6 +466,9 @@
                   and (.spec.multipathMaps.mpatha.addDevices | index("/dev/sdb") != null)
                   and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
                   and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
+                  and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
+                  and .spec.snapshots."/mnt/persist/@home-before-upgrade".target == "/mnt/persist/@home"
+                  and .spec.snapshots."/mnt/persist/@home-before-upgrade".readOnly == true
                   and .apply.mode == "activation"
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false
