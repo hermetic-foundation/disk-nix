@@ -1385,6 +1385,26 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             ],
             vec!["changed property equals the desired value".to_string()],
         ),
+        Operation::SetProperty if collection == Some("vdoVolumes") => (
+            vec![
+                command(
+                    ["vdo", "status", "--name", target],
+                    false,
+                    "verify VDO configuration after property update",
+                ),
+                command(
+                    ["vdostats", "--verbose", target],
+                    false,
+                    "verify VDO runtime mode and policy after property update",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled VDO properties after re-probe",
+                ),
+            ],
+            vec!["changed VDO property equals the desired value".to_string()],
+        ),
         Operation::SetProperty if collection == Some("btrfsQgroups") => (
             vec![
                 command(
@@ -4911,6 +4931,7 @@ fn set_property_command(
             lvm_cache_property_command(lvm_volume_target_path(Some(target)), property, assignment)
         }
         Some("caches") => bcache_property_command(target, property, assignment),
+        Some("vdoVolumes") => vdo_property_command(target, property, assignment),
         _ => command_with_readiness(
             ["<set-property-tool>", target, property],
             true,
@@ -4919,6 +4940,95 @@ fn set_property_command(
             "apply the storage-domain property update",
         ),
     }
+}
+
+fn vdo_property_command(target: &str, property: &str, assignment: &str) -> ExecutionCommand {
+    let value = assignment
+        .split_once('=')
+        .map(|(_, value)| value)
+        .unwrap_or(assignment);
+    match normalize_property_name(property).as_str() {
+        "writepolicy" | "write-policy" | "vdo-write-policy" => command(
+            [
+                "vdo",
+                "changeWritePolicy",
+                "--name",
+                target,
+                "--writePolicy",
+                value,
+            ],
+            true,
+            "change VDO write policy",
+        ),
+        "compression" | "vdo-compression" => vdo_boolean_toggle_command(
+            target,
+            value,
+            "enableCompression",
+            "disableCompression",
+            "compression",
+        ),
+        "deduplication" | "dedupe" | "vdo-deduplication" | "vdo-dedupe" => {
+            vdo_boolean_toggle_command(
+                target,
+                value,
+                "enableDeduplication",
+                "disableDeduplication",
+                "deduplication",
+            )
+        }
+        _ => command_with_readiness(
+            ["<vdo-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported VDO property"],
+            "apply a VDO property update after selecting the domain-specific command",
+        ),
+    }
+}
+
+fn vdo_boolean_toggle_command(
+    target: &str,
+    value: &str,
+    enable_command: &'static str,
+    disable_command: &'static str,
+    label: &'static str,
+) -> ExecutionCommand {
+    match normalize_property_name(value).as_str() {
+        "enabled" | "enable" | "true" | "yes" | "on" => command(
+            ["vdo", enable_command, "--name", target],
+            true,
+            &format!("enable VDO {label}"),
+        ),
+        "disabled" | "disable" | "false" | "no" | "off" => command(
+            ["vdo", disable_command, "--name", target],
+            true,
+            &format!("disable VDO {label}"),
+        ),
+        _ => command_with_readiness(
+            ["<vdo-property-tool>", target, label],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["boolean VDO property value"],
+            "apply a VDO boolean property after choosing enabled or disabled",
+        ),
+    }
+}
+
+fn normalize_property_name(value: &str) -> String {
+    value
+        .trim()
+        .trim_start_matches("vdo.")
+        .chars()
+        .map(|character| match character {
+            'A'..='Z' => character.to_ascii_lowercase(),
+            'a'..='z' | '0'..='9' => character,
+            _ => '-',
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
 }
 
 fn filesystem_property_command(
@@ -9323,7 +9433,12 @@ mod tests {
                   },
                   "archive": {
                     "operation": "grow",
-                    "desiredSize": "4TiB"
+                    "desiredSize": "4TiB",
+                    "properties": {
+                      "writePolicy": "sync",
+                      "compression": "enabled",
+                      "deduplication": "disabled"
+                    }
                   },
                   "missing-backing": {
                     "operation": "create",
@@ -9399,6 +9514,35 @@ mod tests {
             })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdoVolumes:archive:set-property:writePolicy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "vdo",
+                            "changeWritePolicy",
+                            "--name",
+                            "archive",
+                            "--writePolicy",
+                            "sync",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdoVolumes:archive:set-property:compression"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdo", "enableCompression", "--name", "archive"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdoVolumes:archive:set-property:deduplication"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdo", "disableDeduplication", "--name", "archive"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
                 command.argv == ["vdo", "remove", "--name", "old-cache"]
                     && command.readiness == CommandReadiness::Ready
@@ -9417,11 +9561,57 @@ mod tests {
                 .any(|command| command.argv == ["vdostats", "--human-readable", "archive"])
         }));
         assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "vdoVolumes:archive:set-property:writePolicy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["vdostats", "--verbose", "archive"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "vdovolumes:old-cache:destroy"
                 && step
                     .commands
                     .iter()
                     .any(|command| command.argv == ["vdo", "status"])
+        }));
+    }
+
+    #[test]
+    fn vdo_property_lifecycle_requires_supported_properties_and_values() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "vdoVolumes": {
+                  "archive": {
+                    "properties": {
+                      "compression": "maybe",
+                      "indexMemory": "0.5"
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdoVolumes:archive:set-property:compression"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["<vdo-property-tool>", "archive", "compression"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["boolean VDO property value"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdoVolumes:archive:set-property:indexMemory"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["<vdo-property-tool>", "archive", "indexMemory"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["supported VDO property"]
+                })
         }));
     }
 

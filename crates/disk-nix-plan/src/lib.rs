@@ -5625,7 +5625,12 @@ mod tests {
                 },
                 "archive": {
                   "operation": "grow",
-                  "desiredSize": "4TiB"
+                  "desiredSize": "4TiB",
+                  "properties": {
+                    "writePolicy": "sync",
+                    "compression": "enabled",
+                    "deduplication": "disabled"
+                  }
                 },
                 "old-cache": {
                   "destroy": true
@@ -5635,7 +5640,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 6);
         assert_eq!(plan.summary.offline_required_count, 0);
         assert_eq!(plan.summary.destructive_count, 2);
         let create = plan
@@ -5662,6 +5667,21 @@ mod tests {
                     .alternatives
                     .iter()
                     .any(|alternative| alternative.contains("vdostats"))
+        }));
+        let write_policy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "vdoVolumes:archive:set-property:writePolicy")
+            .expect("VDO write policy property action exists");
+        assert_eq!(write_policy.risk, RiskClass::Safe);
+        assert_eq!(write_policy.context.property_value.as_deref(), Some("sync"));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "vdoVolumes:archive:set-property:compression"
+                && action.risk == RiskClass::Safe
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "vdoVolumes:archive:set-property:deduplication"
+                && action.risk == RiskClass::Safe
         }));
         let destroy = plan
             .actions

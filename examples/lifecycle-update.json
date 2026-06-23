@@ -107,7 +107,12 @@
   "vdoVolumes": {
     "archive": {
       "operation": "grow",
-      "desiredSize": "4TiB"
+      "desiredSize": "4TiB",
+      "properties": {
+        "writePolicy": "sync",
+        "compression": "enabled",
+        "deduplication": "disabled"
+      }
     }
   },
   "physicalVolumes": {

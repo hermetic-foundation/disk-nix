@@ -205,6 +205,11 @@
               vdoVolumes.archive = {
                 operation = "grow";
                 desiredSize = "4TiB";
+                properties = {
+                  writePolicy = "sync";
+                  compression = "enabled";
+                  deduplication = "disabled";
+                };
               };
               physicalVolumes."/dev/disk/by-id/nvme-pv-grow" = {
                 operation = "grow";
@@ -508,7 +513,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 42
+              .summary.actionCount == 45
               and .summary.offlineRequiredCount == 9
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
@@ -521,6 +526,9 @@
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
               and (.actions | any(.id == "volumes:vg0/scratch:create" and .risk == "online"))
               and (.actions | any(.id == "vdovolumes:archive:grow" and .risk == "online"))
+              and (.actions | any(.id == "vdoVolumes:archive:set-property:writePolicy" and .risk == "safe"))
+              and (.actions | any(.id == "vdoVolumes:archive:set-property:compression" and .risk == "safe"))
+              and (.actions | any(.id == "vdoVolumes:archive:set-property:deduplication" and .risk == "safe"))
               and (.actions | any(.id == "physicalvolumes:/dev/disk/by-id/nvme-pv-grow:grow" and .risk == "online"))
               and (.actions | any(.id == "lukskeyslots:cryptroot:1:create" and .risk == "offline-required"))
               and (.actions | any(.id == "lukstokens:cryptroot:0:create" and .risk == "offline-required"))
@@ -680,6 +688,9 @@
                   and .spec.datasets."tank/home".operation == "create"
                   and .spec.vdoVolumes.archive.operation == "grow"
                   and .spec.vdoVolumes.archive.desiredSize == "4TiB"
+                  and .spec.vdoVolumes.archive.properties.writePolicy == "sync"
+                  and .spec.vdoVolumes.archive.properties.compression == "enabled"
+                  and .spec.vdoVolumes.archive.properties.deduplication == "disabled"
                   and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
                   and .spec.luksKeyslots."cryptroot:1".operation == "create"
                   and .spec.luksKeyslots."cryptroot:1".device == "/dev/disk/by-id/root-luks"
