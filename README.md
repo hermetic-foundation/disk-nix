@@ -210,9 +210,11 @@ remaining blocked by the potential-data-loss policy gate.
 ZFS dataset apply plans render reviewed `zfs create` commands and
 policy-gated `zfs destroy` commands.
 LVM logical volume apply plans render reviewed `lvcreate` and gated
-`lvremove` steps for volume lifecycle declarations.
+`lvremove` steps for volume lifecycle declarations, with unresolved markers for
+missing `vg/lv` targets or sizes.
 LVM thin-pool apply plans render reviewed `lvcreate --type thin-pool`,
-`lvextend`, and gated `lvremove` steps.
+`lvextend`, and gated `lvremove` steps, with unresolved markers for missing
+`vg/pool` targets or sizes.
 LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
 volume group lifecycle declarations, reviewed `vgextend` steps for grow
 operations with an explicit physical volume, and reviewed `vgreduce` steps for

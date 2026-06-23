@@ -92,10 +92,12 @@ Examples:
   `vdostats`.
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV removal is destructive because it deletes the volume
-  contents.
+  contents. Create command plans report missing `vg/lv` target form and size
+  inputs separately.
 - LVM thin-pool creation and growth are online allocations inside an existing
   volume group; thin-pool removal is destructive because it removes contained
-  thin volumes and their data.
+  thin volumes and their data. Create command plans report missing `vg/pool`
+  target form and size inputs separately.
 - LVM volume group creation and removal are destructive because they write or
   remove VG metadata on member physical volumes; prefer `vgextend` when
   preserving an existing group is possible. VG growth with an explicit physical

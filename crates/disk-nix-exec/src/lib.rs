@@ -4127,7 +4127,11 @@ fn thin_pool_create_command(target: &str, desired_size: Option<&str>) -> Executi
             ],
             true,
             CommandReadiness::NeedsDomainImplementation,
-            ["target in volume-group/thin-pool form"],
+            missing_lvm_create_inputs(
+                "target in volume-group/thin-pool form",
+                "desired thin pool size",
+                desired_size,
+            ),
             "create an LVM thin pool after resolving volume group and pool name",
         );
     };
@@ -4216,7 +4220,11 @@ fn lvm_logical_volume_create_command(target: &str, desired_size: Option<&str>) -
             ],
             true,
             CommandReadiness::NeedsDomainImplementation,
-            ["target in volume-group/logical-volume form"],
+            missing_lvm_create_inputs(
+                "target in volume-group/logical-volume form",
+                "desired logical volume size",
+                desired_size,
+            ),
             "create an LVM logical volume after resolving volume group and LV name",
         );
     };
@@ -4249,6 +4257,18 @@ fn lvm_logical_volume_create_command(target: &str, desired_size: Option<&str>) -
             "create an LVM logical volume after selecting the desired size",
         ),
     }
+}
+
+fn missing_lvm_create_inputs(
+    target_input: &'static str,
+    size_input: &'static str,
+    desired_size: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = vec![target_input];
+    if desired_size.is_none() {
+        missing.push(size_input);
+    }
+    missing
 }
 
 fn lvm_volume_group_create_command(target: &str, device: Option<&str>) -> ExecutionCommand {
@@ -5770,6 +5790,9 @@ mod tests {
                     "operation": "grow",
                     "desiredSize": "500GiB"
                   },
+                  "badthin": {
+                    "operation": "create"
+                  },
                   "vg0/oldpool": {
                     "destroy": true
                   }
@@ -5807,6 +5830,28 @@ mod tests {
                 command.argv == ["lvextend", "--size", "500GiB", "vg0/pool"]
                     && command.readiness == CommandReadiness::Ready
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "thinpools:badthin:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvcreate",
+                            "--type",
+                            "thin-pool",
+                            "--size",
+                            "<size>",
+                            "--name",
+                            "<thin-pool>",
+                            "<volume-group>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == [
+                                "target in volume-group/thin-pool form",
+                                "desired thin pool size",
+                            ]
+                })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands
@@ -5859,6 +5904,9 @@ mod tests {
                     "operation": "create",
                     "desiredSize": "10GiB"
                   },
+                  "scratch": {
+                    "operation": "create"
+                  },
                   "vg0/old": {
                     "destroy": true
                   }
@@ -5878,6 +5926,26 @@ mod tests {
             step.commands.iter().any(|command| {
                 command.argv == ["lvcreate", "--size", "10GiB", "--name", "scratch", "vg0"]
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumes:scratch:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvcreate",
+                            "--size",
+                            "<size>",
+                            "--name",
+                            "<logical-volume>",
+                            "<volume-group>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == [
+                                "target in volume-group/logical-volume form",
+                                "desired logical volume size",
+                            ]
+                })
         }));
         assert!(
             !report.command_plan.iter().any(|step| {

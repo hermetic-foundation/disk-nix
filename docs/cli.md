@@ -343,9 +343,11 @@ and `portal` or `metadata.portal` for reviewed discovery, login, and logout
 commands. LUN grow command plans keep the broad `iscsiadm --mode session --rescan` step and add per-path SCSI rescans when stable LUN `device` or
 `devices` paths are declared.
 LVM logical volume command plans render concrete `lvcreate` commands when a
-`volumes` create action has a `vg/lv` target and `desiredSize`.
+`volumes` create action has a `vg/lv` target and `desiredSize`, and report
+missing target form and size separately when either is absent.
 LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
-and policy-gated `lvremove` commands for `thinPools` lifecycle declarations.
+and policy-gated `lvremove` commands for `thinPools` lifecycle declarations,
+with separate unresolved-input markers for target form and size.
 LVM volume group command plans render policy-gated `vgcreate` and `vgremove`
 commands for `volumeGroups` lifecycle declarations, reviewed `vgextend`
 commands for grow operations with an explicit physical volume, and reviewed
