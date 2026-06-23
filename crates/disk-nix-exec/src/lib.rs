@@ -2297,7 +2297,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Grow if collection == Some("partitions") => {
-            let target = target.unwrap_or("<partition>");
+            let partition_target = partition_target_path(action);
             let disk = action.context.device.as_deref();
             let partition_number = action.context.partition_number.as_deref();
             let desired_end = action
@@ -2307,9 +2307,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .or(action.context.desired_size.as_deref());
             (
                 vec![
-                    command(
-                        ["disk-nix", "inspect", target],
-                        false,
+                    disk_nix_inspect_command(
+                        partition_target,
+                        "<partition>",
+                        "partition path",
                         "inspect partition, consumers, and backing device before growth",
                     ),
                     partition_grow_command(disk, partition_number, desired_end),
@@ -2788,24 +2789,26 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Create if collection == Some("partitions") => {
-            let target = target.unwrap_or("<partition>");
+            let partition_target = partition_target_path(action);
             let disk = action.context.device.as_deref();
             let start = action.context.start.as_deref();
             let end = action.context.end.as_deref();
             let partition_type = action.context.partition_type.as_deref();
             (
                 vec![
-                    command(
-                        ["disk-nix", "inspect", disk.unwrap_or("<disk>")],
-                        false,
+                    disk_nix_inspect_command(
+                        disk,
+                        "<disk>",
+                        "disk path",
                         "inspect disk identity and existing partition table before creation",
                     ),
                     partition_create_command(disk, partition_type, start, end),
                     partition_probe_command(disk),
                     partition_table_reread_command(disk),
-                    command(
-                        ["disk-nix", "inspect", target],
-                        false,
+                    disk_nix_inspect_command(
+                        partition_target,
+                        "<partition>",
+                        "partition path",
                         "verify the new partition node before creating higher layers",
                     ),
                 ],
@@ -4748,6 +4751,39 @@ fn disk_create_label_command(target: &str, label: &str) -> ExecutionCommand {
     )
 }
 
+fn disk_nix_inspect_command(
+    target: Option<&str>,
+    placeholder: &'static str,
+    missing_input: &'static str,
+    description: &'static str,
+) -> ExecutionCommand {
+    match target {
+        Some(target) => command(["disk-nix", "inspect", target], false, description),
+        None => command_with_readiness(
+            ["disk-nix", "inspect", placeholder],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            [missing_input],
+            description,
+        ),
+    }
+}
+
+fn partition_target_path(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .target
+        .as_deref()
+        .filter(|target| target.starts_with('/'))
+        .or_else(|| {
+            action
+                .context
+                .name
+                .as_deref()
+                .filter(|name| name.starts_with('/'))
+        })
+}
+
 fn partition_create_command(
     disk: Option<&str>,
     partition_type: Option<&str>,
@@ -6504,6 +6540,48 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["parted", "-lm"])
         );
+    }
+
+    #[test]
+    fn partition_creation_requires_disk_and_stable_partition_path_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "partitions": {
+                  "root": {
+                    "operation": "create",
+                    "start": "1MiB",
+                    "end": "100%",
+                    "partitionType": "linux"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "<disk>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["disk path"]
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["parted", "-s", "<disk>", "mkpart", "linux", "1MiB", "100%"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["disk path"]
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "<partition>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["partition path"]
+        }));
     }
 
     #[test]
