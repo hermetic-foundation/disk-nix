@@ -4948,18 +4948,9 @@ fn vdo_property_command(target: &str, property: &str, assignment: &str) -> Execu
         .map(|(_, value)| value)
         .unwrap_or(assignment);
     match normalize_property_name(property).as_str() {
-        "writepolicy" | "write-policy" | "vdo-write-policy" => command(
-            [
-                "vdo",
-                "changeWritePolicy",
-                "--name",
-                target,
-                "--writePolicy",
-                value,
-            ],
-            true,
-            "change VDO write policy",
-        ),
+        "writepolicy" | "write-policy" | "vdo-write-policy" => {
+            vdo_write_policy_command(target, value)
+        }
         "compression" | "vdo-compression" => vdo_boolean_toggle_command(
             target,
             value,
@@ -4982,6 +4973,31 @@ fn vdo_property_command(target: &str, property: &str, assignment: &str) -> Execu
             CommandReadiness::NeedsDomainImplementation,
             ["supported VDO property"],
             "apply a VDO property update after selecting the domain-specific command",
+        ),
+    }
+}
+
+fn vdo_write_policy_command(target: &str, value: &str) -> ExecutionCommand {
+    let policy = normalize_property_name(value);
+    match policy.as_str() {
+        "auto" | "sync" | "async" => command_vec(
+            [
+                "vdo",
+                "changeWritePolicy",
+                "--name",
+                target,
+                "--writePolicy",
+                policy.as_str(),
+            ],
+            true,
+            "change VDO write policy",
+        ),
+        _ => command_with_readiness(
+            ["<vdo-property-tool>", target, "writePolicy"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["VDO write policy value"],
+            "apply a VDO write policy after choosing auto, sync, or async",
         ),
     }
 }
@@ -9840,6 +9856,7 @@ mod tests {
                 "vdoVolumes": {
                   "archive": {
                     "properties": {
+                      "writePolicy": "eventual",
                       "compression": "maybe",
                       "indexMemory": "0.5"
                     }
@@ -9853,6 +9870,14 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdoVolumes:archive:set-property:writePolicy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["<vdo-property-tool>", "archive", "writePolicy"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["VDO write policy value"]
+                })
+        }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "vdoVolumes:archive:set-property:compression"
                 && step.commands.iter().any(|command| {

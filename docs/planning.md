@@ -111,7 +111,8 @@ Examples:
   `vdostats`. Create preflight inspection is marked unresolved until a backing
   device is declared. Supported VDO property updates render reviewed
   `vdo changeWritePolicy`, `vdo enableCompression`/`disableCompression`, and
-  `vdo enableDeduplication`/`disableDeduplication` commands.
+  `vdo enableDeduplication`/`disableDeduplication` commands. Write policy
+  updates require `auto`, `sync`, or `async`.
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV growth is also online when the volume group has free
   extents; LV removal is destructive because it deletes the volume contents.

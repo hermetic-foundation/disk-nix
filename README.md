@@ -252,8 +252,9 @@ member-removal command plans require an explicit array path such as
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
 online `vdo growLogical` and physical growth review steps. Create preflight is
 marked unresolved until a backing device is declared. VDO property updates
-cover write policy, compression, and deduplication with concrete `vdo`
-commands; unsupported properties remain non-ready for manual review.
+cover `auto`, `sync`, and `async` write policy changes, compression, and
+deduplication with concrete `vdo` commands; unsupported properties and invalid
+property values remain non-ready for manual review.
 NFS export apply plans render reviewed `exportfs` create, option update, and
 unexport commands from explicit client and option declarations. Export
 mutations require a path-shaped local export target such as `/srv/share`.

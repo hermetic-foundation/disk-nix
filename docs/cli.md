@@ -390,7 +390,7 @@ preflight remains non-ready until a backing device is declared. Supported
 property updates render `vdo changeWritePolicy`,
 `vdo enableCompression`/`disableCompression`, and
 `vdo enableDeduplication`/`disableDeduplication`; unsupported VDO properties
-stay non-ready with explicit unresolved inputs.
+and invalid write-policy values stay non-ready with explicit unresolved inputs.
 NFS export command plans use explicit `client` and `options` lifecycle fields
 to render reviewed `exportfs` create, option update, and unexport commands.
 They also require a path-shaped local export target such as `/srv/share`.
