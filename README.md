@@ -218,8 +218,9 @@ unexport commands from explicit client and option declarations.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
 and rescan commands from explicit target IQN and portal declarations. LUN apply
 plans model host-side attach, growth rescan, and detach: attach and grow rescan
-sessions, grow can rescan declared SCSI paths, and detach deletes only declared
-stable path devices before refreshing multipath.
+sessions, grow rescans declared SCSI paths, and detach deletes only declared
+stable path devices before refreshing multipath. Executable LUN attach, grow,
+and detach plans require declared stable `device` or `devices` paths.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain. Btrfs snapshot declarations with `readOnly = true` render

@@ -163,7 +163,8 @@ Examples:
   modeled as host-side path detach, not target-side array deletion, and remains
   offline-required. When stable `device` or `devices` paths are declared, apply
   plans render per-path SCSI rescans or deletes in addition to broad iSCSI
-  session and multipath refreshes.
+  session and multipath refreshes. Executable attach, grow, and detach plans
+  remain non-ready until those stable LUN paths are declared.
 - iSCSI session `operation = "grow"` is classified as offline-required because
   target growth, session/path rescan, and dependent consumers must be
   coordinated.

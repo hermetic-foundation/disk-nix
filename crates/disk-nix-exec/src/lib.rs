@@ -1907,7 +1907,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "inspect current LUN paths before per-device rescans",
                 ),
             ];
-            for device in lun_rescan_devices(action) {
+            let devices = lun_rescan_devices(action);
+            if devices.is_empty() {
+                commands.push(command_with_readiness(
+                    ["<scsi-rescan-device>", "<lun-path>"],
+                    true,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["stable LUN device path"],
+                    "rescan the concrete SCSI path after declaring a stable by-path LUN device",
+                ));
+            }
+            for device in devices {
                 commands.push(scsi_device_rescan_command(&device));
             }
             commands.extend([
@@ -1950,7 +1960,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "inspect the newly attached LUN and consumers",
                 ),
             ];
-            for device in lun_rescan_devices(action) {
+            let devices = lun_rescan_devices(action);
+            if devices.is_empty() {
+                commands.push(command_vec_with_readiness(
+                    vec!["blockdev", "--getsize64", "<lun-path>"],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["stable LUN device path"],
+                    "verify the reviewed LUN path after declaring a stable by-path device",
+                ));
+            }
+            for device in devices {
                 commands.push(command_vec(
                     vec!["blockdev", "--getsize64", device.as_str()],
                     false,
@@ -7642,6 +7662,49 @@ mod tests {
                         && !command.mutates
                 })
         }));
+    }
+
+    #[test]
+    fn lun_attach_and_grow_without_stable_path_reports_unresolved_input() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/new:0": {
+                  "operation": "create"
+                },
+                "iqn.2026-06.example:storage/grow:1": {
+                  "operation": "grow"
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/new:0:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["blockdev", "--getsize64", "<lun-path>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["stable LUN device path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/grow:1:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["<scsi-rescan-device>", "<lun-path>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["stable LUN device path"]
+                })
+        }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 2);
+        assert!(!report.command_summary.all_commands_ready());
     }
 
     #[test]
