@@ -170,7 +170,8 @@ blocked by the current potential-data-loss policy gate.
 Btrfs subvolume property updates render read-only toggles with
 `btrfs property set -ts <path> ro true|false`; unsupported Btrfs subvolume
 properties stay explicit as domain-specific review items.
-Btrfs qgroup limit updates render `btrfs qgroup limit` for referenced and
+Btrfs qgroup lifecycle plans render `btrfs qgroup create`, policy-gated
+`btrfs qgroup destroy`, and `btrfs qgroup limit` updates for referenced and
 exclusive byte limits from `btrfsQgroups` declarations.
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit.

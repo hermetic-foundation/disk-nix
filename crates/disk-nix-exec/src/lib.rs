@@ -1008,6 +1008,21 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             ],
             vec!["changed qgroup limit equals the desired value".to_string()],
         ),
+        Operation::Create | Operation::Destroy if collection == Some("btrfsQgroups") => (
+            vec![
+                command(
+                    ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                    false,
+                    "verify Btrfs qgroup inventory after lifecycle change",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled Btrfs qgroup topology after re-probe",
+                ),
+            ],
+            vec!["Btrfs qgroup hierarchy and limits match desired state".to_string()],
+        ),
         Operation::SetProperty if collection == Some("exports") => (
             vec![
                 command(
@@ -2067,6 +2082,35 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("btrfsQgroups") => {
+            let target = target.unwrap_or("<btrfs-filesystem-path>");
+            let qgroup_id = action.context.name.as_deref().unwrap_or("<qgroupid>");
+            (
+                vec![
+                    command(
+                        ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                        false,
+                        "inspect Btrfs qgroup inventory before creation",
+                    ),
+                    command_vec(
+                        vec![
+                            "btrfs".to_string(),
+                            "qgroup".to_string(),
+                            "create".to_string(),
+                            qgroup_id.to_string(),
+                            target.to_string(),
+                        ],
+                        true,
+                        "create the reviewed Btrfs qgroup",
+                    ),
+                ],
+                vec![
+                    "verify qgroup quota accounting is enabled on the filesystem".to_string(),
+                    "select the qgroup id intentionally to avoid hierarchy collisions".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create if collection == Some("pools") => {
             let target = target.unwrap_or("<zfs-pool>");
             let device = action.context.device.as_deref();
@@ -2432,6 +2476,36 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "take a read-only snapshot before deletion when data may be needed".to_string(),
                     "unmount or redirect consumers before deleting the subvolume".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("btrfsQgroups") => {
+            let target = target.unwrap_or("<btrfs-filesystem-path>");
+            let qgroup_id = action.context.name.as_deref().unwrap_or("<qgroupid>");
+            (
+                vec![
+                    command(
+                        ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                        false,
+                        "inspect Btrfs qgroup inventory before destruction",
+                    ),
+                    command_vec(
+                        vec![
+                            "btrfs".to_string(),
+                            "qgroup".to_string(),
+                            "destroy".to_string(),
+                            qgroup_id.to_string(),
+                            target.to_string(),
+                        ],
+                        true,
+                        "destroy the reviewed Btrfs qgroup",
+                    ),
+                ],
+                vec![
+                    "verify no subvolume still depends on the qgroup limit".to_string(),
+                    "preserve qgroup accounting policy elsewhere before deleting the qgroup"
+                        .to_string(),
                 ],
                 true,
             )
@@ -4804,14 +4878,25 @@ mod tests {
             br#"{
               "spec": {
                 "btrfsQgroups": {
+                  "0/258": {
+                    "target": "/mnt/persist",
+                    "operation": "create"
+                  },
                   "0/257": {
                     "target": "/mnt/persist",
                     "properties": {
                       "limit": "25GiB",
                       "maxExclusive": "10GiB"
                     }
+                  },
+                  "0/259": {
+                    "target": "/mnt/persist",
+                    "destroy": true
                   }
                 }
+              },
+              "apply": {
+                "allowDestructive": true
               }
             }"#,
         )
@@ -4820,6 +4905,13 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsqgroups:0/258:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "qgroup", "create", "0/258", "/mnt/persist"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "btrfsQgroups:0/257:set-property:limit"
                 && step.commands.iter().any(|command| {
@@ -4840,6 +4932,13 @@ mod tests {
                             "0/257",
                             "/mnt/persist",
                         ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsqgroups:0/259:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "qgroup", "destroy", "0/259", "/mnt/persist"]
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
