@@ -210,6 +210,10 @@ Examples:
 - `destroy = true` is classified as destructive and recommends backup,
   migration, snapshot, rename, or unmount-first alternatives depending on the
   target type.
+- `operation = "rename"` is offline-required but non-destructive. It carries
+  `renameTo`, `renameTarget`, or `newName` as the new reference and renders
+  reviewed rename commands for ZFS datasets/zvols/snapshots, Btrfs subvolume
+  paths, LVM logical volumes/thin pools, and LVM volume groups.
 - snapshot creation is reversible; snapshot rollback is potential data loss;
   snapshot destruction is destructive because it removes a recovery point.
   Generic snapshot names such as `pool/dataset@snap` map to ZFS snapshots;
@@ -268,11 +272,13 @@ Lifecycle objects may use:
 
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
   `repair`, `scrub`, `trim`, `replace-device`, `add-device`, `remove-device`,
-  `set-property`, `snapshot`, `rebalance`, `rollback`, or `destroy`
+  `set-property`, `snapshot`, `rename`, `rebalance`, `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
 - `devices`: member devices for arrays, pools, or explicit LUN paths that
   should receive per-path host rescans
 - `removeDevices`: list of devices to remove
+- `renameTo`, `renameTarget`, or `newName`: new name or path for rename
+  lifecycle operations
 - `replaceDevices`: object mapping old device to replacement device
 - `properties`: object of properties to set
 - `desiredSize`, `targetSize`, or `size`: desired capacity for grow, shrink,

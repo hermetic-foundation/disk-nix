@@ -261,6 +261,10 @@
               datasets."tank/home" = {
                 operation = "create";
               };
+              datasets."tank/legacy" = {
+                operation = "rename";
+                renameTo = "tank/legacy-staged";
+              };
               zvols."tank/vm/root" = {
                 operation = "grow";
                 desiredSize = "80GiB";
@@ -343,6 +347,7 @@
                 hold = "disk-nix-retain";
                 rollback = true;
                 cloneTo = "tank/home-review";
+                renameTo = "tank/home@before-upgrade-retained";
                 recursiveRollback = true;
               };
               snapshots."tank/home@old" = {
@@ -561,8 +566,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 45
-              and .summary.offlineRequiredCount == 9
+              .summary.actionCount == 47
+              and .summary.offlineRequiredCount == 11
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -594,7 +599,9 @@
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "nvmenamespaces:/dev/nvme0:create" and .risk == "destructive"))
               and (.actions | any(.id == "datasets:tank/home:create" and .risk == "online"))
+              and (.actions | any(.id == "datasets:tank/legacy:rename" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/archive:destroy"))
+              and (.actions | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained" and .risk == "offline-required"))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
               and (.actions | any(.id == "exports:/srv/share:create" and .risk == "online"))
               and (.actions | any(.id == "caches:/dev/bcache0:add-device:cache-set-uuid" and .risk == "online"))
@@ -630,22 +637,24 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 14
-              and .apply.blockedSummary.offlineRequiredCount == 9
+              and .apply.blockedCount == 16
+              and .apply.blockedSummary.offlineRequiredCount == 11
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
+              and (.apply.blocked | any(.id == "datasets:tank/legacy:rename"))
+              and (.apply.blocked | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained"))
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 14
+              and .apply.blockedCount == 16
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 14
-              and .messages[0] == "apply policy blocked 14 action(s)"
+              and .apply.blockedCount == 16
+              and .messages[0] == "apply policy blocked 16 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -782,7 +791,9 @@
                   and .spec.snapshots."tank/home@before-upgrade".hold == "disk-nix-retain"
                   and .spec.snapshots."tank/home@before-upgrade".rollback == true
                   and .spec.snapshots."tank/home@before-upgrade".cloneTo == "tank/home-review"
+                  and .spec.snapshots."tank/home@before-upgrade".renameTo == "tank/home@before-upgrade-retained"
                   and .spec.snapshots."tank/home@before-upgrade".recursiveRollback == true
+                  and .spec.datasets."tank/legacy".renameTo == "tank/legacy-staged"
                   and .spec.snapshots."tank/home@old".releaseHold == "old-retention"
                   and .spec.snapshots."/mnt/persist/@home-before-upgrade".target == "/mnt/persist/@home"
                   and .spec.snapshots."/mnt/persist/@home-before-upgrade".readOnly == true

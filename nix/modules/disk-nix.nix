@@ -77,6 +77,7 @@ let
       "remove-device"
       "set-property"
       "snapshot"
+      "rename"
       "rebalance"
       "rollback"
       "destroy"
@@ -124,6 +125,13 @@ let
           example = {
             "/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
           };
+        };
+
+        renameTo = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "New name or path for rename lifecycle operations.";
+          example = "tank/home-staged";
         };
 
         properties = lib.mkOption {
@@ -370,6 +378,13 @@ let
           example = "tank/home-review";
         };
 
+        renameTo = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "New ZFS snapshot name or Btrfs snapshot path for rename lifecycle operations.";
+          example = "tank/home@before-prune";
+        };
+
         recursiveRollback = lib.mkOption {
           type = lib.types.nullOr lib.types.bool;
           default = null;
@@ -430,6 +445,7 @@ let
         devices
         removeDevices
         replaceDevices
+        renameTo
         properties
         destroy
         preserveData
@@ -470,6 +486,7 @@ let
         destroy
         rollback
         cloneTo
+        renameTo
         recursiveRollback
         hold
         holdTag

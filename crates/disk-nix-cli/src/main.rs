@@ -694,6 +694,9 @@ fn spec_schema() -> serde_json::Value {
                         "type": "object",
                         "additionalProperties": { "type": "string" }
                     },
+                    "renameTo": { "type": "string" },
+                    "renameTarget": { "type": "string" },
+                    "newName": { "type": "string" },
                     "properties": {
                         "type": "object",
                         "additionalProperties": true
@@ -856,6 +859,9 @@ fn spec_schema() -> serde_json::Value {
                     "cloneTo": { "type": "string" },
                     "cloneTarget": { "type": "string" },
                     "clone": { "type": "string" },
+                    "renameTo": { "type": "string" },
+                    "renameTarget": { "type": "string" },
+                    "newName": { "type": "string" },
                     "recursiveRollback": { "type": "boolean" },
                     "recursive": { "type": "boolean" },
                     "zfs.rollbackRecursive": { "type": "boolean" },
@@ -888,6 +894,7 @@ fn spec_schema() -> serde_json::Value {
                     "set-property",
                     "snapshot",
                     "clone",
+                    "rename",
                     "rebalance",
                     "rollback",
                     "destroy"

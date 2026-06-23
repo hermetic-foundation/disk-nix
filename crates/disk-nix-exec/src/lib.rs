@@ -1882,6 +1882,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         Operation::Format
         | Operation::Shrink
         | Operation::Clone
+        | Operation::Rename
         | Operation::RemoveDevice
         | Operation::Repair
         | Operation::Rollback
@@ -3576,6 +3577,35 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Rename if collection == Some("btrfsSubvolumes") => {
+            let target = target.unwrap_or("<btrfs-subvolume-path>");
+            let rename_to = action
+                .context
+                .rename_to
+                .as_deref()
+                .unwrap_or("<new-btrfs-subvolume-path>");
+            (
+                vec![
+                    command(
+                        ["btrfs", "subvolume", "show", target],
+                        false,
+                        "inspect Btrfs subvolume before rename",
+                    ),
+                    command(
+                        ["mv", "--", target, rename_to],
+                        true,
+                        "rename the reviewed Btrfs subvolume path",
+                    ),
+                ],
+                vec![
+                    "update mounts, send/receive jobs, qgroups, and snapshots after rename"
+                        .to_string(),
+                    "validate consumers on the renamed subvolume before deleting the old path"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Destroy if collection == Some("btrfsQgroups") => {
             let qgroup_id = action.context.name.as_deref().unwrap_or("<qgroupid>");
             let target_path = btrfs_qgroup_target_path(action.context.target.as_deref(), qgroup_id);
@@ -3702,6 +3732,35 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Rename if collection == Some("datasets") || collection == Some("zvols") => {
+            let target = target.unwrap_or("<zfs-dataset>");
+            let rename_to = action
+                .context
+                .rename_to
+                .as_deref()
+                .unwrap_or("<new-zfs-name>");
+            (
+                vec![
+                    command(
+                        ["zfs", "list", "-H", "-p", target],
+                        false,
+                        "inspect ZFS object before rename",
+                    ),
+                    command(
+                        ["zfs", "rename", target, rename_to],
+                        true,
+                        "rename the reviewed ZFS dataset or zvol",
+                    ),
+                ],
+                vec![
+                    "update mountpoints, shares, LUN mappings, and dependent services to the new name"
+                        .to_string(),
+                    "validate consumers on the renamed object before destroying any old path"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Destroy if collection == Some("snapshots") => {
             let snapshot = action.context.name.as_deref().unwrap_or("<snapshot>");
             let source = action
@@ -3768,6 +3827,64 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 )
             }
         }
+        Operation::Rename if collection == Some("snapshots") => {
+            let snapshot = action.context.name.as_deref().unwrap_or("<snapshot>");
+            let rename_to = action
+                .context
+                .rename_to
+                .as_deref()
+                .unwrap_or("<new-snapshot-name>");
+            if is_zfs_snapshot_name(snapshot) {
+                (
+                    vec![
+                        command(
+                            ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
+                            false,
+                            "inspect ZFS snapshot before rename",
+                        ),
+                        command(
+                            ["zfs", "rename", snapshot, rename_to],
+                            true,
+                            "rename the reviewed ZFS snapshot recovery point",
+                        ),
+                    ],
+                    vec![
+                        "update retention, replication, and rollback references to the new snapshot name"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            } else if snapshot.starts_with('/') {
+                (
+                    vec![
+                        command(
+                            ["btrfs", "subvolume", "show", snapshot],
+                            false,
+                            "inspect Btrfs snapshot subvolume before rename",
+                        ),
+                        command(
+                            ["mv", "--", snapshot, rename_to],
+                            true,
+                            "rename the reviewed Btrfs snapshot subvolume path",
+                        ),
+                    ],
+                    vec![
+                        "update retention and restore references to the renamed snapshot path"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            } else {
+                (
+                    Vec::new(),
+                    vec![
+                        "snapshot rename command is only rendered for unambiguous ZFS snapshot names or Btrfs absolute paths"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            }
+        }
         Operation::Destroy if collection == Some("lvmSnapshots") => {
             let target = target.unwrap_or("<lvm-snapshot>");
             (
@@ -3805,6 +3922,30 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "snapshot or migrate data before removing the logical volume".to_string(),
                     "unmount filesystems and deactivate dependent mappings before lvremove"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rename if collection == Some("volumes") || collection == Some("thinPools") => {
+            let target = lvm_volume_target_path(target);
+            let rename_to = action.context.rename_to.as_deref();
+            (
+                vec![
+                    lvm_lvs_report_command(target, None, "inspect logical volume before rename"),
+                    lvm_lvrename_command(
+                        target,
+                        rename_to,
+                        "<logical-volume>",
+                        "target in volume-group/logical-volume form",
+                        "new logical volume name or path",
+                        "rename the reviewed logical volume",
+                    ),
+                ],
+                vec![
+                    "update filesystems, crypttab, mounts, LUN exports, and services after rename"
+                        .to_string(),
+                    "keep the old declaration out of destructive mode until consumers are validated"
                         .to_string(),
                 ],
                 true,
@@ -3853,6 +3994,35 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "remove or migrate logical volumes before removing the volume group"
                         .to_string(),
                     "verify no filesystems, mappings, or services still reference the VG"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rename if collection == Some("volumeGroups") => {
+            let target = target.unwrap_or("<volume-group>");
+            let rename_to = action
+                .context
+                .rename_to
+                .as_deref()
+                .unwrap_or("<new-volume-group>");
+            (
+                vec![
+                    command(
+                        ["vgs", "--reportformat", "json", target],
+                        false,
+                        "inspect volume group before rename",
+                    ),
+                    command(
+                        ["vgrename", target, rename_to],
+                        true,
+                        "rename the reviewed volume group",
+                    ),
+                ],
+                vec![
+                    "update every LV path, initrd reference, mount, and service before reboot"
+                        .to_string(),
+                    "validate boot and activation with the renamed volume group before cleanup"
                         .to_string(),
                 ],
                 true,
@@ -4280,6 +4450,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Check
         | Operation::Repair
         | Operation::Clone
+        | Operation::Rename
         | Operation::RemoveDevice
         | Operation::Rollback
         | Operation::Destroy => (
@@ -8048,6 +8219,48 @@ fn lvm_lvremove_command(
     }
 }
 
+fn lvm_lvrename_command(
+    target: Option<&str>,
+    rename_to: Option<&str>,
+    placeholder: &'static str,
+    target_input: &'static str,
+    rename_input: &'static str,
+    description: &'static str,
+) -> ExecutionCommand {
+    match (target, rename_to) {
+        (Some(target), Some(rename_to)) => {
+            command(["lvrename", target, rename_to], true, description)
+        }
+        (target, rename_to) => command_vec_with_readiness(
+            vec![
+                "lvrename".to_string(),
+                target.unwrap_or(placeholder).to_string(),
+                rename_to.unwrap_or("<new-logical-volume>").to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_rename_inputs(target_input, rename_input, target, rename_to),
+            description,
+        ),
+    }
+}
+
+fn missing_rename_inputs(
+    target_input: &'static str,
+    rename_input: &'static str,
+    target: Option<&str>,
+    rename_to: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if target.is_none() {
+        missing.push(target_input);
+    }
+    if rename_to.is_none() {
+        missing.push(rename_input);
+    }
+    missing
+}
+
 fn lvm_snapshot_create_command(
     origin: &str,
     snapshot: &str,
@@ -11547,6 +11760,83 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["zfs", "list", "-H", "-p", "tank/home-review"])
+        }));
+    }
+
+    #[test]
+    fn rename_lifecycle_reports_domain_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "datasets": {
+                  "tank/home": {
+                    "operation": "rename",
+                    "renameTo": "tank/home-staged"
+                  }
+                },
+                "volumes": {
+                  "vg0/old": {
+                    "operation": "rename",
+                    "renameTo": "vg0/new"
+                  }
+                },
+                "btrfsSubvolumes": {
+                  "/mnt/persist/@old": {
+                    "operation": "rename",
+                    "renameTo": "/mnt/persist/@new"
+                  }
+                },
+                "snapshots": {
+                  "tank/home@before-prune": {
+                    "target": "tank/home",
+                    "renameTo": "tank/home@retained"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "datasets:tank/home:rename"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "rename", "tank/home", "tank/home-staged"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumes:vg0/old:rename"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvrename", "vg0/old", "vg0/new"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfssubvolumes:/mnt/persist/@old:rename"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mv", "--", "/mnt/persist/@old", "/mnt/persist/@new"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:tank/home@before-prune:rename:tank/home@retained"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "zfs",
+                            "rename",
+                            "tank/home@before-prune",
+                            "tank/home@retained",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
         }));
     }
 

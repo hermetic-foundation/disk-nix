@@ -36,6 +36,10 @@
     "tank/home": {
       "operation": "create"
     },
+    "tank/legacy": {
+      "operation": "rename",
+      "renameTo": "tank/legacy-staged"
+    },
     "tank/archive": {
       "destroy": true
     }
@@ -205,6 +209,10 @@
   "snapshots": {
     "tank/home@before-upgrade": {
       "target": "tank/home"
+    },
+    "tank/home@before-prune": {
+      "target": "tank/home",
+      "renameTo": "tank/home@retained"
     },
     "tank/root@rollback-point": {
       "target": "tank/root",

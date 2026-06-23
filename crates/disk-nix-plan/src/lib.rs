@@ -48,6 +48,7 @@ pub enum Operation {
     SetProperty,
     Snapshot,
     Clone,
+    Rename,
     Rebalance,
     Rollback,
     Destroy,
@@ -170,6 +171,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replacement: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub rename_to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub property: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub property_value: Option<String>,
@@ -226,6 +229,7 @@ impl ActionContext {
             && self.device.is_none()
             && self.devices.is_empty()
             && self.replacement.is_none()
+            && self.rename_to.is_none()
             && self.property.is_none()
             && self.property_value.is_none()
             && self.property_assignments.is_empty()
@@ -847,6 +851,7 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         target: string_field(object, &["target", "path", "mountpoint"]).or(Some(name.to_string())),
         device: string_field(object, &["device", "disk", "source"]),
         devices: string_array_field(object, &["devices", "addDevices"]),
+        rename_to: string_field(object, &["renameTo", "renameTarget", "newName"]),
         fs_type: string_field(object, &["fsType", "type"]),
         mountpoint: string_field(object, &["mountpoint", "path"])
             .or_else(|| name.starts_with('/').then(|| name.to_string())),
@@ -2497,6 +2502,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
     let hold = string_field(snapshot, &["hold", "holdTag"]);
     let release_hold = string_field(snapshot, &["releaseHold", "release-hold"]);
     let clone_to = string_field(snapshot, &["cloneTo", "cloneTarget", "clone"]);
+    let rename_to = string_field(snapshot, &["renameTo", "renameTarget", "newName"]);
     let destroy = snapshot
         .get("destroy")
         .and_then(Value::as_bool)
@@ -2548,6 +2554,32 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
                     "inspect the clone before rollback or destructive changes".to_string(),
                     "destroy the clone after migration or validation if it is no longer needed"
                         .to_string(),
+                ],
+            }),
+        });
+    }
+    if let Some(rename_to) = rename_to {
+        actions.push(PlannedAction {
+            id: format!("snapshot:{name}:rename:{rename_to}"),
+            description: format!("rename snapshot {name} to {rename_to}"),
+            operation: Operation::Rename,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("snapshots".to_string()),
+                name: Some(name.to_string()),
+                target: Some(target.to_string()),
+                rename_to: Some(rename_to),
+                read_only,
+                ..ActionContext::default()
+            },
+            advice: Some(Advice {
+                summary:
+                    "snapshot rename preserves the recovery point while changing its reference"
+                        .to_string(),
+                alternatives: vec![
+                    "hold the snapshot before renaming when retention jobs may race".to_string(),
+                    "update replication, rollback, and cleanup references after rename".to_string(),
                 ],
             }),
         });
@@ -2688,6 +2720,7 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "set-property" | "setProperty" => Some(Operation::SetProperty),
         "snapshot" => Some(Operation::Snapshot),
         "clone" => Some(Operation::Clone),
+        "rename" => Some(Operation::Rename),
         "rebalance" => Some(Operation::Rebalance),
         "rollback" => Some(Operation::Rollback),
         "destroy" => Some(Operation::Destroy),
@@ -2711,6 +2744,7 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::SetProperty => "set-property",
         Operation::Snapshot => "snapshot",
         Operation::Clone => "clone",
+        Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
         Operation::Destroy => "destroy",
@@ -3123,6 +3157,18 @@ fn classify_operation(
                 alternatives: vec![
                     "inspect the clone before using it for rollback or migration".to_string(),
                     "destroy temporary clones after validation".to_string(),
+                ],
+            }),
+        ),
+        Operation::Rename => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: format!("{collection} rename retargets a storage object without deleting it"),
+                alternatives: vec![
+                    "rename first and validate consumers before destroying old paths".to_string(),
+                    "update mounts, exports, LUN mappings, and services before applying".to_string(),
+                    "keep snapshots or backups until consumers use the renamed object".to_string(),
                 ],
             }),
         ),
@@ -3678,6 +3724,7 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::SetProperty => "set property",
         Operation::Snapshot => "snapshot",
         Operation::Clone => "clone",
+        Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
         Operation::Destroy => "destroy",
@@ -4044,6 +4091,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::ZfsSnapshot,
+            operation: Operation::Rename,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "ZFS snapshot rename preserves a recovery point under a new name"
+                    .to_string(),
+                alternatives: vec![
+                    "hold snapshots before renaming when retention jobs may race".to_string(),
+                    "update replication and rollback references after rename".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsSnapshot,
             operation: Operation::Rollback,
             risk: RiskClass::PotentialDataLoss,
             advice: Some(Advice {
@@ -4283,6 +4343,19 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::BtrfsSubvolume,
+            operation: Operation::Rename,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "Btrfs subvolume rename stages a path move before deletion".to_string(),
+                alternatives: vec![
+                    "update mounts and qgroups before moving the path".to_string(),
+                    "validate consumers on the renamed subvolume before deleting old paths"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::BtrfsQgroup,
             operation: Operation::Create,
             risk: RiskClass::Online,
@@ -4364,6 +4437,21 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::Zvol,
+            operation: Operation::Rename,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "zvol rename preserves block data while changing the ZFS volume name"
+                    .to_string(),
+                alternatives: vec![
+                    "detach or rescan downstream LUN, VM, and filesystem consumers first"
+                        .to_string(),
+                    "validate consumers on the renamed zvol before removing old references"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Zvol,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             advice: Some(Advice {
@@ -4400,6 +4488,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                     "review inherited quota, reservation, mountpoint, and encryption policy first"
                         .to_string(),
                     "snapshot datasets before property changes that affect consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsDataset,
+            operation: Operation::Rename,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "ZFS dataset rename preserves data while changing its dataset name"
+                    .to_string(),
+                alternatives: vec![
+                    "update mountpoints, shares, and services before rename".to_string(),
+                    "validate consumers on the renamed dataset before destroying old references"
+                        .to_string(),
                 ],
             }),
         },
@@ -4504,6 +4606,21 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::LvmLogicalVolume,
+            operation: Operation::Rename,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "logical volume rename changes the LV path without deleting data"
+                    .to_string(),
+                alternatives: vec![
+                    "update crypttab, fileSystems, LUN exports, and services before rename"
+                        .to_string(),
+                    "validate consumers with the renamed LV before removing old declarations"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::LvmVolumeGroup,
             operation: Operation::Create,
             risk: RiskClass::Destructive,
@@ -4553,6 +4670,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "remove or migrate logical volumes before vgremove".to_string(),
                     "deactivate or rename the volume group while validating consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmVolumeGroup,
+            operation: Operation::Rename,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "volume group rename changes every contained LV path".to_string(),
+                alternatives: vec![
+                    "update initrd, mount, crypttab, and service references before reboot"
+                        .to_string(),
+                    "validate activation with the renamed VG before cleanup".to_string(),
                 ],
             }),
         },
@@ -7557,6 +7687,52 @@ mod tests {
             plan.actions[0].context.target.as_deref(),
             Some("tank/home-review")
         );
+    }
+
+    #[test]
+    fn plan_accepts_storage_rename_as_offline_non_destructive() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "spec": {
+                "datasets": {
+                  "tank/home": {
+                    "operation": "rename",
+                    "renameTo": "tank/home-staged"
+                  }
+                },
+                "volumes": {
+                  "vg0/old": {
+                    "operation": "rename",
+                    "renameTo": "vg0/new"
+                  }
+                },
+                "snapshots": {
+                  "tank/home@before-prune": {
+                    "target": "tank/home",
+                    "renameTo": "tank/home@retained"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 3);
+        assert_eq!(plan.summary.destructive_count, 0);
+        assert!(plan.actions.iter().all(|action| {
+            action.operation == Operation::Rename
+                && action.risk == RiskClass::OfflineRequired
+                && !action.destructive
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "datasets:tank/home:rename"
+                && action.context.rename_to.as_deref() == Some("tank/home-staged")
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "snapshot:tank/home@before-prune:rename:tank/home@retained"
+                && action.context.rename_to.as_deref() == Some("tank/home@retained")
+        }));
     }
 
     #[test]

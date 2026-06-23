@@ -473,14 +473,17 @@ and scrub. Pool create preflight inspects declared path-like vdev entries
 instead of topology keywords such as `mirror`.
 ZFS dataset command plans render reviewed `zfs create` commands, including
 create-time `-o key=value` options from declared properties, and policy-gated
-`zfs destroy` commands for `datasets` lifecycle declarations.
+`zfs destroy` commands for `datasets` lifecycle declarations. Dataset and zvol
+rename declarations render reviewed `zfs rename <old> <new>` commands from
+`operation = "rename"` plus `renameTo`.
 Zvol command plans render `zfs create -o key=value -V` for declared create-time
 properties, `zfs set volsize=...`, policy-gated `zfs destroy`, and
 `zfs set key=value` property reconciliation updates for `zvols` lifecycle
 declarations.
 Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
-`btrfs subvolume delete`, and `btrfs property set -ts <path> ro true|false`
-for read-only property declarations.
+`btrfs subvolume delete`, reviewed path renames with `mv -- <old> <new>`, and
+`btrfs property set -ts <path> ro true|false` for read-only property
+declarations.
 Btrfs qgroup command plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` for referenced and exclusive
 limit declarations in `btrfsQgroups`. Qgroup create, destroy, and limit plans
@@ -496,6 +499,8 @@ commands for the same unambiguous domains.
 ZFS snapshot retention declarations render safe `zfs hold <tag> <snapshot>`
 and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
 ZFS snapshot clone declarations render reviewed `zfs clone <snapshot> <dataset>` commands from `cloneTo`, `cloneTarget`, or `clone`.
+Snapshot rename declarations render reviewed `zfs rename <snapshot> <new>` for
+ZFS names and `mv -- <old> <new>` for absolute Btrfs snapshot paths.
 ZFS snapshot rollback declarations render reviewed `zfs rollback` command
 details internally, and `recursiveRollback`, `recursive`, or
 `zfs.rollbackRecursive` render reviewed `zfs rollback -r` details. Apply blocks

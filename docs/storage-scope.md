@@ -26,6 +26,8 @@ Creation is only one lifecycle operation. The planner should also support:
 - grow and shrink where supported
 - add, remove, and replace devices
 - set safe pool, dataset, filesystem, and volume properties
+- rename datasets, volumes, volume groups, subvolumes, and snapshots before
+  final cleanup
 - create and prune snapshots
 - rebalance data
 - convert or attach cache layers

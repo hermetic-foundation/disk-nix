@@ -147,6 +147,8 @@ not a replacement for Windows `chkdsk`.
 For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, `operation = "trim"`, device add/remove/replace operations, and filesystem property
 updates such as labels or balance filters while still deriving the regular
 NixOS `fileSystems` entry from the same declaration.
+Typed Btrfs subvolume declarations can request `operation = "rename"` with
+`renameTo` to stage a path move before final cleanup.
 For ZFS pools, typed declarations can request `operation = "scrub"` to render
 reviewed `zpool scrub` plans.
 
@@ -265,6 +267,7 @@ Typed snapshot declarations include:
 - `destroy`
 - `rollback`
 - `cloneTo`
+- `renameTo`
 - `recursiveRollback`
 - `hold`
 - `holdTag`
@@ -348,6 +351,10 @@ Example lifecycle planning through NixOS options:
       properties.autotrim = "on";
     };
     datasets."tank/home".operation = "create";
+    datasets."tank/legacy" = {
+      operation = "rename";
+      renameTo = "tank/legacy-staged";
+    };
     datasets."tank/archive".destroy = true;
     zvols."tank/vm/root" = {
       operation = "grow";
@@ -430,7 +437,10 @@ Example lifecycle planning through NixOS options:
         metadata.portal = "192.0.2.10:3260";
       };
     };
-    snapshots."tank/home@before-upgrade".target = "tank/home";
+    snapshots."tank/home@before-upgrade" = {
+      target = "tank/home";
+      renameTo = "tank/home@before-upgrade-retained";
+    };
     snapshots."/mnt/persist/@home-before-upgrade" = {
       target = "/mnt/persist/@home";
       readOnly = true;
