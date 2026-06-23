@@ -342,6 +342,7 @@
                 target = "tank/home";
                 hold = "disk-nix-retain";
                 rollback = true;
+                cloneTo = "tank/home-review";
                 recursiveRollback = true;
               };
               snapshots."tank/home@old" = {
@@ -500,6 +501,7 @@
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
               and ."$defs".snapshot.properties.readOnly.type == "boolean"
               and ."$defs".snapshot.properties.readonly.type == "boolean"
+              and ."$defs".snapshot.properties.cloneTo.type == "string"
               and ."$defs".snapshot.properties.recursiveRollback.type == "boolean"
               and ."$defs".snapshot.properties."zfs.rollbackRecursive".type == "boolean"
               and ."$defs".filesystem.properties.device.type == "string"
@@ -779,6 +781,7 @@
                   and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
                   and .spec.snapshots."tank/home@before-upgrade".hold == "disk-nix-retain"
                   and .spec.snapshots."tank/home@before-upgrade".rollback == true
+                  and .spec.snapshots."tank/home@before-upgrade".cloneTo == "tank/home-review"
                   and .spec.snapshots."tank/home@before-upgrade".recursiveRollback == true
                   and .spec.snapshots."tank/home@old".releaseHold == "old-retention"
                   and .spec.snapshots."/mnt/persist/@home-before-upgrade".target == "/mnt/persist/@home"

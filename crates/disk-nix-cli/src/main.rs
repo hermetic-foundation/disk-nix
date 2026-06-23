@@ -853,6 +853,9 @@ fn spec_schema() -> serde_json::Value {
                     "target": { "type": "string" },
                     "destroy": { "type": "boolean" },
                     "rollback": { "type": "boolean" },
+                    "cloneTo": { "type": "string" },
+                    "cloneTarget": { "type": "string" },
+                    "clone": { "type": "string" },
                     "recursiveRollback": { "type": "boolean" },
                     "recursive": { "type": "boolean" },
                     "zfs.rollbackRecursive": { "type": "boolean" },
@@ -884,6 +887,7 @@ fn spec_schema() -> serde_json::Value {
                     "remove-device",
                     "set-property",
                     "snapshot",
+                    "clone",
                     "rebalance",
                     "rollback",
                     "destroy"

@@ -1760,6 +1760,36 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Clone if collection == Some("snapshots") => {
+            let snapshot = action.context.name.as_deref().unwrap_or(target);
+            let clone_target = action.context.target.as_deref().unwrap_or("<clone-dataset>");
+            if !is_zfs_snapshot_name(snapshot) {
+                return (Vec::new(), Vec::new());
+            }
+            (
+                vec![
+                    command(
+                        ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
+                        false,
+                        "verify source ZFS snapshot exists before clone",
+                    ),
+                    command(
+                        ["zfs", "list", "-H", "-p", clone_target],
+                        false,
+                        "verify cloned ZFS dataset after clone",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", clone_target, "--json"],
+                        false,
+                        "verify cloned dataset graph state after clone",
+                    ),
+                ],
+                vec![
+                    "clone dataset exists and is mounted or configured as expected".to_string(),
+                    "clone origin points at the reviewed source snapshot".to_string(),
+                ],
+            )
+        }
         Operation::Format if collection == Some("swaps") => (
             vec![
                 command(
@@ -1851,6 +1881,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         }
         Operation::Format
         | Operation::Shrink
+        | Operation::Clone
         | Operation::RemoveDevice
         | Operation::Repair
         | Operation::Rollback
@@ -3984,6 +4015,42 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 )
             }
         }
+        Operation::Clone if collection == Some("snapshots") => {
+            let target = target.unwrap_or("<clone-dataset>");
+            let snapshot = action.context.name.as_deref().unwrap_or("<snapshot>");
+            if is_zfs_snapshot_name(snapshot) {
+                (
+                    vec![
+                        command(
+                            ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
+                            false,
+                            "inspect ZFS snapshot before clone",
+                        ),
+                        command(
+                            ["zfs", "clone", snapshot, target],
+                            true,
+                            "clone the reviewed ZFS snapshot to a writable dataset",
+                        ),
+                    ],
+                    vec![
+                        "use the clone for inspection, migration, or rollback rehearsal"
+                            .to_string(),
+                        "destroy temporary clones after validation to release snapshot dependencies"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            } else {
+                (
+                    Vec::new(),
+                    vec![
+                        "snapshot clone command is only rendered for unambiguous ZFS snapshot names"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            }
+        }
         Operation::RemoveDevice if collection == Some("pools") => {
             let target = target.unwrap_or("<zfs-pool>");
             let device = action
@@ -4212,6 +4279,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Shrink
         | Operation::Check
         | Operation::Repair
+        | Operation::Clone
         | Operation::RemoveDevice
         | Operation::Rollback
         | Operation::Destroy => (
@@ -11445,6 +11513,40 @@ mod tests {
         assert!(report.apply.blocked.iter().any(|blocked| {
             blocked.id == "vdoVolumes:archive:set-property:indexMemory"
                 && blocked.risk == RiskClass::Unsupported
+        }));
+    }
+
+    #[test]
+    fn zfs_snapshot_clone_renderer_reports_reviewable_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home",
+                  "cloneTo": "tank/home-review"
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:tank/home@before:clone:tank/home-review"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "clone", "tank/home@before", "tank/home-review"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "snapshot:tank/home@before:clone:tank/home-review"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "list", "-H", "-p", "tank/home-review"])
         }));
     }
 

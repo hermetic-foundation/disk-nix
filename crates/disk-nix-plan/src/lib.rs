@@ -47,6 +47,7 @@ pub enum Operation {
     RemoveDevice,
     SetProperty,
     Snapshot,
+    Clone,
     Rebalance,
     Rollback,
     Destroy,
@@ -2495,6 +2496,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
         .unwrap_or(name);
     let hold = string_field(snapshot, &["hold", "holdTag"]);
     let release_hold = string_field(snapshot, &["releaseHold", "release-hold"]);
+    let clone_to = string_field(snapshot, &["cloneTo", "cloneTarget", "clone"]);
     let destroy = snapshot
         .get("destroy")
         .and_then(Value::as_bool)
@@ -2524,6 +2526,31 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
             read_only,
             true,
         ));
+    }
+    if let Some(clone_to) = clone_to {
+        actions.push(PlannedAction {
+            id: format!("snapshot:{name}:clone:{clone_to}"),
+            description: format!("clone snapshot {name} to {clone_to}"),
+            operation: Operation::Clone,
+            risk: RiskClass::Reversible,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("snapshots".to_string()),
+                name: Some(name.to_string()),
+                target: Some(clone_to),
+                read_only,
+                ..ActionContext::default()
+            },
+            advice: Some(Advice {
+                summary: "ZFS snapshot clone creates a writable dataset from the snapshot"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect the clone before rollback or destructive changes".to_string(),
+                    "destroy the clone after migration or validation if it is no longer needed"
+                        .to_string(),
+                ],
+            }),
+        });
     }
 
     if destroy {
@@ -2660,6 +2687,7 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "remove-device" | "removeDevice" => Some(Operation::RemoveDevice),
         "set-property" | "setProperty" => Some(Operation::SetProperty),
         "snapshot" => Some(Operation::Snapshot),
+        "clone" => Some(Operation::Clone),
         "rebalance" => Some(Operation::Rebalance),
         "rollback" => Some(Operation::Rollback),
         "destroy" => Some(Operation::Destroy),
@@ -2682,6 +2710,7 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::RemoveDevice => "remove-device",
         Operation::SetProperty => "set-property",
         Operation::Snapshot => "snapshot",
+        Operation::Clone => "clone",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
         Operation::Destroy => "destroy",
@@ -3086,6 +3115,17 @@ fn classify_operation(
             }),
         ),
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
+        Operation::Clone => (
+            RiskClass::Reversible,
+            false,
+            Some(Advice {
+                summary: format!("{collection} clone creates a dependent writable copy"),
+                alternatives: vec![
+                    "inspect the clone before using it for rollback or migration".to_string(),
+                    "destroy temporary clones after validation".to_string(),
+                ],
+            }),
+        ),
         Operation::Grow if collection == "mdRaids" => (
             RiskClass::OfflineRequired,
             false,
@@ -3637,6 +3677,7 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::RemoveDevice => "remove device",
         Operation::SetProperty => "set property",
         Operation::Snapshot => "snapshot",
+        Operation::Clone => "clone",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
         Operation::Destroy => "destroy",
@@ -3985,6 +4026,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                     "hold snapshots before risky migrations or destructive changes".to_string(),
                     "release only after replacement backups or snapshots are verified"
                         .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsSnapshot,
+            operation: Operation::Clone,
+            risk: RiskClass::Reversible,
+            advice: Some(Advice {
+                summary: "ZFS snapshot clone creates a writable dataset from a recovery point"
+                    .to_string(),
+                alternatives: vec![
+                    "clone a snapshot for inspection before rollback".to_string(),
+                    "destroy temporary clones after migration or validation".to_string(),
                 ],
             }),
         },
@@ -5267,6 +5321,13 @@ mod tests {
                     && capability.operation == Operation::Rollback
             })
             .expect("ZFS snapshot rollback capability should exist");
+        let zfs_clone = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::ZfsSnapshot
+                    && capability.operation == Operation::Clone
+            })
+            .expect("ZFS snapshot clone capability should exist");
         let btrfs_snapshot = capabilities
             .iter()
             .find(|capability| {
@@ -5284,6 +5345,7 @@ mod tests {
 
         assert_eq!(zfs_snapshot.risk, RiskClass::Reversible);
         assert_eq!(zfs_hold.risk, RiskClass::Safe);
+        assert_eq!(zfs_clone.risk, RiskClass::Reversible);
         assert_eq!(zfs_rollback.risk, RiskClass::PotentialDataLoss);
         assert!(zfs_rollback.advice.as_ref().is_some_and(|advice| {
             advice
@@ -7468,6 +7530,33 @@ mod tests {
         assert_eq!(plan.summary.potential_data_loss_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Rollback);
         assert_eq!(plan.actions[0].context.recursive_rollback, Some(true));
+    }
+
+    #[test]
+    fn plan_accepts_zfs_snapshot_clone_as_reversible() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before-upgrade": {
+                  "target": "tank/home",
+                  "cloneTo": "tank/home-review"
+                }
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.actions[0].operation, Operation::Clone);
+        assert_eq!(plan.actions[0].risk, RiskClass::Reversible);
+        assert_eq!(
+            plan.actions[0].context.name.as_deref(),
+            Some("tank/home@before-upgrade")
+        );
+        assert_eq!(
+            plan.actions[0].context.target.as_deref(),
+            Some("tank/home-review")
+        );
     }
 
     #[test]

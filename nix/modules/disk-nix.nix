@@ -363,6 +363,13 @@ let
           description = "Request rollback of the target to this snapshot.";
         };
 
+        cloneTo = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "ZFS dataset target for cloning this snapshot.";
+          example = "tank/home-review";
+        };
+
         recursiveRollback = lib.mkOption {
           type = lib.types.nullOr lib.types.bool;
           default = null;
@@ -462,6 +469,7 @@ let
         target
         destroy
         rollback
+        cloneTo
         recursiveRollback
         hold
         holdTag
