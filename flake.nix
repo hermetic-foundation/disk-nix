@@ -210,6 +210,20 @@
                 mountpoint = "/mnt/action-unmount";
                 action = "unmount";
               };
+              filesystems.targetSizeAlias = {
+                device = "/dev/disk/by-label/target-size";
+                fsType = "xfs";
+                mountpoint = "/mnt/target-size";
+                operation = "rescan";
+                targetSize = "200GiB";
+              };
+              filesystems.sizeAlias = {
+                device = "/dev/disk/by-label/size-alias";
+                fsType = "ext4";
+                mountpoint = "/mnt/size-alias";
+                operation = "rescan";
+                size = "150GiB";
+              };
               filesystems.runTmpfs = {
                 device = "tmpfs";
                 fsType = "tmpfs";
@@ -1063,6 +1077,10 @@
                     and .spec.filesystems.localRescan.mountpoint == "/mnt/local-rescan"
                     and .spec.filesystems.actionRescan.action == "rescan"
                     and .spec.filesystems.actionUnmount.action == "unmount"
+                    and .spec.filesystems.targetSizeAlias.operation == "rescan"
+                    and .spec.filesystems.targetSizeAlias.targetSize == "200GiB"
+                    and .spec.filesystems.sizeAlias.operation == "rescan"
+                    and .spec.filesystems.sizeAlias.size == "150GiB"
                     and .spec.filesystems.runTmpfs.device == "tmpfs"
                     and .spec.filesystems.runTmpfs.fsType == "tmpfs"
                     and .spec.filesystems.runTmpfs.mountpoint == "/run/disk-nix-tmp"

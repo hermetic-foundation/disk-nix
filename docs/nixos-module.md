@@ -157,7 +157,12 @@ Typed filesystem declarations include:
 - `properties`
 - `resizePolicy`
 - `desiredSize`
+- `targetSize`
+- `size`
 - `preserveData`
+
+`targetSize` and `size` are serialized as aliases accepted by the planner for
+the desired filesystem size.
 
 For ext filesystems, `device` is also used by disk-nix grow, shrink, check, and
 repair command plans for `resize2fs` and `e2fsck`. If only `mountpoint` is

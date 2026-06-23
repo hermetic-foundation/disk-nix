@@ -647,6 +647,8 @@ let
       resizePolicy
       preserveData
       desiredSize
+      targetSize
+      size
       ;
   }) cfg.filesystems;
   typedNfsMountSpec = lib.mapAttrs (_: mount: {
@@ -990,6 +992,20 @@ in
                 type = lib.types.nullOr lib.types.str;
                 default = null;
                 description = "Desired filesystem size for planner and executor advisory commands.";
+                example = "100GiB";
+              };
+
+              targetSize = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Alias accepted by disk-nix for the desired filesystem size.";
+                example = "100GiB";
+              };
+
+              size = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Short alias accepted by disk-nix for the desired filesystem size.";
                 example = "100GiB";
               };
 
