@@ -230,6 +230,20 @@
       "options": "rw,sync,no_subtree_check"
     }
   },
+  "nfs": {
+    "mounts": {
+      "/srv/tuned": {
+        "operation": "remount",
+        "source": "nas.example.com:/srv/tuned",
+        "fsType": "nfs4",
+        "options": [
+          "_netdev",
+          "ro",
+          "vers=4.2"
+        ]
+      }
+    }
+  },
   "snapshots": {
     "tank/home@before-upgrade": {
       "target": "tank/home"

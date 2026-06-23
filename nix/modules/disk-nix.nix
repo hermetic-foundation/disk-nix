@@ -82,6 +82,7 @@ let
       "export"
       "activate"
       "deactivate"
+      "remount"
       "rename"
       "rebalance"
       "rollback"

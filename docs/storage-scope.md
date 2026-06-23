@@ -32,6 +32,8 @@ Creation is only one lifecycle operation. The planner should also support:
 - import and export ZFS pools when moving or recovering existing storage
 - import and export LVM volume groups when moving existing PV sets
 - activate and deactivate LVM volumes, thin pools, snapshots, and volume groups
+- remount NFS client mounts to apply reviewed option updates without deleting
+  remote data
 - create and prune snapshots
 - rebalance data
 - convert or attach cache layers

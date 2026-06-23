@@ -75,6 +75,9 @@ in the generated disk-nix spec, but they are not re-added to NixOS
 `swapDevices` or `boot.initrd.luks.devices`.
 Typed NFS client mounts also keep destroy operations in the generated disk-nix
 spec while filtering them out of the derived NixOS `fileSystems` entries.
+`operation = "remount"` stays in both places: NixOS owns the steady-state
+mount declaration, and disk-nix can render a reviewed non-destructive remount
+to apply option changes.
 Typed active LVM declarations enable NixOS LVM support and initrd LVM support by
 default, and typed thin-pool or LVM-cache declarations also enable NixOS thin
 support. Typed active MD RAID declarations enable `boot.swraid` and add the same
@@ -430,6 +433,11 @@ Example lifecycle planning through NixOS options:
       source = "nas.example.com:/srv/shared";
       fsType = "nfs4";
       options = [ "_netdev" "x-systemd.automount" "vers=4.2" ];
+    };
+    nfs.mounts."/srv/tuned" = {
+      source = "nas.example.com:/srv/tuned";
+      operation = "remount";
+      options = [ "_netdev" "ro" "vers=4.2" ];
     };
     nfs.mounts."/srv/old" = {
       source = "nas.example.com:/srv/old";

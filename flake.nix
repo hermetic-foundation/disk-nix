@@ -190,6 +190,16 @@
                   "vers=4.2"
                 ];
               };
+              nfs.mounts."/srv/tuned" = {
+                source = "nas.example.com:/srv/tuned";
+                fsType = "nfs4";
+                operation = "remount";
+                options = [
+                  "_netdev"
+                  "ro"
+                  "vers=4.2"
+                ];
+              };
               nfs.mounts."/srv/old" = {
                 source = "nas.example.com:/srv/old";
                 operation = "destroy";
@@ -526,6 +536,7 @@
               and (."$defs".operation.enum | index("export") != null)
               and (."$defs".operation.enum | index("activate") != null)
               and (."$defs".operation.enum | index("deactivate") != null)
+              and (."$defs".operation.enum | index("remount") != null)
               and ."$defs".filesystem.properties.device.type == "string"
               and ."$defs".filesystem.properties.operation["$ref"] == "#/$defs/operation"
               and ."$defs".filesystem.properties.properties.type == "object"
@@ -583,7 +594,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 54
+              .summary.actionCount == 55
               and .summary.offlineRequiredCount == 18
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
@@ -628,6 +639,7 @@
               and (.actions | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained" and .risk == "offline-required"))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
               and (.actions | any(.id == "exports:/srv/share:create" and .risk == "online"))
+              and (.actions | any(.id == "nfs.mounts:/srv/tuned:remount" and .risk == "online"))
               and (.actions | any(.id == "caches:/dev/bcache0:add-device:cache-set-uuid" and .risk == "online"))
               and (.actions | any(.id == "caches:/dev/bcache0:set-property:bcache.cache-mode" and .risk == "safe"))
               and (.actions | any(.id == "caches:tank/l2arc0:replace-device:/dev/disk/by-id/old-cache"))
@@ -747,6 +759,8 @@
                   and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)
                   and (.spec.filesystems | has("/srv/old") | not)
                   and .spec.nfs.mounts."/srv/shared".source == "nas.example.com:/srv/shared"
+                  and .spec.nfs.mounts."/srv/tuned".operation == "remount"
+                  and (.spec.nfs.mounts."/srv/tuned".options | index("ro") != null)
                   and .spec.nfs.mounts."/srv/old".source == "nas.example.com:/srv/old"
                   and .spec.nfs.mounts."/srv/old".operation == "destroy"
                   and .spec.iscsi.initiatorName == "iqn.2026-06.example:host"
@@ -907,6 +921,9 @@
                 jq -e '
                   has("/srv/shared")
                   and ."/srv/shared".device == "nas.example.com:/srv/shared"
+                  and has("/srv/tuned")
+                  and ."/srv/tuned".device == "nas.example.com:/srv/tuned"
+                  and ."/srv/tuned".fsType == "nfs4"
                   and (has("/srv/old") | not)
                 ' file-systems
                 supportedFilesystems=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleTest.config.boot.supportedFilesystems)}

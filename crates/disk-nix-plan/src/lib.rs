@@ -53,6 +53,7 @@ pub enum Operation {
     Export,
     Activate,
     Deactivate,
+    Remount,
     Rename,
     Rebalance,
     Rollback,
@@ -2734,6 +2735,7 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "export" => Some(Operation::Export),
         "activate" => Some(Operation::Activate),
         "deactivate" => Some(Operation::Deactivate),
+        "remount" => Some(Operation::Remount),
         "rename" => Some(Operation::Rename),
         "rebalance" => Some(Operation::Rebalance),
         "rollback" => Some(Operation::Rollback),
@@ -2763,6 +2765,7 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Export => "export",
         Operation::Activate => "activate",
         Operation::Deactivate => "deactivate",
+        Operation::Remount => "remount",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
@@ -3134,6 +3137,21 @@ fn classify_operation(
                     "verify DNS, routing, firewall, and export permissions before mounting"
                         .to_string(),
                     "prefer declarative NixOS fileSystems for steady-state client mounts"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Remount if collection == "nfs.mounts" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "remounting an NFS client path updates local mount options without deleting remote data"
+                    .to_string(),
+                alternatives: vec![
+                    "prefer remounting with reviewed options before unmounting a busy path"
+                        .to_string(),
+                    "use NixOS fileSystems for the steady-state mount options".to_string(),
+                    "verify active services tolerate option changes such as ro, rw, or timeouts"
                         .to_string(),
                 ],
             }),
@@ -3647,6 +3665,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Remount => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} operations are not implemented for {collection}",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "use operation = \"remount\" only on nfs.mounts declarations for now"
+                        .to_string(),
+                    "use a filesystem-specific mount or service restart workflow for other remount needs"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Shrink
         | Operation::Check
         | Operation::Repair
@@ -3892,6 +3926,7 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Export => "export",
         Operation::Activate => "activate",
         Operation::Deactivate => "deactivate",
+        Operation::Remount => "remount",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
@@ -5223,6 +5258,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                     "use x-systemd.automount or nofail for unreliable networks".to_string(),
                     "verify server reachability and export permissions before mounting"
                         .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsMount,
+            operation: Operation::Remount,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "NFS remount updates local mount options without deleting remote data"
+                    .to_string(),
+                alternatives: vec![
+                    "remount with reviewed options before unmounting a busy path".to_string(),
+                    "persist long-lived option changes through NixOS fileSystems".to_string(),
                 ],
             }),
         },
@@ -8616,6 +8664,11 @@ mod tests {
                   "/srv/old": {
                     "destroy": true,
                     "source": "nas.example.com:/srv/old"
+                  },
+                  "/srv/tuned": {
+                    "operation": "remount",
+                    "source": "nas.example.com:/srv/tuned",
+                    "options": ["_netdev", "ro", "vers=4.2"]
                   }
                 }
               }
@@ -8623,7 +8676,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.action_count, 3);
         assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.summary.destructive_count, 0);
         let create = plan
@@ -8648,6 +8701,19 @@ mod tests {
         assert_eq!(destroy.risk, RiskClass::OfflineRequired);
         assert!(!destroy.destructive);
         assert_eq!(destroy.context.mountpoint.as_deref(), Some("/srv/old"));
+
+        let remount = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "nfs.mounts:/srv/tuned:remount")
+            .expect("NFS mount remount exists");
+        assert_eq!(remount.operation, Operation::Remount);
+        assert_eq!(remount.risk, RiskClass::Online);
+        assert_eq!(remount.context.mountpoint.as_deref(), Some("/srv/tuned"));
+        assert_eq!(
+            remount.context.options.as_deref(),
+            Some("_netdev,ro,vers=4.2")
+        );
     }
 
     #[test]

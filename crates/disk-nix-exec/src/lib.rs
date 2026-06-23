@@ -1108,6 +1108,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent LUN paths and multipath maps are present only when expected".to_string(),
             ],
         ),
+        Operation::Remount if collection == Some("nfs.mounts") => {
+            let mountpoint = nfs_mount_target_path(action);
+            (
+                vec![
+                    nfs_mount_findmnt_command(mountpoint),
+                    command(
+                        ["disk-nix", "inspect", mountpoint.unwrap_or(target), "--json"],
+                        false,
+                        "verify NFS mount graph state after remount",
+                    ),
+                ],
+                vec![
+                    "findmnt reports the mountpoint with the reviewed NFS options".to_string(),
+                    "local services continue to see the expected mount source and filesystem type"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::AddDevice | Operation::ReplaceDevice | Operation::Rebalance
             if collection == Some("pools") =>
         {
@@ -2010,6 +2028,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Export
         | Operation::Activate
         | Operation::Deactivate
+        | Operation::Remount
         | Operation::Rename
         | Operation::RemoveDevice
         | Operation::Repair
@@ -3446,6 +3465,20 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Remount if collection == Some("nfs.mounts") => {
+            let mountpoint = nfs_mount_target_path(action);
+            (
+                vec![
+                    nfs_mount_findmnt_command(mountpoint),
+                    nfs_mount_remount_command(mountpoint, action.context.options.as_deref()),
+                ],
+                vec![
+                    "review active services before changing NFS mount options".to_string(),
+                    "persist the final options through the NixOS fileSystems entry".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create if collection == Some("disks") => {
             let disk = disk_target_path(action);
             let label = action.context.partition_type.as_deref().unwrap_or("gpt");
@@ -4780,6 +4813,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Export
         | Operation::Activate
         | Operation::Deactivate
+        | Operation::Remount
         | Operation::Rename
         | Operation::RemoveDevice
         | Operation::Rollback
@@ -7370,6 +7404,39 @@ fn nfs_mount_destroy_command(mountpoint: Option<&str>) -> ExecutionCommand {
             CommandReadiness::NeedsDomainImplementation,
             ["mountpoint path"],
             "unmount the NFS client mount after selecting the mountpoint",
+        ),
+    }
+}
+
+fn nfs_mount_remount_command(mountpoint: Option<&str>, options: Option<&str>) -> ExecutionCommand {
+    let mountpoint_arg = mountpoint.unwrap_or("<mountpoint>");
+    let remount_options = options
+        .filter(|options| !options.is_empty())
+        .map(|options| format!("remount,{options}"))
+        .unwrap_or_else(|| "remount".to_string());
+
+    match mountpoint {
+        Some(_) => command_vec(
+            vec![
+                "mount".to_string(),
+                "-o".to_string(),
+                remount_options,
+                mountpoint_arg.to_string(),
+            ],
+            true,
+            "remount the NFS client path with the reviewed options",
+        ),
+        None => command_vec_with_readiness(
+            vec![
+                "mount".to_string(),
+                "-o".to_string(),
+                remount_options,
+                mountpoint_arg.to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["mountpoint path"],
+            "remount the NFS client path after selecting the mountpoint",
         ),
     }
 }
@@ -15191,6 +15258,11 @@ mod tests {
                       "fsType": "nfs4",
                       "options": ["_netdev", "vers=4.2"]
                     },
+                    "/srv/tuned": {
+                      "operation": "remount",
+                      "source": "nas.example.com:/srv/tuned",
+                      "options": ["_netdev", "ro", "vers=4.2"]
+                    },
                     "/srv/old": {
                       "destroy": true,
                       "source": "nas.example.com:/srv/old"
@@ -15225,6 +15297,12 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:/srv/tuned:remount"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mount", "-o", "remount,_netdev,ro,vers=4.2", "/srv/tuned"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.action_id == "nfs.mounts:/srv/old:destroy"
                 && step
                     .commands
@@ -15243,6 +15321,11 @@ mod tests {
                     "shared": {
                       "operation": "create",
                       "source": "nas.example.com:/srv/shared"
+                    },
+                    "tuned": {
+                      "operation": "remount",
+                      "source": "nas.example.com:/srv/tuned",
+                      "options": ["ro"]
                     },
                     "old": {
                       "destroy": true,
@@ -15273,6 +15356,14 @@ mod tests {
                             "nas.example.com:/srv/shared",
                             "<mountpoint>",
                         ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mountpoint path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:tuned:remount"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mount", "-o", "remount,ro", "<mountpoint>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["mountpoint path"]
                 })

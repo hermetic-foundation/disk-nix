@@ -413,9 +413,10 @@ and invalid values are blocked as unsupported before commands are rendered.
 NFS export command plans use explicit `client` and `options` lifecycle fields
 to render reviewed `exportfs` create, option update, and unexport commands.
 They also require a path-shaped local export target such as `/srv/share`.
-NFS client mount command plans render reviewed `mount` create commands and
-`umount` destroy commands from `nfs.mounts`; missing sources or path-shaped
-mountpoints keep those commands non-ready.
+NFS client mount command plans render reviewed `mount` create commands,
+`mount -o remount,<options>` option-update commands, and `umount` destroy
+commands from `nfs.mounts`; missing sources or path-shaped mountpoints keep
+those commands non-ready.
 iSCSI session command plans use `target` or the lifecycle key as the target IQN
 and `portal` or `metadata.portal` for reviewed discovery, login, and logout
 commands. LUN command plans model host-side attach, growth rescan, and detach:
