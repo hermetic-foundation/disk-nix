@@ -332,7 +332,7 @@ from explicit `level` and `devices` fields, with `/proc/mdstat` verification.
 VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
 plus online `vdo growLogical` and `vdo growPhysical` growth steps.
 NFS export command plans use explicit `client` and `options` lifecycle fields
-to render reviewed `exportfs` create and unexport commands.
+to render reviewed `exportfs` create, option update, and unexport commands.
 iSCSI session command plans use `target` or the lifecycle key as the target IQN
 and `portal` or `metadata.portal` for reviewed discovery, login, and logout
 commands. LUN grow command plans keep the broad `iscsiadm --mode session --rescan` step and add per-path SCSI rescans when stable LUN `device` or

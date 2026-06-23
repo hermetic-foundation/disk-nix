@@ -187,8 +187,8 @@ MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit member devices and RAID level declarations.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
 online `vdo growLogical` and physical growth review steps.
-NFS export apply plans render reviewed `exportfs` create/unexport commands
-from explicit client and option declarations.
+NFS export apply plans render reviewed `exportfs` create, option update, and
+unexport commands from explicit client and option declarations.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
 and rescan commands from explicit target IQN and portal declarations. LUN grow
 plans additionally render per-path SCSI rescans when stable LUN `device` or

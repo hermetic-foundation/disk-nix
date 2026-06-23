@@ -254,9 +254,9 @@ attachment, cache-mode property changes, dirty-data checks, and replacement
 scaffolding that remains marked as needing domain implementation until the
 replacement cache device and new cache-set UUID are verified.
 NFS export command plans use `exportfs -i -o <options> <client>:<path>` for
-reviewed create operations and `exportfs -u <client>:<path>` for reviewed
-unexport operations, with unresolved-input markers when clients or options are
-missing.
+reviewed create and option-update operations and `exportfs -u <client>:<path>`
+for reviewed unexport operations, with unresolved-input markers when clients or
+options are missing.
 LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
 for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
 destructive policy gates allow removal.

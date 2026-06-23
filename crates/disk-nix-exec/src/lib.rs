@@ -2092,7 +2092,15 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .as_deref()
                 .unwrap_or("<key>");
             let property_assignment = property_assignment(action);
-            let property_command = if collection == Some("btrfsQgroups") {
+            let property_command = if collection == Some("exports") {
+                nfs_export_property_command(
+                    target,
+                    action.context.client.as_deref(),
+                    property,
+                    action.context.property_value.as_deref(),
+                    action.context.options.as_deref(),
+                )
+            } else if collection == Some("btrfsQgroups") {
                 btrfs_qgroup_property_command(
                     target,
                     action.context.name.as_deref().unwrap_or("<qgroupid>"),
@@ -3696,6 +3704,27 @@ fn nfs_export_create_command(
             CommandReadiness::NeedsDomainImplementation,
             ["NFS client selector", "NFS export options"],
             "export the path after selecting clients and options",
+        ),
+    }
+}
+
+fn nfs_export_property_command(
+    target: &str,
+    client: Option<&str>,
+    property: &str,
+    property_value: Option<&str>,
+    existing_options: Option<&str>,
+) -> ExecutionCommand {
+    match property {
+        "options" | "nfs.options" | "exportOptions" | "export-options" => {
+            nfs_export_create_command(target, client, property_value.or(existing_options))
+        }
+        _ => command_with_readiness(
+            ["exportfs", "-ra"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported NFS export property"],
+            "reload NFS exports after selecting a supported export property mapping",
         ),
     }
 }
@@ -6460,6 +6489,17 @@ mod tests {
                     "client": "192.0.2.0/24",
                     "options": "rw,sync,no_subtree_check"
                   },
+                  "/srv/changed": {
+                    "client": "192.0.2.0/24",
+                    "properties": {
+                      "options": "ro,sync,no_subtree_check"
+                    }
+                  },
+                  "/srv/unresolved": {
+                    "properties": {
+                      "options": "rw,sync"
+                    }
+                  },
                   "/srv/old": {
                     "destroy": true,
                     "client": "192.0.2.55"
@@ -6486,6 +6526,32 @@ mod tests {
                         "rw,sync,no_subtree_check",
                         "192.0.2.0/24:/srv/share",
                     ]
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "exportfs",
+                        "-i",
+                        "-o",
+                        "ro,sync,no_subtree_check",
+                        "192.0.2.0/24:/srv/changed",
+                    ]
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "exportfs",
+                        "-i",
+                        "-o",
+                        "rw,sync",
+                        "<client>:/srv/unresolved",
+                    ]
+                    && command.readiness == CommandReadiness::NeedsDomainImplementation
+                    && command.unresolved_inputs == ["NFS client selector"]
             })
         }));
         assert!(report.command_plan.iter().any(|step| {
