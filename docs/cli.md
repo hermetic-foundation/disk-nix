@@ -143,6 +143,7 @@ disk-nix snapshots
 disk-nix mappings
 disk-nix encryption
 disk-nix cache
+disk-nix vdo
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -161,6 +162,7 @@ disk-nix snapshots --json
 disk-nix mappings --json
 disk-nix encryption --json
 disk-nix cache --json
+disk-nix vdo --json
 disk-nix mounts --json
 disk-nix network-storage --json
 disk-nix ids --json
@@ -221,6 +223,10 @@ Use these commands for:
 - `cache`: bcache devices/cache sets, LVM cache/writecache metadata, bcachefs
   member-device cache accounting, and ZFS cache vdevs, including cache mode,
   policy, dirty/writeback data, cache-set identity, state, and vdev state
+- `vdo`: native VDO volumes and LVM VDO segment metadata, including backing
+  device, logical and physical size, status/stat counters, operating mode,
+  recovery progress, write policy, compression, deduplication, and overhead
+  blocks when probes expose them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them

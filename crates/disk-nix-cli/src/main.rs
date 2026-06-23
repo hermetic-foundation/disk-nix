@@ -118,6 +118,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered VDO volumes and LVM VDO segment metadata.
+    Vdo {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -369,6 +375,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_cache_node)?;
             } else {
                 print_cache(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Vdo { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_vdo_node)?;
+            } else {
+                print_vdo(output, &graph)?;
             }
             Ok(())
         }
@@ -1410,6 +1425,34 @@ fn print_cache(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> 
     Ok(())
 }
 
+fn print_vdo(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:>12} {:<12} {:<12} DETAILS",
+        "KIND", "NAME", "LOGICAL", "PHYSICAL", "MODE", "WRITE"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_vdo_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>12} {:>12} {:<12} {:<12} {}",
+            node.kind,
+            node.name,
+            property_value(node, "vdo.logical-size")
+                .or_else(|| property_value(node, "lvm.vdo-logical-size"))
+                .unwrap_or("-"),
+            property_value(node, "vdo.physical-size")
+                .or_else(|| property_value(node, "lvm.vdo-physical-size"))
+                .unwrap_or("-"),
+            property_value(node, "vdo.operating-mode").unwrap_or("-"),
+            property_value(node, "vdo.write-policy")
+                .or_else(|| property_value(node, "lvm.vdo-write-policy"))
+                .unwrap_or("-"),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -1961,6 +2004,13 @@ fn is_cache_node(node: &Node) -> bool {
     })
 }
 
+fn is_vdo_node(node: &Node) -> bool {
+    node.kind == NodeKind::VdoVolume
+        || node.properties.iter().any(|property| {
+            property.key.starts_with("vdo.") || property.key.starts_with("lvm.vdo-")
+        })
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
@@ -2399,10 +2449,10 @@ mod tests {
     use super::{
         confirmation_file_accepts, is_cache_node, is_device_node, is_encryption_node,
         is_filesystem_node, is_mapping_node, is_network_storage_node, is_partition_node,
-        is_pool_node, is_snapshot_node, is_volume_node, mount_details, print_cache, print_devices,
-        print_encryption, print_filesystems, print_mappings, print_mounts, print_network_storage,
-        print_partitions, print_pools, print_snapshots, print_usage, print_volumes,
-        snapshot_source, usage_details, usage_percent,
+        is_pool_node, is_snapshot_node, is_vdo_node, is_volume_node, mount_details, print_cache,
+        print_devices, print_encryption, print_filesystems, print_mappings, print_mounts,
+        print_network_storage, print_partitions, print_pools, print_snapshots, print_usage,
+        print_vdo, print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2500,6 +2550,19 @@ mod tests {
                 "/dev/disk/by-id/cache0"
             )
             .with_property("zfs.vdev-role", "cache")
+        ));
+        assert!(is_vdo_node(&Node::new(
+            "vdo:archive",
+            NodeKind::VdoVolume,
+            "archive"
+        )));
+        assert!(is_vdo_node(
+            &Node::new(
+                "lvm-seg:vg0/archive:0",
+                NodeKind::LvmSegment,
+                "vg0/archive:0"
+            )
+            .with_property("lvm.vdo-write-policy", "auto")
         ));
     }
 
@@ -3334,6 +3397,60 @@ mod tests {
         assert!(output.contains("writecache-writeback=16"));
         assert!(output.contains("/dev/disk/by-id/cache0"));
         assert!(output.contains("vdev-role=cache vdev-state=ONLINE"));
+    }
+
+    #[test]
+    fn vdo_table_includes_vdo_reduction_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_property("vdo.storage-device", "/dev/sdb")
+                .with_property("vdo.logical-size", "1T")
+                .with_property("vdo.physical-size", "250G")
+                .with_property("vdo.stats-size", "268435456")
+                .with_property("vdo.stats-used", "134217728")
+                .with_property("vdo.stats-available", "134217728")
+                .with_property("vdo.use-percent", "50%")
+                .with_property("vdo.space-saving-percent", "75%")
+                .with_property("vdo.operating-mode", "normal")
+                .with_property("vdo.recovery-percentage", "100%")
+                .with_property("vdo.write-policy", "sync")
+                .with_property("vdo.compression", "enabled")
+                .with_property("vdo.deduplication", "enabled")
+                .with_property("vdo.overhead-blocks-used", "4096"),
+        );
+        graph.add_node(
+            Node::new(
+                "lvm-seg:vg0/archive:0",
+                NodeKind::LvmSegment,
+                "vg0/archive:0",
+            )
+            .with_property("lvm.segment-type", "vdo")
+            .with_property("lvm.vdo-compression", "enabled")
+            .with_property("lvm.vdo-deduplication", "disabled")
+            .with_property("lvm.vdo-write-policy", "auto"),
+        );
+
+        let mut output = Vec::new();
+        print_vdo(&mut output, &graph).expect("vdo table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("LOGICAL"));
+        assert!(output.contains("PHYSICAL"));
+        assert!(output.contains("WRITE"));
+        assert!(output.contains("archive"));
+        assert!(output.contains("          1T"));
+        assert!(output.contains("        250G"));
+        assert!(output.contains("normal"));
+        assert!(output.contains("sync"));
+        assert!(output.contains("backing=/dev/sdb logical=1T physical=250G"));
+        assert!(output.contains("stats-size=268435456 stats-used=134217728"));
+        assert!(output.contains("vdo-use=50% saving=75%"));
+        assert!(output.contains("recovery=100% write-policy=sync"));
+        assert!(output.contains("compression=enabled deduplication=enabled"));
+        assert!(output.contains("overhead-blocks=4096"));
+        assert!(output.contains("vg0/archive:0"));
+        assert!(output.contains("vdo-write-policy=auto"));
     }
 
     #[test]
