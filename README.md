@@ -175,8 +175,10 @@ Btrfs qgroup lifecycle plans render `btrfs qgroup create`, policy-gated
 exclusive byte limits from `btrfsQgroups` declarations.
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit.
-LUKS close plans render offline-policy-gated `cryptsetup close` commands and
-verify the topology without erasing the backing LUKS header or encrypted data.
+LUKS open plans render reviewed `cryptsetup open` commands for preserved
+existing containers; close plans render offline-policy-gated `cryptsetup close`
+commands and verify the topology without erasing the backing LUKS header or
+encrypted data.
 Disk initialization plans render destructive-policy-gated `parted mklabel` and
 partition table reread steps after disk identity inspection.
 Partition grow plans render reviewed `parted resizepart` commands when `device`,

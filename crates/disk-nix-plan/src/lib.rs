@@ -1098,6 +1098,25 @@ fn add_luks_actions(actions: &mut Vec<PlannedAction>, name: &str, luks: &Value) 
                 ],
             }),
         }),
+        Some(Operation::Create) if preserve_data => actions.push(PlannedAction {
+            id: format!("luks.devices:{name}:create"),
+            description: format!("open existing LUKS container {device} as {mapper_name}"),
+            operation: Operation::Create,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context,
+            advice: Some(Advice {
+                summary: "opening a LUKS mapper changes active device topology without formatting"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the backing device is the intended LUKS container before opening"
+                        .to_string(),
+                    "use preserveData=false or operation=format only when replacing the header"
+                        .to_string(),
+                    "create filesystems or LVM layers only after the mapper appears".to_string(),
+                ],
+            }),
+        }),
         Some(Operation::Create | Operation::Format) => actions.push(luks_format_action(
             name,
             &device,
@@ -3045,6 +3064,11 @@ mod tests {
                     "device": "/dev/disk/by-partuuid/root",
                     "operation": "grow"
                   },
+                  "cryptdata": {
+                    "name": "cryptdata",
+                    "device": "/dev/disk/by-id/data-luks",
+                    "operation": "create"
+                  },
                   "cryptscratch": {
                     "name": "cryptscratch",
                     "device": "/dev/disk/by-id/scratch",
@@ -3061,8 +3085,8 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 5);
-        assert_eq!(plan.summary.offline_required_count, 3);
+        assert_eq!(plan.summary.action_count, 6);
+        assert_eq!(plan.summary.offline_required_count, 4);
         assert_eq!(plan.summary.destructive_count, 2);
 
         let swap = plan
@@ -3086,6 +3110,19 @@ mod tests {
         assert_eq!(
             luks.context.device.as_deref(),
             Some("/dev/disk/by-partuuid/root")
+        );
+
+        let open = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:cryptdata:create")
+            .expect("luks open action exists");
+        assert_eq!(open.risk, RiskClass::OfflineRequired);
+        assert!(!open.destructive);
+        assert_eq!(open.context.target.as_deref(), Some("cryptdata"));
+        assert_eq!(
+            open.context.device.as_deref(),
+            Some("/dev/disk/by-id/data-luks")
         );
 
         let close = plan

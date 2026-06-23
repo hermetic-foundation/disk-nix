@@ -1100,6 +1100,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Create if collection == Some("luks.devices") => (
+            vec![
+                command(
+                    ["cryptsetup", "status", target],
+                    false,
+                    "verify the LUKS mapper is open",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify opened mapper identity and graph relationships",
+                ),
+            ],
+            vec![
+                "mapper name and backing device match the desired declaration".to_string(),
+                "dependent storage layers see the opened mapper path".to_string(),
+            ],
+        ),
         Operation::Create => (
             vec![command(
                 ["disk-nix", "inspect", target, "--json"],
@@ -2417,6 +2435,36 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 ],
                 vec![
                     "verify header backups and key enrollment policy before formatting"
+                        .to_string(),
+                    "create filesystems or LVM layers only after the mapper is open".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Create if collection == Some("luks.devices") => {
+            let mapper = target.unwrap_or("<mapper>");
+            let device = action.context.device.as_deref().unwrap_or("<device>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", device],
+                        false,
+                        "inspect existing LUKS container before opening",
+                    ),
+                    command(
+                        ["cryptsetup", "isLuks", device],
+                        false,
+                        "verify the backing device has a LUKS header",
+                    ),
+                    command_vec(
+                        vec!["cryptsetup", "open", device, mapper],
+                        true,
+                        "open the existing LUKS container with the desired mapper name",
+                    ),
+                ],
+                vec![
+                    "verify the backing device identity before entering credentials".to_string(),
+                    "keep formatting as a separate explicit action when data must be replaced"
                         .to_string(),
                     "create filesystems or LVM layers only after the mapper is open".to_string(),
                 ],
@@ -4658,6 +4706,11 @@ mod tests {
                       "device": "/dev/disk/by-partuuid/root",
                       "operation": "grow"
                     },
+                    "cryptdata": {
+                      "name": "cryptdata",
+                      "device": "/dev/disk/by-id/data-luks",
+                      "operation": "create"
+                    },
                     "cryptold": {
                       "name": "cryptold",
                       "device": "/dev/disk/by-id/old-luks",
@@ -4679,7 +4732,7 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_plan.len(), 4);
+        assert_eq!(report.command_plan.len(), 5);
         assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
@@ -4695,6 +4748,20 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["cryptsetup", "resize", "cryptroot"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptdata:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "open",
+                            "/dev/disk/by-id/data-luks",
+                            "cryptdata",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "luks.devices:cryptold:destroy"
@@ -4717,6 +4784,13 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["disk-nix", "topology", "--json"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptdata:create"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["cryptsetup", "status", "cryptdata"])
         }));
     }
 
