@@ -55,6 +55,8 @@ pub enum Operation {
     Deactivate,
     Assemble,
     Stop,
+    Open,
+    Close,
     Remount,
     Rename,
     Rebalance,
@@ -1712,46 +1714,33 @@ fn add_luks_actions(actions: &mut Vec<PlannedAction>, name: &str, luks: &Value) 
                 ],
             }),
         }),
-        Some(Operation::Destroy) => actions.push(PlannedAction {
-            id: format!("luks.devices:{name}:destroy"),
-            description: format!(
-                "close LUKS mapping {mapper_name} without formatting {device_label}"
-            ),
-            operation: Operation::Destroy,
-            risk: RiskClass::OfflineRequired,
-            destructive: false,
-            context,
-            advice: Some(Advice {
-                summary: "closing a LUKS mapper requires dependent layers to be stopped"
-                    .to_string(),
-                alternatives: vec![
-                    "unmount filesystems and deactivate LVM volumes before closing the mapper"
-                        .to_string(),
-                    "leave the LUKS header and backing device intact for later reopen".to_string(),
-                    "use preserveData=false only when reformatting is explicitly intended"
-                        .to_string(),
-                ],
-            }),
-        }),
-        Some(Operation::Create) if preserve_data => actions.push(PlannedAction {
-            id: format!("luks.devices:{name}:create"),
-            description: format!("open existing LUKS container {device_label} as {mapper_name}"),
-            operation: Operation::Create,
-            risk: RiskClass::OfflineRequired,
-            destructive: false,
-            context,
-            advice: Some(Advice {
-                summary: "opening a LUKS mapper changes active device topology without formatting"
-                    .to_string(),
-                alternatives: vec![
-                    "verify the backing device is the intended LUKS container before opening"
-                        .to_string(),
-                    "use preserveData=false or operation=format only when replacing the header"
-                        .to_string(),
-                    "create filesystems or LVM layers only after the mapper appears".to_string(),
-                ],
-            }),
-        }),
+        Some(Operation::Destroy | Operation::Close) => {
+            actions.push(luks_close_action(
+                name,
+                &mapper_name,
+                device_label,
+                operation.expect("operation already matched"),
+                context,
+            ));
+        }
+        Some(Operation::Open) => {
+            actions.push(luks_open_action(
+                name,
+                &mapper_name,
+                device_label,
+                Operation::Open,
+                context,
+            ));
+        }
+        Some(Operation::Create) if preserve_data => {
+            actions.push(luks_open_action(
+                name,
+                &mapper_name,
+                device_label,
+                Operation::Create,
+                context,
+            ));
+        }
         Some(Operation::Create | Operation::Format) => actions.push(luks_format_action(
             name,
             device.clone(),
@@ -1809,6 +1798,60 @@ fn luks_format_action(
                     .to_string(),
                 "create a new encrypted target and migrate data before switching mounts"
                     .to_string(),
+            ],
+        }),
+    }
+}
+
+fn luks_open_action(
+    name: &str,
+    mapper_name: &str,
+    device_label: &str,
+    operation: Operation,
+    context: ActionContext,
+) -> PlannedAction {
+    PlannedAction {
+        id: format!("luks.devices:{name}:{}", operation_id(operation)),
+        description: format!("open existing LUKS container {device_label} as {mapper_name}"),
+        operation,
+        risk: RiskClass::OfflineRequired,
+        destructive: false,
+        context,
+        advice: Some(Advice {
+            summary: "opening a LUKS mapper changes active device topology without formatting"
+                .to_string(),
+            alternatives: vec![
+                "verify the backing device is the intended LUKS container before opening"
+                    .to_string(),
+                "use preserveData=false or operation=format only when replacing the header"
+                    .to_string(),
+                "create filesystems or LVM layers only after the mapper appears".to_string(),
+            ],
+        }),
+    }
+}
+
+fn luks_close_action(
+    name: &str,
+    mapper_name: &str,
+    device_label: &str,
+    operation: Operation,
+    context: ActionContext,
+) -> PlannedAction {
+    PlannedAction {
+        id: format!("luks.devices:{name}:{}", operation_id(operation)),
+        description: format!("close LUKS mapping {mapper_name} without formatting {device_label}"),
+        operation,
+        risk: RiskClass::OfflineRequired,
+        destructive: false,
+        context,
+        advice: Some(Advice {
+            summary: "closing a LUKS mapper requires dependent layers to be stopped".to_string(),
+            alternatives: vec![
+                "unmount filesystems and deactivate LVM volumes before closing the mapper"
+                    .to_string(),
+                "leave the LUKS header and backing device intact for later reopen".to_string(),
+                "use preserveData=false only when reformatting is explicitly intended".to_string(),
             ],
         }),
     }
@@ -2739,6 +2782,8 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "deactivate" => Some(Operation::Deactivate),
         "assemble" => Some(Operation::Assemble),
         "stop" => Some(Operation::Stop),
+        "open" => Some(Operation::Open),
+        "close" => Some(Operation::Close),
         "remount" => Some(Operation::Remount),
         "rename" => Some(Operation::Rename),
         "rebalance" => Some(Operation::Rebalance),
@@ -2771,6 +2816,8 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Deactivate => "deactivate",
         Operation::Assemble => "assemble",
         Operation::Stop => "stop",
+        Operation::Open => "open",
+        Operation::Close => "close",
         Operation::Remount => "remount",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
@@ -3719,6 +3766,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Open | Operation::Close => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} operations are currently only supported for luks.devices",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "use luks.devices.<name>.operation for encrypted mapper open or close"
+                        .to_string(),
+                    "use activate, deactivate, import, export, mount, or remount for other storage domains"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Remount => (
             RiskClass::Unsupported,
             false,
@@ -3982,6 +4045,8 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Deactivate => "deactivate",
         Operation::Assemble => "assemble",
         Operation::Stop => "stop",
+        Operation::Open => "open",
+        Operation::Close => "close",
         Operation::Remount => "remount",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
@@ -4079,6 +4144,32 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "grow the backing device before cryptsetup resize".to_string(),
                     "resize consumers only after the mapper reports the new capacity".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
+            operation: Operation::Open,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LUKS open activates an existing encrypted container as a mapper"
+                    .to_string(),
+                alternatives: vec![
+                    "verify backing device identity before entering credentials".to_string(),
+                    "keep formatting as a separate explicit destructive operation".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
+            operation: Operation::Close,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LUKS close tears down an active mapper without removing the header"
+                    .to_string(),
+                alternatives: vec![
+                    "unmount filesystems and deactivate dependent mappings before close".to_string(),
+                    "leave the backing LUKS header intact for later reopen".to_string(),
                 ],
             }),
         },
@@ -7104,6 +7195,12 @@ mod tests {
                     "device": "/dev/disk/by-id/data-luks",
                     "operation": "create"
                   },
+                  "cryptarchive": {
+                    "name": "cryptarchive",
+                    "device": "/dev/disk/by-id/archive-luks",
+                    "operation": "open",
+                    "preserveData": false
+                  },
                   "cryptmissing": {
                     "name": "cryptmissing",
                     "operation": "create"
@@ -7117,6 +7214,11 @@ mod tests {
                     "name": "cryptold",
                     "device": "/dev/disk/by-id/old-luks",
                     "operation": "destroy"
+                  },
+                  "cryptclosed": {
+                    "name": "cryptclosed",
+                    "device": "/dev/disk/by-id/closed-luks",
+                    "operation": "close"
                   }
                 }
               }
@@ -7124,8 +7226,8 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 7);
-        assert_eq!(plan.summary.offline_required_count, 5);
+        assert_eq!(plan.summary.action_count, 9);
+        assert_eq!(plan.summary.offline_required_count, 7);
         assert_eq!(plan.summary.destructive_count, 2);
 
         let swap = plan
@@ -7164,6 +7266,19 @@ mod tests {
             Some("/dev/disk/by-id/data-luks")
         );
 
+        let explicit_open = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:cryptarchive:open")
+            .expect("explicit luks open action exists");
+        assert_eq!(explicit_open.operation, Operation::Open);
+        assert_eq!(explicit_open.risk, RiskClass::OfflineRequired);
+        assert!(!explicit_open.destructive);
+        assert_eq!(
+            explicit_open.context.device.as_deref(),
+            Some("/dev/disk/by-id/archive-luks")
+        );
+
         let missing = plan
             .actions
             .iter()
@@ -7184,6 +7299,19 @@ mod tests {
         assert_eq!(
             close.context.device.as_deref(),
             Some("/dev/disk/by-id/old-luks")
+        );
+
+        let explicit_close = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:cryptclosed:close")
+            .expect("explicit luks close action exists");
+        assert_eq!(explicit_close.operation, Operation::Close);
+        assert_eq!(explicit_close.risk, RiskClass::OfflineRequired);
+        assert!(!explicit_close.destructive);
+        assert_eq!(
+            explicit_close.context.target.as_deref(),
+            Some("cryptclosed")
         );
     }
 

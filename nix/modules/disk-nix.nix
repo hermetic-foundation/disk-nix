@@ -84,6 +84,8 @@ let
       "deactivate"
       "assemble"
       "stop"
+      "open"
+      "close"
       "remount"
       "rename"
       "rebalance"
@@ -609,7 +611,13 @@ let
     // lib.optionalAttrs (filesystem.options != [ ]) {
       inherit (filesystem) options;
     };
-  isDestroyLifecycle = object: (object.destroy or false) || (object.operation or null) == "destroy";
+  isDestroyLifecycle =
+    object:
+    (object.destroy or false)
+    || builtins.elem (object.operation or null) [
+      "destroy"
+      "close"
+    ];
   activeLifecycleAttrs = attrs: lib.filterAttrs (_: object: !isDestroyLifecycle object) attrs;
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;
   activeLuksDevices = lib.filterAttrs (_: luks: !isDestroyLifecycle luks) cfg.luks.devices;

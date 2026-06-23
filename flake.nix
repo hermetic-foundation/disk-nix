@@ -116,6 +116,14 @@
                 device = "/dev/disk/by-partuuid/old-luks";
                 destroy = true;
               };
+              luks.devices.cryptarchive = {
+                device = "/dev/disk/by-id/archive-luks";
+                operation = "open";
+              };
+              luks.devices.cryptclosed = {
+                device = "/dev/disk/by-id/closed-luks";
+                operation = "close";
+              };
               filesystems.root = {
                 device = "/dev/disk/by-label/nixos-root";
                 fsType = "xfs";
@@ -550,6 +558,8 @@
               and (."$defs".operation.enum | index("deactivate") != null)
               and (."$defs".operation.enum | index("assemble") != null)
               and (."$defs".operation.enum | index("stop") != null)
+              and (."$defs".operation.enum | index("open") != null)
+              and (."$defs".operation.enum | index("close") != null)
               and (."$defs".operation.enum | index("remount") != null)
               and ."$defs".filesystem.properties.device.type == "string"
               and ."$defs".filesystem.properties.operation["$ref"] == "#/$defs/operation"
@@ -608,8 +618,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 57
-              and .summary.offlineRequiredCount == 20
+              .summary.actionCount == 59
+              and .summary.offlineRequiredCount == 22
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -642,6 +652,8 @@
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
+              and (.actions | any(.id == "luks.devices:cryptarchive:open" and .risk == "offline-required"))
+              and (.actions | any(.id == "luks.devices:cryptclosed:close" and .risk == "offline-required"))
               and (.actions | any(.id == "nvmenamespaces:/dev/nvme0:create" and .risk == "destructive"))
               and (.actions | any(.id == "pools:vault:import" and .risk == "offline-required" and .context.readOnly == true))
               and (.actions | any(.id == "pools:moveme:export" and .risk == "offline-required"))
@@ -689,8 +701,8 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 25
-              and .apply.blockedSummary.offlineRequiredCount == 20
+              and .apply.blockedCount == 27
+              and .apply.blockedSummary.offlineRequiredCount == 22
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
@@ -702,20 +714,22 @@
               and (.apply.blocked | any(.id == "volumegroups:exportvg:export"))
               and (.apply.blocked | any(.id == "volumegroups:activevg:activate"))
               and (.apply.blocked | any(.id == "volumes:vg0/archive:deactivate"))
+              and (.apply.blocked | any(.id == "luks.devices:cryptarchive:open"))
+              and (.apply.blocked | any(.id == "luks.devices:cryptclosed:close"))
               and (.apply.blocked | any(.id == "mdraids:existing:assemble"))
               and (.apply.blocked | any(.id == "mdraids:oldroot:stop"))
               and (.apply.blocked | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained"))
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 25
+              and .apply.blockedCount == 27
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 25
-              and .messages[0] == "apply policy blocked 25 action(s)"
+              and .apply.blockedCount == 27
+              and .messages[0] == "apply policy blocked 27 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -772,6 +786,10 @@
                   and .spec.luks.devices.cryptroot.properties."luks.subsystem" == "nixos"
                   and .spec.luks.devices.cryptold.destroy == true
                   and .spec.luks.devices.cryptold.device == "/dev/disk/by-partuuid/old-luks"
+                  and .spec.luks.devices.cryptarchive.operation == "open"
+                  and .spec.luks.devices.cryptarchive.device == "/dev/disk/by-id/archive-luks"
+                  and .spec.luks.devices.cryptclosed.operation == "close"
+                  and .spec.luks.devices.cryptclosed.device == "/dev/disk/by-id/closed-luks"
                   and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"
                   and .spec.filesystems."/srv/shared".fsType == "nfs4"
                   and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)
@@ -929,7 +947,10 @@
                 jq -e '
                   has("cryptroot")
                   and .cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
+                  and has("cryptarchive")
+                  and .cryptarchive.device == "/dev/disk/by-id/archive-luks"
                   and (has("cryptold") | not)
+                  and (has("cryptclosed") | not)
                 ' luks-devices
                 fileSystems=${
                   pkgs.lib.escapeShellArg (

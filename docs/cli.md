@@ -346,11 +346,12 @@ Swap grow and format commands require a path-shaped target such as `/swapfile`
 or `/dev/disk/by-*`. Swap label and UUID property updates render
 `swaplabel --label <label> <target>` and `swaplabel --uuid <uuid> <target>` and
 remain offline-required.
-LUKS open command plans render `cryptsetup open` for preserved existing
-containers, while close plans render offline-policy-gated `cryptsetup close`
-steps and keep the backing LUKS container intact for later reopen. LUKS header
-label and subsystem property updates render `cryptsetup config <device> --label`
-or `--subsystem`, while UUID updates render
+LUKS `operation = "open"` command plans render `cryptsetup open` for preserved
+existing containers. Legacy preserved `operation = "create"` still maps to the
+same open flow. `operation = "close"` plans render offline-policy-gated
+`cryptsetup close` steps and keep the backing LUKS container intact for later
+reopen. LUKS header label and subsystem property updates render
+`cryptsetup config <device> --label` or `--subsystem`, while UUID updates render
 `cryptsetup luksUUID <device> --uuid <uuid>`.
 Disk initialization plans render policy-gated `parted mklabel` and partition
 table reread commands after inspecting the target disk.

@@ -214,6 +214,16 @@
         "name": "cryptroot",
         "device": "/dev/disk/by-partuuid/root",
         "operation": "grow"
+      },
+      "cryptarchive": {
+        "name": "cryptarchive",
+        "device": "/dev/disk/by-id/archive-luks",
+        "operation": "open"
+      },
+      "cryptclosed": {
+        "name": "cryptclosed",
+        "device": "/dev/disk/by-id/closed-luks",
+        "operation": "close"
       }
     }
   },

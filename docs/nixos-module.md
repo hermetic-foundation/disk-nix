@@ -72,7 +72,9 @@ only when they are non-destroy declarations with explicit `client` and
 the disk-nix planner spec for review instead of being re-added to `/etc/exports`.
 Typed swap and LUKS declarations follow the same split: destroy operations stay
 in the generated disk-nix spec, but they are not re-added to NixOS
-`swapDevices` or `boot.initrd.luks.devices`.
+`swapDevices` or `boot.initrd.luks.devices`. LUKS `operation = "close"` is
+treated the same way: it remains a reviewed disk-nix mapper teardown without
+re-declaring the mapper for initrd unlock.
 Typed NFS client mounts also keep destroy operations in the generated disk-nix
 spec while filtering them out of the derived NixOS `fileSystems` entries.
 `operation = "remount"` stays in both places: NixOS owns the steady-state
@@ -330,6 +332,14 @@ Example lifecycle planning through NixOS options:
       device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
       operation = "grow";
       desiredSize = "100%";
+    };
+    luks.devices.cryptarchive = {
+      device = "/dev/disk/by-id/archive-luks";
+      operation = "open";
+    };
+    luks.devices.cryptclosed = {
+      device = "/dev/disk/by-id/closed-luks";
+      operation = "close";
     };
     vdoVolumes.archive = {
       operation = "grow";

@@ -99,14 +99,16 @@ Examples:
   command; block-device swap growth must use the backing storage layer first.
   Swap label and UUID property updates are offline-required because they mutate
   swap signature identity used by mounts, resume paths, and automation.
-- LUKS `operation = "create"` with preserved data opens an existing encrypted
-  container as a mapper and is offline-required. LUKS `operation = "format"` or
-  `preserveData = false` is destructive. LUKS growth and mapper close are
-  offline-required because backing capacity, mapper state, and dependent
-  consumers must be coordinated. LUKS header label, subsystem, and UUID property
-  updates are offline-required identity metadata changes rendered through
-  `cryptsetup config` or `cryptsetup luksUUID`. Mapper close keeps the LUKS
-  header and backing data intact unless a separate format action is requested.
+- LUKS `operation = "open"` opens an existing encrypted container as a mapper
+  and is offline-required. Legacy `operation = "create"` with preserved data
+  remains accepted for the same preserved open flow. LUKS `operation = "close"`
+  tears down the mapper without removing the header. LUKS `operation = "format"` or `preserveData = false` is destructive. LUKS growth and mapper
+  close are offline-required because backing capacity, mapper state, and
+  dependent consumers must be coordinated. LUKS header label, subsystem, and
+  UUID property updates are offline-required identity metadata changes rendered
+  through `cryptsetup config` or `cryptsetup luksUUID`. Mapper close keeps the
+  LUKS header and backing data intact unless a separate format action is
+  requested.
 - Btrfs subvolume creation is online, while destruction is destructive and
   suggests read-only snapshots or rename-first validation.
 - VDO creation and removal are destructive because they write or remove VDO
@@ -284,7 +286,7 @@ Lifecycle objects may use:
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
   `repair`, `scrub`, `trim`, `replace-device`, `add-device`, `remove-device`,
   `set-property`, `snapshot`, `promote`, `import`, `export`, `activate`,
-  `deactivate`, `assemble`, `stop`, `remount`, `rename`, `rebalance`,
+  `deactivate`, `assemble`, `stop`, `open`, `close`, `remount`, `rename`, `rebalance`,
   `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
 - `devices`: member devices for arrays, pools, or explicit LUN paths that

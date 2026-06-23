@@ -1615,7 +1615,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
-        Operation::Create if collection == Some("luks.devices") => (
+        Operation::Create | Operation::Open if collection == Some("luks.devices") => (
             vec![
                 command(
                     ["cryptsetup", "status", target],
@@ -1969,7 +1969,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "mapper name and backing device match the desired declaration".to_string(),
             ],
         ),
-        Operation::Destroy if collection == Some("luks.devices") => (
+        Operation::Destroy | Operation::Close if collection == Some("luks.devices") => (
             vec![
                 command(
                     ["cryptsetup", "status", target],
@@ -2032,6 +2032,8 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Deactivate
         | Operation::Assemble
         | Operation::Stop
+        | Operation::Open
+        | Operation::Close
         | Operation::Remount
         | Operation::Rename
         | Operation::RemoveDevice
@@ -3626,7 +3628,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Create if collection == Some("luks.devices") => {
+        Operation::Create | Operation::Open if collection == Some("luks.devices") => {
             let mapper = target.unwrap_or("<mapper>");
             let device = action.context.device.as_deref();
             (
@@ -3683,7 +3685,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Destroy if collection == Some("luks.devices") => {
+        Operation::Destroy | Operation::Close if collection == Some("luks.devices") => {
             let mapper = target.unwrap_or("<mapper>");
             (
                 vec![
@@ -4853,6 +4855,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Deactivate
         | Operation::Assemble
         | Operation::Stop
+        | Operation::Open
+        | Operation::Close
         | Operation::Remount
         | Operation::Rename
         | Operation::RemoveDevice
@@ -11760,6 +11764,11 @@ mod tests {
                       "device": "/dev/disk/by-id/data-luks",
                       "operation": "create"
                     },
+                    "cryptarchive": {
+                      "name": "cryptarchive",
+                      "device": "/dev/disk/by-id/archive-luks",
+                      "operation": "open"
+                    },
                     "cryptmissing": {
                       "name": "cryptmissing",
                       "operation": "create"
@@ -11768,6 +11777,11 @@ mod tests {
                       "name": "cryptold",
                       "device": "/dev/disk/by-id/old-luks",
                       "operation": "destroy"
+                    },
+                    "cryptclosed": {
+                      "name": "cryptclosed",
+                      "device": "/dev/disk/by-id/closed-luks",
+                      "operation": "close"
                     }
                   }
                 }
@@ -11785,7 +11799,7 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_plan.len(), 6);
+        assert_eq!(report.command_plan.len(), 8);
         assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
@@ -11817,6 +11831,20 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptarchive:open"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "open",
+                            "/dev/disk/by-id/archive-luks",
+                            "cryptarchive",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.action_id == "luks.devices:cryptmissing:create"
                 && step.commands.iter().any(|command| {
                     command.argv == ["cryptsetup", "isLuks", "<device>"]
@@ -11835,6 +11863,14 @@ mod tests {
             step.action_id == "luks.devices:cryptold:destroy"
                 && step.commands.iter().any(|command| {
                     command.argv == ["cryptsetup", "close", "cryptold"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptclosed:close"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "close", "cryptclosed"]
                         && command.mutates
                         && command.readiness == CommandReadiness::Ready
                 })
@@ -11859,6 +11895,20 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["cryptsetup", "status", "cryptdata"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptarchive:open"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["cryptsetup", "status", "cryptarchive"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptclosed:close"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
         }));
     }
 
