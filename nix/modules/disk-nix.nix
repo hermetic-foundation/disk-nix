@@ -172,6 +172,13 @@ let
           example = "100%";
         };
 
+        partitionNumber = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Partition number used by partition resize lifecycle declarations.";
+          example = "1";
+        };
+
         partitionType = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -252,6 +259,7 @@ let
           options
           start
           end
+          partitionNumber
           partitionType
           ;
       }

@@ -1786,7 +1786,13 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Grow if collection == Some("partitions") => {
             let target = target.unwrap_or("<partition>");
-            let desired_size = action.context.desired_size.as_deref();
+            let disk = action.context.device.as_deref();
+            let partition_number = action.context.partition_number.as_deref();
+            let desired_end = action
+                .context
+                .end
+                .as_deref()
+                .or(action.context.desired_size.as_deref());
             (
                 vec![
                     command(
@@ -1794,7 +1800,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect partition, consumers, and backing device before growth",
                     ),
-                    partition_grow_command(target, desired_size),
+                    partition_grow_command(disk, partition_number, desired_end),
                     command(
                         ["partprobe"],
                         true,
@@ -3204,23 +3210,62 @@ fn zfs_pool_create_command(target: &str, device: Option<&str>) -> ExecutionComma
     }
 }
 
-fn partition_grow_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
-    match desired_size {
-        Some(size) => command_vec_with_readiness(
-            vec!["parted", "-s", "<disk>", "resizepart", target, size],
+fn partition_grow_command(
+    disk: Option<&str>,
+    partition_number: Option<&str>,
+    desired_end: Option<&str>,
+) -> ExecutionCommand {
+    match (disk, partition_number, desired_end) {
+        (Some(disk), Some(number), Some(end)) => command_vec(
+            vec!["parted", "-s", disk, "resizepart", number, end],
+            true,
+            "grow the partition to the reviewed end offset after backing capacity is visible",
+        ),
+        (Some(disk), Some(number), None) => command_vec(
+            vec!["growpart", disk, number],
+            true,
+            "grow the partition to the maximum visible backing capacity",
+        ),
+        (disk, partition_number, Some(end)) => command_vec_with_readiness(
+            vec![
+                "parted",
+                "-s",
+                disk.unwrap_or("<disk>"),
+                "resizepart",
+                partition_number.unwrap_or("<partition-number>"),
+                end,
+            ],
             true,
             CommandReadiness::NeedsDomainImplementation,
-            ["disk path", "partition number"],
+            missing_partition_resize_inputs(disk, partition_number),
             "grow a partition to the desired end offset or size after backing capacity is visible",
         ),
-        None => command_vec_with_readiness(
-            vec!["growpart", "<disk>", "<partition-number>"],
+        (disk, partition_number, None) => command_vec_with_readiness(
+            vec![
+                "growpart",
+                disk.unwrap_or("<disk>"),
+                partition_number.unwrap_or("<partition-number>"),
+            ],
             true,
             CommandReadiness::NeedsDomainImplementation,
-            ["disk path", "partition number", "desired end offset"],
+            missing_partition_resize_inputs(disk, partition_number),
             "grow a partition after backing capacity is visible",
         ),
     }
+}
+
+fn missing_partition_resize_inputs(
+    disk: Option<&str>,
+    partition_number: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if disk.is_none() {
+        missing.push("disk path");
+    }
+    if partition_number.is_none() {
+        missing.push("partition number");
+    }
+    missing
 }
 
 fn swap_resize_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
@@ -4020,6 +4065,47 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["parted", "-lm"])
         );
+    }
+
+    #[test]
+    fn partition_growth_uses_partition_number_for_resizepart() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "partitions": {
+                  "root": {
+                    "operation": "grow",
+                    "device": "/dev/disk/by-id/nvme-root",
+                    "partitionNumber": 2,
+                    "end": "100%"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true,
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_plan.len(), 1);
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv
+                == [
+                    "parted",
+                    "-s",
+                    "/dev/disk/by-id/nvme-root",
+                    "resizepart",
+                    "2",
+                    "100%",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
     }
 
     #[test]

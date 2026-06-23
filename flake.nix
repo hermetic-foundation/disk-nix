@@ -155,8 +155,9 @@
               };
               partitions.root = {
                 operation = "grow";
-                device = "/dev/disk/by-id/nvme-root-part2";
-                desiredSize = "100%";
+                device = "/dev/disk/by-id/nvme-root";
+                partitionNumber = "2";
+                end = "100%";
               };
               vdoVolumes.archive = {
                 operation = "grow";
@@ -294,6 +295,8 @@
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
               and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
+              and (."$defs".lifecycleObject.properties.partitionNumber.type | index("string") != null)
+              and (."$defs".lifecycleObject.properties.partitionNumber.type | index("number") != null)
               and ."$defs".lifecycleObject.properties.level.type == "string"
               and ."$defs".lifecycleObject.properties.devices.type == "array"
               and ."$defs".lifecycleObject.properties.path.type == "string"
@@ -430,8 +433,9 @@
                   and .spec.exports."/srv/share".client == "192.0.2.0/24"
                   and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
                   and .spec.partitions.root.operation == "grow"
-                  and .spec.partitions.root.device == "/dev/disk/by-id/nvme-root-part2"
-                  and .spec.partitions.root.desiredSize == "100%"
+                  and .spec.partitions.root.device == "/dev/disk/by-id/nvme-root"
+                  and .spec.partitions.root.partitionNumber == "2"
+                  and .spec.partitions.root.end == "100%"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".operation == "create"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".path == "/mnt/persist/@home"
                   and .spec.volumes."vg0/scratch".operation == "create"

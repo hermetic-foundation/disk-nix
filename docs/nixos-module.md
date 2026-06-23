@@ -150,6 +150,7 @@ Each lifecycle declaration includes:
 - `device`
 - `start`
 - `end`
+- `partitionNumber`
 - `partitionType`
 - `metadata`
 

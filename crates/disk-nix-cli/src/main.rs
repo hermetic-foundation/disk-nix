@@ -699,6 +699,7 @@ fn spec_schema() -> serde_json::Value {
                     "preLVM": { "type": "boolean" },
                     "start": { "type": ["string", "number"] },
                     "end": { "type": ["string", "number"] },
+                    "partitionNumber": { "type": ["string", "number"] },
                     "partitionType": { "type": "string" },
                     "level": { "type": "string" },
                     "type": { "type": "string" },

@@ -191,6 +191,8 @@ Lifecycle objects may use:
   is also accepted for NixOS-module-derived session declarations
 - `options`: NFS export options used for reviewed `exportfs` create commands
 - `start` and `end`: partition geometry for partition creation or resizing
+- `partitionNumber` or `number`: partition number for concrete partition
+  resize commands
 - `partitionType` or `type`: partition type/name metadata for partition
   lifecycle plans
 - `destroy`: boolean destructive intent

@@ -179,6 +179,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub partition_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub partition_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<String>,
@@ -206,6 +208,7 @@ impl ActionContext {
             && self.desired_size.is_none()
             && self.start.is_none()
             && self.end.is_none()
+            && self.partition_number.is_none()
             && self.partition_type.is_none()
             && self.level.is_none()
             && self.client.is_none()
@@ -793,6 +796,7 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         desired_size: desired_size(object),
         start: string_field(object, &["start", "startOffset"]),
         end: string_field(object, &["end", "endOffset"]),
+        partition_number: string_field(object, &["partitionNumber", "number"]),
         partition_type: string_field(object, &["partitionType", "type"]),
         level: string_field(object, &["level", "raidLevel"]),
         client: string_field(object, &["client"]),
@@ -2959,8 +2963,9 @@ mod tests {
                 },
                 "home": {
                   "operation": "grow",
-                  "device": "/dev/disk/by-id/nvme-root-part2",
-                  "desiredSize": "750GiB"
+                  "device": "/dev/disk/by-id/nvme-root",
+                  "partitionNumber": 2,
+                  "end": "100%"
                 }
               }
             }"#,
@@ -2984,6 +2989,19 @@ mod tests {
         assert_eq!(root.context.start.as_deref(), Some("1MiB"));
         assert_eq!(root.context.end.as_deref(), Some("100%"));
         assert_eq!(root.context.partition_type.as_deref(), Some("linux"));
+
+        let home = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "partitions:home:grow")
+            .expect("partition grow action exists");
+        assert_eq!(home.risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            home.context.device.as_deref(),
+            Some("/dev/disk/by-id/nvme-root")
+        );
+        assert_eq!(home.context.partition_number.as_deref(), Some("2"));
+        assert_eq!(home.context.end.as_deref(), Some("100%"));
 
         let disk = plan
             .actions
