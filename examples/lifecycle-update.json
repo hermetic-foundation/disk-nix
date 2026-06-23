@@ -386,6 +386,15 @@
     "tank/root@rollback-point": {
       "target": "tank/root",
       "rollback": true
+    },
+    "tank/home@inventory": {
+      "operation": "rescan",
+      "target": "tank/home"
+    },
+    "/mnt/persist/@home-inventory": {
+      "operation": "rescan",
+      "target": "/mnt/persist/@home",
+      "readOnly": true
     }
   },
   "caches": {

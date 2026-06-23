@@ -856,6 +856,8 @@ fn spec_schema() -> serde_json::Value {
                 "additionalProperties": true,
                 "properties": {
                     "target": { "type": "string" },
+                    "operation": { "$ref": "#/$defs/operation" },
+                    "action": { "$ref": "#/$defs/operation" },
                     "destroy": { "type": "boolean" },
                     "rollback": { "type": "boolean" },
                     "cloneTo": { "type": "string" },

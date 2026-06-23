@@ -558,13 +558,17 @@ and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
 ZFS snapshot clone declarations render reviewed `zfs clone <snapshot> <dataset>` commands from `cloneTo`, `cloneTarget`, or `clone`.
 Snapshot rename declarations render reviewed `zfs rename <snapshot> <new>` for
 ZFS names and `mv -- <old> <new>` for absolute Btrfs snapshot paths.
+Snapshot `operation = "rescan"` declarations render read-only ZFS
+`zfs list`, `zfs get`, and `zfs holds` probes or Btrfs `subvolume show` and
+read-only property probes, plus graph inspection for snapshot/source
+relationships.
 ZFS snapshot rollback declarations render reviewed `zfs rollback` command
 details internally, and `recursiveRollback`, `recursive`, or
 `zfs.rollbackRecursive` render reviewed `zfs rollback -r` details. Apply blocks
 rollback by default and requires `allowPotentialDataLoss=true` before execution.
 The capability inventory advertises ZFS snapshot create, hold/release,
-clone, rollback including recursive rollback review, and destroy risks plus
-Btrfs snapshot create and destroy risks.
+clone, rescan, rollback including recursive rollback review, and destroy risks
+plus Btrfs snapshot create, rescan, and destroy risks.
 `verificationSummary` and `verificationPlan` record read-only commands and
 state checks that run after a successful `--execute` command phase or can be
 used for manual review after applying a generated script. These checks re-probe

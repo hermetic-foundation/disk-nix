@@ -259,6 +259,9 @@ Examples:
   reviewed `zfs destroy` or `btrfs subvolume delete` commands. ZFS snapshot
   `hold` and `releaseHold` declarations are safe property actions that render
   `zfs hold <tag> <snapshot>` and `zfs release <tag> <snapshot>`. ZFS snapshot
+  `operation = "rescan"` and absolute Btrfs snapshot rescan declarations are
+  online read-only refreshes for snapshot metadata, holds, read-only state, and
+  graph relationships. ZFS snapshot
   clone declarations with `cloneTo`, `cloneTarget`, or `clone` render
   reversible `zfs clone <snapshot> <dataset>` plans. ZFS rollback command
   rendering is available for review, and `recursiveRollback`, `recursive`, or

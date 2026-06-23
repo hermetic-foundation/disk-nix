@@ -334,6 +334,9 @@ declarations so retention can be changed without deleting recovery points.
 ZFS snapshot clone plans render reviewed `zfs clone <snapshot> <dataset>`
 commands from `cloneTo` so snapshots can be inspected or migrated without
 rolling back the source dataset.
+Snapshot `operation = "rescan"` plans render read-only ZFS metadata, hold, and
+reference probes or Btrfs subvolume/read-only property probes, followed by graph
+inspection for snapshot/source relationships.
 ZFS snapshot rollback plans render reviewed `zfs rollback` details while
 remaining blocked by the potential-data-loss policy gate. Set
 `recursiveRollback = true` for an explicit reviewed `zfs rollback -r` plan when

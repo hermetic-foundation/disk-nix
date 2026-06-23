@@ -2597,6 +2597,38 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
         .get("readOnly")
         .or_else(|| snapshot.get("readonly"))
         .and_then(Value::as_bool);
+    let requested_operation = snapshot
+        .get("operation")
+        .or_else(|| snapshot.get("action"))
+        .and_then(Value::as_str)
+        .and_then(parse_operation);
+
+    if requested_operation == Some(Operation::Rescan) {
+        actions.push(PlannedAction {
+            id: format!("snapshot:{name}:rescan"),
+            description: format!("rescan snapshot metadata for {name}"),
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("snapshots".to_string()),
+                name: Some(name.to_string()),
+                target: Some(target.to_string()),
+                read_only,
+                ..ActionContext::default()
+            },
+            advice: Some(Advice {
+                summary: "snapshot rescan refreshes recovery-point metadata without mutating data"
+                    .to_string(),
+                alternatives: vec![
+                    "use holds for retention changes instead of recreating snapshots".to_string(),
+                    "clone a snapshot for inspection before rollback or destruction".to_string(),
+                    "verify source dataset or subvolume relationships after metadata refresh"
+                        .to_string(),
+                ],
+            }),
+        });
+    }
 
     if let Some(hold) = hold {
         actions.push(snapshot_hold_action(name, target, &hold, read_only, false));
@@ -4090,7 +4122,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG/LV/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG/LV/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4112,6 +4144,8 @@ fn classify_operation(
                     "use lvmCaches.<origin>.operation = \"rescan\" to refresh LVM cache status and utilization"
                         .to_string(),
                     "use thinPools.<pool>.operation = \"rescan\" to refresh LVM thin-pool utilization"
+                        .to_string(),
+                    "use snapshots.<name>.operation = \"rescan\" to refresh snapshot metadata and holds"
                         .to_string(),
                     "use mdRaids.<name>.operation = \"rescan\" to refresh MD RAID metadata inventory"
                         .to_string(),
@@ -5005,6 +5039,21 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::ZfsSnapshot,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "ZFS snapshot rescan refreshes metadata, holds, and graph relationships"
+                    .to_string(),
+                alternatives: vec![
+                    "use holds or releases when retention state must change".to_string(),
+                    "clone snapshots for inspection before rollback or destruction".to_string(),
+                    "verify source dataset relationships after snapshot metadata refresh"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsSnapshot,
             operation: Operation::Clone,
             risk: RiskClass::Reversible,
             advice: Some(Advice {
@@ -5067,6 +5116,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                     "prefer read-only snapshots for backup or migration checkpoints"
                         .to_string(),
                     "verify qgroup policy before creating many snapshots".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsSnapshot,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "Btrfs snapshot rescan refreshes subvolume metadata and relationships"
+                    .to_string(),
+                alternatives: vec![
+                    "use read-only snapshots for recovery points before risky updates".to_string(),
+                    "verify qgroup usage before pruning or creating many snapshots".to_string(),
+                    "clone or rename snapshots when retention intent is uncertain".to_string(),
                 ],
             }),
         },
@@ -6956,6 +7019,13 @@ mod tests {
                     && capability.operation == Operation::Clone
             })
             .expect("ZFS snapshot clone capability should exist");
+        let zfs_rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::ZfsSnapshot
+                    && capability.operation == Operation::Rescan
+            })
+            .expect("ZFS snapshot rescan capability should exist");
         let btrfs_snapshot = capabilities
             .iter()
             .find(|capability| {
@@ -6963,6 +7033,13 @@ mod tests {
                     && capability.operation == Operation::Snapshot
             })
             .expect("Btrfs snapshot create capability should exist");
+        let btrfs_rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsSnapshot
+                    && capability.operation == Operation::Rescan
+            })
+            .expect("Btrfs snapshot rescan capability should exist");
         let btrfs_destroy = capabilities
             .iter()
             .find(|capability| {
@@ -6974,6 +7051,7 @@ mod tests {
         assert_eq!(zfs_snapshot.risk, RiskClass::Reversible);
         assert_eq!(zfs_hold.risk, RiskClass::Safe);
         assert_eq!(zfs_clone.risk, RiskClass::Reversible);
+        assert_eq!(zfs_rescan.risk, RiskClass::Online);
         assert_eq!(zfs_rollback.risk, RiskClass::PotentialDataLoss);
         assert!(zfs_rollback.advice.as_ref().is_some_and(|advice| {
             advice
@@ -6982,6 +7060,7 @@ mod tests {
                 .any(|alternative| alternative.contains("recursive rollback"))
         }));
         assert_eq!(btrfs_snapshot.risk, RiskClass::Reversible);
+        assert_eq!(btrfs_rescan.risk, RiskClass::Online);
         assert_eq!(btrfs_destroy.risk, RiskClass::Destructive);
     }
 
@@ -7077,6 +7156,12 @@ mod tests {
             (NodeKind::LvmThinPool, Operation::Rescan, RiskClass::Online),
             (NodeKind::CacheDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::VdoVolume, Operation::Rescan, RiskClass::Online),
+            (NodeKind::ZfsSnapshot, Operation::Rescan, RiskClass::Online),
+            (
+                NodeKind::BtrfsSnapshot,
+                Operation::Rescan,
+                RiskClass::Online,
+            ),
             (NodeKind::MdRaid, Operation::Create, RiskClass::Destructive),
             (
                 NodeKind::MdRaid,
@@ -9725,6 +9810,52 @@ mod tests {
         assert_eq!(action.operation, Operation::Snapshot);
         assert_eq!(action.context.target.as_deref(), Some("/mnt/persist/@home"));
         assert_eq!(action.context.read_only, Some(true));
+    }
+
+    #[test]
+    fn plan_classifies_snapshot_rescan_as_online_refresh() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before-upgrade": {
+                  "operation": "rescan",
+                  "target": "tank/home"
+                },
+                "/mnt/persist/@home-before-upgrade": {
+                  "operation": "rescan",
+                  "target": "/mnt/persist/@home",
+                  "readOnly": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.destructive_count, 0);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        let zfs_rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:tank/home@before-upgrade:rescan")
+            .expect("ZFS snapshot rescan action exists");
+        assert_eq!(zfs_rescan.operation, Operation::Rescan);
+        assert_eq!(zfs_rescan.risk, RiskClass::Online);
+        assert!(!zfs_rescan.destructive);
+        assert_eq!(zfs_rescan.context.target.as_deref(), Some("tank/home"));
+        let btrfs_rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:/mnt/persist/@home-before-upgrade:rescan")
+            .expect("Btrfs snapshot rescan action exists");
+        assert_eq!(btrfs_rescan.operation, Operation::Rescan);
+        assert_eq!(btrfs_rescan.context.read_only, Some(true));
+        assert!(
+            btrfs_rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("without mutating data") })
+        );
     }
 
     #[test]

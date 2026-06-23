@@ -1904,6 +1904,53 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Rescan if collection == Some("snapshots") => {
+            let snapshot = action.context.name.as_deref().unwrap_or(target);
+            let mut commands = vec![command(
+                ["disk-nix", "inspect", snapshot, "--json"],
+                false,
+                "verify modeled snapshot graph relationships after metadata refresh",
+            )];
+            if is_zfs_snapshot_name(snapshot) {
+                commands.push(zfs_snapshot_list_command(
+                    snapshot,
+                    "verify ZFS snapshot size and reference metadata after rescan",
+                ));
+                commands.push(command(
+                    [
+                        "zfs",
+                        "get",
+                        "-H",
+                        "-p",
+                        "-o",
+                        "property,value",
+                        "creation,used,referenced,userrefs,defer_destroy",
+                        snapshot,
+                    ],
+                    false,
+                    "verify ZFS snapshot properties and retention metadata after rescan",
+                ));
+                commands.push(snapshot_hold_list_command(snapshot));
+            } else if snapshot.starts_with('/') {
+                commands.push(command(
+                    ["btrfs", "subvolume", "show", snapshot],
+                    false,
+                    "verify Btrfs snapshot subvolume metadata after rescan",
+                ));
+                commands.push(command(
+                    ["btrfs", "property", "get", "-ts", snapshot, "ro"],
+                    false,
+                    "verify Btrfs snapshot read-only property after rescan",
+                ));
+            }
+            (
+                commands,
+                vec![
+                    "snapshot metadata, source relationship, and retention state match the refreshed topology"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Create | Operation::Open if collection == Some("luks.devices") => (
             vec![
                 command(
@@ -3817,6 +3864,63 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 ],
                 vec![
                     "property values must come from the desired spec and target domain".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("snapshots") => {
+            let snapshot = action.context.name.as_deref().unwrap_or("<snapshot>");
+            let mut commands = vec![command(
+                ["disk-nix", "inspect", snapshot],
+                false,
+                "inspect modeled snapshot graph relationships after metadata refresh",
+            )];
+            if is_zfs_snapshot_name(snapshot) {
+                commands.push(zfs_snapshot_list_command(
+                    snapshot,
+                    "refresh ZFS snapshot size and reference metadata",
+                ));
+                commands.push(command(
+                    [
+                        "zfs",
+                        "get",
+                        "-H",
+                        "-p",
+                        "-o",
+                        "property,value",
+                        "creation,used,referenced,userrefs,defer_destroy",
+                        snapshot,
+                    ],
+                    false,
+                    "refresh ZFS snapshot properties and retention metadata",
+                ));
+                commands.push(snapshot_hold_list_command(snapshot));
+            } else if snapshot.starts_with('/') {
+                commands.push(command(
+                    ["btrfs", "subvolume", "show", snapshot],
+                    false,
+                    "refresh Btrfs snapshot subvolume metadata",
+                ));
+                commands.push(command(
+                    ["btrfs", "property", "get", "-ts", snapshot, "ro"],
+                    false,
+                    "refresh Btrfs snapshot read-only property",
+                ));
+            } else {
+                commands.push(command_with_readiness(
+                    ["<snapshot-rescan-tool>", snapshot],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["ZFS snapshot name or Btrfs snapshot path"],
+                    "refresh snapshot metadata after selecting the target-specific tool",
+                ));
+            }
+            (
+                commands,
+                vec![
+                    "use hold or release operations for retention changes".to_string(),
+                    "use clone or rollback only after reviewing refreshed snapshot metadata"
+                        .to_string(),
                 ],
                 true,
             )
@@ -8397,6 +8501,14 @@ fn snapshot_hold_list_command(snapshot: &str) -> ExecutionCommand {
     }
 }
 
+fn zfs_snapshot_list_command(snapshot: &str, note: &str) -> ExecutionCommand {
+    command(
+        ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
+        false,
+        note,
+    )
+}
+
 fn zfs_snapshot_rollback_command(snapshot: &str, recursive: bool) -> ExecutionCommand {
     if recursive {
         command(
@@ -11997,6 +12109,110 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["zfs", "holds", "tank/home@before"])
+        }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
+    }
+
+    #[test]
+    fn snapshot_rescan_reports_read_only_metadata_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "operation": "rescan",
+                  "target": "tank/home"
+                },
+                "/mnt/persist/@home-before": {
+                  "operation": "rescan",
+                  "target": "/mnt/persist/@home",
+                  "readOnly": true
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_plan.len(), 2);
+        let zfs_step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "snapshot:tank/home@before:rescan")
+            .expect("ZFS snapshot rescan step exists");
+        assert!(
+            zfs_step
+                .commands
+                .iter()
+                .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+        );
+        assert!(zfs_step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "zfs",
+                    "list",
+                    "-t",
+                    "snapshot",
+                    "-H",
+                    "-p",
+                    "tank/home@before",
+                ]
+        }));
+        assert!(
+            zfs_step
+                .commands
+                .iter()
+                .any(|command| command.argv == ["zfs", "holds", "tank/home@before"])
+        );
+
+        let btrfs_step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "snapshot:/mnt/persist/@home-before:rescan")
+            .expect("Btrfs snapshot rescan step exists");
+        assert!(
+            btrfs_step
+                .commands
+                .iter()
+                .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+        );
+        assert!(btrfs_step.commands.iter().any(|command| {
+            command.argv == ["btrfs", "subvolume", "show", "/mnt/persist/@home-before"]
+        }));
+        assert!(btrfs_step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "btrfs",
+                    "property",
+                    "get",
+                    "-ts",
+                    "/mnt/persist/@home-before",
+                    "ro",
+                ]
+        }));
+
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "snapshot:tank/home@before:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "holds", "tank/home@before"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "snapshot:/mnt/persist/@home-before:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "property",
+                            "get",
+                            "-ts",
+                            "/mnt/persist/@home-before",
+                            "ro",
+                        ]
+                })
         }));
         assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
         assert!(report.command_summary.all_commands_ready());

@@ -290,6 +290,7 @@ Each lifecycle declaration includes:
 Typed snapshot declarations include:
 
 - `target`
+- `operation`
 - `destroy`
 - `rollback`
 - `cloneTo`
@@ -533,6 +534,15 @@ Example lifecycle planning through NixOS options:
       renameTo = "tank/home@before-upgrade-retained";
     };
     snapshots."/mnt/persist/@home-before-upgrade" = {
+      target = "/mnt/persist/@home";
+      readOnly = true;
+    };
+    snapshots."tank/home@inventory" = {
+      operation = "rescan";
+      target = "tank/home";
+    };
+    snapshots."/mnt/persist/@home-inventory" = {
+      operation = "rescan";
       target = "/mnt/persist/@home";
       readOnly = true;
     };

@@ -389,6 +389,13 @@ let
           example = "tank/home";
         };
 
+        operation = lib.mkOption {
+          type = operationType;
+          default = null;
+          description = "Requested snapshot lifecycle operation, such as rescan.";
+          example = "rescan";
+        };
+
         destroy = lib.mkOption {
           type = lib.types.bool;
           default = false;
@@ -514,6 +521,7 @@ let
     // cleanSpecAttrs {
       inherit (snapshot)
         target
+        operation
         destroy
         rollback
         cloneTo

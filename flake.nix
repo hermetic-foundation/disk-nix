@@ -475,6 +475,15 @@
                 target = "/mnt/persist/@home";
                 readOnly = true;
               };
+              snapshots."tank/home@inventory" = {
+                operation = "rescan";
+                target = "tank/home";
+              };
+              snapshots."/mnt/persist/@home-inventory" = {
+                operation = "rescan";
+                target = "/mnt/persist/@home";
+                readOnly = true;
+              };
             };
           }
         ];
@@ -588,6 +597,8 @@
               and .properties.exports["$ref"] == "#/$defs/lifecycleMap"
               and .properties.caches["$ref"] == "#/$defs/lifecycleMap"
               and .properties.snapshots["$ref"] == "#/$defs/snapshotMap"
+              and ."$defs".snapshot.properties.operation["$ref"] == "#/$defs/operation"
+              and ."$defs".snapshot.properties.action["$ref"] == "#/$defs/operation"
               and (."$defs".operation.enum | index("grow") != null)
               and (."$defs".operation.enum | index("check") != null)
               and (."$defs".operation.enum | index("repair") != null)
@@ -626,6 +637,8 @@
               and (."$defs".specBody.properties.exports["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.caches["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
+              and ."$defs".snapshot.properties.operation["$ref"] == "#/$defs/operation"
+              and ."$defs".snapshot.properties.action["$ref"] == "#/$defs/operation"
               and ."$defs".snapshot.properties.readOnly.type == "boolean"
               and ."$defs".snapshot.properties.readonly.type == "boolean"
               and ."$defs".snapshot.properties.cloneTo.type == "string"
@@ -706,7 +719,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 85
+              .summary.actionCount == 87
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -771,6 +784,8 @@
               and (.actions | any(.id == "datasets:tank/archive:destroy"))
               and (.actions | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained" and .risk == "offline-required"))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
+              and (.actions | any(.id == "snapshot:tank/home@inventory:rescan" and .risk == "online"))
+              and (.actions | any(.id == "snapshot:/mnt/persist/@home-inventory:rescan" and .risk == "online"))
               and (.actions | any(.id == "exports:/srv/share:export" and .risk == "online"))
               and (.actions | any(.id == "exports:/srv/old-share:unexport" and .risk == "offline-required"))
               and (.actions | any(.id == "nfs.mounts:/srv/shared:mount" and .risk == "online"))
@@ -1050,6 +1065,9 @@
                   and .spec.snapshots."tank/home@old".releaseHold == "old-retention"
                   and .spec.snapshots."/mnt/persist/@home-before-upgrade".target == "/mnt/persist/@home"
                   and .spec.snapshots."/mnt/persist/@home-before-upgrade".readOnly == true
+                  and .spec.snapshots."tank/home@inventory".operation == "rescan"
+                  and .spec.snapshots."/mnt/persist/@home-inventory".operation == "rescan"
+                  and .spec.snapshots."/mnt/persist/@home-inventory".readOnly == true
                   and .apply.mode == "activation"
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false
