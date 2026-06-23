@@ -341,9 +341,11 @@ and `blockdev --rereadpt` commands when `device`, `partitionNumber`, and `end`
 or `desiredSize` are declared.
 Filesystem shrink command plans render Btrfs allocation checks and
 `btrfs filesystem resize <size> <path>` for declared target sizes. Ext shrink
-plans render `findmnt`, `umount`, `e2fsck`, and `resize2fs` review steps, with
-source-device commands marked unresolved when the filesystem declaration only
-names a mountpoint. XFS shrink renders manual-only migration guidance.
+plans render `findmnt`, `umount`, `e2fsck`, and `resize2fs` review steps. Ext
+grow and shrink commands use a declared filesystem `device` or `disk` when
+present, with source-device commands marked unresolved when the filesystem
+declaration only names a mountpoint. XFS shrink renders manual-only migration
+guidance.
 Btrfs filesystem rebalance plans render `btrfs balance start`; declared
 `properties.balance.data`, `properties.balance.metadata`, and
 `properties.balance.system` values render as `-d`, `-m`, and `-s` filters for

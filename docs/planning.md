@@ -305,6 +305,10 @@ Btrfs filesystem label property updates render
 `e2label <device> <label>` when the filesystem declaration includes a backing
 device; missing devices and unsupported filesystem property keys stay marked
 `needs-domain-implementation`.
+Ext filesystem grow and shrink actions also carry the declared filesystem
+`device` or `disk` into `resize2fs` and `e2fsck` command plans. Mountpoint-only
+ext declarations keep source-device mutations marked unresolved until the block
+device is explicitly selected.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.

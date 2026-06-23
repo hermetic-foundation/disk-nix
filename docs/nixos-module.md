@@ -77,6 +77,11 @@ Typed filesystem declarations include:
 - `desiredSize`
 - `preserveData`
 
+For ext filesystems, `device` is also used by disk-nix grow and shrink command
+plans for `resize2fs` and `e2fsck`. If only `mountpoint` is declared, those
+source-device mutations remain non-ready until the backing block device is
+selected explicitly.
+
 Typed swap declarations include:
 
 - `device`
