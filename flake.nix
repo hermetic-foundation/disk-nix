@@ -403,6 +403,8 @@
               and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".nfsSpec.properties.mounts["$ref"] == "#/$defs/nfsMountMap"
               and ."$defs".nfsMount.properties.source.type == "string"
+              and ."$defs".nfsMount.properties.operation["$ref"] == "#/$defs/operation"
+              and ."$defs".nfsMount.properties.destroy.type == "boolean"
               and ."$defs".nfsMount.properties.options.type == "array"
               and ."$defs".iscsiSpec.properties.sessions["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".iscsiSpec.properties.boot["$ref"] == "#/$defs/iscsiBoot"

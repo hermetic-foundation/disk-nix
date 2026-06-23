@@ -134,6 +134,9 @@ storage spec to `/etc/disk-nix/spec.json`, derives typed NixOS `fileSystems`,
 in the same planner spec. Override `toolPackages` to pin alternate tool builds
 or trim unused domains. Explicit non-destroy `exports` declarations with
 `client` and `options` also derive NixOS NFS server export lines. When
+typed `nfs.mounts` declarations are marked for destroy they stay in the
+disk-nix spec for reviewed unmount planning but are not re-added to NixOS
+`fileSystems`.
 `apply.scriptOut` is set, activation validation asks the CLI to write the
 allowed command plan and post-apply verification plan to that reviewable shell
 script path. When `apply.reportOut` is set, activation also writes the JSON
@@ -227,6 +230,9 @@ marked unresolved until a backing device is declared.
 NFS export apply plans render reviewed `exportfs` create, option update, and
 unexport commands from explicit client and option declarations. Export
 mutations require a path-shaped local export target such as `/srv/share`.
+NFS client mount apply plans render reviewed `mount` create commands and
+`umount` destroy commands from `nfs.mounts`; missing sources or concrete
+mountpoints remain non-ready.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
 and rescan commands from explicit target IQN and portal declarations. LUN apply
 plans model host-side attach, growth rescan, and detach: attach and grow rescan
