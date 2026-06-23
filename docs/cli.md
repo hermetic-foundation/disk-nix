@@ -497,7 +497,8 @@ details internally, and `recursiveRollback`, `recursive`, or
 `zfs.rollbackRecursive` render reviewed `zfs rollback -r` details. Apply
 remains blocked as potential data loss.
 The capability inventory advertises ZFS snapshot create, hold/release,
-rollback, and destroy risks plus Btrfs snapshot create and destroy risks.
+rollback including recursive rollback review, and destroy risks plus Btrfs
+snapshot create and destroy risks.
 `verificationSummary` and `verificationPlan` record read-only commands and
 state checks that run after a successful `--execute` command phase or can be
 used for manual review after applying a generated script. These checks re-probe

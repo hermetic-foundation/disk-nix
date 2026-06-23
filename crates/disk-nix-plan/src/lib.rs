@@ -3995,6 +3995,8 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "clone the snapshot and inspect data before rollback".to_string(),
                     "take a pre-rollback snapshot of the current state".to_string(),
+                    "use recursive rollback only after reviewing newer snapshots and clones"
+                        .to_string(),
                 ],
             }),
         },
@@ -5281,6 +5283,12 @@ mod tests {
         assert_eq!(zfs_snapshot.risk, RiskClass::Reversible);
         assert_eq!(zfs_hold.risk, RiskClass::Safe);
         assert_eq!(zfs_rollback.risk, RiskClass::PotentialDataLoss);
+        assert!(zfs_rollback.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("recursive rollback"))
+        }));
         assert_eq!(btrfs_snapshot.risk, RiskClass::Reversible);
         assert_eq!(btrfs_destroy.risk, RiskClass::Destructive);
     }

@@ -305,7 +305,8 @@ declarations so retention can be changed without deleting recovery points.
 ZFS snapshot rollback plans render reviewed `zfs rollback` details while
 remaining blocked by the potential-data-loss policy gate. Set
 `recursiveRollback = true` for an explicit reviewed `zfs rollback -r` plan when
-newer snapshots in the dataset lineage may be discarded.
+newer snapshots in the dataset lineage may be discarded. The capability
+inventory includes recursive rollback review advice.
 ZFS dataset apply plans render reviewed `zfs create` commands with declared
 properties as create-time `-o key=value` options, plus policy-gated
 `zfs destroy` commands.
