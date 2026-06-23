@@ -117,6 +117,7 @@ Typed lifecycle declarations are available for:
 
 - `disks`
 - `partitions`
+- `btrfsSubvolumes`
 - `vdoVolumes`
 - `volumes`
 - `volumeGroups`
@@ -137,6 +138,9 @@ Each lifecycle declaration includes:
 - `destroy`
 - `preserveData`
 - `desiredSize`
+- `target`
+- `path`
+- `mountpoint`
 - `device`
 - `start`
 - `end`
@@ -180,6 +184,10 @@ Example lifecycle planning through NixOS options:
     vdoVolumes.archive = {
       operation = "grow";
       desiredSize = "4TiB";
+    };
+    btrfsSubvolumes."/mnt/persist/@home" = {
+      operation = "create";
+      path = "/mnt/persist/@home";
     };
     pools.tank = {
       operation = "rebalance";

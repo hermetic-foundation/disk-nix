@@ -685,6 +685,12 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     false,
                     "verify ZFS snapshot existence and metadata",
                 ));
+            } else if collection == Some("btrfsSubvolumes") {
+                commands.push(command(
+                    ["btrfs", "subvolume", "show", snapshot],
+                    false,
+                    "verify Btrfs snapshot subvolume existence and metadata",
+                ));
             }
             (
                 commands,
@@ -738,6 +744,17 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             vec![
                 "LUKS header exists and recovery header backup has been captured".to_string(),
                 "mapper name and backing device match the desired declaration".to_string(),
+            ],
+        ),
+        Operation::Destroy if collection == Some("btrfsSubvolumes") => (
+            vec![command(
+                ["disk-nix", "topology", "--json"],
+                false,
+                "re-probe full topology after Btrfs subvolume deletion",
+            )],
+            vec![
+                "deleted Btrfs subvolume path no longer appears in subvolume listings".to_string(),
+                "snapshots, qgroups, and mount consumers are reviewed after deletion".to_string(),
             ],
         ),
         Operation::Format
@@ -1112,7 +1129,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         Operation::Snapshot => {
             let target = target.unwrap_or("<snapshot>");
             let snapshot = action.context.name.as_deref().unwrap_or(target);
-            let snapshot_command = snapshot_command(target, snapshot);
+            let snapshot_command = snapshot_command(collection, target, snapshot);
             (
                 vec![
                     command(
@@ -1123,6 +1140,29 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     snapshot_command,
                 ],
                 Vec::new(),
+                true,
+            )
+        }
+        Operation::Create if collection == Some("btrfsSubvolumes") => {
+            let target = target.unwrap_or("<btrfs-subvolume-path>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect target path and parent Btrfs mount before subvolume creation",
+                    ),
+                    command(
+                        ["btrfs", "subvolume", "create", target],
+                        true,
+                        "create the Btrfs subvolume at the reviewed path",
+                    ),
+                ],
+                vec![
+                    "verify the parent path is on the intended Btrfs filesystem".to_string(),
+                    "confirm the target path does not already contain data".to_string(),
+                    "review qgroup and mount policy before using the new subvolume".to_string(),
+                ],
                 true,
             )
         }
@@ -1232,6 +1272,28 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             vec!["creation commands require target-kind-specific arguments from the desired spec".to_string()],
             true,
         ),
+        Operation::Destroy if collection == Some("btrfsSubvolumes") => {
+            let target = target.unwrap_or("<btrfs-subvolume-path>");
+            (
+                vec![
+                    command(
+                        ["btrfs", "subvolume", "show", target],
+                        false,
+                        "inspect Btrfs subvolume metadata before deletion",
+                    ),
+                    command(
+                        ["btrfs", "subvolume", "delete", target],
+                        true,
+                        "delete the reviewed Btrfs subvolume",
+                    ),
+                ],
+                vec![
+                    "take a read-only snapshot before deletion when data may be needed".to_string(),
+                    "unmount or redirect consumers before deleting the subvolume".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Format | Operation::Shrink | Operation::RemoveDevice | Operation::Rollback | Operation::Destroy => (
             Vec::new(),
             vec!["no command plan is generated for this risk class unless future explicit policy and executor support are added".to_string()],
@@ -1477,9 +1539,15 @@ fn set_property_command(
     }
 }
 
-fn snapshot_command(target: &str, snapshot: &str) -> ExecutionCommand {
+fn snapshot_command(collection: Option<&str>, target: &str, snapshot: &str) -> ExecutionCommand {
     if snapshot.contains('@') {
         command(["zfs", "snapshot", snapshot], true, "create a ZFS snapshot")
+    } else if collection == Some("btrfsSubvolumes") {
+        command(
+            ["btrfs", "subvolume", "snapshot", target, snapshot],
+            true,
+            "create a Btrfs subvolume snapshot",
+        )
     } else {
         command_with_readiness(
             ["<snapshot-tool>", target, snapshot],
@@ -1875,6 +1943,51 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["vdostats", "--human-readable", "archive"])
+        }));
+    }
+
+    #[test]
+    fn btrfs_subvolume_lifecycle_reports_domain_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "btrfsSubvolumes": {
+                  "/mnt/persist/@home": {
+                    "operation": "create",
+                    "path": "/mnt/persist/@home"
+                  },
+                  "/mnt/persist/@old": {
+                    "destroy": true,
+                    "preserveData": false
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["btrfs", "subvolume", "create", "/mnt/persist/@home"]
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["btrfs", "subvolume", "delete", "/mnt/persist/@old"]
+            })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "btrfssubvolumes:/mnt/persist/@old:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
         }));
     }
 

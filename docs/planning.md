@@ -36,10 +36,10 @@ or the NixOS module wrapper written to `/etc/disk-nix/spec.json`:
 
 Current planning is intentionally conservative. It classifies filesystem
 resize policy, preservation intent, and lifecycle operations for disks,
-partitions, swap, LUKS containers, VDO volumes, volumes, pools, datasets, LUNs,
-iSCSI sessions, exports, cache layers, and snapshots. It reports destructive
-or potentially destructive behavior with alternatives instead of silently
-accepting unsafe mutation.
+partitions, swap, LUKS containers, Btrfs subvolumes, VDO volumes, volumes,
+pools, datasets, LUNs, iSCSI sessions, exports, cache layers, and snapshots. It
+reports destructive or potentially destructive behavior with alternatives
+instead of silently accepting unsafe mutation.
 
 Examples:
 
@@ -69,6 +69,8 @@ Examples:
   and signatures are changed.
 - LUKS format/create is destructive; LUKS growth is offline-required because
   backing capacity, mapper state, and dependent consumers must be coordinated.
+- Btrfs subvolume creation is online, while destruction is destructive and
+  suggests read-only snapshots or rename-first validation.
 - VDO growth is classified as online, with advice to distinguish logical
   growth from physical backing growth and verify `vdostats`.
 - `properties = { ... }` is classified as safe property-update intent.
@@ -96,6 +98,7 @@ Lifecycle collections currently accepted by the planner:
 - `partitions`
 - `swaps`
 - `luks.devices`
+- `btrfsSubvolumes`
 - `vdoVolumes`
 - `volumes`
 - `volumeGroups`
@@ -118,6 +121,8 @@ Lifecycle objects may use:
 - `properties`: object of properties to set
 - `desiredSize`, `targetSize`, or `size`: desired capacity for grow, shrink,
   or create plans
+- `target`, `path`, or `mountpoint`: explicit target path or object identity
+  when it differs from the attribute name
 - `device` or `disk`: backing device path for disk and partition operations
 - `start` and `end`: partition geometry for partition creation or resizing
 - `partitionType` or `type`: partition type/name metadata for partition

@@ -541,6 +541,9 @@ fn spec_schema() -> serde_json::Value {
             "partitions": {
                 "$ref": "#/$defs/lifecycleMap"
             },
+            "btrfsSubvolumes": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
             "vdoVolumes": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -582,6 +585,7 @@ fn spec_schema() -> serde_json::Value {
                     "luks": { "$ref": "#/$defs/luksSpec" },
                     "disks": { "$ref": "#/$defs/lifecycleMap" },
                     "partitions": { "$ref": "#/$defs/lifecycleMap" },
+                    "btrfsSubvolumes": { "$ref": "#/$defs/lifecycleMap" },
                     "vdoVolumes": { "$ref": "#/$defs/lifecycleMap" },
                     "volumes": { "$ref": "#/$defs/lifecycleMap" },
                     "volumeGroups": { "$ref": "#/$defs/lifecycleMap" },
@@ -652,6 +656,9 @@ fn spec_schema() -> serde_json::Value {
                     "targetSize": { "type": ["string", "number"] },
                     "size": { "type": ["string", "number"] },
                     "name": { "type": "string" },
+                    "target": { "type": "string" },
+                    "path": { "type": "string" },
+                    "mountpoint": { "type": "string" },
                     "device": { "type": "string" },
                     "disk": { "type": "string" },
                     "priority": { "type": "integer" },

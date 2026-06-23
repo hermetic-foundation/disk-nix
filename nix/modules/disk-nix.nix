@@ -116,6 +116,27 @@ let
           example = "100GiB";
         };
 
+        target = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Explicit target identity when it differs from the attribute name.";
+          example = "tank/home";
+        };
+
+        path = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Filesystem path for path-addressed lifecycle objects such as Btrfs subvolumes.";
+          example = "/mnt/persist/@home";
+        };
+
+        mountpoint = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Mountpoint for lifecycle objects addressed by mounted path.";
+          example = "/home";
+        };
+
         device = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -209,6 +230,9 @@ let
           destroy
           preserveData
           desiredSize
+          target
+          path
+          mountpoint
           device
           start
           end
@@ -679,6 +703,12 @@ in
       description = "Typed partition lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    btrfsSubvolumes = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed Btrfs subvolume lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
     vdoVolumes = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -862,6 +892,7 @@ in
         };
         disks = (cfg.spec.disks or { }) // normalizeLifecycleSpec cfg.disks;
         partitions = (cfg.spec.partitions or { }) // normalizeLifecycleSpec cfg.partitions;
+        btrfsSubvolumes = (cfg.spec.btrfsSubvolumes or { }) // normalizeLifecycleSpec cfg.btrfsSubvolumes;
         vdoVolumes = (cfg.spec.vdoVolumes or { }) // normalizeLifecycleSpec cfg.vdoVolumes;
         volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;

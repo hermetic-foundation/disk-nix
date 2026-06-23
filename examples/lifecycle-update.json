@@ -31,6 +31,12 @@
       "desiredSize": "4TiB"
     }
   },
+  "btrfsSubvolumes": {
+    "/mnt/persist/@home": {
+      "operation": "create",
+      "path": "/mnt/persist/@home"
+    }
+  },
   "partitions": {
     "root": {
       "operation": "grow",

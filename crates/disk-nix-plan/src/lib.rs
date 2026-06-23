@@ -384,6 +384,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
     for collection in [
         "disks",
         "partitions",
+        "btrfsSubvolumes",
         "vdoVolumes",
         "volumes",
         "volumeGroups",
@@ -765,7 +766,7 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
     ActionContext {
         collection: Some(collection.to_string()),
         name: Some(name.to_string()),
-        target: Some(name.to_string()),
+        target: string_field(object, &["target", "path", "mountpoint"]).or(Some(name.to_string())),
         device: string_field(object, &["device", "disk"]),
         desired_size: desired_size(object),
         start: string_field(object, &["start", "startOffset"]),
@@ -1301,8 +1302,10 @@ fn add_destroy_guard(
         .unwrap_or(true);
 
     if destroy || !preserve_data {
+        let mut alternatives = destructive_alternatives(collection, object);
+        alternatives.push("rename, detach, or unmount first when supported".to_string());
         actions.push(PlannedAction {
-            id: format!("{collection}:{name}:destroy"),
+            id: format!("{collection}:{name}:destroy").to_ascii_lowercase(),
             description: format!("{collection} {name} may be destroyed or replaced"),
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
@@ -1310,11 +1313,7 @@ fn add_destroy_guard(
             context: lifecycle_context(collection, name, object),
             advice: Some(Advice {
                 summary: "destroying or replacing storage removes live data".to_string(),
-                alternatives: vec![
-                    "take and verify a backup before destructive changes".to_string(),
-                    "rename, detach, or unmount first when supported".to_string(),
-                    "migrate data to replacement storage before removal".to_string(),
-                ],
+                alternatives,
             }),
         });
     }
@@ -1442,6 +1441,19 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "btrfsSubvolumes" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "Btrfs subvolume creation is reversible but changes namespace layout"
+                    .to_string(),
+                alternatives: vec![
+                    "create the subvolume at an empty reviewed path".to_string(),
+                    "prefer read-only snapshots or clones for migrations".to_string(),
+                    "verify parent mount and qgroup policy before creation".to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
         Operation::Grow if collection == "luns" || collection == "iscsiSessions" => (
             RiskClass::OfflineRequired,
@@ -1565,6 +1577,12 @@ fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
             alternatives.push("take a recursive snapshot before destroy or rollback".to_string());
             alternatives
                 .push("rename or unmount the dataset while validating consumers".to_string());
+        }
+        "btrfsSubvolumes" => {
+            alternatives
+                .push("take a read-only snapshot before deleting the subvolume".to_string());
+            alternatives
+                .push("rename the subvolume and validate consumers before removal".to_string());
         }
         "volumes" | "volumeGroups" | "luns" => {
             alternatives
@@ -1757,6 +1775,30 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "run a filtered balance before removal".to_string(),
                     "add replacement capacity before removing the old device".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsSubvolume,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "Btrfs subvolume creation changes namespace layout".to_string(),
+                alternatives: vec![
+                    "create at an empty reviewed path".to_string(),
+                    "verify qgroup policy before creation".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsSubvolume,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "deleting a Btrfs subvolume removes its live tree".to_string(),
+                alternatives: vec![
+                    "take a read-only snapshot before deletion".to_string(),
+                    "rename the subvolume before final removal".to_string(),
                 ],
             }),
         },
@@ -2065,6 +2107,50 @@ mod tests {
                     .alternatives
                     .iter()
                     .any(|alternative| alternative.contains("vdostats"))
+        }));
+    }
+
+    #[test]
+    fn plan_accepts_btrfs_subvolume_lifecycle_with_target_path() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsSubvolumes": {
+                "/mnt/persist/@home": {
+                  "operation": "create",
+                  "path": "/mnt/persist/@home"
+                },
+                "/mnt/persist/@old": {
+                  "destroy": true,
+                  "preserveData": false
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| {
+                action.id == "btrfsSubvolumes:/mnt/persist/@home:create".to_ascii_lowercase()
+            })
+            .expect("create action exists");
+        assert_eq!(create.risk, RiskClass::Online);
+        assert_eq!(create.context.target.as_deref(), Some("/mnt/persist/@home"));
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| {
+                action.id == "btrfsSubvolumes:/mnt/persist/@old:destroy".to_ascii_lowercase()
+            })
+            .expect("destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::Destructive);
+        assert!(destroy.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("read-only snapshot"))
         }));
     }
 
