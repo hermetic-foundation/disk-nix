@@ -45,9 +45,10 @@ The NixOS module is the primary declarative interface.
 ```
 
 The module writes `/etc/disk-nix/spec.json`, installs the CLI, and derives the
-matching NixOS `fileSystems`, `swapDevices`, and `boot.initrd.luks.devices`
-entries. Raw `spec` remains available for storage domains whose typed NixOS
-options have not been implemented yet.
+matching NixOS `fileSystems`, `swapDevices`, `boot.initrd.luks.devices`,
+`services.openiscsi`, and `boot.iscsi-initiator` entries. Raw `spec` remains
+available for storage domains whose typed NixOS options have not been
+implemented yet.
 
 Typed filesystem declarations include:
 
@@ -75,6 +76,34 @@ Typed LUKS declarations include:
 - `preLVM`
 - `preserveData`
 
+Typed NFS client mount declarations include:
+
+- `source`
+- `fsType`
+- `mountpoint`
+- `options`
+- `neededForBoot`
+- `preserveData`
+
+Typed iSCSI declarations include:
+
+- `initiatorName`
+- `discoverPortal`
+- `enableAutoLoginOut`
+- `extraConfig`
+- `sessions`
+- `boot.enable`
+- `boot.discoverPortal`
+- `boot.target`
+- `boot.loginAll`
+- `boot.logLevel`
+- `boot.extraIscsiCommands`
+- `boot.extraConfig`
+
+NixOS boot iSCSI currently requires scripted stage 1. Configurations using
+`iscsi.boot.enable = true` must keep `boot.initrd.systemd.enable = false` until
+the upstream `boot.iscsi-initiator` module supports systemd initrd.
+
 Typed lifecycle declarations are available for:
 
 - `volumes`
@@ -82,6 +111,7 @@ Typed lifecycle declarations are available for:
 - `pools`
 - `datasets`
 - `luns`
+- `iscsi.sessions`
 - `exports`
 - `caches`
 
@@ -116,6 +146,24 @@ Example lifecycle planning through NixOS options:
       properties.autotrim = "on";
     };
     datasets."tank/archive".destroy = true;
+    nfs.mounts."/srv/shared" = {
+      source = "nas.example.com:/srv/shared";
+      fsType = "nfs4";
+      options = [ "_netdev" "x-systemd.automount" "vers=4.2" ];
+    };
+    iscsi = {
+      initiatorName = "iqn.2026-06.example:host";
+      discoverPortal = "192.0.2.10:3260";
+      enableAutoLoginOut = true;
+      boot = {
+        enable = true;
+        target = "iqn.2026-06.example:storage.root";
+      };
+      sessions."iqn.2026-06.example:storage.root" = {
+        operation = "grow";
+        metadata.portal = "192.0.2.10:3260";
+      };
+    };
     snapshots."tank/home@before-upgrade".target = "tank/home";
   };
 }

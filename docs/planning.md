@@ -35,9 +35,9 @@ or the NixOS module wrapper written to `/etc/disk-nix/spec.json`:
 
 Current planning is intentionally conservative. It classifies filesystem
 resize policy, preservation intent, and lifecycle operations for volumes,
-pools, datasets, LUNs, exports, cache layers, and snapshots. It reports
-destructive or potentially destructive behavior with alternatives instead of
-silently accepting unsafe mutation.
+pools, datasets, LUNs, iSCSI sessions, exports, cache layers, and snapshots. It
+reports destructive or potentially destructive behavior with alternatives
+instead of silently accepting unsafe mutation.
 
 Examples:
 
@@ -58,6 +58,9 @@ Examples:
 - `properties = { ... }` is classified as safe property-update intent.
 - LUN `operation = "grow"` is classified as offline-required because the
   storage target, host rescan, multipath, and consumers must be coordinated.
+- iSCSI session `operation = "grow"` is classified as offline-required because
+  target growth, session/path rescan, and dependent consumers must be
+  coordinated.
 - `destroy = true` is classified as destructive and recommends backup,
   migration, snapshot, rename, or unmount-first alternatives depending on the
   target type.
@@ -71,6 +74,7 @@ Lifecycle collections currently accepted by the planner:
 - `pools`
 - `datasets`
 - `luns`
+- `iscsiSessions`
 - `exports`
 - `caches`
 - `snapshots`

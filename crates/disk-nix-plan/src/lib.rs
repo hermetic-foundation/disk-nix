@@ -235,6 +235,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "pools",
         "datasets",
         "luns",
+        "iscsiSessions",
         "exports",
         "caches",
     ] {
@@ -670,12 +671,13 @@ fn classify_operation(
 ) -> (RiskClass, bool, Option<Advice>) {
     match operation {
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
-        Operation::Grow if collection == "luns" => (
+        Operation::Grow if collection == "luns" || collection == "iscsiSessions" => (
             RiskClass::OfflineRequired,
             false,
             Some(Advice {
-                summary: "LUN growth must be coordinated with the storage target and host rescan"
-                    .to_string(),
+                summary:
+                    "network LUN growth must be coordinated with the storage target and host rescan"
+                        .to_string(),
                 alternatives: vec![
                     "grow the target LUN before resizing consumers".to_string(),
                     "rescan SCSI paths and verify multipath before filesystem growth".to_string(),
@@ -880,6 +882,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                 ],
             }),
         },
+        Capability {
+            node_kind: NodeKind::IscsiSession,
+            operation: Operation::Grow,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "iSCSI-backed growth requires target coordination and host rescan"
+                    .to_string(),
+                alternatives: vec![
+                    "grow the target LUN before resizing consumers".to_string(),
+                    "rescan the iSCSI session and verify every path before filesystem growth"
+                        .to_string(),
+                ],
+            }),
+        },
     ]
 }
 
@@ -1030,6 +1046,25 @@ mod tests {
                 .iter()
                 .any(|alternative| alternative.contains("multipath"))
         }));
+    }
+
+    #[test]
+    fn plan_classifies_iscsi_session_growth_as_offline_required() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "operation": "grow"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.actions[0].operation, Operation::Grow);
+        assert_eq!(plan.actions[0].risk, RiskClass::OfflineRequired);
     }
 
     #[test]

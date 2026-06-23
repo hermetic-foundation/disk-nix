@@ -102,6 +102,7 @@
               {
                 system.stateVersion = "26.05";
                 boot.loader.grub.enable = false;
+                boot.initrd.systemd.enable = false;
                 services.disk-nix = {
                   enable = true;
                   luks.devices.cryptroot = {
@@ -118,6 +119,30 @@
                   swaps.primary = {
                     device = "/dev/disk/by-label/swap";
                     priority = 5;
+                  };
+                  nfs.mounts."/srv/shared" = {
+                    source = "nas.example.com:/srv/shared";
+                    fsType = "nfs4";
+                    options = [
+                      "_netdev"
+                      "x-systemd.automount"
+                      "vers=4.2"
+                    ];
+                  };
+                  iscsi = {
+                    initiatorName = "iqn.2026-06.example:host";
+                    discoverPortal = "192.0.2.10:3260";
+                    enableAutoLoginOut = true;
+                    boot = {
+                      enable = true;
+                      target = "iqn.2026-06.example:storage.root";
+                    };
+                    sessions."iqn.2026-06.example:storage.root" = {
+                      operation = "grow";
+                      metadata = {
+                        portal = "192.0.2.10:3260";
+                      };
+                    };
                   };
                   pools.tank = {
                     operation = "rebalance";

@@ -172,6 +172,17 @@ let
       preserveData
       ;
   }) cfg.filesystems;
+  typedNfsMountSpec = lib.mapAttrs (_: mount: {
+    inherit (mount)
+      source
+      fsType
+      mountpoint
+      options
+      neededForBoot
+      preserveData
+      ;
+    device = mount.source;
+  }) cfg.nfs.mounts;
   typedSwapSpec = lib.mapAttrs (_: swap: {
     inherit (swap)
       device
@@ -190,6 +201,38 @@ let
       preserveData
       ;
   }) cfg.luks.devices;
+  typedIscsiSpec = cleanSpecAttrs {
+    inherit (cfg.iscsi)
+      initiatorName
+      discoverPortal
+      enableAutoLoginOut
+      extraConfig
+      ;
+    boot = cleanSpecAttrs {
+      inherit (cfg.iscsi.boot)
+        enable
+        discoverPortal
+        target
+        loginAll
+        logLevel
+        extraIscsiCommands
+        extraConfig
+        ;
+    };
+    sessions = normalizeLifecycleSpec cfg.iscsi.sessions;
+  };
+  filesystemToNixos =
+    filesystem:
+    {
+      inherit (filesystem)
+        device
+        fsType
+        neededForBoot
+        ;
+    }
+    // lib.optionalAttrs (filesystem.options != [ ]) {
+      inherit (filesystem) options;
+    };
 in
 {
   options.services.disk-nix = {
@@ -366,6 +409,148 @@ in
       description = "Typed LUKS declarations used to generate both disk-nix spec and boot.initrd.luks.devices.";
     };
 
+    nfs.mounts = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (
+          { name, ... }:
+          {
+            options = {
+              source = lib.mkOption {
+                type = lib.types.str;
+                description = "NFS source in host:/export form.";
+                example = "nas.example.com:/srv/home";
+              };
+
+              fsType = lib.mkOption {
+                type = lib.types.enum [
+                  "nfs"
+                  "nfs4"
+                ];
+                default = "nfs4";
+                description = "NFS filesystem type passed to NixOS fileSystems.";
+              };
+
+              mountpoint = lib.mkOption {
+                type = lib.types.str;
+                default = name;
+                defaultText = lib.literalExpression "<attribute name>";
+                description = "Mountpoint managed by NixOS.";
+                example = "/home";
+              };
+
+              options = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [
+                  "_netdev"
+                  "nofail"
+                ];
+                description = "Mount options passed to NixOS fileSystems.";
+                example = [
+                  "_netdev"
+                  "x-systemd.automount"
+                  "vers=4.2"
+                ];
+              };
+
+              neededForBoot = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Whether this NFS mount is required in the initrd or early boot.";
+              };
+
+              preserveData = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Whether the planner must preserve remote data for this NFS mount.";
+              };
+            };
+          }
+        )
+      );
+      default = { };
+      description = "Typed NFS client mounts used to generate both disk-nix spec and NixOS fileSystems.";
+    };
+
+    iscsi = {
+      initiatorName = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "iSCSI initiator name used by services.openiscsi and optional boot login.";
+        example = "iqn.2026-06.org.example:host";
+      };
+
+      discoverPortal = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Portal used by the regular open-iscsi service for target discovery.";
+        example = "192.0.2.10:3260";
+      };
+
+      enableAutoLoginOut = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Enable NixOS open-iscsi automatic login/logout for discovered automatic targets.";
+      };
+
+      extraConfig = lib.mkOption {
+        type = lib.types.lines;
+        default = "";
+        description = "Extra lines appended to the regular open-iscsi iscsid.conf.";
+      };
+
+      sessions = lib.mkOption {
+        type = lifecycleAttrs;
+        default = { };
+        description = "Typed iSCSI session lifecycle declarations emitted into the disk-nix planner spec.";
+      };
+
+      boot = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Configure NixOS boot.iscsi-initiator for early-boot iSCSI login.";
+        };
+
+        discoverPortal = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Portal used by boot.iscsi-initiator.";
+          example = "192.0.2.10:3260";
+        };
+
+        target = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "iSCSI target used by boot.iscsi-initiator when loginAll is false.";
+          example = "iqn.2026-06.org.example:storage.root";
+        };
+
+        loginAll = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Log into all discovered boot iSCSI targets instead of one target.";
+        };
+
+        logLevel = lib.mkOption {
+          type = lib.types.int;
+          default = 1;
+          description = "boot.iscsi-initiator log level.";
+        };
+
+        extraIscsiCommands = lib.mkOption {
+          type = lib.types.lines;
+          default = "";
+          description = "Extra iscsiadm commands to run in the initrd after login.";
+        };
+
+        extraConfig = lib.mkOption {
+          type = lib.types.nullOr lib.types.lines;
+          default = null;
+          description = "Extra lines appended to the initrd iscsid.conf.";
+        };
+      };
+    };
+
     volumes = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -469,10 +654,15 @@ in
 
     environment.etc."disk-nix/spec.json".source = json.generate "disk-nix-spec.json" {
       spec = cfg.spec // {
-        filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec;
+        filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec // typedNfsMountSpec;
         swaps = (cfg.spec.swaps or { }) // typedSwapSpec;
         luks = (cfg.spec.luks or { }) // {
           devices = ((cfg.spec.luks or { }).devices or { }) // typedLuksSpec;
+        };
+        iscsi = (cfg.spec.iscsi or { }) // typedIscsiSpec;
+        iscsiSessions = (cfg.spec.iscsiSessions or { }) // normalizeLifecycleSpec cfg.iscsi.sessions;
+        nfs = (cfg.spec.nfs or { }) // {
+          mounts = ((cfg.spec.nfs or { }).mounts or { }) // typedNfsMountSpec;
         };
         volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
@@ -486,19 +676,22 @@ in
       apply = cfg.apply;
     };
 
-    fileSystems = lib.mapAttrs' (_: filesystem: {
-      name = filesystem.mountpoint;
-      value = {
-        inherit (filesystem)
-          device
-          fsType
-          neededForBoot
-          ;
-      }
-      // lib.optionalAttrs (filesystem.options != [ ]) {
-        inherit (filesystem) options;
-      };
-    }) cfg.filesystems;
+    fileSystems =
+      lib.mapAttrs' (_: filesystem: {
+        name = filesystem.mountpoint;
+        value = filesystemToNixos filesystem;
+      }) cfg.filesystems
+      // lib.mapAttrs' (_: mount: {
+        name = mount.mountpoint;
+        value = filesystemToNixos {
+          inherit (mount)
+            fsType
+            neededForBoot
+            options
+            ;
+          device = mount.source;
+        };
+      }) cfg.nfs.mounts;
 
     swapDevices = lib.mapAttrsToList (
       _: swap:
@@ -522,6 +715,32 @@ in
         ;
     }) cfg.luks.devices;
 
+    services.openiscsi = lib.mkIf (cfg.iscsi.initiatorName != null) {
+      enable = true;
+      name = cfg.iscsi.initiatorName;
+      inherit (cfg.iscsi)
+        enableAutoLoginOut
+        extraConfig
+        ;
+      discoverPortal = cfg.iscsi.discoverPortal;
+    };
+
+    boot.iscsi-initiator = lib.mkIf cfg.iscsi.boot.enable {
+      name = cfg.iscsi.initiatorName;
+      inherit (cfg.iscsi.boot)
+        target
+        loginAll
+        logLevel
+        extraIscsiCommands
+        extraConfig
+        ;
+      discoverPortal =
+        if cfg.iscsi.boot.discoverPortal != null then
+          cfg.iscsi.boot.discoverPortal
+        else
+          cfg.iscsi.discoverPortal;
+    };
+
     systemd.services.disk-nix-plan = {
       description = "Validate disk-nix storage apply policy";
       wantedBy = lib.mkIf (cfg.apply.mode == "activation") [ "multi-user.target" ];
@@ -535,6 +754,20 @@ in
       {
         assertion = !(cfg.apply.allowDestructive && cfg.apply.mode == "activation");
         message = "disk-nix refuses destructive activation-mode storage changes.";
+      }
+      {
+        assertion = cfg.iscsi.boot.enable -> cfg.iscsi.initiatorName != null;
+        message = "services.disk-nix.iscsi.boot.enable requires services.disk-nix.iscsi.initiatorName.";
+      }
+      {
+        assertion =
+          cfg.iscsi.boot.enable
+          -> (cfg.iscsi.boot.discoverPortal != null || cfg.iscsi.discoverPortal != null);
+        message = "services.disk-nix.iscsi.boot.enable requires services.disk-nix.iscsi.boot.discoverPortal or services.disk-nix.iscsi.discoverPortal.";
+      }
+      {
+        assertion = cfg.iscsi.boot.enable -> (cfg.iscsi.boot.loginAll || cfg.iscsi.boot.target != null);
+        message = "services.disk-nix.iscsi.boot.enable requires a boot target unless loginAll is true.";
       }
     ];
   };
