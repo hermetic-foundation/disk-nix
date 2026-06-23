@@ -124,6 +124,7 @@ disk-nix mappings
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
+disk-nix usage
 ```
 
 Every focused view accepts `--json`:
@@ -139,6 +140,7 @@ disk-nix mappings --json
 disk-nix mounts --json
 disk-nix network-storage --json
 disk-nix ids --json
+disk-nix usage --json
 ```
 
 The JSON form returns a `StorageGraph` subgraph. Edges are preserved when both
@@ -163,6 +165,7 @@ Use these commands for:
 - `network-storage`: iSCSI sessions, iSCSI targets, LUNs, NFS exports, and NFS
   mounts
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
+- `usage`: nodes with size, used, free, allocated, or utilization data
 
 ## Inspect
 

@@ -124,6 +124,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Summarize capacity, free space, allocation, and utilization.
+    Usage {
+        /// Emit JSON for graph nodes with size or usage information.
+        #[arg(long)]
+        json: bool,
+    },
     /// Inspect a graph node by id, path, name, UUID, label, serial, or property.
     Inspect {
         /// Query value to inspect.
@@ -360,6 +366,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, has_identity)?;
             } else {
                 print_ids(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Usage { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, has_capacity_or_usage)?;
+            } else {
+                print_usage(output, &graph)?;
             }
             Ok(())
         }
@@ -1076,6 +1091,34 @@ fn print_ids(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     Ok(())
 }
 
+fn print_usage(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:>12} {:>12} {:>12} {:>7} PATH",
+        "KIND", "NAME", "SIZE", "USED", "FREE", "ALLOC", "USE%"
+    )?;
+    for node in graph
+        .nodes
+        .iter()
+        .filter(|node| has_capacity_or_usage(node))
+    {
+        let usage = node.usage.as_ref();
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>12} {:>12} {:>12} {:>12} {:>7} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            human_bytes(usage.and_then(|usage| usage.used_bytes)),
+            human_bytes(usage.and_then(|usage| usage.free_bytes)),
+            human_bytes(usage.and_then(|usage| usage.allocated_bytes)),
+            usage_percent(node),
+            node.path.as_deref().unwrap_or("-")
+        )?;
+    }
+    Ok(())
+}
+
 fn has_identity(node: &Node) -> bool {
     !node.identity.is_empty()
 }
@@ -1479,6 +1522,15 @@ fn is_network_storage_node(node: &Node) -> bool {
     )
 }
 
+fn has_capacity_or_usage(node: &Node) -> bool {
+    node.size_bytes.is_some()
+        || node.usage.as_ref().is_some_and(|usage| {
+            usage.used_bytes.is_some()
+                || usage.free_bytes.is_some()
+                || usage.allocated_bytes.is_some()
+        })
+}
+
 fn backing_count(graph: &StorageGraph, node: &Node) -> usize {
     graph
         .edges
@@ -1513,6 +1565,27 @@ fn property_value<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
         .map(|property| property.value.as_str())
 }
 
+fn usage_percent(node: &Node) -> String {
+    let Some(usage) = &node.usage else {
+        return "-".to_string();
+    };
+    let Some(used) = usage.used_bytes else {
+        return "-".to_string();
+    };
+    let capacity = node
+        .size_bytes
+        .or(usage.allocated_bytes)
+        .or_else(|| usage.free_bytes.map(|free| used.saturating_add(free)));
+    let Some(capacity) = capacity else {
+        return "-".to_string();
+    };
+    if capacity == 0 {
+        return "-".to_string();
+    }
+
+    format!("{:.1}%", (used as f64 / capacity as f64) * 100.0)
+}
+
 fn human_bytes(value: Option<u64>) -> String {
     let Some(bytes) = value else {
         return "-".to_string();
@@ -1538,11 +1611,11 @@ fn human_bytes(value: Option<u64>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use disk_nix_model::{Edge, Node, NodeKind, Relationship, StorageGraph};
+    use disk_nix_model::{Edge, Node, NodeKind, Relationship, StorageGraph, Usage};
 
     use super::{
         confirmation_file_accepts, is_network_storage_node, is_partition_node, is_pool_node,
-        is_snapshot_node, snapshot_source,
+        is_snapshot_node, snapshot_source, usage_percent,
     };
 
     #[test]
@@ -1619,5 +1692,33 @@ mod tests {
             .find(|node| node.kind == NodeKind::ZfsSnapshot)
             .expect("snapshot exists");
         assert_eq!(snapshot_source(&graph, snapshot), Some("tank/home"));
+    }
+
+    #[test]
+    fn usage_percent_prefers_size_then_allocated_then_used_plus_free() {
+        let sized = Node::new("filesystem:root", NodeKind::Filesystem, "/")
+            .with_size_bytes(100)
+            .with_usage(Usage {
+                used_bytes: Some(25),
+                free_bytes: Some(75),
+                allocated_bytes: Some(50),
+            });
+        assert_eq!(usage_percent(&sized), "25.0%");
+
+        let allocated =
+            Node::new("btrfs:data", NodeKind::BtrfsFilesystem, "data").with_usage(Usage {
+                used_bytes: Some(25),
+                free_bytes: None,
+                allocated_bytes: Some(50),
+            });
+        assert_eq!(usage_percent(&allocated), "50.0%");
+
+        let used_free =
+            Node::new("swap:/dev/sda3", NodeKind::Swap, "/dev/sda3").with_usage(Usage {
+                used_bytes: Some(25),
+                free_bytes: Some(75),
+                allocated_bytes: None,
+            });
+        assert_eq!(usage_percent(&used_free), "25.0%");
     }
 }

@@ -199,6 +199,7 @@
             schema=$(mktemp)
             scriptOut=$(mktemp)
 
+            ${diskNix}/bin/disk-nix --help | grep -- 'usage'
             ${diskNix}/bin/disk-nix schema > "$schema"
             cmp "$schema" ${diskNix}/share/disk-nix/schema/disk-nix-spec.schema.json
             jq -e '
