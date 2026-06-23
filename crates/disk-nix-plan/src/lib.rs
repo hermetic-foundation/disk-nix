@@ -1041,11 +1041,15 @@ fn add_filesystem_property_actions(
     let desired_size = desired_size(filesystem);
 
     for (property, value) in properties {
+        if fs_type == "btrfs" && is_btrfs_balance_filter_property(property) {
+            continue;
+        }
+        let (risk, advice) = classify_filesystem_property_change(fs_type, property);
         actions.push(PlannedAction {
             id: format!("filesystems:{name}:set-property:{property}"),
             description: format!("set property {property} on filesystem {name}"),
             operation: Operation::SetProperty,
-            risk: RiskClass::Safe,
+            risk,
             destructive: false,
             context: ActionContext {
                 property: Some(property.to_string()),
@@ -1059,9 +1063,56 @@ fn add_filesystem_property_actions(
                     desired_size.clone(),
                 )
             },
-            advice: None,
+            advice,
         });
     }
+}
+
+fn classify_filesystem_property_change(
+    fs_type: &str,
+    property: &str,
+) -> (RiskClass, Option<Advice>) {
+    if is_filesystem_property_supported(fs_type, property) {
+        return (RiskClass::Safe, None);
+    }
+
+    (
+        RiskClass::Unsupported,
+        Some(Advice {
+            summary: format!(
+                "{fs_type} filesystem property {property} is not mapped to a safe command"
+            ),
+            alternatives: vec![
+                "use label, filesystem.label, btrfs.label, or ext.label when changing filesystem labels"
+                    .to_string(),
+                "use ZFS dataset declarations for arbitrary zfs set property updates".to_string(),
+                "apply unsupported filesystem property changes manually after reviewing filesystem-specific tooling"
+                    .to_string(),
+            ],
+        }),
+    )
+}
+
+fn is_filesystem_property_supported(fs_type: &str, property: &str) -> bool {
+    match fs_type {
+        "btrfs" => matches!(property, "label" | "btrfs.label" | "filesystem.label"),
+        "ext2" | "ext3" | "ext4" => {
+            matches!(property, "label" | "ext.label" | "filesystem.label")
+        }
+        "zfs" => true,
+        _ => false,
+    }
+}
+
+fn is_btrfs_balance_filter_property(property: &str) -> bool {
+    let property = property
+        .strip_prefix("btrfs.balance.")
+        .or_else(|| property.strip_prefix("balance."))
+        .unwrap_or(property);
+    matches!(
+        property,
+        "data" | "d" | "metadata" | "meta" | "m" | "system" | "s"
+    )
 }
 
 fn add_swap_actions(actions: &mut Vec<PlannedAction>, name: &str, swap: &Value) {
@@ -3596,7 +3647,8 @@ mod tests {
                   "device": "/dev/disk/by-label/data",
                   "fsType": "btrfs",
                   "properties": {
-                    "label": "bulk-data"
+                    "label": "bulk-data",
+                    "compression": "zstd"
                   }
                 }
               }
@@ -3604,6 +3656,8 @@ mod tests {
         )
         .expect("plan should parse");
 
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.unsupported_count, 1);
         let action = plan
             .actions
             .iter()
@@ -3621,6 +3675,20 @@ mod tests {
         assert_eq!(action.context.mountpoint.as_deref(), Some("/data"));
         assert_eq!(action.context.property.as_deref(), Some("label"));
         assert_eq!(action.context.property_value.as_deref(), Some("bulk-data"));
+
+        let unsupported = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:data:set-property:compression")
+            .expect("unsupported filesystem property action should exist");
+        assert_eq!(unsupported.operation, Operation::SetProperty);
+        assert_eq!(unsupported.risk, RiskClass::Unsupported);
+        assert!(unsupported.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("ZFS dataset"))
+        }));
     }
 
     #[test]
@@ -3670,6 +3738,8 @@ mod tests {
         )
         .expect("plan should parse");
 
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.unsupported_count, 0);
         let action = plan
             .actions
             .iter()

@@ -6510,14 +6510,13 @@ mod tests {
               "spec": {
                 "filesystems": {
                   "data": {
-                    "mountpoint": "/data",
-                    "fsType": "btrfs",
-                    "properties": {
-                      "label": "bulk-data",
-                      "unknownBtrfsProperty": "value"
-                    }
+                  "mountpoint": "/data",
+                  "fsType": "btrfs",
+                  "properties": {
+                    "label": "bulk-data"
                   }
                 }
+              }
               }
             }"#,
         )
@@ -6533,21 +6532,8 @@ mod tests {
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
-        assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "filesystems:data:set-property:unknownBtrfsProperty"
-                && step.commands.iter().any(|command| {
-                    command.argv
-                        == [
-                            "<btrfs-filesystem-property-tool>",
-                            "/data",
-                            "unknownBtrfsProperty",
-                        ]
-                        && command.readiness == CommandReadiness::NeedsDomainImplementation
-                        && command.unresolved_inputs == ["supported Btrfs filesystem property"]
-                })
-        }));
         assert!(report.command_summary.ready_count >= 3);
-        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
     }
 
     #[test]
@@ -6608,8 +6594,7 @@ mod tests {
                   "operation": "rebalance",
                   "properties": {
                     "balance.data": "usage=50",
-                    "balance.metadata": "usage=75",
-                    "compression": "zstd"
+                    "balance.metadata": "usage=75"
                   }
                 }
               },

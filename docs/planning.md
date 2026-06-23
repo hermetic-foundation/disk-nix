@@ -142,8 +142,10 @@ Examples:
 - Loop-device creation and capacity refresh are online; detach is
   offline-required because mounts, mappers, and other consumers must be stopped
   before the mapping is removed.
-- `properties = { ... }` is classified as safe property-update intent. Btrfs
-  subvolume `readonly`, `readOnly`, or `ro` declarations render
+- Supported `properties = { ... }` declarations are classified as safe
+  property-update intent. Unsupported filesystem and Btrfs subvolume property
+  keys are classified as unsupported with alternatives. Btrfs subvolume
+  `readonly`, `readOnly`, or `ro` declarations render
   `btrfs property set -ts <path> ro true|false`.
 - Btrfs qgroup `properties.limit` or `properties.maxReferenced` render
   `btrfs qgroup limit <size|none> <qgroupid> <path>`;
@@ -319,8 +321,9 @@ declared data, metadata, and system filters from lifecycle properties.
 Btrfs filesystem label property updates render
 `btrfs filesystem label <path> <label>`. Ext filesystem label updates render
 `e2label <device> <label>` when the filesystem declaration includes a backing
-device; missing devices and unsupported filesystem property keys stay marked
-`needs-domain-implementation`.
+device; missing devices stay marked `needs-domain-implementation`, while
+unsupported filesystem property keys are classified as unsupported before
+execution.
 Btrfs subvolume property updates only treat read-only aliases (`readOnly`,
 `readonly`, `ro`, `btrfs.readonly`, and `btrfs.ro`) as safe planned property
 changes. Other Btrfs subvolume property keys are classified as unsupported so
