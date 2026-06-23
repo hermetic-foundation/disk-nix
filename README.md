@@ -212,6 +212,11 @@ Btrfs filesystem device topology plans render `btrfs device add`,
 `btrfs replace start`, and allocation-inspected `btrfs device remove` commands
 for review. Removal is blocked by default and requires explicit
 `allowPotentialDataLoss` policy before execution.
+bcachefs filesystem lifecycle plans render `bcachefs device resize`,
+`bcachefs device add`, `bcachefs data rereplicate`, `bcachefs device remove`,
+and `bcachefs scrub` commands for mounted bcachefs filesystems. Replacement is
+modeled as add replacement capacity, rereplicate, then remove the old member so
+each data-preserving step stays reviewable.
 Btrfs filesystem rebalance plans render `btrfs balance start` and use declared
 data, metadata, and system balance filters from lifecycle properties when set.
 Btrfs scrub plans render `btrfs scrub start -B`; ZFS pool scrub plans render

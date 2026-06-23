@@ -387,6 +387,11 @@ logical cache names remain marked `needs-domain-implementation`.
 Btrfs filesystem device-removal plans use Btrfs allocation inspection and
 domain-specific `btrfs device remove` rendering, but the mutating command is
 blocked by default until `allowPotentialDataLoss=true` is set.
+bcachefs filesystem lifecycle plans render `bcachefs device resize`,
+`bcachefs device add`, `bcachefs data rereplicate`, `bcachefs device remove`,
+and `bcachefs scrub` commands for mounted bcachefs filesystems. Replacement is
+modeled as add replacement capacity, rereplicate, then remove the old member so
+the operator can review each data-preserving step.
 Swapfile growth command plans render `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon`; block-device swap growth keeps the backing resize command
 non-ready until the partition, LV, LUN, or other backing layer is selected.

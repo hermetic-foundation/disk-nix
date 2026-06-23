@@ -488,6 +488,13 @@ Btrfs filesystem device topology plans support add, replace, and remove
 operations. Removal stays potential-data-loss, while rebalance plans render
 `btrfs balance start` with optional declared data, metadata, and system filters
 from lifecycle properties.
+bcachefs filesystem topology plans support add, replace, remove, grow,
+rebalance, and scrub operations. Device growth uses `bcachefs device resize`
+against a declared member device and desired size. Device add/remove uses
+`bcachefs device add` and `bcachefs device remove` against the mounted
+filesystem. Replacement is rendered as add replacement capacity, `bcachefs data rereplicate`, then remove the old member, keeping each data-preserving step
+visible for review. Rebalance-style plans use `bcachefs data rereplicate`, and
+scrub plans use `bcachefs scrub`.
 Btrfs filesystem label property updates render
 `btrfs filesystem label <path> <label>`. Ext filesystem label updates render
 `e2label <device> <label>` when the filesystem declaration includes a backing

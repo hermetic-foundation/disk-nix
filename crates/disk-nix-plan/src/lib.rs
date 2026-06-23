@@ -5026,6 +5026,49 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::Filesystem,
+            operation: Operation::AddDevice,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "multi-device filesystem growth attaches reviewed member devices"
+                    .to_string(),
+                alternatives: vec![
+                    "verify stable by-id paths before adding devices".to_string(),
+                    "prefer replacement workflows when removing old media after adding capacity"
+                        .to_string(),
+                    "rebalance or rereplicate data after changing member topology".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Filesystem,
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "filesystem device replacement preserves data while changing members"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement capacity before evacuating old media".to_string(),
+                    "review filesystem-specific replacement status until convergence"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Filesystem,
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "filesystem device removal requires enough remaining replicas and capacity"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement capacity before removing old media".to_string(),
+                    "take a backup or snapshot before topology contraction".to_string(),
+                    "rebalance or rereplicate data before final member removal".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::ZfsPool,
             operation: Operation::Scrub,
             risk: RiskClass::Online,
@@ -7390,6 +7433,24 @@ mod tests {
     #[test]
     fn btrfs_filesystem_capabilities_cover_device_topology_updates() {
         let capabilities = default_capabilities();
+        for (operation, risk) in [
+            (Operation::AddDevice, RiskClass::Online),
+            (Operation::ReplaceDevice, RiskClass::OfflineRequired),
+            (Operation::RemoveDevice, RiskClass::PotentialDataLoss),
+        ] {
+            let capability = capabilities
+                .iter()
+                .find(|capability| {
+                    capability.node_kind == NodeKind::Filesystem
+                        && capability.operation == operation
+                })
+                .unwrap_or_else(|| {
+                    panic!("generic filesystem {operation:?} capability should exist")
+                });
+            assert_eq!(capability.risk, risk);
+            assert!(capability.advice.is_some());
+        }
+
         let add = capabilities
             .iter()
             .find(|capability| {

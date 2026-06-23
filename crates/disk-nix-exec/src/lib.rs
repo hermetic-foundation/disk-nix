@@ -3870,6 +3870,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::AddDevice => {
             let target = target.unwrap_or("<target>");
+            let fs_type = action.context.fs_type.as_deref();
             let device = action
                 .context
                 .device
@@ -3882,10 +3883,41 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect target health before adding a device",
                     ),
-                    add_device_command(collection, target, device),
+                    add_device_command(collection, fs_type, target, device),
                 ],
                 vec![
                     "verify the new device identity and redundancy policy before attaching it"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::ReplaceDevice
+            if collection == Some("filesystems")
+                && action.context.fs_type.as_deref() == Some("bcachefs") =>
+        {
+            let target = target.unwrap_or("<bcachefs-mountpoint>");
+            let from = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| action_id_suffix(&action.id, "replace-device"));
+            let to = action.context.replacement.as_deref();
+            (
+                vec![
+                    bcachefs_usage_command(
+                        target,
+                        "inspect bcachefs allocation before replacement",
+                    ),
+                    bcachefs_add_device_command(target, to),
+                    bcachefs_rereplicate_command(target),
+                    bcachefs_remove_device_command(target, from),
+                ],
+                vec![
+                    "add replacement capacity before evacuating the old bcachefs member"
+                        .to_string(),
+                    "wait for rereplication to converge before removing the old device".to_string(),
+                    "keep the old device available until post-apply verification passes"
                         .to_string(),
                 ],
                 true,
@@ -3966,6 +3998,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::ReplaceDevice => {
             let target = target.unwrap_or("<target>");
+            let fs_type = action.context.fs_type.as_deref();
             let from = action
                 .context
                 .device
@@ -3979,7 +4012,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect redundancy and source device health before replacement",
                     ),
-                    replace_device_command(collection, target, from, to),
+                    replace_device_command(collection, fs_type, target, from, to),
                 ],
                 vec![
                     "keep the old device available until post-apply verification passes"
@@ -3990,8 +4023,12 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Rebalance => {
             let target = target.unwrap_or("<target>");
-            let rebalance =
-                rebalance_command(collection, target, &action.context.property_assignments);
+            let rebalance = rebalance_command(
+                collection,
+                action.context.fs_type.as_deref(),
+                target,
+                &action.context.property_assignments,
+            );
             (
                 vec![
                     command(
@@ -4017,7 +4054,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect pool or filesystem health before scrub",
                     ),
-                    scrub_command(collection, target),
+                    scrub_command(collection, action.context.fs_type.as_deref(), target),
                 ],
                 vec!["monitor scrub progress and health until completion".to_string()],
                 true,
@@ -6078,28 +6115,52 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::RemoveDevice if collection == Some("filesystems") => {
-            let target = target.unwrap_or("<btrfs-filesystem>");
+            let fs_type = action.context.fs_type.as_deref();
+            let target = target.unwrap_or(match fs_type {
+                Some("bcachefs") => "<bcachefs-mountpoint>",
+                _ => "<btrfs-filesystem>",
+            });
             let device = action
                 .context
                 .device
                 .as_deref()
                 .or_else(|| action_id_suffix(&action.id, "remove-device"));
-            (
-                vec![
-                    command(
-                        ["btrfs", "filesystem", "usage", "-b", target],
-                        false,
-                        "inspect Btrfs allocation and free space before device removal",
-                    ),
-                    btrfs_remove_device_command(target, device),
-                ],
-                vec![
-                    "remove a Btrfs device only when remaining data and metadata space are sufficient"
-                        .to_string(),
-                    "run or review balance progress until device evacuation completes".to_string(),
-                ],
-                true,
-            )
+            if fs_type == Some("bcachefs") {
+                (
+                    vec![
+                        bcachefs_usage_command(
+                            target,
+                            "inspect bcachefs allocation and free space before device removal",
+                        ),
+                        bcachefs_rereplicate_command(target),
+                        bcachefs_remove_device_command(target, device),
+                    ],
+                    vec![
+                        "remove a bcachefs device only when remaining replicas and capacity are sufficient"
+                            .to_string(),
+                        "rereplicate or migrate data before removing the reviewed member"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            } else {
+                (
+                    vec![
+                        command(
+                            ["btrfs", "filesystem", "usage", "-b", target],
+                            false,
+                            "inspect Btrfs allocation and free space before device removal",
+                        ),
+                        btrfs_remove_device_command(target, device),
+                    ],
+                    vec![
+                        "remove a Btrfs device only when remaining data and metadata space are sufficient"
+                            .to_string(),
+                        "run or review balance progress until device evacuation completes".to_string(),
+                    ],
+                    true,
+                )
+            }
         }
         Operation::RemoveDevice if collection == Some("caches") => {
             let target = target.unwrap_or("<cache-device>");
@@ -6339,6 +6400,7 @@ fn filesystem_grow_command(
             true,
             "grow a Btrfs filesystem to the requested or maximum visible device size",
         ),
+        "bcachefs" => bcachefs_device_resize_command(device, desired_size),
         "zfs" => match desired_size {
             Some(size) => command_vec(
                 vec![
@@ -6819,10 +6881,14 @@ fn action_id_suffix<'a>(action_id: &'a str, operation: &str) -> Option<&'a str> 
 
 fn add_device_command(
     collection: Option<&str>,
+    fs_type: Option<&str>,
     target: &str,
     device: Option<&str>,
 ) -> ExecutionCommand {
     let Some(device) = device else {
+        if collection == Some("filesystems") && fs_type == Some("bcachefs") {
+            return bcachefs_add_device_command(target, None);
+        }
         return command_with_readiness(
             ["<add-device-tool>", target, "<device>"],
             true,
@@ -6856,6 +6922,9 @@ fn add_device_command(
             lvm_cache_attach_command(lvm_volume_target_path(Some(target)), Some(device))
         }
         Some("caches") => bcache_attach_command(target, device),
+        Some("filesystems") if fs_type == Some("bcachefs") => {
+            bcachefs_add_device_command(target, Some(device))
+        }
         Some("filesystems") => command(
             ["btrfs", "device", "add", device, target],
             true,
@@ -6873,6 +6942,7 @@ fn add_device_command(
 
 fn replace_device_command(
     collection: Option<&str>,
+    fs_type: Option<&str>,
     target: &str,
     from: Option<&str>,
     to: Option<&str>,
@@ -6896,6 +6966,22 @@ fn replace_device_command(
             ["zpool", "replace", target, from, to],
             true,
             "replace a ZFS pool device and resilver before detaching the old device",
+        ),
+        Some("filesystems") if fs_type == Some("bcachefs") => command_vec(
+            vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                format!(
+                    "bcachefs device add {} {} && bcachefs data rereplicate {} && bcachefs device remove {} {}",
+                    shell_quote(target),
+                    shell_quote(to),
+                    shell_quote(target),
+                    shell_quote(target),
+                    shell_quote(from)
+                ),
+            ],
+            true,
+            "replace a bcachefs member by adding replacement capacity, rereplicating, then removing the old device",
         ),
         Some("filesystems") => command(
             ["btrfs", "replace", "start", from, to, target],
@@ -7280,8 +7366,95 @@ fn btrfs_remove_device_command(target: &str, device: Option<&str>) -> ExecutionC
     }
 }
 
+fn bcachefs_usage_command(target: &str, note: &'static str) -> ExecutionCommand {
+    command(["bcachefs", "fs", "usage", target], false, note)
+}
+
+fn bcachefs_add_device_command(target: &str, device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["bcachefs", "device", "add", target, device],
+            true,
+            "add the reviewed device to the mounted bcachefs filesystem",
+        ),
+        None => command_with_readiness(
+            ["bcachefs", "device", "add", target, "<device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device to add"],
+            "add a bcachefs member after selecting the reviewed device",
+        ),
+    }
+}
+
+fn bcachefs_remove_device_command(target: &str, device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["bcachefs", "device", "remove", target, device],
+            true,
+            "remove the reviewed device from the mounted bcachefs filesystem",
+        ),
+        None => command_with_readiness(
+            ["bcachefs", "device", "remove", target, "<device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device to remove"],
+            "remove a bcachefs member after selecting the reviewed device",
+        ),
+    }
+}
+
+fn bcachefs_rereplicate_command(target: &str) -> ExecutionCommand {
+    command(
+        ["bcachefs", "data", "rereplicate", target],
+        true,
+        "rereplicate bcachefs data after topology or replica-policy changes",
+    )
+}
+
+fn bcachefs_device_resize_command(
+    device: Option<&str>,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
+    match (device, desired_size) {
+        (Some(device), Some(size)) => command(
+            ["bcachefs", "device", "resize", device, size],
+            true,
+            "resize the reviewed bcachefs member device to the desired size",
+        ),
+        (Some(device), None) => command_with_readiness(
+            ["bcachefs", "device", "resize", device, "<size>"],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired bcachefs member size"],
+            "resize the reviewed bcachefs member after selecting the desired size",
+        ),
+        (None, Some(size)) => command_vec_with_readiness(
+            vec!["bcachefs", "device", "resize", "<bcachefs-device>", size],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["bcachefs member device"],
+            "resize the bcachefs member after selecting the device",
+        ),
+        (None, None) => command_with_readiness(
+            [
+                "bcachefs",
+                "device",
+                "resize",
+                "<bcachefs-device>",
+                "<size>",
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["bcachefs member device", "desired bcachefs member size"],
+            "resize the bcachefs member after selecting device and desired size",
+        ),
+    }
+}
+
 fn rebalance_command(
     collection: Option<&str>,
+    fs_type: Option<&str>,
     target: &str,
     property_assignments: &[String],
 ) -> ExecutionCommand {
@@ -7291,6 +7464,7 @@ fn rebalance_command(
             true,
             "scrub the pool after topology changes; ZFS has no generic rebalance command",
         ),
+        Some("filesystems") if fs_type == Some("bcachefs") => bcachefs_rereplicate_command(target),
         Some("filesystems") => {
             let mut argv = vec![
                 "btrfs".to_string(),
@@ -7315,12 +7489,21 @@ fn rebalance_command(
     }
 }
 
-fn scrub_command(collection: Option<&str>, target: &str) -> ExecutionCommand {
+fn scrub_command(
+    collection: Option<&str>,
+    fs_type: Option<&str>,
+    target: &str,
+) -> ExecutionCommand {
     match collection {
         Some("pools") => command(
             ["zpool", "scrub", target],
             true,
             "start the reviewed ZFS pool scrub",
+        ),
+        Some("filesystems") if fs_type == Some("bcachefs") => command(
+            ["bcachefs", "scrub", target],
+            true,
+            "run the reviewed bcachefs scrub",
         ),
         Some("filesystems") => command(
             ["btrfs", "scrub", "start", "-B", target],
@@ -11691,6 +11874,243 @@ mod tests {
                 .iter()
                 .any(|check| check.contains("Btrfs device list matches desired topology"))
         );
+    }
+
+    #[test]
+    fn bcachefs_filesystem_lifecycle_reports_domain_commands() {
+        let grow = PlannedAction {
+            id: "filesystem:bulk:grow".to_string(),
+            description: "grow bcachefs member".to_string(),
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                name: Some("bulk".to_string()),
+                target: Some("/bulk".to_string()),
+                device: Some("/dev/disk/by-id/bcachefs-member".to_string()),
+                fs_type: Some("bcachefs".to_string()),
+                desired_size: Some("4TiB".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let add = PlannedAction {
+            id: "filesystems:bulk:add-device:/dev/disk/by-id/new-bcachefs-device".to_string(),
+            description: "add bcachefs member".to_string(),
+            operation: Operation::AddDevice,
+            risk: RiskClass::Online,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                target: Some("/bulk".to_string()),
+                device: Some("/dev/disk/by-id/new-bcachefs-device".to_string()),
+                fs_type: Some("bcachefs".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let remove = PlannedAction {
+            id: "filesystems:bulk:remove-device:/dev/disk/by-id/old-bcachefs-device".to_string(),
+            description: "remove bcachefs member".to_string(),
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                target: Some("/bulk".to_string()),
+                device: Some("/dev/disk/by-id/old-bcachefs-device".to_string()),
+                fs_type: Some("bcachefs".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let replace = PlannedAction {
+            id: "filesystems:bulk:replace-device:/dev/disk/by-id/old-bcachefs-device".to_string(),
+            description: "replace bcachefs member".to_string(),
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                target: Some("/bulk".to_string()),
+                device: Some("/dev/disk/by-id/old-bcachefs-device".to_string()),
+                replacement: Some("/dev/disk/by-id/new-bcachefs-device".to_string()),
+                fs_type: Some("bcachefs".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let rebalance = PlannedAction {
+            id: "filesystems:bulk:rebalance".to_string(),
+            description: "rereplicate bcachefs data".to_string(),
+            operation: Operation::Rebalance,
+            risk: RiskClass::Online,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                target: Some("/bulk".to_string()),
+                fs_type: Some("bcachefs".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let scrub = PlannedAction {
+            id: "filesystems:bulk:scrub".to_string(),
+            description: "scrub bcachefs".to_string(),
+            operation: Operation::Scrub,
+            risk: RiskClass::Online,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                target: Some("/bulk".to_string()),
+                fs_type: Some("bcachefs".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+
+        let (grow_commands, _, _) = commands_for_action(&grow);
+        let (add_commands, _, _) = commands_for_action(&add);
+        let (remove_commands, remove_notes, _) = commands_for_action(&remove);
+        let (replace_commands, replace_notes, _) = commands_for_action(&replace);
+        let (rebalance_commands, _, _) = commands_for_action(&rebalance);
+        let (scrub_commands, _, _) = commands_for_action(&scrub);
+
+        assert!(grow_commands.iter().any(|command| {
+            command.argv
+                == [
+                    "bcachefs",
+                    "device",
+                    "resize",
+                    "/dev/disk/by-id/bcachefs-member",
+                    "4TiB",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(add_commands.iter().any(|command| {
+            command.argv
+                == [
+                    "bcachefs",
+                    "device",
+                    "add",
+                    "/bulk",
+                    "/dev/disk/by-id/new-bcachefs-device",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(remove_commands.iter().any(|command| {
+            command.argv == ["bcachefs", "fs", "usage", "/bulk"] && !command.mutates
+        }));
+        assert!(remove_commands.iter().any(|command| {
+            command.argv == ["bcachefs", "data", "rereplicate", "/bulk"] && command.mutates
+        }));
+        assert!(remove_commands.iter().any(|command| {
+            command.argv
+                == [
+                    "bcachefs",
+                    "device",
+                    "remove",
+                    "/bulk",
+                    "/dev/disk/by-id/old-bcachefs-device",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(
+            remove_notes
+                .iter()
+                .any(|note| note.contains("remaining replicas"))
+        );
+        assert!(replace_commands.iter().any(|command| {
+            command.argv
+                == [
+                    "bcachefs",
+                    "device",
+                    "add",
+                    "/bulk",
+                    "/dev/disk/by-id/new-bcachefs-device",
+                ]
+        }));
+        assert!(replace_commands.iter().any(|command| {
+            command.argv
+                == [
+                    "bcachefs",
+                    "device",
+                    "remove",
+                    "/bulk",
+                    "/dev/disk/by-id/old-bcachefs-device",
+                ]
+        }));
+        assert!(
+            replace_notes
+                .iter()
+                .any(|note| note.contains("replacement capacity"))
+        );
+        assert!(rebalance_commands.iter().any(|command| {
+            command.argv == ["bcachefs", "data", "rereplicate", "/bulk"] && command.mutates
+        }));
+        assert!(
+            scrub_commands.iter().any(|command| {
+                command.argv == ["bcachefs", "scrub", "/bulk"] && command.mutates
+            })
+        );
+    }
+
+    #[test]
+    fn bcachefs_filesystem_update_commands_report_missing_inputs() {
+        let grow = PlannedAction {
+            id: "filesystem:bulk:grow".to_string(),
+            description: "grow bcachefs member".to_string(),
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                target: Some("/bulk".to_string()),
+                fs_type: Some("bcachefs".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let add = PlannedAction {
+            id: "filesystems:bulk:add-device".to_string(),
+            description: "add bcachefs member".to_string(),
+            operation: Operation::AddDevice,
+            risk: RiskClass::Online,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                target: Some("/bulk".to_string()),
+                fs_type: Some("bcachefs".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+
+        let (grow_commands, _, _) = commands_for_action(&grow);
+        let (add_commands, _, _) = commands_for_action(&add);
+
+        assert!(grow_commands.iter().any(|command| {
+            command.argv
+                == [
+                    "bcachefs",
+                    "device",
+                    "resize",
+                    "<bcachefs-device>",
+                    "<size>",
+                ]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs
+                    == ["bcachefs member device", "desired bcachefs member size"]
+        }));
+        assert!(add_commands.iter().any(|command| {
+            command.argv == ["bcachefs", "device", "add", "/bulk", "<device>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["device to add"]
+        }));
     }
 
     #[test]
