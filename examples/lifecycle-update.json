@@ -91,6 +91,9 @@
     "vg0/newthin": {
       "operation": "create",
       "desiredSize": "100GiB"
+    },
+    "vg0/reporting": {
+      "operation": "rescan"
     }
   },
   "volumeGroups": {

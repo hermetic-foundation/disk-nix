@@ -853,6 +853,32 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent thin volumes remain active and monitored".to_string(),
             ],
         ),
+        Operation::Rescan if collection == Some("thinPools") => (
+            vec![
+                command(
+                    [
+                        "lvs",
+                        "--reportformat",
+                        "json",
+                        "-o",
+                        "lv_name,lv_size,data_percent,metadata_percent,seg_monitor",
+                        target,
+                    ],
+                    false,
+                    "verify thin pool data, metadata, and monitoring state after refresh",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify thin pool graph node and dependent thin volumes after refresh",
+                ),
+            ],
+            vec![
+                "thin pool data and metadata utilization are reviewed before further allocation"
+                    .to_string(),
+                "monitoring and autoextend state match the intended safety policy".to_string(),
+            ],
+        ),
         Operation::Create if collection == Some("thinPools") => (
             vec![
                 command(
@@ -2636,6 +2662,28 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "extend metadata before it approaches exhaustion".to_string(),
                     "verify thin pool autoextend policy and monitoring before growth".to_string(),
                     "review thin volume overcommit before adding virtual capacity".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("thinPools") => {
+            let target = lvm_volume_target_path(target);
+            (
+                vec![
+                    lvm_lvs_report_command(
+                        target,
+                        Some("lv_name,lv_size,data_percent,metadata_percent,seg_monitor"),
+                        "refresh thin pool data, metadata, and monitoring state",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target.unwrap_or("<thin-pool>")],
+                        false,
+                        "inspect modeled thin pool relationships after status refresh",
+                    ),
+                ],
+                vec![
+                    "use grow when data or metadata capacity must change".to_string(),
+                    "review utilization before allocating more thin volumes".to_string(),
                 ],
                 true,
             )
@@ -14413,6 +14461,9 @@ mod tests {
                     "operation": "grow",
                     "desiredSize": "500GiB"
                   },
+                  "vg0/reporting": {
+                    "operation": "rescan"
+                  },
                   "badthin": {
                     "operation": "create"
                   },
@@ -14453,6 +14504,28 @@ mod tests {
                 command.argv == ["lvextend", "--size", "500GiB", "vg0/pool"]
                     && command.readiness == CommandReadiness::Ready
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "thinpools:vg0/reporting:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvs",
+                            "--reportformat",
+                            "json",
+                            "-o",
+                            "lv_name,lv_size,data_percent,metadata_percent,seg_monitor",
+                            "vg0/reporting",
+                        ]
+                })
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "vg0/reporting"])
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "thinpools:badthin:create"
@@ -14507,6 +14580,23 @@ mod tests {
                         "vg0/pool",
                     ]
             })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "thinpools:vg0/reporting:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvs",
+                            "--reportformat",
+                            "json",
+                            "-o",
+                            "lv_name,lv_size,data_percent,metadata_percent,seg_monitor",
+                            "vg0/reporting",
+                        ]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "vg0/reporting", "--json"]
+                })
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "thinpools:vg0/oldpool:destroy"

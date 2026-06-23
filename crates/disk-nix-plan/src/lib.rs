@@ -3140,6 +3140,20 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "thinPools" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "thin pool rescan refreshes data, metadata, monitoring, and graph status"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow only when data or metadata capacity must change".to_string(),
+                    "verify data and metadata utilization before creating more thin volumes"
+                        .to_string(),
+                    "review autoextend and monitoring policy before pool exhaustion".to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "lvmCaches" => (
             RiskClass::OfflineRequired,
             false,
@@ -4063,7 +4077,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG/cache metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4081,6 +4095,8 @@ fn classify_operation(
                     "use physicalVolumes or volumeGroups operation = \"rescan\" to refresh LVM metadata"
                         .to_string(),
                     "use lvmCaches.<origin>.operation = \"rescan\" to refresh LVM cache status and utilization"
+                        .to_string(),
+                    "use thinPools.<pool>.operation = \"rescan\" to refresh LVM thin-pool utilization"
                         .to_string(),
                     "use mdRaids.<name>.operation = \"rescan\" to refresh MD RAID metadata inventory"
                         .to_string(),
@@ -4827,6 +4843,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "extend metadata before it approaches exhaustion".to_string(),
                     "verify autoextend policy and overcommit before growth".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmThinPool,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "thin pool status refresh reads data and metadata utilization"
+                    .to_string(),
+                alternatives: vec![
+                    "grow data or metadata only after reviewing utilization".to_string(),
+                    "verify monitoring and autoextend before overcommitting thin volumes"
+                        .to_string(),
                 ],
             }),
         },
@@ -7011,6 +7041,7 @@ mod tests {
                 Operation::RemoveDevice,
                 RiskClass::PotentialDataLoss,
             ),
+            (NodeKind::LvmThinPool, Operation::Rescan, RiskClass::Online),
             (NodeKind::CacheDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::VdoVolume, Operation::Rescan, RiskClass::Online),
             (NodeKind::MdRaid, Operation::Create, RiskClass::Destructive),
@@ -9072,6 +9103,9 @@ mod tests {
                   "operation": "grow",
                   "desiredSize": "500GiB"
                 },
+                "vg0/reporting": {
+                  "operation": "rescan"
+                },
                 "vg0/oldpool": {
                   "destroy": true
                 }
@@ -9080,7 +9114,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 4);
         assert_eq!(plan.summary.offline_required_count, 0);
         assert_eq!(plan.summary.destructive_count, 1);
         let create = plan
@@ -9105,6 +9139,20 @@ mod tests {
                     .iter()
                     .any(|alternative| alternative.contains("overcommit"))
         }));
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "thinpools:vg0/reporting:rescan")
+            .expect("thin pool rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
+        assert!(
+            rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("thin pool rescan refreshes") })
+        );
         let destroy = plan
             .actions
             .iter()

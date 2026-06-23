@@ -406,6 +406,7 @@ Example lifecycle planning through NixOS options:
       operation = "create";
       desiredSize = "100GiB";
     };
+    thinPools."vg0/reporting".operation = "rescan";
     lvmSnapshots."vg0/root-snap" = {
       operation = "snapshot";
       target = "vg0/root";

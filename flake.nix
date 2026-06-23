@@ -352,6 +352,7 @@
                 operation = "create";
                 desiredSize = "100GiB";
               };
+              thinPools."vg0/reporting".operation = "rescan";
               lvmSnapshots."vg0/root-snap" = {
                 operation = "snapshot";
                 target = "vg0/root";
@@ -704,7 +705,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 83
+              .summary.actionCount == 84
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -738,6 +739,7 @@
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/newthin:create" and .risk == "online"))
+              and (.actions | any(.id == "thinpools:vg0/reporting:rescan" and .risk == "online"))
               and (.actions | any(.id == "lvmsnapshots:vg0/root-snap:snapshot" and .risk == "reversible"))
               and (.actions | any(.id == "lvmcaches:vg0/root:create" and .risk == "offline-required"))
               and (.actions | any(.id == "lvmCaches:vg0/root:set-property:lvm.cache-mode" and .risk == "safe"))
@@ -996,6 +998,7 @@
                   and .spec.thinPools."vg0/thinpool".desiredSize == "500GiB"
                   and .spec.thinPools."vg0/newthin".operation == "create"
                   and .spec.thinPools."vg0/newthin".desiredSize == "100GiB"
+                  and .spec.thinPools."vg0/reporting".operation == "rescan"
                   and .spec.lvmSnapshots."vg0/root-snap".operation == "snapshot"
                   and .spec.lvmSnapshots."vg0/root-snap".target == "vg0/root"
                   and .spec.lvmSnapshots."vg0/root-snap".desiredSize == "20GiB"

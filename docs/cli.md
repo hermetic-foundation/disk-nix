@@ -489,9 +489,10 @@ declarations still map to the same access-material command plans.
 add/change plans require a LUKS backing device and new key file; token imports
 require a token JSON file; removal also requires a keyslot number or token id.
 LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
-and policy-gated `lvremove` commands for `thinPools` lifecycle declarations,
-with separate unresolved-input markers for target form and size. Thin-pool grow
-and remove commands require the canonical `vg/pool` target form.
+read-only `lvs` rescans, and policy-gated `lvremove` commands for `thinPools`
+lifecycle declarations, with separate unresolved-input markers for target form
+and size. Thin-pool grow, rescan, and remove commands require the canonical
+`vg/pool` target form.
 LVM cache command plans render `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` commands for `lvmCaches`
 lifecycle declarations. Executable attach plans require both an origin `vg/lv`

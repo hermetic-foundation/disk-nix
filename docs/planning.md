@@ -182,7 +182,9 @@ Examples:
   offline-required because disk-nix models it as a host rescan after
   controller-side namespace resize or replacement.
 - LVM thin pool growth is online, with advice to monitor data and metadata
-  utilization, autoextend policy, and thin-volume overcommit.
+  utilization, autoextend policy, and thin-volume overcommit. Thin pool
+  `operation = "rescan"` is online and read-only; it refreshes data,
+  metadata, monitoring, and graph status before later allocation or growth.
 - LVM snapshot creation is reversible; snapshot merge rollback is potential
   data loss; snapshot removal is destructive because it deletes a recovery
   point.
