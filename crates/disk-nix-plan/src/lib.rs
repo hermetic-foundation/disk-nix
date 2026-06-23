@@ -938,7 +938,7 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             operation: Operation::Format,
             risk: RiskClass::Destructive,
             destructive: true,
-            context: filesystem_context(name, mountpoint, fs_type, desired_size),
+            context: filesystem_context(name, mountpoint, fs_type, desired_size.clone()),
             advice: Some(Advice {
                 summary: "formatting or replacing a filesystem destroys existing data".to_string(),
                 alternatives: vec![
@@ -949,6 +949,29 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
                         .to_string(),
                 ],
             }),
+        });
+    }
+
+    if let Some(Operation::Rebalance) = filesystem
+        .get("operation")
+        .or_else(|| filesystem.get("action"))
+        .and_then(Value::as_str)
+        .and_then(parse_operation)
+    {
+        let (risk, destructive, advice) =
+            classify_operation("filesystems", Operation::Rebalance, filesystem);
+        actions.push(PlannedAction {
+            id: format!("filesystems:{name}:rebalance"),
+            description: format!("plan rebalance operation for filesystem {name}"),
+            operation: Operation::Rebalance,
+            risk,
+            destructive,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                property_assignments: property_assignments(filesystem),
+                ..filesystem_context(name, mountpoint, fs_type, desired_size.clone())
+            },
+            advice,
         });
     }
 
@@ -2995,6 +3018,44 @@ mod tests {
                 && action.context.device.as_deref() == Some("/dev/disk/by-id/old-btrfs-device")
                 && action.advice.is_some()
         }));
+    }
+
+    #[test]
+    fn plan_accepts_filesystem_rebalance_with_filters() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "data": {
+                  "mountpoint": "/data",
+                  "fsType": "btrfs",
+                  "operation": "rebalance",
+                  "properties": {
+                    "balance.data": "usage=50",
+                    "balance.metadata": "usage=75"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let action = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:data:rebalance")
+            .expect("filesystem rebalance action exists");
+
+        assert_eq!(action.operation, Operation::Rebalance);
+        assert_eq!(action.risk, RiskClass::Online);
+        assert_eq!(action.context.collection.as_deref(), Some("filesystems"));
+        assert_eq!(action.context.target.as_deref(), Some("/data"));
+        assert_eq!(
+            action.context.property_assignments,
+            vec![
+                "balance.data=usage=50".to_string(),
+                "balance.metadata=usage=75".to_string()
+            ]
+        );
     }
 
     #[test]

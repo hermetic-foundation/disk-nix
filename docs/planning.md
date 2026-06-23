@@ -63,6 +63,10 @@ Examples:
   replacement capacity, evacuation, and health verification. Btrfs filesystem
   device removal also verifies allocation state with `btrfs filesystem usage`
   before any future `btrfs device remove` workflow is reviewed.
+- Btrfs filesystem `operation = "rebalance"` renders `btrfs balance start`.
+  Optional `properties.balance.data`, `properties.balance.metadata`, and
+  `properties.balance.system` values become `-d`, `-m`, and `-s` balance
+  filters so operators can prefer scoped balances over a full balance.
 - `replaceDevices = { old = new; }` is classified as reversible because the
   original device can remain available until verification passes.
 - Cache `replace-device` is classified as offline-required because dirty or
@@ -288,6 +292,8 @@ when the pool layout supports evacuation. LVM volume group device removal
 renders reviewed `pvmove <pv>` then `vgreduce <vg> <pv>` steps so allocated
 extents are evacuated before the physical volume is reduced. These remain
 potential-data-loss intents unless a safer explicit workflow is selected.
+Btrfs filesystem rebalance plans render `btrfs balance start` with optional
+declared data, metadata, and system filters from lifecycle properties.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.

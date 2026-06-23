@@ -2215,7 +2215,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Rebalance => {
             let target = target.unwrap_or("<target>");
-            let rebalance = rebalance_command(collection, target);
+            let rebalance = rebalance_command(
+                collection,
+                target,
+                &action.context.property_assignments,
+            );
             (
                 vec![
                     command(
@@ -3712,18 +3716,31 @@ fn replace_device_command(
     }
 }
 
-fn rebalance_command(collection: Option<&str>, target: &str) -> ExecutionCommand {
+fn rebalance_command(
+    collection: Option<&str>,
+    target: &str,
+    property_assignments: &[String],
+) -> ExecutionCommand {
     match collection {
         Some("pools") => command(
             ["zpool", "scrub", target],
             true,
             "scrub the pool after topology changes; ZFS has no generic rebalance command",
         ),
-        Some("filesystems") => command(
-            ["btrfs", "balance", "start", target],
-            true,
-            "rebalance Btrfs chunks across available devices",
-        ),
+        Some("filesystems") => {
+            let mut argv = vec![
+                "btrfs".to_string(),
+                "balance".to_string(),
+                "start".to_string(),
+            ];
+            argv.extend(btrfs_balance_filters(property_assignments));
+            argv.push(target.to_string());
+            command_vec(
+                argv,
+                true,
+                "rebalance Btrfs chunks across available devices",
+            )
+        }
         _ => command_with_readiness(
             ["<rebalance-tool>", target],
             true,
@@ -3732,6 +3749,26 @@ fn rebalance_command(collection: Option<&str>, target: &str) -> ExecutionCommand
             "run the storage-domain rebalance command",
         ),
     }
+}
+
+fn btrfs_balance_filters(property_assignments: &[String]) -> Vec<String> {
+    property_assignments
+        .iter()
+        .filter_map(|assignment| {
+            let (property, value) = assignment.split_once('=')?;
+            let property = property
+                .strip_prefix("btrfs.balance.")
+                .or_else(|| property.strip_prefix("balance."))
+                .or_else(|| property.strip_prefix("btrfs."))
+                .unwrap_or(property);
+            match property {
+                "data" | "d" => Some(format!("-d{value}")),
+                "metadata" | "meta" | "m" => Some(format!("-m{value}")),
+                "system" | "s" => Some(format!("-s{value}")),
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 fn set_property_command(
@@ -5238,6 +5275,57 @@ mod tests {
                 .iter()
                 .any(|check| check.contains("Btrfs device list matches desired topology"))
         );
+    }
+
+    #[test]
+    fn btrfs_filesystem_rebalance_uses_declared_filters() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "data": {
+                  "mountpoint": "/data",
+                  "fsType": "btrfs",
+                  "operation": "rebalance",
+                  "properties": {
+                    "balance.data": "usage=50",
+                    "balance.metadata": "usage=75",
+                    "compression": "zstd"
+                  }
+                }
+              },
+              "apply": {
+                "allowRebalance": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:data:rebalance"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "balance",
+                            "start",
+                            "-dusage=50",
+                            "-musage=75",
+                            "/data",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "filesystems:data:rebalance"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["btrfs", "filesystem", "usage", "-b", "/data"])
+        }));
     }
 
     #[test]
