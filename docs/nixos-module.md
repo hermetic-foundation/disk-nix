@@ -314,15 +314,24 @@ Typed snapshot declarations include:
 - `target`
 - `path`
 - `snapshotPath`
+- `snapshot-path`
 - `operation`
 - `destroy`
 - `rollback`
 - `cloneTo`
+- `cloneTarget`
+- `clone`
 - `renameTo`
+- `renameTarget`
+- `newName`
 - `recursiveRollback`
+- `recursive`
+- `zfs.rollbackRecursive`
 - `hold`
 - `holdTag`
 - `releaseHold`
+- `readOnly`
+- `readonly`
 - `preserveData`
 - `metadata`
 

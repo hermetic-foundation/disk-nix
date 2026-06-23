@@ -551,6 +551,18 @@
                 target = "tank/home";
                 cloneTo = "tank/home-clone";
               };
+              snapshots.aliases = {
+                operation = "clone";
+                target = "tank/home";
+                "snapshot-path" = "tank/home@alias-source";
+                cloneTarget = "tank/home-alias-clone";
+                clone = "tank/home-short-clone";
+                renameTarget = "tank/home@alias-retained";
+                newName = "tank/home@alias-new";
+                recursive = true;
+                "zfs.rollbackRecursive" = true;
+                readonly = true;
+              };
               snapshots."tank/home@old" = {
                 target = "tank/home";
                 releaseHold = "old-retention";
@@ -1201,6 +1213,15 @@
                 and .spec.snapshots."tank/home@before-upgrade".recursiveRollback == true
                 and .spec.snapshots."tank/home@clone-only".operation == "clone"
                 and .spec.snapshots."tank/home@clone-only".cloneTo == "tank/home-clone"
+                and .spec.snapshots.aliases.operation == "clone"
+                and .spec.snapshots.aliases."snapshot-path" == "tank/home@alias-source"
+                and .spec.snapshots.aliases.cloneTarget == "tank/home-alias-clone"
+                and .spec.snapshots.aliases.clone == "tank/home-short-clone"
+                and .spec.snapshots.aliases.renameTarget == "tank/home@alias-retained"
+                and .spec.snapshots.aliases.newName == "tank/home@alias-new"
+                and .spec.snapshots.aliases.recursive == true
+                and .spec.snapshots.aliases."zfs.rollbackRecursive" == true
+                and .spec.snapshots.aliases.readonly == true
                 and .spec.datasets."tank/legacy".renameTo == "tank/legacy-staged"
                     and .spec.snapshots."tank/home@old".releaseHold == "old-retention"
                     and .spec.snapshots."/mnt/persist/@home-before-upgrade".target == "/mnt/persist/@home"

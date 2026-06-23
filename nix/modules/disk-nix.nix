@@ -405,6 +405,13 @@ let
           example = "/mnt/persist/@home-before-upgrade";
         };
 
+        "snapshot-path" = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Kebab-case alias for snapshotPath, copied into the planner spec.";
+          example = "/mnt/persist/@home-before-upgrade";
+        };
+
         operation = lib.mkOption {
           type = operationType;
           default = null;
@@ -431,6 +438,20 @@ let
           example = "tank/home-review";
         };
 
+        cloneTarget = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias for cloneTo accepted by the planner.";
+          example = "tank/home-review";
+        };
+
+        clone = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Short alias for cloneTo accepted by the planner.";
+          example = "tank/home-review";
+        };
+
         renameTo = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -438,10 +459,36 @@ let
           example = "tank/home@before-prune";
         };
 
+        renameTarget = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias for renameTo accepted by the planner.";
+          example = "tank/home@before-prune";
+        };
+
+        newName = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias for renameTo accepted by the planner.";
+          example = "tank/home@before-prune";
+        };
+
         recursiveRollback = lib.mkOption {
           type = lib.types.nullOr lib.types.bool;
           default = null;
           description = "Render recursive ZFS rollback with zfs rollback -r when explicitly true.";
+        };
+
+        recursive = lib.mkOption {
+          type = lib.types.nullOr lib.types.bool;
+          default = null;
+          description = "Alias for recursiveRollback accepted by the planner.";
+        };
+
+        "zfs.rollbackRecursive" = lib.mkOption {
+          type = lib.types.nullOr lib.types.bool;
+          default = null;
+          description = "ZFS-specific alias for recursiveRollback accepted by the planner.";
         };
 
         hold = lib.mkOption {
@@ -469,6 +516,13 @@ let
           type = lib.types.nullOr lib.types.bool;
           default = null;
           description = "Create this snapshot read-only when the target domain supports it, such as Btrfs subvolume snapshots.";
+          example = true;
+        };
+
+        readonly = lib.mkOption {
+          type = lib.types.nullOr lib.types.bool;
+          default = null;
+          description = "Alias for readOnly accepted by the planner.";
           example = true;
         };
 
@@ -543,14 +597,22 @@ let
         destroy
         rollback
         cloneTo
+        cloneTarget
+        clone
         renameTo
+        renameTarget
+        newName
         recursiveRollback
+        recursive
         hold
         holdTag
         releaseHold
         readOnly
+        readonly
         preserveData
         ;
+      "snapshot-path" = snapshot."snapshot-path";
+      "zfs.rollbackRecursive" = snapshot."zfs.rollbackRecursive";
     }
   );
   typedFilesystemSpec = lib.mapAttrs (_: filesystem: {
