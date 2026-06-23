@@ -468,6 +468,9 @@ let
     // lib.optionalAttrs (filesystem.options != [ ]) {
       inherit (filesystem) options;
     };
+  isDestroyLifecycle = object: (object.destroy or false) || (object.operation or null) == "destroy";
+  activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;
+  activeLuksDevices = lib.filterAttrs (_: luks: !isDestroyLifecycle luks) cfg.luks.devices;
   nfsExportLines =
     lib.mapAttrsToList
       (
@@ -1182,7 +1185,7 @@ in
       // lib.optionalAttrs swap.randomEncryption {
         randomEncryption.enable = true;
       }
-    ) cfg.swaps;
+    ) activeSwaps;
 
     boot.initrd.luks.devices = lib.mapAttrs (_: luks: {
       inherit (luks)
@@ -1191,7 +1194,7 @@ in
         allowDiscards
         bypassWorkqueues
         ;
-    }) cfg.luks.devices;
+    }) activeLuksDevices;
 
     services.openiscsi = lib.mkIf (cfg.iscsi.initiatorName != null) {
       enable = true;

@@ -108,6 +108,10 @@
                 desiredSize = "100%";
                 allowDiscards = true;
               };
+              luks.devices.cryptold = {
+                device = "/dev/disk/by-partuuid/old-luks";
+                operation = "destroy";
+              };
               filesystems.root = {
                 device = "/dev/disk/by-label/nixos-root";
                 fsType = "xfs";
@@ -121,6 +125,10 @@
                 operation = "format";
                 desiredSize = "8GiB";
                 priority = 5;
+              };
+              swaps.old = {
+                device = "/dev/disk/by-label/old-swap";
+                operation = "destroy";
               };
               nfs.mounts."/srv/shared" = {
                 source = "nas.example.com:/srv/shared";
@@ -515,10 +523,14 @@
                   and .spec.swaps.primary.operation == "format"
                   and .spec.swaps.primary.desiredSize == "8GiB"
                   and .spec.swaps.primary.preserveData == false
+                  and .spec.swaps.old.operation == "destroy"
+                  and .spec.swaps.old.device == "/dev/disk/by-label/old-swap"
                   and .spec.luks.devices.cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
                   and .spec.luks.devices.cryptroot.name == "cryptroot"
                   and .spec.luks.devices.cryptroot.operation == "grow"
                   and .spec.luks.devices.cryptroot.desiredSize == "100%"
+                  and .spec.luks.devices.cryptold.operation == "destroy"
+                  and .spec.luks.devices.cryptold.device == "/dev/disk/by-partuuid/old-luks"
                   and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"
                   and .spec.filesystems."/srv/shared".fsType == "nfs4"
                   and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)
@@ -602,6 +614,31 @@
                 grep -- 'lvm2-' service-paths
                 grep -- 'open-iscsi-' service-paths
                 grep -- 'zfs-user-' service-paths
+                swapDevices=${
+                  pkgs.lib.escapeShellArg (
+                    builtins.toJSON (map (swap: { inherit (swap) device; }) nixosModuleTest.config.swapDevices)
+                  )
+                }
+                printf '%s\n' "$swapDevices" > swap-devices
+                jq -e '
+                  length == 1
+                  and .[0].device == "/dev/disk/by-label/swap"
+                ' swap-devices
+                luksDevices=${
+                  pkgs.lib.escapeShellArg (
+                    builtins.toJSON (
+                      pkgs.lib.mapAttrs (_: luks: {
+                        inherit (luks) device;
+                      }) nixosModuleTest.config.boot.initrd.luks.devices
+                    )
+                  )
+                }
+                printf '%s\n' "$luksDevices" > luks-devices
+                jq -e '
+                  has("cryptroot")
+                  and .cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
+                  and (has("cryptold") | not)
+                ' luks-devices
                 printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
                 grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
                 touch "$out"

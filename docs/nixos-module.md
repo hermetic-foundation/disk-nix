@@ -65,6 +65,9 @@ Typed NFS export declarations derive regular NixOS NFS server export lines
 only when they are non-destroy declarations with explicit `client` and
 `options` fields. Destructive or under-specified export declarations remain in
 the disk-nix planner spec for review instead of being re-added to `/etc/exports`.
+Typed swap and LUKS declarations follow the same split: destroy operations stay
+in the generated disk-nix spec, but they are not re-added to NixOS
+`swapDevices` or `boot.initrd.luks.devices`.
 
 Lifecycle declaration attribute names are usable object names only for domains
 whose native tools address objects by name, such as ZFS datasets, ZFS pools,
