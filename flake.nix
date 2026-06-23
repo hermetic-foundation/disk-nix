@@ -176,6 +176,37 @@
                   "discard=async"
                 ];
               };
+              filesystems.runTmpfs = {
+                device = "tmpfs";
+                fsType = "tmpfs";
+                mountpoint = "/run/disk-nix-tmp";
+                options = [
+                  "mode=0755"
+                  "size=64M"
+                  "nosuid"
+                  "nodev"
+                ];
+              };
+              filesystems.bindCache = {
+                device = "/var/cache/disk-nix";
+                fsType = "none";
+                mountpoint = "/srv/disk-nix-cache";
+                options = [
+                  "bind"
+                  "x-systemd.requires-mounts-for=/var/cache/disk-nix"
+                ];
+              };
+              filesystems.overlayScratch = {
+                device = "overlay";
+                fsType = "overlay";
+                mountpoint = "/srv/disk-nix-overlay";
+                options = [
+                  "lowerdir=/nix/store"
+                  "upperdir=/var/lib/disk-nix/overlay/upper"
+                  "workdir=/var/lib/disk-nix/overlay/work"
+                  "index=off"
+                ];
+              };
               filesystems.mobile = {
                 device = "/dev/disk/by-label/mobile";
                 fsType = "f2fs";
@@ -940,6 +971,20 @@
                   and .spec.filesystems.remount.operation == "remount"
                   and .spec.filesystems.remount.mountpoint == "/remount"
                   and (.spec.filesystems.remount.options | index("discard=async") != null)
+                  and .spec.filesystems.runTmpfs.device == "tmpfs"
+                  and .spec.filesystems.runTmpfs.fsType == "tmpfs"
+                  and .spec.filesystems.runTmpfs.mountpoint == "/run/disk-nix-tmp"
+                  and (.spec.filesystems.runTmpfs.options | index("size=64M") != null)
+                  and .spec.filesystems.bindCache.device == "/var/cache/disk-nix"
+                  and .spec.filesystems.bindCache.fsType == "none"
+                  and .spec.filesystems.bindCache.mountpoint == "/srv/disk-nix-cache"
+                  and (.spec.filesystems.bindCache.options | index("bind") != null)
+                  and .spec.filesystems.overlayScratch.device == "overlay"
+                  and .spec.filesystems.overlayScratch.fsType == "overlay"
+                  and .spec.filesystems.overlayScratch.mountpoint == "/srv/disk-nix-overlay"
+                  and (.spec.filesystems.overlayScratch.options | index("lowerdir=/nix/store") != null)
+                  and (.spec.filesystems.overlayScratch.options | index("upperdir=/var/lib/disk-nix/overlay/upper") != null)
+                  and (.spec.filesystems.overlayScratch.options | index("workdir=/var/lib/disk-nix/overlay/work") != null)
                   and .spec.swaps.primary.device == "/dev/disk/by-label/swap"
                   and .spec.swaps.primary.operation == "format"
                   and .spec.swaps.primary.desiredSize == "8GiB"
@@ -1194,6 +1239,15 @@
                   and has("/srv/tuned")
                   and ."/srv/tuned".device == "nas.example.com:/srv/tuned"
                   and ."/srv/tuned".fsType == "nfs4"
+                  and has("/run/disk-nix-tmp")
+                  and ."/run/disk-nix-tmp".device == "tmpfs"
+                  and ."/run/disk-nix-tmp".fsType == "tmpfs"
+                  and has("/srv/disk-nix-cache")
+                  and ."/srv/disk-nix-cache".device == "/var/cache/disk-nix"
+                  and ."/srv/disk-nix-cache".fsType == "none"
+                  and has("/srv/disk-nix-overlay")
+                  and ."/srv/disk-nix-overlay".device == "overlay"
+                  and ."/srv/disk-nix-overlay".fsType == "overlay"
                   and (has("/srv/old") | not)
                 ' file-systems
                 supportedFilesystems=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleTest.config.boot.supportedFilesystems)}
@@ -1203,6 +1257,8 @@
                   and .btrfs == true
                   and .bcachefs == true
                   and .f2fs == true
+                  and .tmpfs == true
+                  and .overlay == true
                   and .nfs4 == true
                   and .zfs == true
                 ' supported-filesystems

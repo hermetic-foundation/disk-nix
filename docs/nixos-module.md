@@ -84,6 +84,14 @@ render reviewed mount or non-destructive remount commands to apply changes.
 Typed filesystem declarations can also use `operation = "remount"` to render a
 reviewed `mount -o remount,<options>` command for non-NFS local filesystems
 while keeping the persistent options in the same NixOS `fileSystems` entry.
+The same `filesystems` option is also the typed path for non-block mounted
+filesystems that NixOS represents through `fileSystems`, including tmpfs,
+bind mounts, and overlayfs. Declare `device = "tmpfs"; fsType = "tmpfs"` for
+tmpfs mounts, `options = [ "bind" ... ]` for bind mounts, and
+`device = "overlay"; fsType = "overlay"` with `lowerdir`, `upperdir`, and
+`workdir` options for overlayfs. These declarations are emitted to the
+disk-nix spec for planning/probing context and to NixOS `fileSystems` for
+steady-state mounting.
 Typed active LVM declarations enable NixOS LVM support and initrd LVM support by
 default, and typed thin-pool or LVM-cache declarations also enable NixOS thin
 support. Typed active MD RAID declarations enable `boot.swraid` and add the same
@@ -373,6 +381,29 @@ Example lifecycle planning through NixOS options:
         label = "bulk-data";
         "btrfs.balance.data" = "usage=50";
       };
+    };
+    filesystems.runTmpfs = {
+      device = "tmpfs";
+      fsType = "tmpfs";
+      mountpoint = "/run/disk-nix-tmp";
+      options = [ "mode=0755" "size=64M" "nosuid" "nodev" ];
+    };
+    filesystems.bindCache = {
+      device = "/var/cache/disk-nix";
+      fsType = "none";
+      mountpoint = "/srv/disk-nix-cache";
+      options = [ "bind" "x-systemd.requires-mounts-for=/var/cache/disk-nix" ];
+    };
+    filesystems.overlayScratch = {
+      device = "overlay";
+      fsType = "overlay";
+      mountpoint = "/srv/disk-nix-overlay";
+      options = [
+        "lowerdir=/nix/store"
+        "upperdir=/var/lib/disk-nix/overlay/upper"
+        "workdir=/var/lib/disk-nix/overlay/work"
+        "index=off"
+      ];
     };
     btrfsSubvolumes."/mnt/persist/@home" = {
       operation = "create";
