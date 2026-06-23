@@ -298,11 +298,12 @@ iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
 and rescan commands from explicit target IQN and portal declarations. Prefer
 `operation = "login"` and `operation = "logout"` for session lifecycle;
 legacy session `create` and `destroy` still map to the same command plans. LUN
-apply plans model host-side attach, growth rescan, and detach: attach and grow
-rescan sessions, grow rescans declared SCSI paths, and detach deletes only
-declared stable path devices before refreshing multipath. Executable LUN
-attach, grow, and detach plans require declared stable `device` or `devices`
-paths.
+apply plans model host-side `operation = "attach"`, growth rescan, and
+`operation = "detach"`: attach and grow rescan sessions, grow rescans declared
+SCSI paths, and detach deletes only declared stable path devices before
+refreshing multipath. Legacy LUN `create` and `destroy` still map to the same
+host-side command plans. Executable LUN attach, grow, and detach plans require
+declared stable `device` or `devices` paths.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain. Btrfs snapshot declarations with `readOnly = true` render

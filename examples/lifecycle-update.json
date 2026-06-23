@@ -241,6 +241,16 @@
       "devices": [
         "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0"
       ]
+    },
+    "iqn.2026-06.example:storage/new:2": {
+      "operation": "attach",
+      "device": "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-2"
+    },
+    "iqn.2026-06.example:storage/old:3": {
+      "operation": "detach",
+      "devices": [
+        "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3"
+      ]
     }
   },
   "iscsiSessions": {

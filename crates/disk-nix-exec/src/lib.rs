@@ -1059,7 +1059,9 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
-        Operation::Create if collection == Some("luns") || action.id.starts_with("luns:") => {
+        Operation::Create | Operation::Attach
+            if collection == Some("luns") || action.id.starts_with("luns:") =>
+        {
             let mut commands = vec![command(
                 ["lsblk", "--json", "--bytes", "--output-all"],
                 false,
@@ -1086,7 +1088,9 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
-        Operation::Destroy if collection == Some("luns") || action.id.starts_with("luns:") => {
+        Operation::Destroy | Operation::Detach
+            if collection == Some("luns") || action.id.starts_with("luns:") =>
+        {
             let mut commands = vec![command(
                 ["lsblk", "--json", "--bytes", "--output-all"],
                 false,
@@ -2115,6 +2119,8 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Import
         | Operation::Export
         | Operation::Unexport
+        | Operation::Attach
+        | Operation::Detach
         | Operation::Activate
         | Operation::Deactivate
         | Operation::Assemble
@@ -2493,7 +2499,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Create if collection == Some("luns") || action.id.starts_with("luns:") => {
+        Operation::Create | Operation::Attach
+            if collection == Some("luns") || action.id.starts_with("luns:") =>
+        {
             let target = target.unwrap_or("<lun>");
             let mut commands = vec![
                 command(
@@ -4940,7 +4948,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Destroy if collection == Some("luns") || action.id.starts_with("luns:") => {
+        Operation::Destroy | Operation::Detach
+            if collection == Some("luns") || action.id.starts_with("luns:") =>
+        {
             let target = target.unwrap_or("<lun>");
             let devices = lun_rescan_devices(action);
             let mut commands = vec![command(
@@ -4991,6 +5001,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Import
         | Operation::Export
         | Operation::Unexport
+        | Operation::Attach
+        | Operation::Detach
         | Operation::Activate
         | Operation::Deactivate
         | Operation::Assemble
@@ -14536,11 +14548,11 @@ mod tests {
             br#"{
               "luns": {
                 "iqn.2026-06.example:storage/root:0": {
-                  "operation": "create",
+                  "operation": "attach",
                   "device": "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
                 },
                 "iqn.2026-06.example:storage/old:1": {
-                  "destroy": true,
+                  "operation": "detach",
                   "devices": [
                     "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-1"
                   ]
@@ -14557,14 +14569,14 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "luns:iqn.2026-06.example:storage/root:0:create"
+            step.action_id == "luns:iqn.2026-06.example:storage/root:0:attach"
                 && step
                     .commands
                     .iter()
                     .any(|command| command.argv == ["iscsiadm", "--mode", "session", "--rescan"])
         }));
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "luns:iqn.2026-06.example:storage/root:0:create"
+            step.action_id == "luns:iqn.2026-06.example:storage/root:0:attach"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
@@ -14576,7 +14588,7 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "luns:iqn.2026-06.example:storage/old:1:destroy"
+            step.action_id == "luns:iqn.2026-06.example:storage/old:1:detach"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
@@ -14591,7 +14603,7 @@ mod tests {
                 })
         }));
         assert!(report.verification_plan.iter().any(|step| {
-            step.action_id == "luns:iqn.2026-06.example:storage/old:1:destroy"
+            step.action_id == "luns:iqn.2026-06.example:storage/old:1:detach"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [

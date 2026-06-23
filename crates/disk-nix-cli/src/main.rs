@@ -900,6 +900,8 @@ fn spec_schema() -> serde_json::Value {
                     "import",
                     "export",
                     "unexport",
+                    "attach",
+                    "detach",
                     "activate",
                     "deactivate",
                     "assemble",

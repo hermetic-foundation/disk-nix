@@ -374,6 +374,16 @@
                   lun = 0;
                 };
               };
+              luns."iqn.2026-06.example:storage/new:2" = {
+                operation = "attach";
+                device = "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-2";
+              };
+              luns."iqn.2026-06.example:storage/old:3" = {
+                operation = "detach";
+                devices = [
+                  "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3"
+                ];
+              };
               nvmeNamespaces."/dev/nvme0" = {
                 operation = "create";
                 desiredSize = "100G";
@@ -570,6 +580,8 @@
               and (."$defs".operation.enum | index("import") != null)
               and (."$defs".operation.enum | index("export") != null)
               and (."$defs".operation.enum | index("unexport") != null)
+              and (."$defs".operation.enum | index("attach") != null)
+              and (."$defs".operation.enum | index("detach") != null)
               and (."$defs".operation.enum | index("activate") != null)
               and (."$defs".operation.enum | index("deactivate") != null)
               and (."$defs".operation.enum | index("assemble") != null)
@@ -639,8 +651,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 66
-              and .summary.offlineRequiredCount == 27
+              .summary.actionCount == 68
+              and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -663,6 +675,8 @@
               and (.actions | any(.id == "lukstokens:cryptroot:0:create" and .risk == "offline-required"))
               and (.actions | any(.id == "iscsisessions:iqn.2026-06.example:storage.login:login" and .risk == "online"))
               and (.actions | any(.id == "iscsisessions:iqn.2026-06.example:storage.logout:logout" and .risk == "offline-required"))
+              and (.actions | any(.id == "luns:iqn.2026-06.example:storage/new:2:attach" and .risk == "online"))
+              and (.actions | any(.id == "luns:iqn.2026-06.example:storage/old:3:detach" and .risk == "offline-required"))
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/newthin:create" and .risk == "online"))
@@ -729,8 +743,8 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 32
-              and .apply.blockedSummary.offlineRequiredCount == 27
+              and .apply.blockedCount == 33
+              and .apply.blockedSummary.offlineRequiredCount == 28
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
@@ -742,6 +756,7 @@
               and (.apply.blocked | any(.id == "volumegroups:exportvg:export"))
               and (.apply.blocked | any(.id == "volumegroups:activevg:activate"))
               and (.apply.blocked | any(.id == "iscsisessions:iqn.2026-06.example:storage.logout:logout"))
+              and (.apply.blocked | any(.id == "luns:iqn.2026-06.example:storage/old:3:detach"))
               and (.apply.blocked | any(.id == "exports:/srv/old-share:unexport"))
               and (.apply.blocked | any(.id == "nfs.mounts:/srv/old:unmount"))
               and (.apply.blocked | any(.id == "volumes:vg0/archive:deactivate"))
@@ -755,14 +770,14 @@
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 32
+              and .apply.blockedCount == 33
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 32
-              and .messages[0] == "apply policy blocked 32 action(s)"
+              and .apply.blockedCount == 33
+              and .messages[0] == "apply policy blocked 33 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -851,6 +866,10 @@
                   and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
                   and .spec.luns."iqn.2026-06.example:storage/root:0".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
                   and (.spec.luns."iqn.2026-06.example:storage/root:0".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0") != null)
+                  and .spec.luns."iqn.2026-06.example:storage/new:2".operation == "attach"
+                  and .spec.luns."iqn.2026-06.example:storage/new:2".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-2"
+                  and .spec.luns."iqn.2026-06.example:storage/old:3".operation == "detach"
+                  and (.spec.luns."iqn.2026-06.example:storage/old:3".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3") != null)
                   and .spec.nvmeNamespaces."/dev/nvme0".operation == "create"
                   and .spec.nvmeNamespaces."/dev/nvme0".desiredSize == "100G"
                   and .spec.nvmeNamespaces."/dev/nvme0".namespaceId == "4"

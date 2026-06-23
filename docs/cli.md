@@ -427,12 +427,13 @@ mountpoints keep those commands non-ready.
 iSCSI session command plans use `target` or the lifecycle key as the target IQN
 and `portal` or `metadata.portal` for reviewed `operation = "login"` and
 `operation = "logout"` commands. Legacy session `create` and `destroy` map to
-the same login/logout command plans. LUN command plans model host-side attach,
-growth rescan, and detach: create and grow keep the broad
-`iscsiadm --mode session --rescan` step, grow adds per-path SCSI rescans, and
-destroy deletes only declared stable SCSI path devices before reloading
-multipath. Attach, grow, and destroy remain non-ready
-until stable `device` or `devices` paths are declared. Target-side array
+the same login/logout command plans. LUN command plans model host-side
+`operation = "attach"`, growth rescan, and `operation = "detach"`: attach and
+grow keep the broad `iscsiadm --mode session --rescan` step, grow adds per-path
+SCSI rescans, and detach deletes only declared stable SCSI path devices before
+reloading multipath. Legacy LUN `create` and `destroy` map to the same command
+plans. Attach, grow, and detach remain non-ready until stable `device` or
+`devices` paths are declared. Target-side array
 provisioning or deletion must be handled outside the host plan unless a future
 target adapter is added.
 The capability inventory advertises iSCSI login/logout and LUN attach/detach

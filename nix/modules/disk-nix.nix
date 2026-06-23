@@ -81,6 +81,8 @@ let
       "import"
       "export"
       "unexport"
+      "attach"
+      "detach"
       "activate"
       "deactivate"
       "assemble"
@@ -626,6 +628,7 @@ let
       "logout"
       "unmount"
       "unexport"
+      "detach"
     ];
   activeLifecycleAttrs = attrs: lib.filterAttrs (_: object: !isDestroyLifecycle object) attrs;
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;

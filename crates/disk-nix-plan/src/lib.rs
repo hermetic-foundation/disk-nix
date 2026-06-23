@@ -52,6 +52,8 @@ pub enum Operation {
     Import,
     Export,
     Unexport,
+    Attach,
+    Detach,
     Activate,
     Deactivate,
     Assemble,
@@ -2785,6 +2787,8 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "import" => Some(Operation::Import),
         "export" => Some(Operation::Export),
         "unexport" | "un-export" => Some(Operation::Unexport),
+        "attach" => Some(Operation::Attach),
+        "detach" => Some(Operation::Detach),
         "activate" => Some(Operation::Activate),
         "deactivate" => Some(Operation::Deactivate),
         "assemble" => Some(Operation::Assemble),
@@ -2825,6 +2829,8 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Import => "import",
         Operation::Export => "export",
         Operation::Unexport => "unexport",
+        Operation::Attach => "attach",
+        Operation::Detach => "detach",
         Operation::Activate => "activate",
         Operation::Deactivate => "deactivate",
         Operation::Assemble => "assemble",
@@ -3287,7 +3293,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Create if collection == "luns" => (
+        Operation::Create | Operation::Attach if collection == "luns" => (
             RiskClass::Online,
             false,
             Some(Advice {
@@ -3668,7 +3674,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Destroy if collection == "luns" => (
+        Operation::Destroy | Operation::Detach if collection == "luns" => (
             RiskClass::OfflineRequired,
             false,
             Some(Advice {
@@ -3793,6 +3799,24 @@ fn classify_operation(
                     "use operation = \"unmount\" on nfs.mounts declarations for NFS client mounts"
                         .to_string(),
                     "use destroy only where a storage domain has not yet gained explicit lifecycle verbs"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Attach | Operation::Detach => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} operations are currently only supported for luns",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "use operation = \"attach\" or \"detach\" on luns declarations for host-side LUN path lifecycle"
+                        .to_string(),
+                    "use operation = \"login\" or \"logout\" on iscsiSessions declarations for target session lifecycle"
+                        .to_string(),
+                    "use domain-specific add-device, remove-device, mount, unmount, import, or export operations where available"
                         .to_string(),
                 ],
             }),
@@ -4138,6 +4162,8 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Import => "import",
         Operation::Export => "export",
         Operation::Unexport => "unexport",
+        Operation::Attach => "attach",
+        Operation::Detach => "detach",
         Operation::Activate => "activate",
         Operation::Deactivate => "deactivate",
         Operation::Assemble => "assemble",
@@ -5654,6 +5680,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::Lun,
+            operation: Operation::Attach,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "LUN attach discovers existing target-side storage on this host"
+                    .to_string(),
+                alternatives: vec![
+                    "verify target-side LUN identity before rescanning sessions".to_string(),
+                    "use stable by-path devices before provisioning downstream consumers"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Lun,
             operation: Operation::Grow,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
@@ -5668,6 +5708,21 @@ pub fn default_capabilities() -> Vec<Capability> {
         Capability {
             node_kind: NodeKind::Lun,
             operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LUN detach removes selected host paths without deleting target-side data"
+                    .to_string(),
+                alternatives: vec![
+                    "unmount filesystems and deactivate mappings before deleting paths"
+                        .to_string(),
+                    "detach one redundant path at a time after alternate paths are healthy"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Lun,
+            operation: Operation::Detach,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
                 summary: "LUN detach removes selected host paths without deleting target-side data"
@@ -6173,12 +6228,24 @@ mod tests {
                 capability.node_kind == NodeKind::Lun && capability.operation == Operation::Create
             })
             .expect("LUN create capability should exist");
+        let lun_attach = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::Lun && capability.operation == Operation::Attach
+            })
+            .expect("LUN attach capability should exist");
         let lun_destroy = capabilities
             .iter()
             .find(|capability| {
                 capability.node_kind == NodeKind::Lun && capability.operation == Operation::Destroy
             })
             .expect("LUN destroy capability should exist");
+        let lun_detach = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::Lun && capability.operation == Operation::Detach
+            })
+            .expect("LUN detach capability should exist");
         let session_create = capabilities
             .iter()
             .find(|capability| {
@@ -6209,7 +6276,9 @@ mod tests {
             .expect("iSCSI session logout capability should exist");
 
         assert_eq!(lun_create.risk, RiskClass::Online);
+        assert_eq!(lun_attach.risk, RiskClass::Online);
         assert_eq!(lun_destroy.risk, RiskClass::OfflineRequired);
+        assert_eq!(lun_detach.risk, RiskClass::OfflineRequired);
         assert_eq!(session_create.risk, RiskClass::Online);
         assert_eq!(session_login.risk, RiskClass::Online);
         assert_eq!(session_destroy.risk, RiskClass::OfflineRequired);
@@ -8980,11 +9049,11 @@ mod tests {
             br#"{
               "luns": {
                 "iqn.2026-06.example:storage/root:0": {
-                  "operation": "create",
+                  "operation": "attach",
                   "device": "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
                 },
                 "iqn.2026-06.example:storage/old:1": {
-                  "destroy": true,
+                  "operation": "detach",
                   "devices": [
                     "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-1"
                   ]
@@ -8998,29 +9067,29 @@ mod tests {
         assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.summary.destructive_count, 0);
 
-        let create = plan
+        let attach = plan
             .actions
             .iter()
-            .find(|action| action.id == "luns:iqn.2026-06.example:storage/root:0:create")
-            .expect("LUN create action exists");
-        assert_eq!(create.operation, Operation::Create);
-        assert_eq!(create.risk, RiskClass::Online);
-        assert!(create.advice.as_ref().is_some_and(|advice| {
+            .find(|action| action.id == "luns:iqn.2026-06.example:storage/root:0:attach")
+            .expect("LUN attach action exists");
+        assert_eq!(attach.operation, Operation::Attach);
+        assert_eq!(attach.risk, RiskClass::Online);
+        assert!(attach.advice.as_ref().is_some_and(|advice| {
             advice
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("stable by-path"))
         }));
 
-        let destroy = plan
+        let detach = plan
             .actions
             .iter()
-            .find(|action| action.id == "luns:iqn.2026-06.example:storage/old:1:destroy")
-            .expect("LUN destroy action exists");
-        assert_eq!(destroy.operation, Operation::Destroy);
-        assert_eq!(destroy.risk, RiskClass::OfflineRequired);
-        assert!(!destroy.destructive);
-        assert!(destroy.advice.as_ref().is_some_and(|advice| {
+            .find(|action| action.id == "luns:iqn.2026-06.example:storage/old:1:detach")
+            .expect("LUN detach action exists");
+        assert_eq!(detach.operation, Operation::Detach);
+        assert_eq!(detach.risk, RiskClass::OfflineRequired);
+        assert!(!detach.destructive);
+        assert!(detach.advice.as_ref().is_some_and(|advice| {
             advice
                 .alternatives
                 .iter()

@@ -210,15 +210,17 @@ Examples:
   offline-required because remote clients may need to be drained, but it is not
   treated as data destruction. Legacy NFS export `create` and `destroy` still
   map to the same lifecycle paths.
-- LUN `operation = "create"` means host-side attach for an existing target-side
+- LUN `operation = "attach"` means host-side attach for an existing target-side
   LUN and is online when it only rescans sessions and verifies stable paths.
+  Legacy LUN `create` maps to the same host attach lifecycle.
   LUN `operation = "grow"` is offline-required because the storage target,
-  host rescan, multipath, and consumers must be coordinated. LUN destruction is
-  modeled as host-side path detach, not target-side array deletion, and remains
-  offline-required. When stable `device` or `devices` paths are declared, apply
-  plans render per-path SCSI rescans or deletes in addition to broad iSCSI
-  session and multipath refreshes. Executable attach, grow, and detach plans
-  remain non-ready until those stable LUN paths are declared.
+  host rescan, multipath, and consumers must be coordinated. LUN
+  `operation = "detach"` is modeled as host-side path detach, not target-side
+  array deletion, and remains offline-required. Legacy LUN `destroy` maps to
+  the same detach lifecycle. When stable `device` or `devices` paths are
+  declared, apply plans render per-path SCSI rescans or deletes in addition to
+  broad iSCSI session and multipath refreshes. Executable attach, grow, and
+  detach plans remain non-ready until those stable LUN paths are declared.
 - iSCSI session `operation = "login"` discovers/logs into an existing target
   and is online. Legacy `operation = "create"` remains accepted for the same
   login flow. `operation = "logout"` detaches remote LUN paths from the host,
