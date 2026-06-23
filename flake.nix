@@ -362,6 +362,7 @@
                 device = "vg0/root-cache";
                 properties."lvm.cache-mode" = "writethrough";
               };
+              lvmCaches."vg0/archive".operation = "rescan";
               loopDevices."/dev/loop7" = {
                 operation = "create";
                 device = "/var/lib/images/root.img";
@@ -703,7 +704,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 82
+              .summary.actionCount == 83
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -740,6 +741,7 @@
               and (.actions | any(.id == "lvmsnapshots:vg0/root-snap:snapshot" and .risk == "reversible"))
               and (.actions | any(.id == "lvmcaches:vg0/root:create" and .risk == "offline-required"))
               and (.actions | any(.id == "lvmCaches:vg0/root:set-property:lvm.cache-mode" and .risk == "safe"))
+              and (.actions | any(.id == "lvmcaches:vg0/archive:rescan" and .risk == "online"))
               and (.actions | any(.id == "loopdevices:/dev/loop7:create" and .risk == "online"))
               and (.actions | any(.id == "mdraids:existing:assemble" and .risk == "offline-required"))
               and (.actions | any(.id == "mdraids:oldroot:stop" and .risk == "offline-required"))
@@ -1000,6 +1002,7 @@
                   and .spec.lvmCaches."vg0/root".operation == "create"
                   and .spec.lvmCaches."vg0/root".device == "vg0/root-cache"
                   and .spec.lvmCaches."vg0/root".properties."lvm.cache-mode" == "writethrough"
+                  and .spec.lvmCaches."vg0/archive".operation == "rescan"
                   and .spec.volumes."vg0/archive".operation == "deactivate"
                   and .spec.loopDevices."/dev/loop7".operation == "create"
                   and .spec.loopDevices."/dev/loop7".device == "/var/lib/images/root.img"

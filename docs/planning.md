@@ -208,7 +208,8 @@ Examples:
 - LVM cache attach, detach, and replacement are offline-required because
   `lvconvert` changes origin LV I/O paths and dirty cache state must be drained.
   LVM cache mode and policy updates are safe but still include verification
-  advice.
+  advice. LVM cache `operation = "rescan"` is online and read-only; it refreshes
+  cache mode, policy, utilization, and modeled relationships.
 - NFS export publication with `operation = "export"` is online when it
   publishes an existing path to explicit clients and options; unexporting is
   offline-required because remote clients may need to be drained, but it is not
@@ -372,6 +373,9 @@ and replacement scaffolding that remains marked as needing domain
 implementation until the replacement cache device and new cache-set UUID are
 verified. bcache sysfs operations require a concrete `/dev/bcache*` target;
 logical cache declaration names stay non-ready.
+LVM cache command plans include read-only `lvs` status refresh for
+`lvmCaches.<origin>.operation = "rescan"` before any later mode, detach, or
+replacement work.
 NFS export command plans use `exportfs -i -o <options> <client>:<path>` for
 reviewed `operation = "export"` and option-update operations and
 `exportfs -u <client>:<path>` for reviewed `operation = "unexport"`

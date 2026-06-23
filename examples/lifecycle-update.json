@@ -121,6 +121,9 @@
       "properties": {
         "lvm.cache-mode": "writethrough"
       }
+    },
+    "vg0/archive": {
+      "operation": "rescan"
     }
   },
   "loopDevices": {

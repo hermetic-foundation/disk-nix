@@ -3172,6 +3172,20 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "lvmCaches" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "LVM cache rescan refreshes origin, cache mode, policy, and dirty-data reports"
+                    .to_string(),
+                alternatives: vec![
+                    "use property updates when cache mode or cache policy must change".to_string(),
+                    "use remove-device only after dirty cache data has drained".to_string(),
+                    "verify origin LV readability before any later cache detach or replacement"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "volumeGroups" => (
             RiskClass::Destructive,
             true,
@@ -4049,7 +4063,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG/cache metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4065,6 +4079,8 @@ fn classify_operation(
                     "use multipathMaps.<name>.operation = \"rescan\" to reload reviewed path maps"
                         .to_string(),
                     "use physicalVolumes or volumeGroups operation = \"rescan\" to refresh LVM metadata"
+                        .to_string(),
+                    "use lvmCaches.<origin>.operation = \"rescan\" to refresh LVM cache status and utilization"
                         .to_string(),
                     "use mdRaids.<name>.operation = \"rescan\" to refresh MD RAID metadata inventory"
                         .to_string(),
@@ -6288,6 +6304,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::LvmCache,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "LVM cache status refresh reads cache mode, policy, and utilization"
+                    .to_string(),
+                alternatives: vec![
+                    "review lvs cache fields before detach or replacement".to_string(),
+                    "use property updates only when cache mode or policy must change".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmCache,
             operation: Operation::RemoveDevice,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
@@ -6468,6 +6497,13 @@ mod tests {
                     && capability.operation == Operation::SetProperty
             })
             .expect("LVM cache property capability should exist");
+        let rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LvmCache
+                    && capability.operation == Operation::Rescan
+            })
+            .expect("LVM cache rescan capability should exist");
         let remove = capabilities
             .iter()
             .find(|capability| {
@@ -6479,6 +6515,7 @@ mod tests {
         assert_eq!(create.risk, RiskClass::OfflineRequired);
         assert_eq!(add.risk, RiskClass::OfflineRequired);
         assert_eq!(set_property.risk, RiskClass::Safe);
+        assert_eq!(rescan.risk, RiskClass::Online);
         assert_eq!(remove.risk, RiskClass::OfflineRequired);
     }
 
@@ -10047,6 +10084,9 @@ mod tests {
                   "properties": {
                     "lvm.cache-mode": "writethrough"
                   }
+                },
+                "vg0/archive": {
+                  "operation": "rescan"
                 }
               }
             }"#,
@@ -10073,13 +10113,21 @@ mod tests {
             .iter()
             .find(|action| action.id == "lvmCaches:vg0/root:set-property:lvm.cache-mode")
             .expect("LVM cache property action exists");
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lvmcaches:vg0/archive:rescan")
+            .expect("LVM cache rescan action exists");
 
-        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.action_count, 5);
         assert_eq!(plan.summary.offline_required_count, 3);
         assert_eq!(create.risk, RiskClass::OfflineRequired);
         assert_eq!(add.risk, RiskClass::OfflineRequired);
         assert_eq!(remove.risk, RiskClass::OfflineRequired);
         assert_eq!(property.risk, RiskClass::Safe);
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
         assert!(remove.advice.as_ref().is_some_and(|advice| {
             advice
                 .alternatives

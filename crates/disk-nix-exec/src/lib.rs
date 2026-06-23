@@ -1593,6 +1593,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::RemoveDevice
         | Operation::SetProperty
         | Operation::Destroy
+        | Operation::Rescan
             if collection == Some("lvmCaches") =>
         {
             let target = lvm_volume_target_path(Some(target));
@@ -2682,6 +2683,31 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "verify the cache pool LV is clean and belongs to the same VG as the origin"
                         .to_string(),
                     "prefer writethrough cache mode until post-attach verification passes"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("lvmCaches") => {
+            let target = lvm_volume_target_path(target);
+            (
+                vec![
+                    lvm_lvs_report_command(
+                        target,
+                        Some(
+                            "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent",
+                        ),
+                        "refresh LVM cache mode, policy, utilization, and metadata state",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target.unwrap_or("<lvm-cache>")],
+                        false,
+                        "inspect modeled LVM cache relationships after status refresh",
+                    ),
+                ],
+                vec![
+                    "use property updates when cache mode or policy must change".to_string(),
+                    "verify dirty data before detach, uncache, or cache-pool replacement"
                         .to_string(),
                 ],
                 true,
@@ -16265,6 +16291,9 @@ mod tests {
                       "lvm.cache-mode": "writethrough"
                     },
                     "destroy": true
+                  },
+                  "vg0/archive": {
+                    "operation": "rescan"
                   }
                 }
               },
@@ -16328,6 +16357,25 @@ mod tests {
                     .iter()
                     .any(|command| command.argv == ["lvconvert", "--uncache", "vg0/root"])
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lvmcaches:vg0/archive:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+                && step.commands.iter().any(|command| {
+                    command.argv.len() >= 6
+                        && command.argv[0] == "lvs"
+                        && command.argv[1] == "--reportformat"
+                        && command.argv[2] == "json"
+                        && command.argv[3] == "-o"
+                        && command.argv[5] == "vg0/archive"
+                })
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "vg0/archive"])
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "lvmCaches:vg0/root:set-property:lvm.cache-mode"
                 && step.commands.iter().any(|command| {
@@ -16337,6 +16385,21 @@ mod tests {
                         && command.argv[2] == "json"
                         && command.argv[3] == "-o"
                 })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "lvmcaches:vg0/archive:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv.len() >= 6
+                        && command.argv[0] == "lvs"
+                        && command.argv[1] == "--reportformat"
+                        && command.argv[2] == "json"
+                        && command.argv[3] == "-o"
+                        && command.argv[5] == "vg0/archive"
+                })
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "vg0/archive", "--json"])
         }));
     }
 

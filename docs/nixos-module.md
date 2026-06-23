@@ -416,6 +416,7 @@ Example lifecycle planning through NixOS options:
       device = "vg0/root-cache";
       properties."lvm.cache-mode" = "writethrough";
     };
+    lvmCaches."vg0/archive".operation = "rescan";
     luksKeyslots."cryptroot:1" = {
       operation = "add-key";
       device = "/dev/disk/by-id/root-luks";

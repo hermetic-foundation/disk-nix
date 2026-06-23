@@ -495,7 +495,8 @@ and remove commands require the canonical `vg/pool` target form.
 LVM cache command plans render `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` commands for `lvmCaches`
 lifecycle declarations. Executable attach plans require both an origin `vg/lv`
-target and a cache-pool LV.
+target and a cache-pool LV. `operation = "rescan"` renders read-only `lvs`
+cache mode, policy, utilization, and graph inspection commands.
 LVM volume group command plans render policy-gated `vgcreate` and `vgremove`
 commands for `volumeGroups` lifecycle declarations, reviewed `vgextend`
 commands for grow or add-device operations with an explicit physical volume,

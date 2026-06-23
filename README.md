@@ -203,6 +203,8 @@ bcache device path is declared.
 LVM cache apply plans use separate `lvmCaches` declarations and render
 `lvconvert --type cache`, `lvconvert --uncache`, and `lvchange --cachemode` or
 `--cachepolicy` commands when an origin `vg/lv` and cache-pool LV are declared.
+`lvmCaches.<origin>.operation = "rescan"` renders read-only `lvs` cache mode,
+policy, utilization, and graph inspection commands.
 Btrfs filesystem device topology plans render `btrfs device add`,
 `btrfs replace start`, and allocation-inspected `btrfs device remove` commands
 for review. Removal is blocked by default and requires explicit
