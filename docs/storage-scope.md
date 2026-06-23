@@ -10,6 +10,8 @@
 - LVM PVs, VGs, LVs, thin pools, snapshots, cache, and VDO
 - MD RAID
 - Btrfs filesystems, devices, subvolumes, snapshots, qgroups, balance, and usage
+- bcachefs filesystems, member devices, mounted usage, data-type accounting, and
+  lifecycle topology operations
 - ZFS pools, vdevs, datasets, zvols, snapshots, properties, cache, log, special
   vdevs, and pool health
 - iSCSI sessions, targets, portals, and LUNs
@@ -67,9 +69,11 @@ The current probe layer normalizes:
   cluster sizing, index block size, MFT record size, and allocated size
 - `dump.f2fs` for F2FS volume identity, UUID, block counts, valid block usage,
   segment counts, section/zone geometry, and overprovisioning metadata
-- `bcachefs show-super` and `bcachefs fs usage` for bcachefs external/internal
-  UUIDs, labels, member-device indexes, mounted capacity, online reservations,
-  data-type byte accounting, and per-device free/capacity metadata
+- `bcachefs show-super`, `bcachefs fs usage`, `blkid`, and `findmnt` for
+  first-class bcachefs filesystem and member-device nodes with
+  external/internal UUIDs, labels, member-device indexes, mounted capacity,
+  online reservations, data-type byte accounting, and per-device free/capacity
+  metadata
 - `/proc/swaps` for active swap devices/files, active size, used/free bytes,
   swap type, and priority
 - `losetup --json --list` for loop device mappings, backing files or block

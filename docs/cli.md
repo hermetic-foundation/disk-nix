@@ -179,20 +179,21 @@ Use these commands for:
   `blkid` signature details, partition number, start/end geometry, type/name,
   and flags when probes expose them
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
-  ZFS datasets/snapshots, and NFS exports, with selected filesystem metadata
-  details such as `blkid` version/block-size/usage, exFAT GUID/serial/cluster
-  geometry, NTFS volume identity, version, cluster sizing, and MFT record
-  sizing, F2FS block/segment/overprovisioning metadata, bcachefs
-  external/internal UUID, member-device, mounted usage, and data-type byte
-  accounting, Btrfs Data/Metadata/System allocation profiles and byte counts,
-  and ext state/features/block and inode counts when probes expose them
-- `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
-  exports, including LVM origin/pool/data metadata, activation state, role,
-  layout, health, tags, thin-pool fullness behavior, metadata size, and cache
-  or writecache status, MD RAID level/state, iSCSI attached disks, NFS
+  bcachefs filesystems, ZFS datasets/snapshots, and NFS exports, with selected
+  filesystem metadata details such as `blkid` version/block-size/usage, exFAT
+  GUID/serial/cluster geometry, NTFS volume identity, version, cluster sizing,
+  and MFT record sizing, F2FS block/segment/overprovisioning metadata,
+  bcachefs external/internal UUID, member-device, mounted usage, and data-type
+  byte accounting, Btrfs Data/Metadata/System allocation profiles and byte
+  counts, and ext state/features/block and inode counts when probes expose them
+- `volumes`: logical storage objects such as LVM, Btrfs, bcachefs, ZFS, zvols,
+  LUNs, and exports, including LVM origin/pool/data metadata, activation state,
+  role, layout, health, tags, thin-pool fullness behavior, metadata size, and
+  cache or writecache status, MD RAID level/state, iSCSI attached disks, NFS
   server/export details, and ZFS zvol `volsize` when reported by `zfs list`
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
-  pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays,
+  pools, Btrfs filesystems/qgroups, bcachefs filesystems, ZFS pools/vdevs, and
+  MD RAID arrays,
   including ZFS health/vdev role/state/error counters, LVM extent and PV/LV
   counts, Btrfs qgroup limits, and MD RAID metadata version, name, level,
   state, device counts, and event counters where probes expose them
@@ -223,7 +224,7 @@ Use these commands for:
   replacement policy, dirty data, writeback percentage, `blkid` signature
   details, ext superblock details, LVM layout, health, thin/cache/writecache
   status, NTFS volume geometry and MFT record sizing, F2FS block/segment usage,
-  bcachefs filesystem and per-device capacity accounting, Btrfs allocation
+  bcachefs filesystem and member-device capacity accounting, Btrfs allocation
   class profiles and byte counts, VDO backing and logical/physical size
   details, NVMe namespace details, loop mapping details, and active swap
   state/type/priority when probed

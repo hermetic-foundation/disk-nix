@@ -146,6 +146,7 @@ fn filesystem_kind(filesystem_type: &str) -> NodeKind {
     match filesystem_type {
         "swap" => NodeKind::Swap,
         "btrfs" => NodeKind::BtrfsFilesystem,
+        "bcachefs" => NodeKind::BcachefsFilesystem,
         "zfs_member" => NodeKind::ZfsPool,
         _ => NodeKind::Filesystem,
     }

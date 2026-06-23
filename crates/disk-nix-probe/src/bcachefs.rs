@@ -17,7 +17,7 @@ pub fn normalize_show_super(device: &str, bytes: &[u8]) -> Result<StorageGraph, 
         .cloned();
     let mut filesystem = Node::new(
         filesystem_id.clone(),
-        NodeKind::Filesystem,
+        NodeKind::BcachefsFilesystem,
         label.clone().unwrap_or_else(|| "bcachefs".to_string()),
     )
     .with_path(device)
@@ -43,7 +43,7 @@ pub fn normalize_show_super(device: &str, bytes: &[u8]) -> Result<StorageGraph, 
     graph.add_node(
         Node::new(
             format!("block:{device}"),
-            NodeKind::DeviceMapper,
+            NodeKind::BcachefsDevice,
             device.to_string(),
         )
         .with_path(device.to_string()),
@@ -65,7 +65,7 @@ pub fn normalize_fs_usage(target: &str, bytes: &[u8]) -> Result<StorageGraph, Pr
         .as_ref()
         .map(|uuid| format!("bcachefs:{uuid}"))
         .unwrap_or_else(|| format!("mount:{target}"));
-    let mut filesystem = Node::new(filesystem_id.clone(), NodeKind::Filesystem, target)
+    let mut filesystem = Node::new(filesystem_id.clone(), NodeKind::BcachefsFilesystem, target)
         .with_property("filesystem.type", "bcachefs")
         .with_property("bcachefs.mount-target", target);
 
@@ -134,7 +134,7 @@ pub fn normalize_fs_usage(target: &str, bytes: &[u8]) -> Result<StorageGraph, Pr
         );
         let mut node = Node::new(
             device_id.clone(),
-            NodeKind::PhysicalDisk,
+            NodeKind::BcachefsDevice,
             device.name.clone(),
         )
         .with_property("filesystem.type", "bcachefs")
@@ -427,7 +427,7 @@ capacity:            16000900661248        30519296
             .find(|node| node.id.0 == "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3")
             .expect("filesystem node exists");
 
-        assert_eq!(filesystem.kind, NodeKind::Filesystem);
+        assert_eq!(filesystem.kind, NodeKind::BcachefsFilesystem);
         assert_eq!(
             filesystem.identity.uuid.as_deref(),
             Some("a2d6fc04-efd0-4e36-aece-2475941d09a3")
@@ -479,6 +479,7 @@ capacity:            16000900661248        30519296
             .iter()
             .find(|node| node.id.0 == "bcachefs-device:a2d6fc04-efd0-4e36-aece-2475941d09a3:6")
             .expect("device node exists");
+        assert_eq!(device.kind, NodeKind::BcachefsDevice);
         assert_eq!(device.name, "sdc");
         assert_eq!(device.size_bytes, Some(16_000_900_661_248));
         assert_eq!(

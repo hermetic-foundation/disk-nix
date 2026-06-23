@@ -1751,6 +1751,7 @@ fn is_device_node(node: &Node) -> bool {
             | NodeKind::MultipathDevice
             | NodeKind::NvmeNamespace
             | NodeKind::LoopDevice
+            | NodeKind::BcachefsDevice
             | NodeKind::BackingFile
             | NodeKind::Swap
     )
@@ -1768,6 +1769,7 @@ fn is_filesystem_node(node: &Node) -> bool {
             | NodeKind::BtrfsSubvolume
             | NodeKind::BtrfsSnapshot
             | NodeKind::BtrfsQgroup
+            | NodeKind::BcachefsFilesystem
             | NodeKind::ZfsDataset
             | NodeKind::ZfsSnapshot
             | NodeKind::NfsExport
@@ -1789,6 +1791,7 @@ fn is_volume_node(node: &Node) -> bool {
             | NodeKind::BtrfsSubvolume
             | NodeKind::BtrfsSnapshot
             | NodeKind::BtrfsQgroup
+            | NodeKind::BcachefsFilesystem
             | NodeKind::ZfsPool
             | NodeKind::ZfsDataset
             | NodeKind::ZfsSnapshot
@@ -1805,6 +1808,7 @@ fn is_pool_node(node: &Node) -> bool {
             | NodeKind::LvmThinPool
             | NodeKind::BtrfsFilesystem
             | NodeKind::BtrfsQgroup
+            | NodeKind::BcachefsFilesystem
             | NodeKind::ZfsPool
             | NodeKind::ZfsVdev
             | NodeKind::MdRaid
@@ -1833,6 +1837,7 @@ fn is_mapping_node(node: &Node) -> bool {
             | NodeKind::MultipathDevice
             | NodeKind::LoopDevice
             | NodeKind::CacheDevice
+            | NodeKind::BcachefsDevice
     )
 }
 
@@ -2272,11 +2277,11 @@ mod tests {
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 
     use super::{
-        confirmation_file_accepts, is_device_node, is_mapping_node, is_network_storage_node,
-        is_partition_node, is_pool_node, is_snapshot_node, mount_details, print_devices,
-        print_filesystems, print_mappings, print_mounts, print_network_storage, print_partitions,
-        print_pools, print_snapshots, print_usage, print_volumes, snapshot_source, usage_details,
-        usage_percent,
+        confirmation_file_accepts, is_device_node, is_filesystem_node, is_mapping_node,
+        is_network_storage_node, is_partition_node, is_pool_node, is_snapshot_node, is_volume_node,
+        mount_details, print_devices, print_filesystems, print_mappings, print_mounts,
+        print_network_storage, print_partitions, print_pools, print_snapshots, print_usage,
+        print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2310,6 +2315,19 @@ mod tests {
             "vg:root",
             NodeKind::LvmVolumeGroup,
             "root"
+        )));
+        let bcachefs = Node::new(
+            "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
+            NodeKind::BcachefsFilesystem,
+            "archive",
+        );
+        assert!(is_filesystem_node(&bcachefs));
+        assert!(is_volume_node(&bcachefs));
+        assert!(is_pool_node(&bcachefs));
+        assert!(is_device_node(&Node::new(
+            "bcachefs-device:a2d6fc04-efd0-4e36-aece-2475941d09a3:6",
+            NodeKind::BcachefsDevice,
+            "sdc"
         )));
         assert!(is_snapshot_node(&Node::new(
             "snapshot:tank/home@before",
@@ -2651,7 +2669,7 @@ mod tests {
 
         let bcachefs = Node::new(
             "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
-            NodeKind::Filesystem,
+            NodeKind::BcachefsFilesystem,
             "archive",
         )
         .with_property(
@@ -2677,7 +2695,7 @@ mod tests {
 
         let bcachefs_device = Node::new(
             "bcachefs-device:a2d6fc04-efd0-4e36-aece-2475941d09a3:6",
-            NodeKind::PhysicalDisk,
+            NodeKind::BcachefsDevice,
             "sdc",
         )
         .with_property("bcachefs.device-label", "hdd.archive")
@@ -2821,7 +2839,7 @@ mod tests {
         graph.add_node(
             Node::new(
                 "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
-                NodeKind::Filesystem,
+                NodeKind::BcachefsFilesystem,
                 "archive",
             )
             .with_property(

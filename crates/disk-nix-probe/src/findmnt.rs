@@ -135,6 +135,7 @@ fn mount_kind(filesystem: &FindmntFilesystem) -> NodeKind {
 fn source_kind(filesystem: &FindmntFilesystem, source: &str) -> NodeKind {
     match filesystem.fstype.as_deref() {
         Some("nfs" | "nfs4") => NodeKind::NfsExport,
+        Some("bcachefs") => NodeKind::BcachefsFilesystem,
         _ if source.starts_with("/dev/") => NodeKind::Filesystem,
         _ => NodeKind::Filesystem,
     }

@@ -44,6 +44,10 @@ ZFS pool -> vdevs -> datasets -> snapshots
 Btrfs filesystem -> devices -> subvolumes -> snapshots -> qgroups
 ```
 
+```text
+bcachefs filesystem -> member devices -> mountpoint
+```
+
 Nodes describe storage objects. Edges describe relationships such as
 `contains`, `backs`, `maps-to`, `member-of`, `mounted-at`, `snapshot-of`,
 `cache-for`, and `depends-on`.

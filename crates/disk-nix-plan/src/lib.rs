@@ -5632,6 +5632,73 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::BcachefsFilesystem,
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "bcachefs member growth expands a mounted filesystem after backing capacity changes"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the member device and target size before resizing".to_string(),
+                    "refresh bcachefs usage after growth before resizing consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BcachefsFilesystem,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "bcachefs rescan refreshes filesystem and member-device usage metadata"
+                    .to_string(),
+                alternatives: vec![
+                    "run rescan before device replacement or removal planning".to_string(),
+                    "review per-device free and data-type byte accounting".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BcachefsFilesystem,
+            operation: Operation::AddDevice,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "adding a bcachefs member expands the mounted filesystem device set"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the new block device identity before adding it".to_string(),
+                    "rereplicate data after topology changes when replicas or durability changed"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BcachefsFilesystem,
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "bcachefs replacement should add new capacity, rereplicate data, then remove the old member"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement capacity before evacuating old media".to_string(),
+                    "inspect rereplication status before removing the old member".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BcachefsFilesystem,
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "bcachefs member removal requires enough remaining capacity and replicas"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement capacity before removal".to_string(),
+                    "rereplicate data and verify free metadata capacity before final removal"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::BtrfsSubvolume,
             operation: Operation::Create,
             risk: RiskClass::Online,
@@ -6226,6 +6293,32 @@ pub fn default_capabilities() -> Vec<Capability> {
             operation: Operation::Rebalance,
             risk: RiskClass::Online,
             advice: None,
+        },
+        Capability {
+            node_kind: NodeKind::BcachefsFilesystem,
+            operation: Operation::Rebalance,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "bcachefs rereplication rebalances data across the current member set"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect bcachefs usage before and after rereplication".to_string(),
+                    "prefer rereplication before removing or replacing a member".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BcachefsFilesystem,
+            operation: Operation::Scrub,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "bcachefs scrub verifies filesystem data and metadata online".to_string(),
+                alternatives: vec![
+                    "review scrub output before repair or topology contraction".to_string(),
+                    "use filesystem check when offline metadata validation is required"
+                        .to_string(),
+                ],
+            }),
         },
         Capability {
             node_kind: NodeKind::MdRaid,
@@ -7553,6 +7646,28 @@ mod tests {
         assert_eq!(replace.risk, RiskClass::OfflineRequired);
         assert_eq!(remove.risk, RiskClass::PotentialDataLoss);
         assert!(replace.advice.is_some());
+
+        for (operation, risk) in [
+            (Operation::Grow, RiskClass::Online),
+            (Operation::Rescan, RiskClass::Online),
+            (Operation::AddDevice, RiskClass::Online),
+            (Operation::ReplaceDevice, RiskClass::OfflineRequired),
+            (Operation::RemoveDevice, RiskClass::PotentialDataLoss),
+            (Operation::Rebalance, RiskClass::Online),
+            (Operation::Scrub, RiskClass::Online),
+        ] {
+            let capability = capabilities
+                .iter()
+                .find(|capability| {
+                    capability.node_kind == NodeKind::BcachefsFilesystem
+                        && capability.operation == operation
+                })
+                .unwrap_or_else(|| {
+                    panic!("bcachefs filesystem {operation:?} capability should exist")
+                });
+            assert_eq!(capability.risk, risk);
+            assert!(capability.advice.is_some());
+        }
     }
 
     #[test]

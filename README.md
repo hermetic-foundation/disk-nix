@@ -11,6 +11,7 @@ storage stacks:
 - LUKS headers, keyslots, tokens, and device-mapper mappings
 - LVM PVs, VGs, LVs, thin pools, snapshots, cache, and VDO
 - Btrfs filesystems, devices, subvolumes, snapshots, qgroups, and usage
+- bcachefs filesystems, member devices, usage, and topology updates
 - ZFS pools, vdevs, datasets, zvols, snapshots, snapshot hold reference counts,
   compression/quota/reservation/encryption properties, cache, log, and special
   vdevs
