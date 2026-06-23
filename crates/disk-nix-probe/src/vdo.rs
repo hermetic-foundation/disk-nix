@@ -22,6 +22,12 @@ struct VdoStats {
     saving_percent: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct VdoVerboseStats {
+    device: String,
+    properties: Vec<(String, String)>,
+}
+
 pub fn normalize_vdo_status(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
     let volumes = parse_vdo_status(bytes)?;
     let mut graph = StorageGraph::empty();
@@ -39,6 +45,17 @@ pub fn normalize_vdostats_table(bytes: &[u8]) -> Result<StorageGraph, ProbeError
 
     for stat in stats {
         add_stats(&mut graph, stat);
+    }
+
+    Ok(graph)
+}
+
+pub fn normalize_vdostats_verbose(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
+    let stats = parse_vdostats_verbose(bytes)?;
+    let mut graph = StorageGraph::empty();
+
+    for stat in stats {
+        add_verbose_stats(&mut graph, stat);
     }
 
     Ok(graph)
@@ -144,6 +161,61 @@ fn parse_vdostats_table(bytes: &[u8]) -> Result<Vec<VdoStats>, ProbeError> {
     Ok(rows)
 }
 
+fn parse_vdostats_verbose(bytes: &[u8]) -> Result<Vec<VdoVerboseStats>, ProbeError> {
+    let text = std::str::from_utf8(bytes).map_err(|error| {
+        ProbeError::Adapter(format!("failed to read verbose vdostats output: {error}"))
+    })?;
+    let mut rows = Vec::new();
+    let mut current: Option<VdoVerboseStats> = None;
+
+    for line in text.lines() {
+        if line.trim().is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+
+        let indent = line
+            .chars()
+            .take_while(|character| character.is_ascii_whitespace())
+            .count();
+        let trimmed = line.trim();
+
+        if indent == 0 && trimmed.ends_with(':') {
+            if let Some(row) = current.take() {
+                rows.push(row);
+            }
+            let device = trimmed.trim_end_matches(':').trim().trim_matches('"');
+            if !device.is_empty() {
+                current = Some(VdoVerboseStats {
+                    device: device.to_string(),
+                    properties: Vec::new(),
+                });
+            }
+            continue;
+        }
+
+        let Some((key, value)) = trimmed.split_once(':') else {
+            continue;
+        };
+        let Some(row) = &mut current else {
+            continue;
+        };
+        let key = normalize_key(key);
+        let value = value.trim().trim_matches('"').trim_matches('\'');
+        if key.is_empty() || value.is_empty() {
+            continue;
+        }
+
+        row.properties
+            .push((format!("vdo.{key}"), value.to_string()));
+    }
+
+    if let Some(row) = current {
+        rows.push(row);
+    }
+
+    Ok(rows)
+}
+
 fn add_volume(graph: &mut StorageGraph, volume: VdoVolume) {
     let id = format!("vdo:{}", volume.name);
     let mut node = Node::new(id.clone(), NodeKind::VdoVolume, volume.name.clone());
@@ -224,6 +296,21 @@ fn add_stats(graph: &mut StorageGraph, stats: VdoStats) {
         if let Some(value) = value {
             node = node.with_property(key, value);
         }
+    }
+
+    graph.add_node(node);
+}
+
+fn add_verbose_stats(graph: &mut StorageGraph, stats: VdoVerboseStats) {
+    let mut node = Node::new(
+        vdo_id_from_path(&stats.device),
+        NodeKind::VdoVolume,
+        vdo_name_from_path(&stats.device),
+    )
+    .with_path(stats.device);
+
+    for (key, value) in stats.properties {
+        node = node.with_property(key, value);
     }
 
     graph.add_node(node);
@@ -328,6 +415,20 @@ Device                    1K-blocks    Used Available Use% Space saving%
 /dev/mapper/archive             1T    250G      750G  25%           60%
 /dev/mapper/raw              1048576  262144    786432  25%            0%
 "#;
+    const VDOSTATS_VERBOSE: &[u8] = br#"
+/dev/mapper/archive:
+  version: 47
+  release version: 133524
+  operating mode: normal
+  recovery percentage: 100
+  write policy: sync
+  data blocks used: 65536
+  overhead blocks used: 8192
+  logical blocks used: 262144
+/dev/mapper/recovering:
+  operating mode: recovering
+  recovery percentage: 42
+"#;
 
     #[test]
     fn normalizes_vdo_status() {
@@ -384,5 +485,38 @@ Device                    1K-blocks    Used Available Use% Space saving%
             .find(|node| node.id.0 == "vdo:raw")
             .expect("raw stats should exist");
         assert_eq!(raw.size_bytes, Some(1_073_741_824));
+    }
+
+    #[test]
+    fn normalizes_verbose_vdostats_metadata() {
+        let graph = normalize_vdostats_verbose(VDOSTATS_VERBOSE).expect("fixture should parse");
+        let archive = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "vdo:archive")
+            .expect("archive verbose stats should exist");
+
+        assert_eq!(archive.path.as_deref(), Some("/dev/mapper/archive"));
+        assert!(archive.properties.iter().any(|property| {
+            property.key == "vdo.operating-mode" && property.value == "normal"
+        }));
+        assert!(
+            archive
+                .properties
+                .iter()
+                .any(|property| property.key == "vdo.write-policy" && property.value == "sync")
+        );
+        assert!(archive.properties.iter().any(|property| {
+            property.key == "vdo.overhead-blocks-used" && property.value == "8192"
+        }));
+
+        let recovering = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "vdo:recovering")
+            .expect("recovering verbose stats should exist");
+        assert!(recovering.properties.iter().any(|property| {
+            property.key == "vdo.recovery-percentage" && property.value == "42"
+        }));
     }
 }

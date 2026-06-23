@@ -99,6 +99,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_lvm(&mut result);
         collect_vdo(&mut result);
         collect_vdostats(&mut result);
+        collect_vdostats_verbose(&mut result);
         collect_zfs(&mut result);
         collect_btrfs(&mut result);
         collect_bcache(&mut result);
@@ -587,6 +588,43 @@ fn collect_vdostats(result: &mut ProbeResult) {
         },
         Err(message) => result.reports.push(ProbeReport {
             adapter: "vdostats".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
+    }
+}
+
+fn collect_vdostats_verbose(result: &mut ProbeResult) {
+    match run_report("vdostats", &["--verbose"]) {
+        Ok(output) => match vdo::normalize_vdostats_verbose(&output) {
+            Ok(graph) if graph.nodes.is_empty() => result.reports.push(ProbeReport {
+                adapter: "vdostats-verbose".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("no verbose VDO statistics discovered".to_string()),
+            }),
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "vdostats-verbose".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from verbose VDO statistics"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "vdostats-verbose".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "vdostats-verbose".to_string(),
             status: if message.contains("not found") || message.contains("No such file") {
                 ProbeStatus::Unavailable
             } else {

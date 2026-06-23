@@ -1786,6 +1786,10 @@ fn usage_details(node: &Node) -> String {
         ("btrfs.max-exclusive", "max-excl"),
         ("vdo.use-percent", "vdo-use"),
         ("vdo.space-saving-percent", "saving"),
+        ("vdo.operating-mode", "mode"),
+        ("vdo.recovery-percentage", "recovery"),
+        ("vdo.write-policy", "write-policy"),
+        ("vdo.overhead-blocks-used", "overhead-blocks"),
         ("bcache.cache_mode", "cache-mode"),
         ("bcache.dirty_data", "dirty"),
         ("zfs.health", "health"),
@@ -2055,7 +2059,9 @@ mod tests {
                     allocated_bytes: None,
                 })
                 .with_property("vdo.use-percent", "50%")
-                .with_property("vdo.space-saving-percent", "20%"),
+                .with_property("vdo.space-saving-percent", "20%")
+                .with_property("vdo.operating-mode", "normal")
+                .with_property("vdo.write-policy", "sync"),
         );
 
         let mut output = Vec::new();
@@ -2063,6 +2069,6 @@ mod tests {
         let output = String::from_utf8(output).expect("table is utf8");
 
         assert!(output.contains("DETAILS"));
-        assert!(output.contains("vdo-use=50% saving=20%"));
+        assert!(output.contains("vdo-use=50% saving=20% mode=normal write-policy=sync"));
     }
 }

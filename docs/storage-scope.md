@@ -68,7 +68,9 @@ The current probe layer normalizes:
   logical/physical size, compression, deduplication, write policy, index, and
   cache settings
 - VDO `vdostats --human-readable` output for runtime size, used/free capacity,
-  utilization percentage, and space-saving percentage
+  utilization percentage, and space-saving percentage; `vdostats --verbose`
+  output for operating mode, recovery percentage, write policy, and detailed
+  VDO block/accounting metadata
 - ZFS `zpool list -H -p`, `zpool status -P`, and `zfs list -H -p` output for
   pool capacity, health, vdev topology, data/log/cache/special/dedup roles,
   backing devices, datasets, snapshots, zvols, mountpoints, clone origins, and
