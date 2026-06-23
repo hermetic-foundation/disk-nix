@@ -15,12 +15,14 @@ let
     builtins.dirOf cfg.apply.reportOut
   );
   applyCommand = if cfg.apply.failOnBlocked then "apply" else "validate";
+  applyPolicy = builtins.removeAttrs cfg.apply [ "execute" ];
   applyArgs = [
     applyCommand
     "--spec"
     "/etc/disk-nix/spec.json"
   ]
   ++ lib.optional cfg.apply.probeCurrent "--probe-current"
+  ++ lib.optional cfg.apply.execute "--execute"
   ++ lib.optionals (cfg.apply.scriptOut != null) [
     "--script-out"
     cfg.apply.scriptOut
@@ -1012,6 +1014,12 @@ in
         description = "Fail the activation service when policy blocks planned actions. When false, activation uses disk-nix validate so blocked actions are reported without failing the unit.";
       };
 
+      execute = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Run ready, policy-allowed storage commands during activation with disk-nix apply --execute. The default only validates policy and writes review artifacts.";
+      };
+
       scriptOut = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
@@ -1063,7 +1071,7 @@ in
         caches = (cfg.spec.caches or { }) // normalizeLifecycleSpec cfg.caches;
         snapshots = (cfg.spec.snapshots or { }) // normalizeSnapshotSpec cfg.snapshots;
       };
-      apply = cfg.apply;
+      apply = applyPolicy;
     };
 
     fileSystems =
@@ -1144,6 +1152,10 @@ in
       {
         assertion = !(cfg.apply.allowDestructive && cfg.apply.mode == "activation");
         message = "disk-nix refuses destructive activation-mode storage changes.";
+      }
+      {
+        assertion = cfg.apply.execute -> cfg.apply.failOnBlocked;
+        message = "services.disk-nix.apply.execute requires services.disk-nix.apply.failOnBlocked=true because disk-nix validate cannot execute storage commands.";
       }
       {
         assertion = cfg.apply.scriptOut != null -> lib.hasPrefix "/" cfg.apply.scriptOut;

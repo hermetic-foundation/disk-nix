@@ -254,6 +254,24 @@
             };
           }
         ];
+        nixosModuleExecuteTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              apply = {
+                mode = "activation";
+                execute = true;
+                probeCurrent = true;
+                failOnBlocked = true;
+                scriptOut = "/run/disk-nix/execute.sh";
+                reportOut = "/run/disk-nix/execute-report.json";
+              };
+            };
+          }
+        ];
       in
       {
         formatter = formatProgram;
@@ -540,6 +558,27 @@
                 grep -- '/run/disk-nix/apply.sh' "$applyScript"
                 grep -- '--report-out' "$applyScript"
                 grep -- '/run/disk-nix/apply-report.json' "$applyScript"
+                touch "$out"
+              '';
+          nixosModuleExecute =
+            pkgs.runCommand "disk-nix-nixos-module-execute-check" { nativeBuildInputs = [ pkgs.jq ]; }
+              ''
+                spec=${nixosModuleExecuteTest.config.environment.etc."disk-nix/spec.json".source}
+                jq -e '
+                  .apply.mode == "activation"
+                  and .apply.failOnBlocked == true
+                  and .apply.probeCurrent == true
+                  and has("apply")
+                  and (.apply | has("execute") | not)
+                ' "$spec"
+                applyScript='${nixosModuleExecuteTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'
+                grep -- 'apply' "$applyScript"
+                grep -- '--execute' "$applyScript"
+                grep -- '--probe-current' "$applyScript"
+                grep -- '--script-out' "$applyScript"
+                grep -- '/run/disk-nix/execute.sh' "$applyScript"
+                grep -- '--report-out' "$applyScript"
+                grep -- '/run/disk-nix/execute-report.json' "$applyScript"
                 touch "$out"
               '';
         };

@@ -302,7 +302,9 @@ Example lifecycle planning through NixOS options:
   shell script during validation. Set `reportOut` to persist the JSON report
   before blocked-policy failures are returned. Set `failOnBlocked = false` to
   run `disk-nix validate` during activation so blocked policy is reported
-  without failing the unit.
+  without failing the unit. Set `execute = true` to run ready, policy-allowed
+  commands with `disk-nix apply --execute` during activation; this requires
+  `failOnBlocked = true`.
 - `boot`: reserved for boot-time lifecycle work
 - `install`: reserved for installer workflows
 
@@ -325,6 +327,7 @@ Mutation policy should remain explicit:
 - `requireConfirmationFile`
 - `probeCurrent`
 - `failOnBlocked`
+- `execute`
 - `scriptOut`
 - `reportOut`
 
@@ -335,6 +338,9 @@ contains a standalone line equal to `disk-nix confirm`.
 `failOnBlocked` defaults to true. When false, activation keeps writing the same
 report data but uses `disk-nix validate`, which exits successfully even when
 policy blocks planned actions.
+`execute` defaults to false. When true, activation runs `disk-nix apply --execute` after policy validation and command-readiness checks pass. The module
+requires `failOnBlocked = true` for this mode because `disk-nix validate` is
+report-only.
 `scriptOut` must be an absolute path. The activation service creates its parent
 directory before asking the CLI to write the review script.
 `reportOut` must also be an absolute path. The activation service creates its
