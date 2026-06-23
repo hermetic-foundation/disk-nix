@@ -35,10 +35,10 @@ or the NixOS module wrapper written to `/etc/disk-nix/spec.json`:
 ```
 
 Current planning is intentionally conservative. It classifies filesystem
-resize policy, preservation intent, and lifecycle operations for volumes,
-pools, datasets, LUNs, iSCSI sessions, exports, cache layers, and snapshots. It
-reports destructive or potentially destructive behavior with alternatives
-instead of silently accepting unsafe mutation.
+resize policy, preservation intent, and lifecycle operations for disks,
+partitions, volumes, pools, datasets, LUNs, iSCSI sessions, exports, cache
+layers, and snapshots. It reports destructive or potentially destructive
+behavior with alternatives instead of silently accepting unsafe mutation.
 
 Examples:
 
@@ -59,6 +59,10 @@ Examples:
   original device can remain available until verification passes.
 - Cache `replace-device` is classified as offline-required because dirty or
   writeback data must be flushed or detached cleanly before replacement.
+- disk partition-table creation is classified as destructive because it can
+  hide or replace existing storage metadata.
+- partition creation and growth are classified as offline-required because the
+  kernel partition table reread and dependent consumers must be coordinated.
 - `properties = { ... }` is classified as safe property-update intent.
 - LUN `operation = "grow"` is classified as offline-required because the
   storage target, host rescan, multipath, and consumers must be coordinated.
@@ -80,6 +84,8 @@ policy fields.
 
 Lifecycle collections currently accepted by the planner:
 
+- `disks`
+- `partitions`
 - `volumes`
 - `volumeGroups`
 - `pools`
@@ -101,14 +107,18 @@ Lifecycle objects may use:
 - `properties`: object of properties to set
 - `desiredSize`, `targetSize`, or `size`: desired capacity for grow, shrink,
   or create plans
+- `device` or `disk`: backing device path for disk and partition operations
+- `start` and `end`: partition geometry for partition creation or resizing
+- `partitionType` or `type`: partition type/name metadata for partition
+  lifecycle plans
 - `destroy`: boolean destructive intent
 - `preserveData`: boolean preservation policy
 
 Plan actions include typed `context` when a desired object provides useful
 executor inputs. Context fields can include collection, name, target, device,
 replacement, property, property value, filesystem type, mountpoint, and
-desired size. Apply reports use this context to build command plans without
-relying on action-id parsing.
+desired size, plus partition start, end, and type. Apply reports use this
+context to build command plans without relying on action-id parsing.
 
 `disk-nix plan --probe-current --spec <path>` probes the current host and adds
 a `topologyComparison` section to the plan. The comparison matches action

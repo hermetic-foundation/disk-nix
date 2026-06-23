@@ -116,6 +116,34 @@ let
           example = "100GiB";
         };
 
+        device = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Backing device or partition path for this lifecycle object.";
+          example = "/dev/disk/by-id/nvme-root";
+        };
+
+        start = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Partition start offset for partition lifecycle declarations.";
+          example = "1MiB";
+        };
+
+        end = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Partition end offset or size for partition lifecycle declarations.";
+          example = "100%";
+        };
+
+        partitionType = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Partition type/name argument used by partition lifecycle declarations.";
+          example = "linux";
+        };
+
         metadata = lib.mkOption {
           type = lib.types.attrsOf json.type;
           default = { };
@@ -181,6 +209,10 @@ let
           destroy
           preserveData
           desiredSize
+          device
+          start
+          end
+          partitionType
           ;
       }
     )
@@ -603,6 +635,18 @@ in
       description = "Typed volume lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    disks = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed disk lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
+    partitions = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed partition lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
     volumeGroups = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -778,6 +822,8 @@ in
         nfs = (cfg.spec.nfs or { }) // {
           mounts = ((cfg.spec.nfs or { }).mounts or { }) // typedNfsMountSpec;
         };
+        disks = (cfg.spec.disks or { }) // normalizeLifecycleSpec cfg.disks;
+        partitions = (cfg.spec.partitions or { }) // normalizeLifecycleSpec cfg.partitions;
         volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
         pools = (cfg.spec.pools or { }) // normalizeLifecycleSpec cfg.pools;

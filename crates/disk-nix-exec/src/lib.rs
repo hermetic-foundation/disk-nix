@@ -448,6 +448,32 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent filesystem capacity reflects the grown backing volume".to_string(),
             ],
         ),
+        Operation::Create | Operation::Grow if collection == Some("partitions") => (
+            vec![
+                command(
+                    ["lsblk", "--json", "--bytes", "--output-all"],
+                    false,
+                    "verify kernel partition and consumer topology",
+                ),
+                command(
+                    ["parted", "-lm"],
+                    false,
+                    "verify partition table geometry after the change",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify partition graph node and dependent mappings",
+                ),
+            ],
+            vec![
+                "partition start, end, size, type, and flags match desired state".to_string(),
+                "kernel reread succeeded or a reboot is scheduled before resizing consumers"
+                    .to_string(),
+                "dependent LUKS, LVM, filesystem, and mount layers still resolve correctly"
+                    .to_string(),
+            ],
+        ),
         Operation::Grow
             if collection == Some("luns")
                 || collection == Some("iscsiSessions")
@@ -754,6 +780,40 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Grow if collection == Some("partitions") => {
+            let target = target.unwrap_or("<partition>");
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect partition, consumers, and backing device before growth",
+                    ),
+                    partition_grow_command(target, desired_size),
+                    command(
+                        ["partprobe"],
+                        true,
+                        "ask the kernel to reread partition tables after the geometry change",
+                    ),
+                    command_with_readiness(
+                        ["blockdev", "--rereadpt", "<disk>"],
+                        true,
+                        CommandReadiness::NeedsDomainImplementation,
+                        ["disk path"],
+                        "force a partition table reread when supported by the block device",
+                    ),
+                ],
+                vec![
+                    "confirm the backing disk or LUN has already grown".to_string(),
+                    "pause dependent consumers when the kernel cannot reread an active table"
+                        .to_string(),
+                    "resize LUKS, LVM, and filesystems only after the partition reports the new size"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Grow => {
             let target = target.unwrap_or("<target>");
             (
@@ -872,6 +932,45 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     snapshot_command,
                 ],
                 Vec::new(),
+                true,
+            )
+        }
+        Operation::Create if collection == Some("partitions") => {
+            let target = target.unwrap_or("<partition>");
+            let disk = action.context.device.as_deref().unwrap_or("<disk>");
+            let start = action.context.start.as_deref().unwrap_or("<start>");
+            let end = action.context.end.as_deref().unwrap_or("<end>");
+            let partition_type = action
+                .context
+                .partition_type
+                .as_deref()
+                .unwrap_or("<partition-type>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", disk],
+                        false,
+                        "inspect disk identity and existing partition table before creation",
+                    ),
+                    partition_create_command(disk, partition_type, start, end),
+                    command(
+                        ["partprobe", disk],
+                        true,
+                        "ask the kernel to reread the changed partition table",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "verify the new partition node before creating higher layers",
+                    ),
+                ],
+                vec![
+                    "verify the selected disk path is stable and matches the intended hardware"
+                        .to_string(),
+                    "verify the start and end offsets are inside known-free space".to_string(),
+                    "format or map the new partition only after it appears by stable identity"
+                        .to_string(),
+                ],
                 true,
             )
         }
@@ -1145,6 +1244,40 @@ fn snapshot_command(target: &str, snapshot: &str) -> ExecutionCommand {
     }
 }
 
+fn partition_create_command(
+    disk: &str,
+    partition_type: &str,
+    start: &str,
+    end: &str,
+) -> ExecutionCommand {
+    command_vec_with_readiness(
+        vec!["parted", "-s", disk, "mkpart", partition_type, start, end],
+        true,
+        CommandReadiness::NeedsDomainImplementation,
+        ["verified free region", "partition number and flags"],
+        "create a partition in the reviewed free region",
+    )
+}
+
+fn partition_grow_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    match desired_size {
+        Some(size) => command_vec_with_readiness(
+            vec!["parted", "-s", "<disk>", "resizepart", target, size],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["disk path", "partition number"],
+            "grow a partition to the desired end offset or size after backing capacity is visible",
+        ),
+        None => command_vec_with_readiness(
+            vec!["growpart", "<disk>", "<partition-number>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["disk path", "partition number", "desired end offset"],
+            "grow a partition after backing capacity is visible",
+        ),
+    }
+}
+
 fn property_assignment(action: &PlannedAction) -> String {
     let key = action.context.property.as_deref().unwrap_or("<key>");
     let value = action
@@ -1309,6 +1442,53 @@ mod tests {
 
         assert!(script.contains("# NOT READY: lvextend --resizefs --size '+<size>' vg/root"));
         assert!(script.contains("# Unresolved inputs: desired size delta"));
+    }
+
+    #[test]
+    fn partition_creation_reports_reviewable_commands_when_offline_allowed() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "partitions": {
+                  "root": {
+                    "operation": "create",
+                    "device": "/dev/disk/by-id/nvme-root",
+                    "start": "1MiB",
+                    "end": "100%",
+                    "partitionType": "linux"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_plan.len(), 1);
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv
+                == [
+                    "parted",
+                    "-s",
+                    "/dev/disk/by-id/nvme-root",
+                    "mkpart",
+                    "linux",
+                    "1MiB",
+                    "100%",
+                ]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+        }));
+        assert!(
+            report.verification_plan[0]
+                .commands
+                .iter()
+                .any(|command| command.argv == ["parted", "-lm"])
+        );
     }
 
     #[test]

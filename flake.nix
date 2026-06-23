@@ -149,6 +149,11 @@
                 removeDevices = [ "/dev/disk/by-id/old-disk" ];
                 properties.autotrim = "on";
               };
+              partitions.root = {
+                operation = "grow";
+                device = "/dev/disk/by-id/nvme-root-part2";
+                desiredSize = "100%";
+              };
               datasets."tank/archive" = {
                 destroy = true;
               };
@@ -206,9 +211,12 @@
               ."$schema" == "https://json-schema.org/draft/2020-12/schema"
               and .properties.spec["$ref"] == "#/$defs/specBody"
               and .properties.apply["$ref"] == "#/$defs/applyPolicy"
+              and .properties.partitions["$ref"] == "#/$defs/lifecycleMap"
               and (."$defs".operation.enum | index("grow") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
+              and (."$defs".specBody.properties.disks["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
+              and ."$defs".lifecycleObject.properties.partitionType.type == "string"
               and ."$defs".applyPolicy.properties.failOnBlocked.default == true
               and (."$defs".applyPolicy.properties.reportOut.type | index("string") != null)
             ' "$schema"
@@ -228,11 +236,12 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 11
-              and .summary.offlineRequiredCount == 3
+              .summary.actionCount == 12
+              and .summary.offlineRequiredCount == 4
               and .summary.destructiveCount == 1
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
+              and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/archive:destroy"))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
               and (.actions | any(.id == "caches:tank/l2arc0:replace-device:/dev/disk/by-id/old-cache"))
@@ -256,22 +265,22 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 6
-              and .apply.blockedSummary.offlineRequiredCount == 3
+              and .apply.blockedCount == 7
+              and .apply.blockedSummary.offlineRequiredCount == 4
               and .apply.blockedSummary.destructiveCount == 1
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 6
+              and .apply.blockedCount == 7
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 6
-              and .messages[0] == "apply policy blocked 6 action(s)"
+              and .apply.blockedCount == 7
+              and .messages[0] == "apply policy blocked 7 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -310,6 +319,9 @@
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
                   and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
+                  and .spec.partitions.root.operation == "grow"
+                  and .spec.partitions.root.device == "/dev/disk/by-id/nvme-root-part2"
+                  and .spec.partitions.root.desiredSize == "100%"
                   and .apply.mode == "activation"
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false

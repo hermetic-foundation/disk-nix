@@ -172,6 +172,12 @@ pub struct ActionContext {
     pub mountpoint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub desired_size: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partition_type: Option<String>,
 }
 
 impl ActionContext {
@@ -187,6 +193,9 @@ impl ActionContext {
             && self.fs_type.is_none()
             && self.mountpoint.is_none()
             && self.desired_size.is_none()
+            && self.start.is_none()
+            && self.end.is_none()
+            && self.partition_type.is_none()
     }
 }
 
@@ -359,6 +368,8 @@ pub fn plan_from_value(value: &Value) -> Plan {
         }
     }
     for collection in [
+        "disks",
+        "partitions",
         "volumes",
         "volumeGroups",
         "pools",
@@ -740,9 +751,23 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         collection: Some(collection.to_string()),
         name: Some(name.to_string()),
         target: Some(name.to_string()),
+        device: string_field(object, &["device", "disk"]),
         desired_size: desired_size(object),
+        start: string_field(object, &["start", "startOffset"]),
+        end: string_field(object, &["end", "endOffset"]),
+        partition_type: string_field(object, &["partitionType", "type"]),
         ..ActionContext::default()
     }
+}
+
+fn string_field(object: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        object.get(*key).and_then(|value| match value {
+            Value::String(value) => Some(value.clone()),
+            Value::Number(value) => Some(value.to_string()),
+            _ => None,
+        })
+    })
 }
 
 fn desired_size(object: &Value) -> Option<String> {
@@ -1179,6 +1204,30 @@ fn classify_operation(
     object: &Value,
 ) -> (RiskClass, bool, Option<Advice>) {
     match operation {
+        Operation::Create if collection == "disks" => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: "creating or replacing a disk partition table can hide existing data"
+                    .to_string(),
+                alternatives: destructive_alternatives(collection, object),
+            }),
+        ),
+        Operation::Create if collection == "partitions" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary:
+                    "partition creation changes on-disk metadata and requires kernel reread coordination"
+                        .to_string(),
+                alternatives: vec![
+                    "verify the target disk, free region, and partition table before applying"
+                        .to_string(),
+                    "prefer stable /dev/disk/by-id paths for disk selection".to_string(),
+                    "run partprobe or reboot if the kernel cannot reread the table".to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
         Operation::Grow if collection == "luns" || collection == "iscsiSessions" => (
             RiskClass::OfflineRequired,
@@ -1191,6 +1240,21 @@ fn classify_operation(
                     "grow the target LUN before resizing consumers".to_string(),
                     "rescan SCSI paths and verify multipath before filesystem growth".to_string(),
                     "confirm every dependent filesystem or volume sees the new capacity"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Grow if collection == "partitions" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "partition growth may require inactive consumers and a kernel partition table reread"
+                    .to_string(),
+                alternatives: vec![
+                    "grow the backing disk or LUN before resizing the partition".to_string(),
+                    "verify dependent LUKS, LVM, and filesystem layers before resizing consumers"
+                        .to_string(),
+                    "schedule a reboot when active consumers prevent partition table reread"
                         .to_string(),
                 ],
             }),
@@ -1278,6 +1342,12 @@ fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
             alternatives
                 .push("grow or attach replacement capacity instead of reformatting".to_string());
         }
+        "disks" | "partitions" => {
+            alternatives.push(
+                "preserve the existing partition table and add capacity elsewhere".to_string(),
+            );
+            alternatives.push("clone the disk before changing partition metadata".to_string());
+        }
         "exports" => {
             alternatives
                 .push("disable clients or switch exports before removing the source".to_string());
@@ -1316,6 +1386,44 @@ fn operation_label(operation: Operation) -> &'static str {
 #[must_use]
 pub fn default_capabilities() -> Vec<Capability> {
     vec![
+        Capability {
+            node_kind: NodeKind::PhysicalDisk,
+            operation: Operation::Format,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "creating a new partition table can hide existing data".to_string(),
+                alternatives: vec![
+                    "clone the disk before replacing partition metadata".to_string(),
+                    "prefer adding partitions in known-free regions".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Partition,
+            operation: Operation::Create,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "partition creation requires partition table reread coordination"
+                    .to_string(),
+                alternatives: vec![
+                    "verify disk identity and free regions before applying".to_string(),
+                    "schedule reboot when active consumers block table reread".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Partition,
+            operation: Operation::Grow,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "partition growth may require inactive consumers".to_string(),
+                alternatives: vec![
+                    "grow backing LUNs or disks before the partition".to_string(),
+                    "resize LUKS, LVM, and filesystems only after kernel reread succeeds"
+                        .to_string(),
+                ],
+            }),
+        },
         Capability {
             node_kind: NodeKind::Filesystem,
             operation: Operation::Grow,
@@ -1517,6 +1625,61 @@ mod tests {
             .find(|action| action.id == "volumes:vg/home:grow")
             .expect("volume grow action exists");
         assert_eq!(volume.context.desired_size.as_deref(), Some("800GiB"));
+    }
+
+    #[test]
+    fn plan_classifies_disk_and_partition_lifecycle_safely() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "disks": {
+                "/dev/disk/by-id/nvme-root": {
+                  "operation": "create",
+                  "partitionType": "gpt"
+                }
+              },
+              "partitions": {
+                "root": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/nvme-root",
+                  "start": "1MiB",
+                  "end": "100%",
+                  "partitionType": "linux"
+                },
+                "home": {
+                  "operation": "grow",
+                  "device": "/dev/disk/by-id/nvme-root-part2",
+                  "desiredSize": "750GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.destructive_count, 1);
+
+        let root = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "partitions:root:create")
+            .expect("partition create action exists");
+        assert_eq!(root.risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            root.context.device.as_deref(),
+            Some("/dev/disk/by-id/nvme-root")
+        );
+        assert_eq!(root.context.start.as_deref(), Some("1MiB"));
+        assert_eq!(root.context.end.as_deref(), Some("100%"));
+        assert_eq!(root.context.partition_type.as_deref(), Some("linux"));
+
+        let disk = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "disks:/dev/disk/by-id/nvme-root:create")
+            .expect("disk create action exists");
+        assert_eq!(disk.risk, RiskClass::Destructive);
+        assert!(disk.destructive);
     }
 
     #[test]

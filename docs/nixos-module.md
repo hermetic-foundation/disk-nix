@@ -111,6 +111,8 @@ the upstream `boot.iscsi-initiator` module supports systemd initrd.
 
 Typed lifecycle declarations are available for:
 
+- `disks`
+- `partitions`
 - `volumes`
 - `volumeGroups`
 - `pools`
@@ -130,6 +132,10 @@ Each lifecycle declaration includes:
 - `destroy`
 - `preserveData`
 - `desiredSize`
+- `device`
+- `start`
+- `end`
+- `partitionType`
 - `metadata`
 
 Typed snapshot declarations include:
@@ -150,6 +156,11 @@ Example lifecycle planning through NixOS options:
       probeCurrent = true;
       scriptOut = "/run/disk-nix/apply.sh";
       reportOut = "/run/disk-nix/apply-report.json";
+    };
+    partitions.root = {
+      operation = "grow";
+      device = "/dev/disk/by-id/nvme-root-part2";
+      desiredSize = "100%";
     };
     pools.tank = {
       operation = "rebalance";

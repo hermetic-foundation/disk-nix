@@ -529,6 +529,12 @@ fn spec_schema() -> serde_json::Value {
             "filesystems": {
                 "$ref": "#/$defs/filesystemMap"
             },
+            "disks": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
+            "partitions": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
             "volumes": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -563,6 +569,8 @@ fn spec_schema() -> serde_json::Value {
                 "additionalProperties": true,
                 "properties": {
                     "filesystems": { "$ref": "#/$defs/filesystemMap" },
+                    "disks": { "$ref": "#/$defs/lifecycleMap" },
+                    "partitions": { "$ref": "#/$defs/lifecycleMap" },
                     "volumes": { "$ref": "#/$defs/lifecycleMap" },
                     "volumeGroups": { "$ref": "#/$defs/lifecycleMap" },
                     "pools": { "$ref": "#/$defs/lifecycleMap" },
@@ -624,6 +632,12 @@ fn spec_schema() -> serde_json::Value {
                     "desiredSize": { "type": ["string", "number"] },
                     "targetSize": { "type": ["string", "number"] },
                     "size": { "type": ["string", "number"] },
+                    "device": { "type": "string" },
+                    "disk": { "type": "string" },
+                    "start": { "type": ["string", "number"] },
+                    "end": { "type": ["string", "number"] },
+                    "partitionType": { "type": "string" },
+                    "type": { "type": "string" },
                     "destroy": { "type": "boolean" },
                     "preserveData": { "type": "boolean", "default": true },
                     "metadata": {
