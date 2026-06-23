@@ -1087,6 +1087,8 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
         | Operation::Scrub
         | Operation::Trim
         | Operation::Rebalance
+        | Operation::Mount
+        | Operation::Unmount
         | Operation::Remount),
     ) = filesystem
         .get("operation")
@@ -3569,6 +3571,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Mount if collection == "filesystems" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "mounting a filesystem changes local namespace state without formatting storage"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the source device, filesystem type, and mountpoint before mounting"
+                        .to_string(),
+                    "prefer x-systemd.automount, nofail, or service ordering when dependencies may be unavailable"
+                        .to_string(),
+                    "persist long-lived mounts through the matching NixOS fileSystems entry"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Remount if collection == "nfs.mounts" => (
             RiskClass::Online,
             false,
@@ -4020,6 +4038,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Unmount if collection == "filesystems" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "unmounting a filesystem can interrupt local services without deleting data"
+                    .to_string(),
+                alternatives: vec![
+                    "stop dependent services, automount units, user sessions, and bind mounts before unmounting"
+                        .to_string(),
+                    "switch the mount to read-only or noauto first when a staged removal is safer"
+                        .to_string(),
+                    "verify no open files still reference the mountpoint before applying"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Destroy | Operation::Logout if collection == "iscsiSessions" => (
             RiskClass::OfflineRequired,
             false,
@@ -4235,13 +4269,15 @@ fn classify_operation(
             false,
             Some(Advice {
                 summary: format!(
-                    "{} operations are currently only supported for nfs.mounts",
+                    "{} operations are currently only supported for filesystems and nfs.mounts",
                     operation_label(operation)
                 ),
                 alternatives: vec![
+                    "use operation = \"mount\" or \"unmount\" on filesystems declarations for local filesystem mount lifecycle"
+                        .to_string(),
                     "use operation = \"mount\" or \"unmount\" on nfs.mounts declarations for NFS client mount lifecycle"
                         .to_string(),
-                    "use filesystem, service, or automount-specific workflows for non-NFS mounts"
+                    "use service or automount-specific workflows for domains outside the modeled mount collections"
                         .to_string(),
                 ],
             }),
@@ -8311,6 +8347,59 @@ mod tests {
                 .as_ref()
                 .is_some_and(|advice| advice.summary.contains("updates local mount options"))
         );
+    }
+
+    #[test]
+    fn plan_accepts_filesystem_mount_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "backup": {
+                  "mountpoint": "/backup",
+                  "device": "/dev/disk/by-label/backup",
+                  "fsType": "xfs",
+                  "operation": "mount",
+                  "options": ["rw", "noatime"]
+                },
+                "archive": {
+                  "mountpoint": "/archive",
+                  "device": "/dev/disk/by-label/archive",
+                  "fsType": "ext4",
+                  "operation": "unmount"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.unsupported_count, 0);
+        assert_eq!(plan.summary.destructive_count, 0);
+        let mount = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:backup:mount")
+            .expect("filesystem mount action exists");
+        assert_eq!(mount.operation, Operation::Mount);
+        assert_eq!(mount.risk, RiskClass::Online);
+        assert_eq!(
+            mount.context.device.as_deref(),
+            Some("/dev/disk/by-label/backup")
+        );
+        assert_eq!(mount.context.mountpoint.as_deref(), Some("/backup"));
+        assert_eq!(mount.context.fs_type.as_deref(), Some("xfs"));
+        assert_eq!(mount.context.options.as_deref(), Some("rw,noatime"));
+
+        let unmount = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:archive:unmount")
+            .expect("filesystem unmount action exists");
+        assert_eq!(unmount.operation, Operation::Unmount);
+        assert_eq!(unmount.risk, RiskClass::OfflineRequired);
+        assert!(!unmount.destructive);
+        assert_eq!(unmount.context.mountpoint.as_deref(), Some("/archive"));
     }
 
     #[test]

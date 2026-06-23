@@ -422,6 +422,13 @@ Filesystem `operation = "remount"` actions are online, non-destructive updates
 that render `mount -o remount,<options> <mountpoint>`. Missing concrete
 mountpoints remain non-ready, and long-lived options should be kept in the
 matching NixOS `fileSystems` entry.
+Filesystem `operation = "mount"` and `operation = "unmount"` actions render
+reviewable `mount [-t <fsType>] [-o <options>] <device> <mountpoint>` and
+`umount <mountpoint>` command plans from the same `fileSystems`-compatible
+declarations. Mounts are online namespace changes; unmounts are offline-gated,
+non-destructive operations because they can interrupt services, sessions, bind
+mounts, and automount units. Missing devices or concrete mountpoint paths keep
+the command plan non-ready.
 LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
 for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
 destructive policy gates allow removal. LV grow and remove commands require

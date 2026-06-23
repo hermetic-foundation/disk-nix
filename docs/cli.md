@@ -497,6 +497,12 @@ NFS client mount command plans render reviewed `operation = "mount"` commands,
 `operation = "unmount"` commands from `nfs.mounts`; legacy NFS mount `create`
 and `destroy` map to the same command plans. Missing sources or path-shaped
 mountpoints keep those commands non-ready.
+Local filesystem command plans render reviewed `operation = "mount"` commands,
+`mount -o remount,<options>` option-update commands, and
+`operation = "unmount"` commands from `filesystems`/NixOS `fileSystems`-style
+declarations. Mount commands require a source device and path-shaped mountpoint;
+unmount commands are non-destructive but remain blocked unless offline work is
+allowed by policy.
 iSCSI session command plans use `target` or the lifecycle key as the target IQN
 and `portal` or `metadata.portal` for reviewed `operation = "login"` and
 `operation = "logout"` commands, plus `operation = "rescan"` for online session

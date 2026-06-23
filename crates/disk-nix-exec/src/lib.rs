@@ -2628,6 +2628,42 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Mount if action.context.collection.as_deref() == Some("filesystems") => {
+            let mountpoint = filesystem_mountpoint(action);
+            (
+                vec![
+                    filesystem_findmnt_command(mountpoint),
+                    command(
+                        ["disk-nix", "inspect", mountpoint.unwrap_or(target), "--json"],
+                        false,
+                        "verify filesystem graph state after mount",
+                    ),
+                ],
+                vec![
+                    "findmnt reports the mountpoint with the reviewed source and options"
+                        .to_string(),
+                    "local services see the expected mounted filesystem source and type"
+                        .to_string(),
+                ],
+            )
+        }
+        Operation::Unmount if action.context.collection.as_deref() == Some("filesystems") => {
+            let mountpoint = filesystem_mountpoint(action);
+            (
+                vec![
+                    filesystem_findmnt_command(mountpoint),
+                    command(
+                        ["disk-nix", "topology", "--json"],
+                        false,
+                        "re-probe full topology after filesystem unmount",
+                    ),
+                ],
+                vec![
+                    "findmnt no longer reports the reviewed filesystem as mounted".to_string(),
+                    "dependent services and bind mounts have no stale references".to_string(),
+                ],
+            )
+        }
         Operation::Format
         | Operation::Shrink
         | Operation::Clone
@@ -2822,6 +2858,43 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "review active services before changing filesystem mount options".to_string(),
                     "persist the final options through the NixOS fileSystems entry".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Mount
+            if collection == Some("filesystems") || action.id.starts_with("filesystems:") =>
+        {
+            let mountpoint = filesystem_mountpoint(action);
+            (
+                vec![filesystem_mount_command(
+                    action.context.device.as_deref(),
+                    mountpoint,
+                    action.context.fs_type.as_deref(),
+                    action.context.options.as_deref(),
+                )],
+                vec![
+                    "verify the source device, filesystem type, and mountpoint before mounting"
+                        .to_string(),
+                    "persist long-lived mounts through the NixOS fileSystems entry".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Unmount
+            if collection == Some("filesystems") || action.id.starts_with("filesystems:") =>
+        {
+            let mountpoint = filesystem_mountpoint(action);
+            (
+                vec![
+                    filesystem_findmnt_command(mountpoint),
+                    filesystem_unmount_command(mountpoint),
+                ],
+                vec![
+                    "stop services, automount units, and sessions that depend on the mountpoint before unmounting"
+                        .to_string(),
+                    "verify no open files, bind mounts, or namespaces still reference the mountpoint"
+                        .to_string(),
                 ],
                 true,
             )
@@ -9065,6 +9138,70 @@ fn filesystem_remount_command(mountpoint: Option<&str>, options: Option<&str>) -
     }
 }
 
+fn filesystem_mount_command(
+    source: Option<&str>,
+    mountpoint: Option<&str>,
+    fs_type: Option<&str>,
+    options: Option<&str>,
+) -> ExecutionCommand {
+    let source_arg = source.unwrap_or("<device>");
+    let mountpoint_arg = mountpoint.unwrap_or("<mountpoint>");
+    let fs_type = fs_type.filter(|fs_type| !fs_type.is_empty() && *fs_type != "unknown");
+    let options = options.filter(|options| !options.is_empty());
+    let mut missing = Vec::new();
+    if source.is_none() {
+        missing.push("filesystem source device");
+    }
+    if mountpoint.is_none() {
+        missing.push("mountpoint path");
+    }
+
+    let mut argv = vec!["mount".to_string()];
+    if let Some(fs_type) = fs_type {
+        argv.push("-t".to_string());
+        argv.push(fs_type.to_string());
+    }
+    if let Some(options) = options {
+        argv.push("-o".to_string());
+        argv.push(options.to_string());
+    }
+    argv.push(source_arg.to_string());
+    argv.push(mountpoint_arg.to_string());
+
+    if source.is_some() && mountpoint.is_some() {
+        command_vec(
+            argv,
+            true,
+            "mount the reviewed filesystem source at the selected mountpoint",
+        )
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "mount the filesystem after selecting a source device and mountpoint",
+        )
+    }
+}
+
+fn filesystem_unmount_command(mountpoint: Option<&str>) -> ExecutionCommand {
+    match mountpoint {
+        Some(mountpoint) => command(
+            ["umount", mountpoint],
+            true,
+            "unmount the reviewed filesystem without formatting or deleting data",
+        ),
+        None => command_with_readiness(
+            ["umount", "<mountpoint>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["mountpoint path"],
+            "unmount the filesystem after selecting the mountpoint",
+        ),
+    }
+}
+
 fn nfs_mount_create_command(
     source: Option<&str>,
     mountpoint: Option<&str>,
@@ -12894,6 +13031,164 @@ mod tests {
                     .iter()
                     .any(|command| command.argv == ["findmnt", "--json", "/scratch"])
         }));
+    }
+
+    #[test]
+    fn filesystem_mount_lifecycle_reports_mount_command() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "backup": {
+                    "mountpoint": "/backup",
+                    "device": "/dev/disk/by-label/backup",
+                    "fsType": "xfs",
+                    "operation": "mount",
+                    "options": ["rw", "noatime"]
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:backup:mount"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mount",
+                            "-t",
+                            "xfs",
+                            "-o",
+                            "rw,noatime",
+                            "/dev/disk/by-label/backup",
+                            "/backup",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "filesystems:backup:mount"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["findmnt", "--json", "/backup"])
+        }));
+    }
+
+    #[test]
+    fn filesystem_unmount_lifecycle_reports_umount_command_when_offline_allowed() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "archive": {
+                    "mountpoint": "/archive",
+                    "device": "/dev/disk/by-label/archive",
+                    "fsType": "ext4",
+                    "operation": "unmount"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:archive:unmount"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["umount", "/archive"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "filesystems:archive:unmount"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
+        }));
+    }
+
+    #[test]
+    fn filesystem_mount_lifecycle_requires_source_and_mountpoint_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "scratch": {
+                    "fsType": "xfs",
+                    "operation": "mount",
+                    "options": ["ro"]
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:mount"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mount", "-t", "xfs", "-o", "ro", "<device>", "<mountpoint>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == ["filesystem source device", "mountpoint path"]
+                })
+        }));
+    }
+
+    #[test]
+    fn filesystem_unmount_lifecycle_is_blocked_by_default_offline_policy() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "archive": {
+                    "mountpoint": "/archive",
+                    "operation": "unmount"
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::Blocked);
+        assert_eq!(report.apply.blocked_count, 1);
+        assert_eq!(
+            report.messages,
+            ["apply policy blocked 1 action(s)".to_string()]
+        );
+        assert!(
+            !report
+                .command_plan
+                .iter()
+                .any(|step| step.action_id == "filesystems:archive:unmount")
+        );
     }
 
     #[test]
