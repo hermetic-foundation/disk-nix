@@ -6401,6 +6401,7 @@ fn filesystem_grow_command(
             "grow a Btrfs filesystem to the requested or maximum visible device size",
         ),
         "bcachefs" => bcachefs_device_resize_command(device, desired_size),
+        "f2fs" => f2fs_filesystem_grow_command(target, device, desired_size),
         "zfs" => match desired_size {
             Some(size) => command_vec(
                 vec![
@@ -6514,6 +6515,39 @@ fn ext_filesystem_device<'a>(target: &'a str, device: Option<&'a str>) -> Option
 
 fn filesystem_source_device<'a>(target: &'a str, device: Option<&'a str>) -> Option<&'a str> {
     device.or_else(|| target.starts_with("/dev/").then_some(target))
+}
+
+fn f2fs_filesystem_grow_command(
+    target: &str,
+    device: Option<&str>,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
+    match (filesystem_source_device(target, device), desired_size) {
+        (Some(source), Some(size)) => command(
+            ["resize.f2fs", "-t", size, source],
+            true,
+            "grow an F2FS filesystem to the reviewed target sector count",
+        ),
+        (Some(source), None) => command(
+            ["resize.f2fs", source],
+            true,
+            "grow an F2FS filesystem to the visible backing device size",
+        ),
+        (None, Some(size)) => command_with_readiness(
+            ["resize.f2fs", "-t", size, "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "grow the F2FS filesystem after resolving the source device",
+        ),
+        (None, None) => command_with_readiness(
+            ["resize.f2fs", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "grow the F2FS filesystem after resolving the source device",
+        ),
+    }
 }
 
 fn filesystem_check_commands(
@@ -7724,6 +7758,7 @@ fn filesystem_property_command(
             ntfs_filesystem_property_command(device, target, property, assignment)
         }
         Some("exfat") => exfat_filesystem_property_command(device, target, property, assignment),
+        Some("f2fs") => f2fs_filesystem_property_command(device, target, property, assignment),
         Some("xfs") => xfs_filesystem_property_command(device, target, property, assignment),
         Some("zfs") => command(
             ["zfs", "set", assignment, target],
@@ -8112,6 +8147,44 @@ fn exfat_volume_serial(value: &str) -> Option<String> {
         Some(normalized.to_ascii_uppercase())
     } else {
         None
+    }
+}
+
+fn f2fs_filesystem_property_command(
+    device: Option<&str>,
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            ["<f2fs-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["F2FS filesystem property value"],
+            "set an F2FS filesystem property after resolving the desired value",
+        );
+    };
+    match (property, filesystem_source_device(target, device)) {
+        ("label" | "f2fs.label" | "filesystem.label", Some(source)) => command(
+            ["f2fslabel", source, value],
+            true,
+            "set the F2FS filesystem label on the reviewed backing device",
+        ),
+        ("label" | "f2fs.label" | "filesystem.label", None) => command_with_readiness(
+            ["f2fslabel", "<filesystem-device>", value],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "set the F2FS filesystem label after resolving the backing device",
+        ),
+        _ => command_with_readiness(
+            ["<f2fs-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported F2FS filesystem property"],
+            "set an F2FS filesystem property after selecting a supported property mapping",
+        ),
     }
 }
 
@@ -11590,6 +11663,18 @@ mod tests {
                     "fsType": "ext4",
                     "resizePolicy": "grow-only",
                     "desiredSize": "50G"
+                  },
+                  "mobile": {
+                    "mountpoint": "/mnt/mobile",
+                    "device": "/dev/disk/by-label/mobile",
+                    "fsType": "f2fs",
+                    "resizePolicy": "grow-only",
+                    "desiredSize": "409600"
+                  },
+                  "cache": {
+                    "mountpoint": "/cache",
+                    "fsType": "f2fs",
+                    "resizePolicy": "grow-only"
                   }
                 },
                 "volumes": {
@@ -11610,7 +11695,7 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert_eq!(report.command_summary.needs_desired_size_count, 0);
-        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 2);
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
                 command.argv == ["btrfs", "filesystem", "resize", "750GiB", "/home"]
@@ -11628,6 +11713,21 @@ mod tests {
             step.action_id == "filesystem:var:grow"
                 && step.commands.iter().any(|command| {
                     command.argv == ["resize2fs", "<filesystem-device>", "50G"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystem:mobile:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["resize.f2fs", "-t", "409600", "/dev/disk/by-label/mobile"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystem:cache:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["resize.f2fs", "<filesystem-device>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["filesystem source device"]
                 })
@@ -12424,6 +12524,53 @@ mod tests {
             step.action_id == "filesystems:missing-device:set-property:volume-serial"
                 && step.commands.iter().any(|command| {
                     command.argv == ["exfatlabel", "-i", "<filesystem-device>", "DEADBEEF"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+    }
+
+    #[test]
+    fn f2fs_filesystem_label_uses_f2fslabel() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "mobile": {
+                    "mountpoint": "/mnt/mobile",
+                    "device": "/dev/disk/by-label/mobile-old",
+                    "fsType": "f2fs",
+                    "properties": {
+                      "label": "mobile-new"
+                    }
+                  },
+                  "missing-device": {
+                    "mountpoint": "/mnt/cache",
+                    "fsType": "f2fs",
+                    "properties": {
+                      "f2fs.label": "cache-new"
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:mobile:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["f2fslabel", "/dev/disk/by-label/mobile-old", "mobile-new"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:missing-device:set-property:f2fs.label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["f2fslabel", "<filesystem-device>", "cache-new"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["filesystem source device"]
                 })

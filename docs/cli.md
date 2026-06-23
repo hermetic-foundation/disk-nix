@@ -424,8 +424,9 @@ Filesystem shrink command plans render Btrfs allocation checks and
 plans render `findmnt`, `umount`, `e2fsck`, and `resize2fs` review steps. Ext
 grow and shrink commands use a declared filesystem `device` or `disk` when
 present, with source-device commands marked unresolved when the filesystem
-declaration only names a mountpoint. XFS shrink renders manual-only migration
-guidance.
+declaration only names a mountpoint. F2FS grow command plans render
+`resize.f2fs <device>` or `resize.f2fs -t <sectors> <device>` when a target
+sector count is declared. XFS shrink renders manual-only migration guidance.
 Filesystem check and repair command plans render `e2fsck -n`/`e2fsck -f -y`,
 `xfs_repair -n`/`xfs_repair`, `btrfs check --readonly`/`--repair`,
 `fsck.fat -n`/`-a`, `fsck.exfat -n`/`-p`,
@@ -448,7 +449,8 @@ Btrfs filesystem label property updates render
 updates render `e2label <device> <label>` when an explicit backing device is
 declared. FAT/vfat label updates render `fatlabel <device> <label>`. NTFS label
 updates render `ntfslabel <device> <label>`. exFAT label updates render
-`exfatlabel <device> <label>`. XFS filesystem label updates render
+`exfatlabel <device> <label>`. F2FS label updates render
+`f2fslabel <device> <label>`. XFS filesystem label updates render
 `xfs_admin -L <label> <device>`. Btrfs, ext, FAT/vfat, NTFS, exFAT, and XFS UUID,
 volume-ID, or volume-serial updates render
 `btrfstune -U <uuid> <device>`, `tune2fs -U <uuid> <device>`,

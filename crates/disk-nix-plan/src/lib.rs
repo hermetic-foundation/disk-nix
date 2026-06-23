@@ -1259,7 +1259,7 @@ fn classify_filesystem_property_change(
                 "{fs_type} filesystem property {property} is not mapped to a safe command"
             ),
             alternatives: vec![
-                "use label, filesystem.label, btrfs.label, exfat.label, ext.label, fat.label, ntfs.label, vfat.label, or xfs.label when changing filesystem labels"
+                "use label, filesystem.label, btrfs.label, exfat.label, ext.label, f2fs.label, fat.label, ntfs.label, vfat.label, or xfs.label when changing filesystem labels"
                     .to_string(),
                 "use uuid, filesystem.uuid, btrfs.uuid, exfat.uuid, ext.uuid, fat.uuid, ntfs.uuid, vfat.uuid, or xfs.uuid when changing supported filesystem UUIDs"
                     .to_string(),
@@ -1336,6 +1336,7 @@ fn is_filesystem_property_supported(fs_type: &str, property: &str) -> bool {
                 | "exfat.serial"
                 | "exfat.volume-serial"
         ),
+        "f2fs" => matches!(property, "label" | "f2fs.label" | "filesystem.label"),
         "xfs" => matches!(
             property,
             "label" | "xfs.label" | "filesystem.label" | "uuid" | "xfs.uuid" | "filesystem.uuid"
@@ -7927,6 +7928,52 @@ mod tests {
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("8-hex-digit exFAT volume serial"))
+        }));
+    }
+
+    #[test]
+    fn plan_accepts_f2fs_label_property() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "mobile": {
+                  "mountpoint": "/mnt/mobile",
+                  "device": "/dev/disk/by-label/mobile",
+                  "fsType": "f2fs",
+                  "properties": {
+                    "f2fs.label": "mobile-new",
+                    "f2fs.uuid": "11111111-2222-3333-4444-555555555555"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.unsupported_count, 1);
+
+        let label = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:mobile:set-property:f2fs.label")
+            .expect("F2FS label property action should exist");
+        assert_eq!(label.operation, Operation::SetProperty);
+        assert_eq!(label.risk, RiskClass::Safe);
+        assert_eq!(label.context.fs_type.as_deref(), Some("f2fs"));
+        assert_eq!(label.context.property_value.as_deref(), Some("mobile-new"));
+
+        let unsupported = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:mobile:set-property:f2fs.uuid")
+            .expect("unsupported F2FS property action should exist");
+        assert_eq!(unsupported.risk, RiskClass::Unsupported);
+        assert!(unsupported.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("f2fs.label"))
         }));
     }
 

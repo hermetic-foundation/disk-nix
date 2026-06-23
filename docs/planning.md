@@ -500,7 +500,8 @@ Btrfs filesystem label property updates render
 `e2label <device> <label>` when the filesystem declaration includes a backing
 device. FAT/vfat label updates render `fatlabel <device> <label>`. NTFS label
 updates render `ntfslabel <device> <label>`. exFAT label updates render
-`exfatlabel <device> <label>`. XFS filesystem label updates render
+`exfatlabel <device> <label>`. F2FS label updates render
+`f2fslabel <device> <label>`. XFS filesystem label updates render
 `xfs_admin -L <label> <device>`. Btrfs, ext, FAT/vfat, NTFS, exFAT, and XFS
 filesystem UUID, volume-ID, or volume-serial updates render
 `btrfstune -U <uuid> <device>`, `tune2fs -U <uuid> <device>`,
@@ -519,7 +520,9 @@ apply policy blocks them before command execution.
 Ext filesystem grow and shrink actions also carry the declared filesystem
 `device` or `disk` into `resize2fs` and `e2fsck` command plans. Mountpoint-only
 ext declarations keep source-device mutations marked unresolved until the block
-device is explicitly selected.
+device is explicitly selected. F2FS grow actions render `resize.f2fs <device>`
+or `resize.f2fs -t <sectors> <device>` when a target sector count is declared,
+and keep mountpoint-only plans unresolved until a source device is selected.
 Filesystem check and repair actions carry the declared `device` or `disk` into
 read-only and mutating maintenance command plans. Ext uses `e2fsck`, XFS uses
 `xfs_repair`, Btrfs uses `btrfs check`, FAT/vfat uses `fsck.fat`, exFAT uses
