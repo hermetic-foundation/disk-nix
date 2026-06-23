@@ -136,11 +136,25 @@ Policy fields currently supported:
 - `allowGrow`
 - `allowOffline`
 - `allowPropertyChanges`
+- `allowDeviceReplacement`
+- `allowRebalance`
+- `requireBackup`
+- `backupVerified`
+- `requireConfirmation`
+- `confirmation`
+- `requireConfirmationFile`
 
 The default policy allows online grow and property-change intents, but blocks
 offline-required, destructive, irreversible, format, shrink, and
 potential-data-loss actions.
 Unsupported actions are always blocked, even if permissive destructive or
 shrink policy flags are enabled.
+`allowDeviceReplacement=false` blocks device add, replacement, and removal
+actions. `allowRebalance=false` blocks rebalance actions. `requireBackup=true`
+requires `backupVerified=true` for destructive or potential-data-loss actions.
+`requireConfirmation=true` requires `confirmation=true` for high-risk or
+offline actions. `requireConfirmationFile` records the expected confirmation
+file path in policy; automation should set `confirmation=true` only after it
+has verified that file according to its local workflow.
 `--execute` is reserved for the future executor and is refused after policy
 validation so the command cannot pretend to have modified storage.

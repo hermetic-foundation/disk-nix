@@ -198,9 +198,24 @@ pub struct ApplyPolicy {
     pub allow_destructive: bool,
     pub allow_format: bool,
     pub allow_shrink: bool,
+    #[serde(default = "default_true")]
     pub allow_grow: bool,
     pub allow_offline: bool,
+    #[serde(default = "default_true")]
     pub allow_property_changes: bool,
+    #[serde(default = "default_true")]
+    pub allow_device_replacement: bool,
+    #[serde(default = "default_true")]
+    pub allow_rebalance: bool,
+    pub require_backup: bool,
+    pub backup_verified: bool,
+    pub require_confirmation: bool,
+    pub confirmation: bool,
+    pub require_confirmation_file: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for ApplyPolicy {
@@ -213,6 +228,13 @@ impl Default for ApplyPolicy {
             allow_grow: true,
             allow_offline: false,
             allow_property_changes: true,
+            allow_device_replacement: true,
+            allow_rebalance: true,
+            require_backup: false,
+            backup_verified: false,
+            require_confirmation: false,
+            confirmation: false,
+            require_confirmation_file: None,
         }
     }
 }
@@ -629,17 +651,37 @@ fn parse_size_bytes(value: &str) -> Option<u64> {
 fn blocked_action(action: &PlannedAction, policy: &ApplyPolicy) -> Option<BlockedAction> {
     let reason = if action.risk == RiskClass::Unsupported {
         Some("unsupported actions cannot be applied")
+    } else if requires_backup(action) && policy.require_backup && !policy.backup_verified {
+        Some("backup-required actions require backupVerified=true")
+    } else if requires_confirmation(action) && policy.require_confirmation && !policy.confirmation {
+        Some("confirmation-required actions require confirmation=true")
+    } else if requires_confirmation(action)
+        && policy.require_confirmation_file.is_some()
+        && !policy.confirmation
+    {
+        Some(
+            "confirmation-file policy requires confirmation=true after checking the configured file",
+        )
     } else if action.risk == RiskClass::OfflineRequired && !policy.allow_offline {
         Some("offline-required actions require allowOffline=true")
     } else if action.operation == Operation::Format && !policy.allow_format {
         Some("format actions require allowFormat=true")
-    } else if action.operation == Operation::Shrink {
-        (!policy.allow_shrink).then_some("shrink actions require allowShrink=true")
-    } else if action.operation == Operation::Grow {
-        (!policy.allow_grow).then_some("grow actions require allowGrow=true")
-    } else if action.operation == Operation::SetProperty {
-        (!policy.allow_property_changes)
-            .then_some("property changes require allowPropertyChanges=true")
+    } else if action.operation == Operation::Shrink && !policy.allow_shrink {
+        Some("shrink actions require allowShrink=true")
+    } else if action.operation == Operation::Grow && !policy.allow_grow {
+        Some("grow actions require allowGrow=true")
+    } else if matches!(
+        action.operation,
+        Operation::AddDevice | Operation::ReplaceDevice | Operation::RemoveDevice
+    ) && !policy.allow_device_replacement
+    {
+        Some("device topology changes require allowDeviceReplacement=true")
+    } else if action.operation == Operation::Rebalance && !policy.allow_rebalance {
+        Some("rebalance actions require allowRebalance=true")
+    } else if action.operation == Operation::SetProperty && !policy.allow_property_changes {
+        Some("property changes require allowPropertyChanges=true")
+    } else if action.operation == Operation::Format && !policy.allow_destructive {
+        Some("format actions also require allowDestructive=true")
     } else if action.destructive
         || action.risk == RiskClass::Destructive
         || action.risk == RiskClass::Irreversible
@@ -658,6 +700,22 @@ fn blocked_action(action: &PlannedAction, policy: &ApplyPolicy) -> Option<Blocke
         risk: action.risk,
         reason: reason.to_string(),
     })
+}
+
+fn requires_backup(action: &PlannedAction) -> bool {
+    action.destructive
+        || matches!(
+            action.risk,
+            RiskClass::PotentialDataLoss | RiskClass::Destructive | RiskClass::Irreversible
+        )
+}
+
+fn requires_confirmation(action: &PlannedAction) -> bool {
+    requires_backup(action)
+        || matches!(
+            action.risk,
+            RiskClass::OfflineRequired | RiskClass::Unsupported
+        )
 }
 
 fn filesystem_context(
@@ -1828,5 +1886,102 @@ mod tests {
         policy.allow_format = true;
         let report = evaluate_apply_policy(&plan, policy);
         assert_eq!(report.blocked_count, 0);
+    }
+
+    #[test]
+    fn apply_policy_can_require_verified_backup_for_high_risk_actions() {
+        let (plan, mut policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "datasets": {
+                  "tank/old": { "destroy": true }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "requireBackup": true,
+                "backupVerified": false
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        let report = evaluate_apply_policy(&plan, policy.clone());
+        assert_eq!(report.blocked_count, 1);
+        assert_eq!(
+            report.blocked[0].reason,
+            "backup-required actions require backupVerified=true"
+        );
+
+        policy.backup_verified = true;
+        let report = evaluate_apply_policy(&plan, policy);
+        assert_eq!(report.blocked_count, 0);
+    }
+
+    #[test]
+    fn apply_policy_can_require_confirmation_for_offline_actions() {
+        let (plan, mut policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/root:0": {
+                  "operation": "grow"
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true,
+                "requireConfirmation": true,
+                "confirmation": false
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        let report = evaluate_apply_policy(&plan, policy.clone());
+        assert_eq!(report.blocked_count, 1);
+        assert_eq!(
+            report.blocked[0].reason,
+            "confirmation-required actions require confirmation=true"
+        );
+
+        policy.confirmation = true;
+        let report = evaluate_apply_policy(&plan, policy);
+        assert_eq!(report.blocked_count, 0);
+    }
+
+    #[test]
+    fn apply_policy_can_disable_device_topology_changes_and_rebalance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "pools": {
+                "tank": {
+                  "operation": "rebalance",
+                  "addDevices": ["/dev/disk/by-id/new"],
+                  "replaceDevices": {
+                    "/dev/disk/by-id/old": "/dev/disk/by-id/new"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowDeviceReplacement": false,
+                "allowRebalance": false
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        let report = evaluate_apply_policy(&plan, policy);
+
+        assert_eq!(report.blocked_count, 3);
+        assert!(report.blocked.iter().any(|blocked| {
+            blocked.reason == "device topology changes require allowDeviceReplacement=true"
+        }));
+        assert!(
+            report
+                .blocked
+                .iter()
+                .any(|blocked| blocked.reason == "rebalance actions require allowRebalance=true")
+        );
     }
 }

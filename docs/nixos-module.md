@@ -25,6 +25,8 @@ The NixOS module is the primary declarative interface.
       allowShrink = false;
       allowDestructive = false;
       probeCurrent = true;
+      requireBackup = false;
+      requireConfirmation = false;
     };
     luks.devices.cryptroot = {
       device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
@@ -193,11 +195,16 @@ Mutation policy should remain explicit:
 - `allowGrow`
 - `allowOffline`
 - `allowPropertyChanges`
-- `probeCurrent`
-
-Future policies should include:
-
 - `allowDeviceReplacement`
 - `allowRebalance`
 - `requireBackup`
+- `backupVerified`
+- `requireConfirmation`
+- `confirmation`
 - `requireConfirmationFile`
+- `probeCurrent`
+
+`requireBackup` and `requireConfirmation` are additional safety gates for
+high-risk actions. `requireConfirmationFile` stores the expected file path in
+the generated policy; local automation should only set `confirmation = true`
+after checking that file.

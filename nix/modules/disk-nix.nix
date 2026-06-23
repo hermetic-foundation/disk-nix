@@ -664,6 +664,48 @@ in
         description = "Allow non-destructive storage property changes.";
       };
 
+      allowDeviceReplacement = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Allow device add, replacement, and removal topology changes.";
+      };
+
+      allowRebalance = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Allow pool or filesystem rebalance operations.";
+      };
+
+      requireBackup = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Require backupVerified=true for destructive or potential-data-loss actions.";
+      };
+
+      backupVerified = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Assert that required backups have been verified before policy validation.";
+      };
+
+      requireConfirmation = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Require confirmation=true for high-risk or offline actions.";
+      };
+
+      confirmation = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Explicit operator confirmation for policies that require it.";
+      };
+
+      requireConfirmationFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Path to an operator-controlled confirmation file referenced by apply policy.";
+      };
+
       probeCurrent = lib.mkOption {
         type = lib.types.bool;
         default = false;

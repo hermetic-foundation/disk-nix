@@ -76,7 +76,16 @@
             boot.initrd.systemd.enable = false;
             services.disk-nix = {
               enable = true;
-              apply.probeCurrent = true;
+              apply = {
+                probeCurrent = true;
+                allowDeviceReplacement = true;
+                allowRebalance = true;
+                requireBackup = false;
+                backupVerified = false;
+                requireConfirmation = false;
+                confirmation = false;
+                requireConfirmationFile = "/run/disk-nix/confirm";
+              };
               luks.devices.cryptroot = {
                 device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
                 allowDiscards = true;
@@ -199,6 +208,13 @@
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false
                   and .apply.probeCurrent == true
+                  and .apply.allowDeviceReplacement == true
+                  and .apply.allowRebalance == true
+                  and .apply.requireBackup == false
+                  and .apply.backupVerified == false
+                  and .apply.requireConfirmation == false
+                  and .apply.confirmation == false
+                  and .apply.requireConfirmationFile == "/run/disk-nix/confirm"
                 ' "$spec"
                 printf '%s\n' '${nixosModuleTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}' | grep -- --probe-current
                 touch "$out"
