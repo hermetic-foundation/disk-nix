@@ -335,7 +335,8 @@ MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit `level` and `devices` fields, with exact unresolved-input markers
 when either field is missing and `/proc/mdstat` verification.
 VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
-plus online `vdo growLogical` and `vdo growPhysical` growth steps.
+plus online `vdo growLogical` and `vdo growPhysical` growth steps. Create
+preflight remains non-ready until a backing device is declared.
 NFS export command plans use explicit `client` and `options` lifecycle fields
 to render reviewed `exportfs` create, option update, and unexport commands.
 iSCSI session command plans use `target` or the lifecycle key as the target IQN

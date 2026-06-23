@@ -2305,11 +2305,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             let desired_size = action.context.desired_size.as_deref();
             (
                 vec![
-                    command(
-                        ["disk-nix", "inspect", device.unwrap_or("<backing-device>")],
-                        false,
-                        "inspect backing device before creating the VDO volume",
-                    ),
+                    vdo_backing_inspect_command(device),
                     vdo_create_command(target, device, desired_size),
                 ],
                 vec![
@@ -4134,6 +4130,23 @@ fn vdo_create_command(
     }
 }
 
+fn vdo_backing_inspect_command(device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["disk-nix", "inspect", device],
+            false,
+            "inspect backing device before creating the VDO volume",
+        ),
+        None => command_with_readiness(
+            ["disk-nix", "inspect", "<backing-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing device"],
+            "inspect backing device before creating the VDO volume",
+        ),
+    }
+}
+
 fn thin_pool_extend_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
     match desired_size {
         Some(size) => command_vec(
@@ -5207,6 +5220,10 @@ mod tests {
                     "operation": "grow",
                     "desiredSize": "4TiB"
                   },
+                  "missing-backing": {
+                    "operation": "create",
+                    "desiredSize": "1TiB"
+                  },
                   "old-cache": {
                     "destroy": true
                   }
@@ -5238,6 +5255,29 @@ mod tests {
                     ]
                     && command.readiness == CommandReadiness::Ready
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:missing-backing:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "<backing-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["backing device"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "vdo",
+                            "create",
+                            "--name",
+                            "missing-backing",
+                            "--device",
+                            "<backing-device>",
+                            "--vdoLogicalSize",
+                            "1TiB",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["backing device"]
+                })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {

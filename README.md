@@ -191,7 +191,8 @@ MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit member devices and RAID level declarations, with exact
 unresolved-input markers when either field is missing.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
-online `vdo growLogical` and physical growth review steps.
+online `vdo growLogical` and physical growth review steps. Create preflight is
+marked unresolved until a backing device is declared.
 NFS export apply plans render reviewed `exportfs` create, option update, and
 unexport commands from explicit client and option declarations.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,

@@ -89,7 +89,8 @@ Examples:
 - VDO creation and removal are destructive because they write or remove VDO
   metadata on the backing device; VDO growth is online, with advice to
   distinguish logical growth from physical backing growth and verify
-  `vdostats`.
+  `vdostats`. Create preflight inspection is marked unresolved until a backing
+  device is declared.
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV removal is destructive because it deletes the volume
   contents. Create command plans report missing `vg/lv` target form and size
