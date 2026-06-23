@@ -265,6 +265,8 @@ Example lifecycle planning through NixOS options:
       device = "/dev/disk/by-label/swap";
       operation = "format";
       desiredSize = "8GiB";
+      properties.label = "swap";
+      properties."swap.uuid" = "01234567-89ab-cdef-0123-456789abcdef";
     };
     luks.devices.cryptroot = {
       device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";

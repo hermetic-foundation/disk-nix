@@ -97,6 +97,8 @@ Examples:
   offline-required because active swap must be disabled before backing storage
   and signatures are changed. Swapfile growth can render a concrete file resize
   command; block-device swap growth must use the backing storage layer first.
+  Swap label and UUID property updates are offline-required because they mutate
+  swap signature identity used by mounts, resume paths, and automation.
 - LUKS `operation = "create"` with preserved data opens an existing encrypted
   container as a mapper and is offline-required. LUKS `operation = "format"` or
   `preserveData = false` is destructive. LUKS growth and mapper close are
@@ -363,11 +365,12 @@ offline-required and means host namespace rescan after controller-side resize
 or replacement. Executable create plans require a `/dev/nvme*` controller
 target and `desiredSize`; attach and delete flows require `namespaceId` plus
 `controllers` when attachment state is changed.
-Swap grow and format command plans require a path-shaped swap target. MD RAID
-create, grow, and member-removal command plans require an explicit array path
-such as `/dev/md/root`. Loop-device refresh and detach command plans require
-`/dev/loop*` targets. Multipath map growth requires a concrete map target such
-as `mpatha` or `/dev/mapper/mpatha`.
+Swap grow, format, label, and UUID command plans require a path-shaped swap
+target. Label and UUID updates render `swaplabel --label` and
+`swaplabel --uuid`. MD RAID create, grow, and member-removal command plans
+require an explicit array path such as `/dev/md/root`. Loop-device refresh and
+detach command plans require `/dev/loop*` targets. Multipath map growth requires
+a concrete map target such as `mpatha` or `/dev/mapper/mpatha`.
 ZFS pool device removal renders reviewed `zpool remove <pool> <device>` steps
 when the pool layout supports evacuation. LVM volume group device removal
 renders reviewed `pvmove <pv>` then `vgreduce <vg> <pv>` steps so allocated

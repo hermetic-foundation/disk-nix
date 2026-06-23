@@ -340,7 +340,9 @@ Swapfile growth command plans render `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon`; block-device swap growth keeps the backing resize command
 non-ready until the partition, LV, LUN, or other backing layer is selected.
 Swap grow and format commands require a path-shaped target such as `/swapfile`
-or `/dev/disk/by-*`.
+or `/dev/disk/by-*`. Swap label and UUID property updates render
+`swaplabel --label <label> <target>` and `swaplabel --uuid <uuid> <target>` and
+remain offline-required.
 LUKS open command plans render `cryptsetup open` for preserved existing
 containers, while close plans render offline-policy-gated `cryptsetup close`
 steps and keep the backing LUKS container intact for later reopen.

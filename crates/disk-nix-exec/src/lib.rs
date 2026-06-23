@@ -2715,6 +2715,12 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     property,
                     &property_assignment,
                 )
+            } else if collection == Some("swaps") {
+                swap_property_command(
+                    swap_target_path(action),
+                    property,
+                    action.context.property_value.as_deref(),
+                )
             } else if collection == Some("luksKeyslots") {
                 luks_change_key_command(
                     luks_keyslot_device(action),
@@ -5078,6 +5084,74 @@ fn filesystem_property_command(
             CommandReadiness::NeedsDomainImplementation,
             ["filesystem type", "supported filesystem property"],
             "set a filesystem property after selecting the filesystem-specific command",
+        ),
+    }
+}
+
+fn swap_property_command(
+    target: Option<&str>,
+    property: &str,
+    value: Option<&str>,
+) -> ExecutionCommand {
+    match (property, target, value) {
+        ("label" | "swap.label", Some(target), Some(value)) => command(
+            ["swaplabel", "--label", value, target],
+            true,
+            "set the swap signature label on the reviewed inactive swap target",
+        ),
+        ("label" | "swap.label", None, Some(value)) => command_with_readiness(
+            ["swaplabel", "--label", value, "<swap>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap target path"],
+            "set the swap label after resolving the swap target",
+        ),
+        ("label" | "swap.label", Some(target), None) => command_with_readiness(
+            ["swaplabel", "--label", "<label>", target],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap label"],
+            "set the swap label after resolving the desired label",
+        ),
+        ("label" | "swap.label", None, None) => command_with_readiness(
+            ["swaplabel", "--label", "<label>", "<swap>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap target path", "swap label"],
+            "set the swap label after resolving target and label",
+        ),
+        ("uuid" | "swap.uuid", Some(target), Some(value)) => command(
+            ["swaplabel", "--uuid", value, target],
+            true,
+            "set the swap signature UUID on the reviewed inactive swap target",
+        ),
+        ("uuid" | "swap.uuid", None, Some(value)) => command_with_readiness(
+            ["swaplabel", "--uuid", value, "<swap>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap target path"],
+            "set the swap UUID after resolving the swap target",
+        ),
+        ("uuid" | "swap.uuid", Some(target), None) => command_with_readiness(
+            ["swaplabel", "--uuid", "<uuid>", target],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap UUID"],
+            "set the swap UUID after resolving the desired UUID",
+        ),
+        ("uuid" | "swap.uuid", None, None) => command_with_readiness(
+            ["swaplabel", "--uuid", "<uuid>", "<swap>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap target path", "swap UUID"],
+            "set the swap UUID after resolving target and UUID",
+        ),
+        _ => command_with_readiness(
+            ["<swap-property-tool>", target.unwrap_or("<swap>"), property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported swap property"],
+            "set a swap property after selecting a supported property mapping",
         ),
     }
 }
@@ -10184,6 +10258,72 @@ mod tests {
             step.action_id == "swaps:primary:format"
                 && step.commands.iter().any(|command| {
                     command.argv == ["mkswap", "<swap>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["swap target path"]
+                })
+        }));
+    }
+
+    #[test]
+    fn swap_properties_use_swaplabel() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "swaps": {
+                  "primary": {
+                    "device": "/dev/disk/by-label/swap-old",
+                    "properties": {
+                      "label": "swap-new",
+                      "swap.uuid": "01234567-89ab-cdef-0123-456789abcdef"
+                    }
+                  },
+                  "logical": {
+                    "properties": {
+                      "swap.label": "logical-swap"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:primary:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "swaplabel",
+                            "--label",
+                            "swap-new",
+                            "/dev/disk/by-label/swap-old",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:primary:set-property:swap.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "swaplabel",
+                            "--uuid",
+                            "01234567-89ab-cdef-0123-456789abcdef",
+                            "/dev/disk/by-label/swap-old",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:logical:set-property:swap.label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["swaplabel", "--label", "logical-swap", "<swap>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["swap target path"]
                 })

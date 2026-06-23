@@ -1503,7 +1503,7 @@ fn add_swap_actions(actions: &mut Vec<PlannedAction>, name: &str, swap: &Value) 
             operation: Operation::Grow,
             risk: RiskClass::OfflineRequired,
             destructive: false,
-            context,
+            context: context.clone(),
             advice: Some(Advice {
                 summary:
                     "swap growth requires disabling active swap before resizing backing storage"
@@ -1535,10 +1535,77 @@ fn add_swap_actions(actions: &mut Vec<PlannedAction>, name: &str, swap: &Value) 
             operation: Operation::SetProperty,
             risk: RiskClass::Safe,
             destructive: false,
-            context,
+            context: context.clone(),
             advice: None,
         }),
     }
+
+    add_swap_property_actions(actions, name, swap, &context);
+}
+
+fn add_swap_property_actions(
+    actions: &mut Vec<PlannedAction>,
+    name: &str,
+    swap: &Value,
+    context: &ActionContext,
+) {
+    let Some(properties) = swap.get("properties").and_then(Value::as_object) else {
+        return;
+    };
+
+    for (property, value) in properties {
+        let (risk, advice) = classify_swap_property_change(property);
+        actions.push(PlannedAction {
+            id: format!("swaps:{name}:set-property:{property}"),
+            description: format!("set swap property {property} on {name}"),
+            operation: Operation::SetProperty,
+            risk,
+            destructive: false,
+            context: ActionContext {
+                property: Some(property.to_string()),
+                property_value: Some(property_value(value)),
+                ..context.clone()
+            },
+            advice,
+        });
+    }
+}
+
+fn classify_swap_property_change(property: &str) -> (RiskClass, Option<Advice>) {
+    if is_swap_identity_property(property) {
+        return (
+            RiskClass::OfflineRequired,
+            Some(Advice {
+                summary: "swap label and UUID updates mutate swap signature identity".to_string(),
+                alternatives: vec![
+                    "prefer updating NixOS swapDevices references to the current identity when possible"
+                        .to_string(),
+                    "disable active swap and verify hibernation/resume references before changing identity"
+                        .to_string(),
+                    "use a stable device path instead of changing swap UUID when consumers allow it"
+                        .to_string(),
+                ],
+            }),
+        );
+    }
+
+    (
+        RiskClass::Unsupported,
+        Some(Advice {
+            summary: format!("swap property {property} is not mapped to a safe command"),
+            alternatives: vec![
+                "use label, swap.label, uuid, or swap.uuid for swap identity changes".to_string(),
+                "recreate the swap signature with preserveData=false only when overwriting metadata is intended"
+                    .to_string(),
+                "apply unsupported swap changes manually after reviewing util-linux swap tools"
+                    .to_string(),
+            ],
+        }),
+    )
+}
+
+fn is_swap_identity_property(property: &str) -> bool {
+    matches!(property, "label" | "swap.label" | "uuid" | "swap.uuid")
 }
 
 fn swap_format_action(
@@ -6206,6 +6273,67 @@ mod tests {
             close.context.device.as_deref(),
             Some("/dev/disk/by-id/old-luks")
         );
+    }
+
+    #[test]
+    fn plan_accepts_swap_label_and_uuid_properties() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "swaps": {
+                "primary": {
+                  "device": "/dev/disk/by-label/swap-old",
+                  "properties": {
+                    "label": "swap-new",
+                    "swap.uuid": "01234567-89ab-cdef-0123-456789abcdef",
+                    "priority": "10"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.unsupported_count, 1);
+
+        let label = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "swaps:primary:set-property:label")
+            .expect("swap label action exists");
+        assert_eq!(label.operation, Operation::SetProperty);
+        assert_eq!(label.risk, RiskClass::OfflineRequired);
+        assert_eq!(label.context.property_value.as_deref(), Some("swap-new"));
+        assert!(label.advice.as_ref().is_some_and(|advice| {
+            advice
+                .summary
+                .contains("swap label and UUID updates mutate swap signature identity")
+        }));
+
+        let uuid = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "swaps:primary:set-property:swap.uuid")
+            .expect("swap UUID action exists");
+        assert_eq!(uuid.risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            uuid.context.property_value.as_deref(),
+            Some("01234567-89ab-cdef-0123-456789abcdef")
+        );
+
+        let unsupported = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "swaps:primary:set-property:priority")
+            .expect("unsupported swap property action exists");
+        assert_eq!(unsupported.risk, RiskClass::Unsupported);
+        assert!(unsupported.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("swap.label"))
+        }));
     }
 
     #[test]
