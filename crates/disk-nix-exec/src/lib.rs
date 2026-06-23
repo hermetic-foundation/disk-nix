@@ -2398,11 +2398,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::SetProperty => {
             let target = target.unwrap_or("<target>");
-            let property = action
-                .context
-                .property
-                .as_deref()
-                .unwrap_or("<key>");
+            let Some(property) = action.context.property.as_deref() else {
+                return (
+                    vec![command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect declared storage object state",
+                    )],
+                    vec!["no property mutation was requested by this declaration".to_string()],
+                    false,
+                );
+            };
             let property_assignment = property_assignment(action);
             let property_command = if collection == Some("exports") {
                 nfs_export_property_command(
@@ -2424,6 +2430,13 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     action.context.name.as_deref().unwrap_or(target),
                     property,
                     action.context.property_value.as_deref(),
+                )
+            } else if collection == Some("filesystems") {
+                filesystem_property_command(
+                    action.context.fs_type.as_deref(),
+                    target,
+                    property,
+                    &property_assignment,
                 )
             } else {
                 set_property_command(collection, target, property, &property_assignment)
@@ -3973,6 +3986,59 @@ fn set_property_command(
     }
 }
 
+fn filesystem_property_command(
+    fs_type: Option<&str>,
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    match fs_type {
+        Some("btrfs") => btrfs_filesystem_property_command(target, property, assignment),
+        Some("zfs") => command(
+            ["zfs", "set", assignment, target],
+            true,
+            "set a ZFS filesystem property",
+        ),
+        _ => command_with_readiness(
+            ["<filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem type", "supported filesystem property"],
+            "set a filesystem property after selecting the filesystem-specific command",
+        ),
+    }
+}
+
+fn btrfs_filesystem_property_command(
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            ["<btrfs-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["Btrfs filesystem property value"],
+            "set a Btrfs filesystem property after resolving the desired value",
+        );
+    };
+    match property {
+        "label" | "btrfs.label" | "filesystem.label" => command(
+            ["btrfs", "filesystem", "label", target, value],
+            true,
+            "set the Btrfs filesystem label",
+        ),
+        _ => command_with_readiness(
+            ["<btrfs-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported Btrfs filesystem property"],
+            "set a Btrfs filesystem property after selecting a supported property mapping",
+        ),
+    }
+}
+
 fn btrfs_subvolume_property_command(
     target: &str,
     property: &str,
@@ -5438,6 +5504,53 @@ mod tests {
                 .iter()
                 .any(|check| check.contains("Btrfs device list matches desired topology"))
         );
+    }
+
+    #[test]
+    fn btrfs_filesystem_label_property_is_ready() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "data": {
+                    "mountpoint": "/data",
+                    "fsType": "btrfs",
+                    "properties": {
+                      "label": "bulk-data",
+                      "unknownBtrfsProperty": "value"
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:data:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "filesystem", "label", "/data", "bulk-data"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:data:set-property:unknownBtrfsProperty"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "<btrfs-filesystem-property-tool>",
+                            "/data",
+                            "unknownBtrfsProperty",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["supported Btrfs filesystem property"]
+                })
+        }));
+        assert!(report.command_summary.ready_count >= 3);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
     }
 
     #[test]

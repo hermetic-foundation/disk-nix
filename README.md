@@ -176,6 +176,9 @@ domain-specific `btrfs device remove` rendering for review, while remaining
 blocked by the current potential-data-loss policy gate.
 Btrfs filesystem rebalance plans render `btrfs balance start` and use declared
 data, metadata, and system balance filters from lifecycle properties when set.
+Regular Btrfs filesystem label updates render
+`btrfs filesystem label <path> <label>`; unsupported filesystem properties stay
+non-ready until a domain-specific command mapping exists.
 Filesystem shrink plans render Btrfs usage checks and `btrfs filesystem resize`
 commands when a desired size is declared. Ext shrink plans render source
 resolution, unmount, `e2fsck`, and `resize2fs` steps, but leave source-device

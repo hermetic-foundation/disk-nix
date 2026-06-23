@@ -345,6 +345,9 @@ Btrfs filesystem rebalance plans render `btrfs balance start`; declared
 `properties.balance.data`, `properties.balance.metadata`, and
 `properties.balance.system` values render as `-d`, `-m`, and `-s` filters for
 scoped balances.
+Btrfs filesystem label property updates render
+`btrfs filesystem label <path> <label>` as ready commands; unsupported Btrfs
+filesystem property keys remain marked `needs-domain-implementation`.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit `level` and `devices` fields, with exact unresolved-input markers
 when either field is missing and `/proc/mdstat` verification.

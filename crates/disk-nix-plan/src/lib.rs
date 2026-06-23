@@ -976,6 +976,37 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
     }
 
     add_device_membership_actions(actions, "filesystems", name, filesystem);
+    add_filesystem_property_actions(actions, name, mountpoint, fs_type, filesystem);
+}
+
+fn add_filesystem_property_actions(
+    actions: &mut Vec<PlannedAction>,
+    name: &str,
+    mountpoint: &str,
+    fs_type: &str,
+    filesystem: &Value,
+) {
+    let Some(properties) = filesystem.get("properties").and_then(Value::as_object) else {
+        return;
+    };
+    let desired_size = desired_size(filesystem);
+
+    for (property, value) in properties {
+        actions.push(PlannedAction {
+            id: format!("filesystems:{name}:set-property:{property}"),
+            description: format!("set property {property} on filesystem {name}"),
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            destructive: false,
+            context: ActionContext {
+                property: Some(property.to_string()),
+                property_value: Some(property_value(value)),
+                property_assignments: property_assignments(filesystem),
+                ..filesystem_context(name, mountpoint, fs_type, desired_size.clone())
+            },
+            advice: None,
+        });
+    }
 }
 
 fn add_swap_actions(actions: &mut Vec<PlannedAction>, name: &str, swap: &Value) {
@@ -2990,6 +3021,38 @@ mod tests {
         assert_eq!(plan.actions[0].risk, RiskClass::PotentialDataLoss);
         assert_eq!(plan.actions[0].context.fs_type.as_deref(), Some("ext4"));
         assert_eq!(plan.actions[0].context.mountpoint.as_deref(), Some("/home"));
+    }
+
+    #[test]
+    fn plan_filesystem_properties_keep_filesystem_context() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "data": {
+                  "mountpoint": "/data",
+                  "fsType": "btrfs",
+                  "properties": {
+                    "label": "bulk-data"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let action = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:data:set-property:label")
+            .expect("filesystem label property action should exist");
+
+        assert_eq!(action.operation, Operation::SetProperty);
+        assert_eq!(action.risk, RiskClass::Safe);
+        assert_eq!(action.context.target.as_deref(), Some("/data"));
+        assert_eq!(action.context.fs_type.as_deref(), Some("btrfs"));
+        assert_eq!(action.context.mountpoint.as_deref(), Some("/data"));
+        assert_eq!(action.context.property.as_deref(), Some("label"));
+        assert_eq!(action.context.property_value.as_deref(), Some("bulk-data"));
     }
 
     #[test]

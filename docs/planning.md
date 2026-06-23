@@ -296,6 +296,9 @@ extents are evacuated before the physical volume is reduced. These remain
 potential-data-loss intents unless a safer explicit workflow is selected.
 Btrfs filesystem rebalance plans render `btrfs balance start` with optional
 declared data, metadata, and system filters from lifecycle properties.
+Btrfs filesystem label property updates render
+`btrfs filesystem label <path> <label>`, while unsupported filesystem property
+keys stay marked `needs-domain-implementation`.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.
