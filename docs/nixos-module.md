@@ -374,6 +374,10 @@ Example lifecycle planning through NixOS options:
       operation = "create";
       path = "/mnt/persist/@home";
     };
+    btrfsSubvolumes."/mnt/persist/@inventory" = {
+      operation = "rescan";
+      path = "/mnt/persist/@inventory";
+    };
     btrfsQgroups."0/257" = {
       target = "/mnt/persist";
       properties.limit = "25GiB";

@@ -1851,6 +1851,31 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Rescan if collection == Some("btrfsSubvolumes") => (
+            vec![
+                command(
+                    ["btrfs", "subvolume", "show", target],
+                    false,
+                    "verify Btrfs subvolume metadata after rescan",
+                ),
+                command(
+                    ["btrfs", "property", "get", "-ts", target, "ro"],
+                    false,
+                    "verify Btrfs subvolume read-only property after rescan",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled Btrfs subvolume relationships after re-probe",
+                ),
+            ],
+            vec![
+                "Btrfs subvolume metadata and read-only state match refreshed topology"
+                    .to_string(),
+                "snapshot and qgroup relationships are reviewed before later cleanup"
+                    .to_string(),
+            ],
+        ),
         Operation::SetProperty if collection == Some("exports") => (
             vec![
                 command(
@@ -4014,6 +4039,65 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "verify the parent path is on the intended Btrfs filesystem".to_string(),
                     "confirm the target path does not already contain data".to_string(),
                     "review qgroup and mount policy before using the new subvolume".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("btrfsSubvolumes") => {
+            let target = target.unwrap_or("<btrfs-subvolume-path>");
+            let ready = action.context.target.as_deref().is_some();
+            let show_command = if ready {
+                command(
+                    ["btrfs", "subvolume", "show", target],
+                    false,
+                    "refresh Btrfs subvolume metadata",
+                )
+            } else {
+                command_with_readiness(
+                    ["btrfs", "subvolume", "show", target],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["Btrfs subvolume path"],
+                    "refresh Btrfs subvolume metadata after selecting the subvolume path",
+                )
+            };
+            let readonly_command = if ready {
+                command(
+                    ["btrfs", "property", "get", "-ts", target, "ro"],
+                    false,
+                    "refresh Btrfs subvolume read-only property",
+                )
+            } else {
+                command_with_readiness(
+                    ["btrfs", "property", "get", "-ts", target, "ro"],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["Btrfs subvolume path"],
+                    "refresh Btrfs subvolume read-only property after selecting the subvolume path",
+                )
+            };
+            let inspect_command = if ready {
+                command(
+                    ["disk-nix", "inspect", target],
+                    false,
+                    "inspect modeled Btrfs subvolume relationships after refresh",
+                )
+            } else {
+                command_with_readiness(
+                    ["disk-nix", "inspect", target],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["Btrfs subvolume path"],
+                    "inspect modeled Btrfs subvolume relationships after selecting the subvolume path",
+                )
+            };
+            (
+                vec![show_command, readonly_command, inspect_command],
+                vec![
+                    "subvolume rescan does not change read-only enforcement or namespace layout"
+                        .to_string(),
+                    "review qgroup and snapshot relationships before later destructive cleanup"
+                        .to_string(),
                 ],
                 true,
             )
@@ -13883,6 +13967,10 @@ mod tests {
                       "readonly": true
                     }
                   },
+                  "/mnt/persist/@inventory": {
+                    "operation": "rescan",
+                    "path": "/mnt/persist/@inventory"
+                  },
                   "/mnt/persist/@old": {
                     "destroy": true,
                     "preserveData": false
@@ -13918,6 +14006,33 @@ mod tests {
                             "true",
                         ]
                         && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfssubvolumes:/mnt/persist/@inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "subvolume", "show", "/mnt/persist/@inventory"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "property",
+                            "get",
+                            "-ts",
+                            "/mnt/persist/@inventory",
+                            "ro",
+                        ]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "btrfssubvolumes:/mnt/persist/@inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/mnt/persist/@inventory", "--json"]
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {

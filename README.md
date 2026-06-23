@@ -185,7 +185,7 @@ the planned command phase succeeds.
 Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS
 format/resize/open/close/keyslot/token workflows, Btrfs subvolume
-creation/deletion, VDO create/grow/rescan/remove, LVM
+creation/deletion/rescan, VDO create/grow/rescan/remove, LVM
 physical-volume create/grow/rescan/remove, logical-volume growth/removal,
 LVM volume-group extension/device removal, LVM thin-pool create/grow/rescan/remove,
 LVM snapshot create/rescan/merge/remove, LVM cache attach/detach/property updates,
@@ -253,6 +253,8 @@ selected.
 Btrfs subvolume property updates render read-only toggles with
 `btrfs property set -ts <path> ro true|false`; unsupported Btrfs subvolume
 properties are classified as unsupported with manual-review alternatives.
+Btrfs subvolume `operation = "rescan"` renders read-only subvolume metadata,
+read-only property, and graph inspection commands for the declared `path`.
 Btrfs qgroup lifecycle plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` updates for referenced and
 exclusive byte limits from `btrfsQgroups` declarations. Qgroup

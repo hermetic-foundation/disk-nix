@@ -3059,6 +3059,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "btrfsSubvolumes" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary:
+                    "Btrfs subvolume rescan refreshes subvolume metadata and read-only state"
+                        .to_string(),
+                alternatives: vec![
+                    "use property updates only when read-only enforcement must change"
+                        .to_string(),
+                    "inspect qgroup and snapshot relationships before destructive cleanup"
+                        .to_string(),
+                    "verify consumers still mount the intended subvolume path".to_string(),
+                ],
+            }),
+        ),
         Operation::Rescan if collection == "btrfsQgroups" => (
             RiskClass::Online,
             false,
@@ -4155,7 +4171,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, Btrfs qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4181,6 +4197,8 @@ fn classify_operation(
                     "use lvmSnapshots.<vg/lv>.operation = \"rescan\" to refresh LVM snapshot status"
                         .to_string(),
                     "use snapshots.<name>.operation = \"rescan\" to refresh snapshot metadata and holds"
+                        .to_string(),
+                    "use btrfsSubvolumes.<path>.operation = \"rescan\" to refresh subvolume metadata and read-only state"
                         .to_string(),
                     "use mdRaids.<name>.operation = \"rescan\" to refresh MD RAID metadata inventory"
                         .to_string(),
@@ -5404,6 +5422,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                     "use readOnly, readonly, ro, btrfs.readonly, or btrfs.ro".to_string(),
                     "review unsupported subvolume properties manually before changing them"
                         .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsSubvolume,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "Btrfs subvolume rescan refreshes metadata without changing data"
+                    .to_string(),
+                alternatives: vec![
+                    "use read-only property updates only when enforcement must change"
+                        .to_string(),
+                    "inspect qgroups and snapshots before cleanup".to_string(),
                 ],
             }),
         },
@@ -7216,6 +7248,11 @@ mod tests {
                 Operation::Rescan,
                 RiskClass::Online,
             ),
+            (
+                NodeKind::BtrfsSubvolume,
+                Operation::Rescan,
+                RiskClass::Online,
+            ),
             (NodeKind::BtrfsQgroup, Operation::Rescan, RiskClass::Online),
             (NodeKind::LvmVolumeGroup, Operation::Grow, RiskClass::Online),
             (
@@ -8942,6 +8979,10 @@ mod tests {
                   "operation": "create",
                   "path": "/mnt/persist/@home"
                 },
+                "/mnt/persist/@inventory": {
+                  "operation": "rescan",
+                  "path": "/mnt/persist/@inventory"
+                },
                 "/mnt/persist/@old": {
                   "destroy": true,
                   "preserveData": false
@@ -8951,7 +8992,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.action_count, 3);
         let create = plan
             .actions
             .iter()
@@ -8961,6 +9002,20 @@ mod tests {
             .expect("create action exists");
         assert_eq!(create.risk, RiskClass::Online);
         assert_eq!(create.context.target.as_deref(), Some("/mnt/persist/@home"));
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| {
+                action.id == "btrfsSubvolumes:/mnt/persist/@inventory:rescan".to_ascii_lowercase()
+            })
+            .expect("rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
+        assert_eq!(
+            rescan.context.target.as_deref(),
+            Some("/mnt/persist/@inventory")
+        );
         let destroy = plan
             .actions
             .iter()

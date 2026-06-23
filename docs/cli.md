@@ -543,7 +543,9 @@ lifecycle path.
 Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
 `btrfs subvolume delete`, reviewed path renames with `mv -- <old> <new>`, and
 `btrfs property set -ts <path> ro true|false` for read-only property
-declarations.
+declarations. Subvolume `operation = "rescan"` renders read-only
+`btrfs subvolume show`, `btrfs property get -ts <path> ro`, and graph
+inspection commands for the declared path.
 Btrfs qgroup command plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` for referenced and exclusive
 limit declarations in `btrfsQgroups`. Qgroup `operation = "rescan"` renders

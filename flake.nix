@@ -318,6 +318,10 @@
                 operation = "create";
                 path = "/mnt/persist/@home";
               };
+              btrfsSubvolumes."/mnt/persist/@inventory" = {
+                operation = "rescan";
+                path = "/mnt/persist/@inventory";
+              };
               btrfsQgroups."0/257" = {
                 target = "/mnt/persist";
                 properties.limit = "25GiB";
@@ -724,7 +728,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 89
+              .summary.actionCount == 90
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -734,6 +738,7 @@
               and (.actions | any(.id == "filesystems:scratch-trim:trim" and .risk == "online"))
               and (.actions | any(.id == "filesystems:scratch-remount:remount" and .risk == "online"))
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@home:create" and .risk == "online"))
+              and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@inventory:rescan" and .risk == "online"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:limit" and .risk == "safe"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
               and (.actions | any(.id == "btrfsqgroups:0/258:rescan" and .risk == "online"))
@@ -987,6 +992,8 @@
                   and .spec.partitions.dataTable.device == "/dev/disk/by-id/nvme-data"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".operation == "create"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".path == "/mnt/persist/@home"
+                  and .spec.btrfsSubvolumes."/mnt/persist/@inventory".operation == "rescan"
+                  and .spec.btrfsSubvolumes."/mnt/persist/@inventory".path == "/mnt/persist/@inventory"
                   and .spec.btrfsQgroups."0/257".target == "/mnt/persist"
                   and .spec.btrfsQgroups."0/257".properties.limit == "25GiB"
                   and .spec.btrfsQgroups."0/258".operation == "rescan"

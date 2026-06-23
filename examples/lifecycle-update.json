@@ -242,6 +242,10 @@
     "/mnt/persist/@home": {
       "operation": "create",
       "path": "/mnt/persist/@home"
+    },
+    "/mnt/persist/@inventory": {
+      "operation": "rescan",
+      "path": "/mnt/persist/@inventory"
     }
   },
   "btrfsQgroups": {

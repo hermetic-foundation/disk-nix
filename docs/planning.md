@@ -113,7 +113,10 @@ Examples:
   LUKS header and backing data intact unless a separate format action is
   requested.
 - Btrfs subvolume creation is online, while destruction is destructive and
-  suggests read-only snapshots or rename-first validation.
+  suggests read-only snapshots or rename-first validation. Btrfs subvolume
+  `operation = "rescan"` is online and read-only; it refreshes subvolume
+  metadata, read-only state, and modeled graph relationships for the declared
+  `path`.
 - VDO creation and removal are destructive because they write or remove VDO
   metadata on the backing device; VDO growth is online, with advice to
   distinguish logical growth from physical backing growth and verify
