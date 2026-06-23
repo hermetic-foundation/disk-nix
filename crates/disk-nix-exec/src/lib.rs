@@ -2206,15 +2206,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Grow if collection == Some("mdRaids") => {
-            let target = target.unwrap_or("<md-array>");
+            let target = md_array_target_path(action);
             let desired_size = action.context.desired_size.as_deref();
             (
                 vec![
-                    command(
-                        ["mdadm", "--detail", target],
-                        false,
-                        "inspect MD RAID array health before grow or reshape",
-                    ),
+                    md_raid_detail_command(target, "inspect MD RAID array health before grow or reshape"),
                     md_raid_grow_command(target, desired_size),
                     command(
                         ["cat", "/proc/mdstat"],
@@ -2559,7 +2555,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Create if collection == Some("mdRaids") => {
-            let target = target.unwrap_or("<md-array>");
+            let target = md_array_target_path(action);
             (
                 vec![
                     command(
@@ -3325,7 +3321,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::RemoveDevice if collection == Some("mdRaids") => {
-            let target = target.unwrap_or("<md-array>");
+            let target = md_array_target_path(action);
             let device = action
                 .context
                 .device
@@ -3333,11 +3329,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .or_else(|| action_id_suffix(&action.id, "remove-device"));
             (
                 vec![
-                    command(
-                        ["mdadm", "--detail", target],
-                        false,
-                        "inspect MD RAID redundancy before member removal",
-                    ),
+                    md_raid_detail_command(target, "inspect MD RAID redundancy before member removal"),
                     md_raid_fail_member_command(target, device),
                     md_raid_remove_member_command(target, device),
                 ],
@@ -3994,38 +3986,87 @@ fn lvm_volume_group_reduce_command(target: &str, device: Option<&str>) -> Execut
     }
 }
 
-fn md_raid_fail_member_command(target: &str, device: Option<&str>) -> ExecutionCommand {
-    match device {
-        Some(device) => command(
-            ["mdadm", target, "--fail", device],
-            true,
-            "mark the MD RAID member failed before removal",
-        ),
+fn md_array_target_path(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .target
+        .as_deref()
+        .filter(|target| target.starts_with("/dev/md"))
+        .or_else(|| {
+            action
+                .context
+                .name
+                .as_deref()
+                .filter(|name| name.starts_with("/dev/md"))
+        })
+}
+
+fn md_raid_detail_command(target: Option<&str>, note: &'static str) -> ExecutionCommand {
+    match target {
+        Some(target) => command(["mdadm", "--detail", target], false, note),
         None => command_with_readiness(
-            ["mdadm", target, "--fail", "<device>"],
-            true,
+            ["mdadm", "--detail", "<md-array>"],
+            false,
             CommandReadiness::NeedsDomainImplementation,
-            ["member device to remove"],
-            "mark the MD RAID member failed after selecting it",
+            ["MD array path"],
+            note,
         ),
     }
 }
 
-fn md_raid_remove_member_command(target: &str, device: Option<&str>) -> ExecutionCommand {
-    match device {
-        Some(device) => command(
-            ["mdadm", target, "--remove", device],
+fn md_raid_fail_member_command(target: Option<&str>, device: Option<&str>) -> ExecutionCommand {
+    let target_arg = target.unwrap_or("<md-array>");
+    match (target, device) {
+        (Some(_), Some(device)) => command(
+            ["mdadm", target_arg, "--fail", device],
+            true,
+            "mark the MD RAID member failed before removal",
+        ),
+        _ => command_vec_with_readiness(
+            vec!["mdadm", target_arg, "--fail", device.unwrap_or("<device>")],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_md_member_operation_inputs(target, device),
+            "mark the MD RAID member failed after selecting the array and member",
+        ),
+    }
+}
+
+fn md_raid_remove_member_command(target: Option<&str>, device: Option<&str>) -> ExecutionCommand {
+    let target_arg = target.unwrap_or("<md-array>");
+    match (target, device) {
+        (Some(_), Some(device)) => command(
+            ["mdadm", target_arg, "--remove", device],
             true,
             "remove the reviewed MD RAID member",
         ),
-        None => command_with_readiness(
-            ["mdadm", target, "--remove", "<device>"],
+        _ => command_vec_with_readiness(
+            vec![
+                "mdadm",
+                target_arg,
+                "--remove",
+                device.unwrap_or("<device>"),
+            ],
             true,
             CommandReadiness::NeedsDomainImplementation,
-            ["member device to remove"],
-            "remove the MD RAID member after selecting it",
+            missing_md_member_operation_inputs(target, device),
+            "remove the MD RAID member after selecting the array and member",
         ),
     }
+}
+
+fn missing_md_member_operation_inputs(
+    target: Option<&str>,
+    device: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if target.is_none() {
+        missing.push("MD array path");
+    }
+    if device.is_none() {
+        missing.push("member device to remove");
+    }
+    missing
 }
 
 fn multipath_delete_path_command(path: Option<&str>) -> ExecutionCommand {
@@ -5730,12 +5771,14 @@ fn zvol_set_volsize_command(target: &str, desired_size: Option<&str>) -> Executi
 }
 
 fn md_raid_create_command(
-    target: &str,
+    target: Option<&str>,
     level: Option<&str>,
     devices: &[String],
 ) -> ExecutionCommand {
+    let missing_target = target.is_none();
     let missing_level = level.is_none();
     let missing_devices = devices.is_empty();
+    let target = target.unwrap_or("<md-array>");
     let level = level.unwrap_or("<level>");
     let raid_devices = if missing_devices {
         "<member-count>".to_string()
@@ -5757,12 +5800,12 @@ fn md_raid_create_command(
         argv.extend(devices.iter().cloned());
     }
 
-    if missing_level || missing_devices {
+    if missing_target || missing_level || missing_devices {
         command_vec_with_readiness(
             argv,
             true,
             CommandReadiness::NeedsDomainImplementation,
-            missing_md_raid_create_inputs(missing_level, missing_devices),
+            missing_md_raid_create_inputs(missing_target, missing_level, missing_devices),
             "create the MD RAID array after selecting level and reviewed member devices",
         )
     } else {
@@ -5774,8 +5817,15 @@ fn md_raid_create_command(
     }
 }
 
-fn missing_md_raid_create_inputs(missing_level: bool, missing_devices: bool) -> Vec<&'static str> {
+fn missing_md_raid_create_inputs(
+    missing_target: bool,
+    missing_level: bool,
+    missing_devices: bool,
+) -> Vec<&'static str> {
     let mut missing = Vec::new();
+    if missing_target {
+        missing.push("MD array path");
+    }
     if missing_level {
         missing.push("RAID level");
     }
@@ -5785,21 +5835,49 @@ fn missing_md_raid_create_inputs(missing_level: bool, missing_devices: bool) -> 
     missing
 }
 
-fn md_raid_grow_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
-    match desired_size {
-        Some(size) => command_vec(
-            vec!["mdadm", "--grow", target, "--size", size],
+fn md_raid_grow_command(target: Option<&str>, desired_size: Option<&str>) -> ExecutionCommand {
+    let target_arg = target.unwrap_or("<md-array>");
+    match (target, desired_size) {
+        (Some(_), Some(size)) => command_vec(
+            vec!["mdadm", "--grow", target_arg, "--size", size],
             true,
             "grow or reshape the MD RAID array to the desired component size",
         ),
-        None => command_with_readiness(
-            ["mdadm", "--grow", target, "--size", "<size-or-max>"],
+        (Some(_), None) => command_with_readiness(
+            ["mdadm", "--grow", target_arg, "--size", "<size-or-max>"],
             true,
             CommandReadiness::NeedsDesiredSize,
             ["desired MD RAID component size or max"],
             "grow or reshape the MD RAID array after selecting the desired size",
         ),
+        (None, desired_size) => command_vec_with_readiness(
+            vec![
+                "mdadm",
+                "--grow",
+                target_arg,
+                "--size",
+                desired_size.unwrap_or("<size-or-max>"),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_md_raid_grow_inputs(target, desired_size),
+            "grow or reshape the MD RAID array after selecting the array and desired size",
+        ),
     }
+}
+
+fn missing_md_raid_grow_inputs(
+    target: Option<&str>,
+    desired_size: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if target.is_none() {
+        missing.push("MD array path");
+    }
+    if desired_size.is_none() {
+        missing.push("desired MD RAID component size or max");
+    }
+    missing
 }
 
 fn property_assignment(action: &PlannedAction) -> String {
@@ -7775,6 +7853,97 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["mdadm", "--detail", "/dev/md/newroot"])
+        }));
+    }
+
+    #[test]
+    fn md_raid_lifecycle_requires_array_path_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "mdRaids": {
+                  "newroot": {
+                    "operation": "create",
+                    "level": "1",
+                    "devices": [
+                      "/dev/disk/by-id/nvme-a",
+                      "/dev/disk/by-id/nvme-b"
+                    ]
+                  },
+                  "root": {
+                    "operation": "grow",
+                    "desiredSize": "max"
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowGrow": true,
+                "allowOffline": true,
+                "allowDeviceReplacement": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:newroot:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mdadm",
+                            "--create",
+                            "<md-array>",
+                            "--level",
+                            "1",
+                            "--raid-devices",
+                            "2",
+                            "/dev/disk/by-id/nvme-a",
+                            "/dev/disk/by-id/nvme-b",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["MD array path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:root:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mdadm", "--grow", "<md-array>", "--size", "max"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["MD array path"]
+                })
+        }));
+
+        let remove_action = PlannedAction {
+            id: "mdRaids:root:remove-device:/dev/disk/by-id/failed-md-member".to_string(),
+            description: "remove failed MD member".to_string(),
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("mdRaids".to_string()),
+                name: Some("root".to_string()),
+                target: Some("root".to_string()),
+                device: Some("/dev/disk/by-id/failed-md-member".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let (commands, _, _) = commands_for_action(&remove_action);
+        assert!(commands.iter().any(|command| {
+            command.argv
+                == [
+                    "mdadm",
+                    "<md-array>",
+                    "--remove",
+                    "/dev/disk/by-id/failed-md-member",
+                ]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["MD array path"]
         }));
     }
 
