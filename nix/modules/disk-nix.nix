@@ -1894,7 +1894,10 @@ in
 
     services.multipath.enable = lib.mkIf hasActiveMultipathMaps (lib.mkDefault true);
 
-    boot.zfs.extraPools = lib.mkIf (zfsExtraPools != [ ]) (lib.mkAfter zfsExtraPools);
+    boot.zfs = lib.mkIf (zfsExtraPools != [ ]) {
+      extraPools = lib.mkAfter zfsExtraPools;
+      forceImportRoot = lib.mkDefault false;
+    };
 
     boot.bcache.enable = lib.mkIf hasActiveCaches (lib.mkDefault true);
 

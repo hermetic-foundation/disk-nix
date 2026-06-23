@@ -110,7 +110,9 @@ Typed active ZFS pool, dataset, zvol, and ZFS snapshot declarations add their
 pool names to `boot.zfs.extraPools` and include `zfs` in
 `boot.supportedFilesystems`, so NixOS imports pools that disk-nix is asked to
 manage even when no legacy-mounted ZFS `fileSystems` entry references them.
-NixOS requires `networking.hostId` whenever ZFS support is enabled.
+They also default `boot.zfs.forceImportRoot = false` to avoid the legacy
+force-import path unless the host explicitly overrides it. NixOS requires
+`networking.hostId` whenever ZFS support is enabled.
 Typed active bcache cache declarations enable NixOS bcache support and initrd
 bcache udev support by default, so `/dev/bcache*` mappings are assembled before
 early consumers try to mount or inspect them.

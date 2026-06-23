@@ -1560,6 +1560,7 @@
                         mdadmConf = nixosModuleTest.config.boot.swraid.mdadmConf;
                         multipath = nixosModuleTest.config.services.multipath.enable;
                         zfsExtraPools = nixosModuleTest.config.boot.zfs.extraPools;
+                        zfsForceImportRoot = nixosModuleTest.config.boot.zfs.forceImportRoot;
                         bcache = nixosModuleTest.config.boot.bcache.enable;
                         bcacheInitrd = nixosModuleTest.config.boot.initrd.services.bcache.enable;
                         openIscsiDiscoverPortal = nixosModuleTest.config.services.openiscsi.discoverPortal;
@@ -1578,6 +1579,7 @@
                     and .multipath == true
                     and (.zfsExtraPools | index("tank") != null)
                     and (.zfsExtraPools | index("mnt") == null)
+                    and .zfsForceImportRoot == false
                     and .bcache == true
                     and .bcacheInitrd == true
                     and .openIscsiDiscoverPortal == "192.0.2.10:3260"

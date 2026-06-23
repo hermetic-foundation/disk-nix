@@ -136,12 +136,14 @@ The module installs the CLI plus default storage tooling, writes a normalized
 storage spec to `/etc/disk-nix/spec.json`, derives typed NixOS `fileSystems`,
 `swapDevices`, initrd LUKS options, `boot.supportedFilesystems`, LVM support,
 swraid support, multipath support, and `boot.zfs.extraPools` for typed active
-ZFS declarations, and bcache boot/initrd support for typed active cache
-declarations, and VDO-capable LVM boot support for typed active VDO
-declarations. Typed active iSCSI session portals can derive the regular
-open-iscsi discovery portal, while logout lifecycle declarations stay in the
-planner spec without being treated as active auto-login targets. It keeps
-lifecycle domains available in the same planner spec.
+ZFS declarations. Typed active ZFS declarations also default
+`boot.zfs.forceImportRoot = false` unless the host overrides it. The module
+derives bcache boot/initrd support for typed active cache declarations and
+VDO-capable LVM boot support for typed active VDO declarations. Typed active
+iSCSI session portals can derive the regular open-iscsi discovery portal, while
+logout lifecycle declarations stay in the planner spec without being treated as
+active auto-login targets. It keeps lifecycle domains available in the same
+planner spec.
 Override `toolPackages` to pin alternate tool builds or trim unused domains.
 Explicit non-destroy
 `exports` declarations with `client` and `options` also derive NixOS NFS server
