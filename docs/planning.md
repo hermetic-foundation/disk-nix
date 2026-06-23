@@ -152,10 +152,14 @@ Examples:
 - NFS export creation is online when it publishes an existing path to explicit
   clients and options; unexporting is offline-required because remote clients
   may need to be drained, but it is not treated as data destruction.
-- LUN `operation = "grow"` is classified as offline-required because the
-  storage target, host rescan, multipath, and consumers must be coordinated.
-  When stable `device` or `devices` paths are declared, apply plans render
-  per-path SCSI rescans in addition to broad iSCSI session rescans.
+- LUN `operation = "create"` means host-side attach for an existing target-side
+  LUN and is online when it only rescans sessions and verifies stable paths.
+  LUN `operation = "grow"` is offline-required because the storage target,
+  host rescan, multipath, and consumers must be coordinated. LUN destruction is
+  modeled as host-side path detach, not target-side array deletion, and remains
+  offline-required. When stable `device` or `devices` paths are declared, apply
+  plans render per-path SCSI rescans or deletes in addition to broad iSCSI
+  session and multipath refreshes.
 - iSCSI session `operation = "grow"` is classified as offline-required because
   target growth, session/path rescan, and dependent consumers must be
   coordinated.

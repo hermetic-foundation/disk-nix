@@ -822,6 +822,60 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Create if collection == Some("luns") || action.id.starts_with("luns:") => {
+            let mut commands = vec![command(
+                ["lsblk", "--json", "--bytes", "--output-all"],
+                false,
+                "verify kernel block-device inventory after LUN attach",
+            )];
+            for device in lun_rescan_devices(action) {
+                commands.push(command_vec(
+                    vec!["blockdev", "--getsize64", device.as_str()],
+                    false,
+                    "verify the reviewed LUN path exists and reports capacity",
+                ));
+            }
+            commands.push(command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify attached LUN, iSCSI session, multipath, and consumers in the graph",
+            ));
+            (
+                commands,
+                vec![
+                    "every expected LUN path is visible by a stable device name".to_string(),
+                    "multipath maps and consumers are created only after path identity is verified"
+                        .to_string(),
+                ],
+            )
+        }
+        Operation::Destroy if collection == Some("luns") || action.id.starts_with("luns:") => {
+            let mut commands = vec![command(
+                ["lsblk", "--json", "--bytes", "--output-all"],
+                false,
+                "verify kernel block-device inventory after LUN detach",
+            )];
+            for device in lun_rescan_devices(action) {
+                commands.push(command_vec(
+                    vec!["test", "!", "-e", device.as_str()],
+                    false,
+                    "verify the reviewed LUN path is no longer present",
+                ));
+            }
+            commands.push(command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify detached LUN paths and remaining consumers in the graph",
+            ));
+            (
+                commands,
+                vec![
+                    "detached LUN paths no longer appear in kernel block inventory".to_string(),
+                    "remaining multipath maps, filesystems, and services have no stale dependencies"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Create | Operation::Destroy if collection == Some("iscsiSessions") => (
             vec![
                 command(
@@ -1710,6 +1764,43 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "coordinate the target-side LUN grow before host rescans".to_string(),
                     "declare stable LUN path devices to render per-path SCSI rescans".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Create if collection == Some("luns") || action.id.starts_with("luns:") => {
+            let target = target.unwrap_or("<lun>");
+            let mut commands = vec![
+                command(
+                    ["iscsiadm", "--mode", "session", "--rescan"],
+                    true,
+                    "rescan iSCSI sessions after target-side LUN creation",
+                ),
+                command(
+                    ["multipath", "-r"],
+                    true,
+                    "reload multipath maps after newly attached LUN paths appear",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "inspect the newly attached LUN and consumers",
+                ),
+            ];
+            for device in lun_rescan_devices(action) {
+                commands.push(command_vec(
+                    vec!["blockdev", "--getsize64", device.as_str()],
+                    false,
+                    "verify the reviewed LUN path is visible to the kernel",
+                ));
+            }
+            (
+                commands,
+                vec![
+                    "create or map the target-side LUN before host attach".to_string(),
+                    "declare stable LUN path devices to verify every expected path".to_string(),
+                    "enable filesystems, LVM, or multipath consumers only after verification"
+                        .to_string(),
                 ],
                 true,
             )
@@ -3212,6 +3303,48 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Destroy if collection == Some("luns") || action.id.starts_with("luns:") => {
+            let target = target.unwrap_or("<lun>");
+            let devices = lun_rescan_devices(action);
+            let mut commands = vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "inspect LUN consumers before detaching reviewed SCSI paths",
+            )];
+            if devices.is_empty() {
+                commands.push(command_with_readiness(
+                    ["<scsi-delete-device>", "<lun-path>"],
+                    true,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["stable LUN device path"],
+                    "detach a LUN path after declaring a stable by-path device",
+                ));
+            } else {
+                for device in devices {
+                    commands.push(scsi_device_delete_command(&device));
+                }
+            }
+            commands.push(command(
+                ["multipath", "-r"],
+                true,
+                "reload multipath maps after LUN path detach",
+            ));
+            commands.push(command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify detached LUN paths and remaining consumers",
+            ));
+            (
+                commands,
+                vec![
+                    "unmount filesystems and deactivate dm, LVM, or multipath consumers before detach"
+                        .to_string(),
+                    "detach only reviewed stable paths; target-side LUN deletion remains an external storage-array action"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Format | Operation::Shrink | Operation::RemoveDevice | Operation::Rollback | Operation::Destroy => (
             Vec::new(),
             vec!["no command plan is generated for this risk class unless future explicit policy and executor support are added".to_string()],
@@ -3827,6 +3960,21 @@ fn scsi_device_rescan_command(device: &str) -> ExecutionCommand {
         ],
         true,
         "rescan the reviewed SCSI block path after target-side LUN growth",
+    )
+}
+
+fn scsi_device_delete_command(device: &str) -> ExecutionCommand {
+    command_vec(
+        vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            "block=$(basename \"$(readlink -f \"$1\")\"); printf '1\\n' > \"/sys/class/block/${block}/device/delete\""
+                .to_string(),
+            "disk-nix-scsi-delete".to_string(),
+            device.to_string(),
+        ],
+        true,
+        "detach the reviewed SCSI block path from the host",
     )
 }
 
@@ -6884,6 +7032,110 @@ mod tests {
                 ]
                 && !command.mutates
         }));
+    }
+
+    #[test]
+    fn lun_attach_and_detach_reports_host_path_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/root:0": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                },
+                "iqn.2026-06.example:storage/old:1": {
+                  "destroy": true,
+                  "devices": [
+                    "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-1"
+                  ]
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/root:0:create"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["iscsiadm", "--mode", "session", "--rescan"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/root:0:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "blockdev",
+                            "--getsize64",
+                            "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+                        ]
+                        && !command.mutates
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/old:1:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "block=$(basename \"$(readlink -f \"$1\")\"); printf '1\\n' > \"/sys/class/block/${block}/device/delete\"",
+                            "disk-nix-scsi-delete",
+                            "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-1",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/old:1:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "test",
+                            "!",
+                            "-e",
+                            "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-1",
+                        ]
+                        && !command.mutates
+                })
+        }));
+    }
+
+    #[test]
+    fn lun_detach_without_stable_path_reports_unresolved_input() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/old:1": {
+                  "destroy": true
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/old:1:destroy"
+                && step.commands.iter().any(|command| {
+                    command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["stable LUN device path"]
+                })
+        }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
     }
 
     #[test]

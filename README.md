@@ -202,9 +202,10 @@ marked unresolved until a backing device is declared.
 NFS export apply plans render reviewed `exportfs` create, option update, and
 unexport commands from explicit client and option declarations.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
-and rescan commands from explicit target IQN and portal declarations. LUN grow
-plans additionally render per-path SCSI rescans when stable LUN `device` or
-`devices` paths are declared.
+and rescan commands from explicit target IQN and portal declarations. LUN apply
+plans model host-side attach, growth rescan, and detach: attach and grow rescan
+sessions, grow can rescan declared SCSI paths, and detach deletes only declared
+stable path devices before refreshing multipath.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain. Btrfs snapshot declarations with `readOnly = true` render

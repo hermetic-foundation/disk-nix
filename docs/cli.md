@@ -346,8 +346,11 @@ NFS export command plans use explicit `client` and `options` lifecycle fields
 to render reviewed `exportfs` create, option update, and unexport commands.
 iSCSI session command plans use `target` or the lifecycle key as the target IQN
 and `portal` or `metadata.portal` for reviewed discovery, login, and logout
-commands. LUN grow command plans keep the broad `iscsiadm --mode session --rescan` step and add per-path SCSI rescans when stable LUN `device` or
-`devices` paths are declared.
+commands. LUN command plans model host-side attach, growth rescan, and detach:
+create and grow keep the broad `iscsiadm --mode session --rescan` step, grow
+adds per-path SCSI rescans, and destroy deletes only declared stable SCSI path
+devices before reloading multipath. Target-side array provisioning or deletion
+must be handled outside the host plan unless a future target adapter is added.
 LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`, and report
 missing target form and size separately when either is absent.

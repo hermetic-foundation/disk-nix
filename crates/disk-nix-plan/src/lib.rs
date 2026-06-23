@@ -1458,6 +1458,29 @@ fn add_destroy_guard(
             });
             return;
         }
+        if collection == "luns" {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:destroy").to_ascii_lowercase(),
+                description: format!("detach LUN paths for {name}"),
+                operation: Operation::Destroy,
+                risk: RiskClass::OfflineRequired,
+                destructive: false,
+                context: lifecycle_context(collection, name, object),
+                advice: Some(Advice {
+                    summary: "LUN host detach removes reviewed SCSI paths from this host"
+                        .to_string(),
+                    alternatives: vec![
+                        "unmount filesystems and deactivate LVM, multipath, or dm consumers before detach"
+                            .to_string(),
+                        "remove a single path only after redundancy or alternate paths are healthy"
+                            .to_string(),
+                        "disable automatic session login only after dependent services no longer need the LUN"
+                            .to_string(),
+                    ],
+                }),
+            });
+            return;
+        }
 
         let mut alternatives = destructive_alternatives(collection, object);
         alternatives.push("rename, detach, or unmount first when supported".to_string());
@@ -1847,6 +1870,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "luns" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "LUN host attach makes an existing target-side LUN visible to this host"
+                    .to_string(),
+                alternatives: vec![
+                    "create or grow the target-side LUN before host attach".to_string(),
+                    "declare stable by-path devices so apply can verify every expected path"
+                        .to_string(),
+                    "keep multipath and filesystem consumers disabled until paths are verified"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
         Operation::Grow if collection == "mdRaids" => (
             RiskClass::OfflineRequired,
@@ -2006,6 +2044,21 @@ fn classify_operation(
                     "verify multipath, LVM, and filesystem consumers have migrated away"
                         .to_string(),
                     "disable automatic login only after dependent services no longer need the LUN"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Destroy if collection == "luns" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "LUN host detach removes reviewed SCSI paths from this host".to_string(),
+                alternatives: vec![
+                    "unmount filesystems and deactivate LVM, multipath, or dm consumers before detach"
+                        .to_string(),
+                    "remove a single path only after redundancy or alternate paths are healthy"
+                        .to_string(),
+                    "disable automatic session login only after dependent services no longer need the LUN"
                         .to_string(),
                 ],
             }),
@@ -3983,6 +4036,60 @@ mod tests {
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("multipath"))
+        }));
+    }
+
+    #[test]
+    fn plan_classifies_lun_attach_and_detach() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/root:0": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                },
+                "iqn.2026-06.example:storage/old:1": {
+                  "destroy": true,
+                  "devices": [
+                    "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-1"
+                  ]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.destructive_count, 0);
+
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luns:iqn.2026-06.example:storage/root:0:create")
+            .expect("LUN create action exists");
+        assert_eq!(create.operation, Operation::Create);
+        assert_eq!(create.risk, RiskClass::Online);
+        assert!(create.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("stable by-path"))
+        }));
+
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luns:iqn.2026-06.example:storage/old:1:destroy")
+            .expect("LUN destroy action exists");
+        assert_eq!(destroy.operation, Operation::Destroy);
+        assert_eq!(destroy.risk, RiskClass::OfflineRequired);
+        assert!(!destroy.destructive);
+        assert!(destroy.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("deactivate"))
         }));
     }
 
