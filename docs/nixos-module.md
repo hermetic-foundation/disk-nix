@@ -617,8 +617,11 @@ Example lifecycle planning through NixOS options:
   `failOnBlocked = true`.
 - `boot`: reserved for boot-time lifecycle work; the module emits a warning and
   does not wire imperative apply for this mode yet
-- `install`: reserved for installer workflows; the module emits a warning and
-  does not wire imperative apply for this mode yet
+- `install`: run the same service-backed policy validation and optional
+  execution path as activation mode, but without activation-mode's extra
+  destructive-action assertion. This is intended for installer or image-build
+  workflows where destructive provisioning is explicit in the apply policy and
+  confirmation gates.
 
 ## Policy
 
@@ -650,13 +653,14 @@ rollback, shrink, and device-removal workflows, and backup or confirmation
 requirements still apply when enabled. `requireConfirmationFile` stores the
 expected file path in the generated policy; `disk-nix apply` only treats it as
 confirmed when the file contains a standalone line equal to `disk-nix confirm`.
-`failOnBlocked` defaults to true. When false, activation keeps writing the same
-report data but uses `disk-nix validate`, which exits successfully even when
-policy blocks planned actions.
-`execute` defaults to false. When true, activation runs `disk-nix apply --execute` after policy validation and command-readiness checks pass. The module
-requires `failOnBlocked = true` for this mode because `disk-nix validate` is
-report-only.
-`scriptOut` must be an absolute path. The activation service creates its parent
+`failOnBlocked` defaults to true. When false, activation and install modes keep
+writing the same report data but use `disk-nix validate`, which exits
+successfully even when policy blocks planned actions.
+`execute` defaults to false. When true, activation and install modes run
+`disk-nix apply --execute` after policy validation and command-readiness checks
+pass. The module requires `failOnBlocked = true` for this mode because
+`disk-nix validate` is report-only.
+`scriptOut` must be an absolute path. The apply service creates its parent
 directory before asking the CLI to write the review script.
-`reportOut` must also be an absolute path. The activation service creates its
-parent directory before asking the CLI to write the JSON apply report.
+`reportOut` must also be an absolute path. The apply service creates its parent
+directory before asking the CLI to write the JSON apply report.

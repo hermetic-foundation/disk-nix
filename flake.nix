@@ -1322,13 +1322,21 @@
                 grep -- '/run/disk-nix/execute-report.json' "$applyScript"
                 touch "$out"
               '';
-          nixosModuleReservedModes = pkgs.runCommand "disk-nix-nixos-module-reserved-modes-check" { } ''
-            bootWarnings=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleBootModeTest.config.warnings)}
-            installWarnings=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleInstallModeTest.config.warnings)}
-            printf '%s\n' "$bootWarnings" | grep -- 'apply.mode = \\"boot\\" is reserved'
-            printf '%s\n' "$installWarnings" | grep -- 'apply.mode = \\"install\\" is reserved'
-            touch "$out"
-          '';
+          nixosModuleApplyModes =
+            pkgs.runCommand "disk-nix-nixos-module-apply-modes-check" { nativeBuildInputs = [ pkgs.jq ]; }
+              ''
+                bootWarnings=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleBootModeTest.config.warnings)}
+                installWarnings=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleInstallModeTest.config.warnings)}
+                printf '%s\n' "$bootWarnings" | grep -- 'apply.mode = \\"boot\\" is reserved'
+                ! printf '%s\n' "$installWarnings" | grep -- 'apply.mode = \\"install\\" is reserved'
+                installSpec=${nixosModuleInstallModeTest.config.environment.etc."disk-nix/spec.json".source}
+                jq -e '.apply.mode == "install"' "$installSpec"
+                installScript='${nixosModuleInstallModeTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'
+                grep -- 'apply' "$installScript"
+                installWantedBy=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleInstallModeTest.config.systemd.services.disk-nix-plan.wantedBy)}
+                printf '%s\n' "$installWantedBy" | jq -e 'index("multi-user.target") != null'
+                touch "$out"
+              '';
         };
 
         devShells.default = pkgs.mkShell {
