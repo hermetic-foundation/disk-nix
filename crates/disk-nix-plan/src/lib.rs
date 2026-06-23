@@ -1002,6 +1002,7 @@ fn add_filesystem_property_actions(
                 property: Some(property.to_string()),
                 property_value: Some(property_value(value)),
                 property_assignments: property_assignments(filesystem),
+                device: string_field(filesystem, &["device", "disk"]),
                 ..filesystem_context(name, mountpoint, fs_type, desired_size.clone())
             },
             advice: None,
@@ -3030,6 +3031,7 @@ mod tests {
               "filesystems": {
                 "data": {
                   "mountpoint": "/data",
+                  "device": "/dev/disk/by-label/data",
                   "fsType": "btrfs",
                   "properties": {
                     "label": "bulk-data"
@@ -3049,6 +3051,10 @@ mod tests {
         assert_eq!(action.operation, Operation::SetProperty);
         assert_eq!(action.risk, RiskClass::Safe);
         assert_eq!(action.context.target.as_deref(), Some("/data"));
+        assert_eq!(
+            action.context.device.as_deref(),
+            Some("/dev/disk/by-label/data")
+        );
         assert_eq!(action.context.fs_type.as_deref(), Some("btrfs"));
         assert_eq!(action.context.mountpoint.as_deref(), Some("/data"));
         assert_eq!(action.context.property.as_deref(), Some("label"));

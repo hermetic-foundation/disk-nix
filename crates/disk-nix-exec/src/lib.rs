@@ -2435,6 +2435,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 filesystem_property_command(
                     action.context.fs_type.as_deref(),
                     target,
+                    action.context.device.as_deref(),
                     property,
                     &property_assignment,
                 )
@@ -3989,11 +3990,15 @@ fn set_property_command(
 fn filesystem_property_command(
     fs_type: Option<&str>,
     target: &str,
+    device: Option<&str>,
     property: &str,
     assignment: &str,
 ) -> ExecutionCommand {
     match fs_type {
         Some("btrfs") => btrfs_filesystem_property_command(target, property, assignment),
+        Some("ext2" | "ext3" | "ext4") => {
+            ext_filesystem_property_command(device, target, property, assignment)
+        }
         Some("zfs") => command(
             ["zfs", "set", assignment, target],
             true,
@@ -4005,6 +4010,44 @@ fn filesystem_property_command(
             CommandReadiness::NeedsDomainImplementation,
             ["filesystem type", "supported filesystem property"],
             "set a filesystem property after selecting the filesystem-specific command",
+        ),
+    }
+}
+
+fn ext_filesystem_property_command(
+    device: Option<&str>,
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            ["<ext-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["Ext filesystem property value"],
+            "set an Ext filesystem property after resolving the desired value",
+        );
+    };
+    match (property, device) {
+        ("label" | "ext.label" | "filesystem.label", Some(device)) => command(
+            ["e2label", device, value],
+            true,
+            "set the Ext filesystem label on the reviewed backing device",
+        ),
+        ("label" | "ext.label" | "filesystem.label", None) => command_with_readiness(
+            ["e2label", "<filesystem-device>", value],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "set the Ext filesystem label after resolving the backing device",
+        ),
+        _ => command_with_readiness(
+            ["<ext-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported Ext filesystem property"],
+            "set an Ext filesystem property after selecting a supported property mapping",
         ),
     }
 }
@@ -5551,6 +5594,53 @@ mod tests {
         }));
         assert!(report.command_summary.ready_count >= 3);
         assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
+    }
+
+    #[test]
+    fn ext_filesystem_label_uses_declared_device() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "home": {
+                    "mountpoint": "/home",
+                    "device": "/dev/disk/by-label/home-old",
+                    "fsType": "ext4",
+                    "properties": {
+                      "label": "home-new"
+                    }
+                  },
+                  "missing-device": {
+                    "mountpoint": "/srv",
+                    "fsType": "ext4",
+                    "properties": {
+                      "label": "srv-new"
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:home:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["e2label", "/dev/disk/by-label/home-old", "home-new"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:missing-device:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["e2label", "<filesystem-device>", "srv-new"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
     }
 
     #[test]
