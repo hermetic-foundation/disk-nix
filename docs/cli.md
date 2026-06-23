@@ -345,7 +345,10 @@ or `/dev/disk/by-*`. Swap label and UUID property updates render
 remain offline-required.
 LUKS open command plans render `cryptsetup open` for preserved existing
 containers, while close plans render offline-policy-gated `cryptsetup close`
-steps and keep the backing LUKS container intact for later reopen.
+steps and keep the backing LUKS container intact for later reopen. LUKS header
+label and subsystem property updates render `cryptsetup config <device> --label`
+or `--subsystem`, while UUID updates render
+`cryptsetup luksUUID <device> --uuid <uuid>`.
 Disk initialization plans render policy-gated `parted mklabel` and partition
 table reread commands after inspecting the target disk.
 Partition create command plans render concrete `parted mkpart`, `partprobe`,

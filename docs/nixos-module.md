@@ -138,6 +138,7 @@ Typed LUKS declarations include:
 - `preLVM`
 - `preserveData`
 - `destroy`
+- `properties`
 
 Typed NFS client mount declarations include:
 

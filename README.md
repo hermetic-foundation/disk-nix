@@ -244,7 +244,10 @@ offline-required signature identity changes.
 LUKS open plans render reviewed `cryptsetup open` commands for preserved
 existing containers; close plans render offline-policy-gated `cryptsetup close`
 commands and verify the topology without erasing the backing LUKS header or
-encrypted data.
+encrypted data. LUKS header label and subsystem property updates render
+`cryptsetup config <device> --label` or `--subsystem`, and UUID updates render
+`cryptsetup luksUUID <device> --uuid`; missing backing devices stay non-ready
+until the LUKS header device is explicit.
 LUKS keyslot and token plans render `cryptsetup luksAddKey`, `luksChangeKey`,
 `luksKillSlot`, `cryptsetup token import`, and `cryptsetup token remove` with
 header verification. Keyslot and token removal are potential data loss because

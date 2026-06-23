@@ -107,6 +107,8 @@
                 operation = "grow";
                 desiredSize = "100%";
                 allowDiscards = true;
+                properties.label = "cryptroot";
+                properties."luks.subsystem" = "nixos";
               };
               luks.devices.cryptold = {
                 device = "/dev/disk/by-partuuid/old-luks";
@@ -670,6 +672,8 @@
                   and .spec.luks.devices.cryptroot.name == "cryptroot"
                   and .spec.luks.devices.cryptroot.operation == "grow"
                   and .spec.luks.devices.cryptroot.desiredSize == "100%"
+                  and .spec.luks.devices.cryptroot.properties.label == "cryptroot"
+                  and .spec.luks.devices.cryptroot.properties."luks.subsystem" == "nixos"
                   and .spec.luks.devices.cryptold.destroy == true
                   and .spec.luks.devices.cryptold.device == "/dev/disk/by-partuuid/old-luks"
                   and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"

@@ -1405,6 +1405,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             ],
             vec!["changed VDO property equals the desired value".to_string()],
         ),
+        Operation::SetProperty if collection == Some("luks.devices") => {
+            let device = action.context.device.as_deref();
+            (
+                vec![
+                    luks_dump_command(device, "verify LUKS header metadata after property update"),
+                    command(
+                        ["disk-nix", "inspect", device.unwrap_or("<luks-device>"), "--json"],
+                        false,
+                        "verify modeled LUKS header properties after re-probe",
+                    ),
+                ],
+                vec![
+                    "changed LUKS header property equals the desired value".to_string(),
+                    "initrd, crypttab, and dependent mappings still reference the intended encrypted container"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::SetProperty if collection == Some("btrfsQgroups") => (
             vec![
                 command(
@@ -2718,6 +2736,12 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             } else if collection == Some("swaps") {
                 swap_property_command(
                     swap_target_path(action),
+                    property,
+                    action.context.property_value.as_deref(),
+                )
+            } else if collection == Some("luks.devices") {
+                luks_device_property_command(
+                    action.context.device.as_deref(),
                     property,
                     action.context.property_value.as_deref(),
                 )
@@ -6232,6 +6256,101 @@ fn nfs_export_property_command(
             "reload NFS exports after selecting a supported export property mapping",
         ),
     }
+}
+
+fn luks_device_property_command(
+    device: Option<&str>,
+    property: &str,
+    value: Option<&str>,
+) -> ExecutionCommand {
+    let device_arg = device.unwrap_or("<luks-device>");
+    let mut missing = Vec::new();
+    if device.is_none() {
+        missing.push("LUKS backing device");
+    }
+    if value.is_none() {
+        missing.push("LUKS property value");
+    }
+
+    let Some(value) = value else {
+        return command_vec_with_readiness(
+            luks_device_property_argv(device_arg, property, "<value>"),
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "update LUKS header identity after selecting a property value",
+        );
+    };
+
+    let argv = luks_device_property_argv(device_arg, property, value);
+    if !missing.is_empty() {
+        return command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "update LUKS header identity after selecting the backing device",
+        );
+    }
+
+    if luks_device_property_argv_is_supported(property) {
+        command_vec(argv, true, "update LUKS header identity metadata")
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            vec!["supported LUKS header property"],
+            "update LUKS header identity after selecting a supported property mapping",
+        )
+    }
+}
+
+fn luks_device_property_argv(device: &str, property: &str, value: &str) -> Vec<String> {
+    match property {
+        "label" | "luks.label" | "cryptsetup.label" => vec![
+            "cryptsetup".to_string(),
+            "config".to_string(),
+            device.to_string(),
+            "--label".to_string(),
+            value.to_string(),
+        ],
+        "subsystem" | "luks.subsystem" | "cryptsetup.subsystem" => vec![
+            "cryptsetup".to_string(),
+            "config".to_string(),
+            device.to_string(),
+            "--subsystem".to_string(),
+            value.to_string(),
+        ],
+        "uuid" | "luks.uuid" | "cryptsetup.uuid" => vec![
+            "cryptsetup".to_string(),
+            "luksUUID".to_string(),
+            device.to_string(),
+            "--uuid".to_string(),
+            value.to_string(),
+        ],
+        _ => vec![
+            "<luks-property-tool>".to_string(),
+            device.to_string(),
+            property.to_string(),
+            value.to_string(),
+        ],
+    }
+}
+
+fn luks_device_property_argv_is_supported(property: &str) -> bool {
+    matches!(
+        property,
+        "label"
+            | "luks.label"
+            | "cryptsetup.label"
+            | "subsystem"
+            | "luks.subsystem"
+            | "cryptsetup.subsystem"
+            | "uuid"
+            | "luks.uuid"
+            | "cryptsetup.uuid"
+    )
 }
 
 fn export_target_path(action: &PlannedAction) -> Option<&str> {
@@ -10387,6 +10506,105 @@ mod tests {
                     command.argv == ["mkswap", "<swap>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["swap target path"]
+                })
+        }));
+    }
+
+    #[test]
+    fn luks_header_properties_use_cryptsetup_identity_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "luks": {
+                  "devices": {
+                    "cryptroot": {
+                      "name": "cryptroot",
+                      "device": "/dev/disk/by-id/root-luks",
+                      "properties": {
+                        "label": "root",
+                        "luks.subsystem": "nixos",
+                        "luks.uuid": "01234567-89ab-cdef-0123-456789abcdef"
+                      }
+                    },
+                    "logical": {
+                      "properties": {
+                        "luks.label": "logical-root"
+                      }
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptroot:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "config",
+                            "/dev/disk/by-id/root-luks",
+                            "--label",
+                            "root",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptroot:set-property:luks.subsystem"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "config",
+                            "/dev/disk/by-id/root-luks",
+                            "--subsystem",
+                            "nixos",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptroot:set-property:luks.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "luksUUID",
+                            "/dev/disk/by-id/root-luks",
+                            "--uuid",
+                            "01234567-89ab-cdef-0123-456789abcdef",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:logical:set-property:luks.label"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "config",
+                            "<luks-device>",
+                            "--label",
+                            "logical-root",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["LUKS backing device"]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptroot:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
                 })
         }));
     }

@@ -524,6 +524,7 @@ let
       preLVM
       preserveData
       destroy
+      properties
       ;
   }) cfg.luks.devices;
   typedIscsiSpec = cleanSpecAttrs {
@@ -872,6 +873,16 @@ in
                 type = lib.types.bool;
                 default = false;
                 description = "Request LUKS mapper teardown in disk-nix planning without adding the device to boot.initrd.luks.devices.";
+              };
+
+              properties = lib.mkOption {
+                type = lib.types.attrsOf json.type;
+                default = { };
+                description = "LUKS header properties to set through disk-nix lifecycle planning, such as label, subsystem, or luks.uuid.";
+                example = {
+                  label = "cryptroot";
+                  "luks.uuid" = "01234567-89ab-cdef-0123-456789abcdef";
+                };
               };
             };
           }

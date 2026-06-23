@@ -103,8 +103,10 @@ Examples:
   container as a mapper and is offline-required. LUKS `operation = "format"` or
   `preserveData = false` is destructive. LUKS growth and mapper close are
   offline-required because backing capacity, mapper state, and dependent
-  consumers must be coordinated. Mapper close keeps the LUKS header and backing
-  data intact unless a separate format action is requested.
+  consumers must be coordinated. LUKS header label, subsystem, and UUID property
+  updates are offline-required identity metadata changes rendered through
+  `cryptsetup config` or `cryptsetup luksUUID`. Mapper close keeps the LUKS
+  header and backing data intact unless a separate format action is requested.
 - Btrfs subvolume creation is online, while destruction is destructive and
   suggests read-only snapshots or rename-first validation.
 - VDO creation and removal are destructive because they write or remove VDO

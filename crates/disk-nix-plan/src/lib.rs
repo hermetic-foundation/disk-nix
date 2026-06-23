@@ -1660,8 +1660,13 @@ fn add_luks_actions(actions: &mut Vec<PlannedAction>, name: &str, luks: &Value) 
         name: Some(name.to_string()),
         target: Some(mapper_name.clone()),
         device: device.clone(),
+        property_assignments: property_assignments(luks),
         ..ActionContext::default()
     };
+    let has_properties = luks
+        .get("properties")
+        .and_then(Value::as_object)
+        .is_some_and(|properties| !properties.is_empty());
 
     match operation {
         Some(Operation::Grow) => actions.push(PlannedAction {
@@ -1736,7 +1741,7 @@ fn add_luks_actions(actions: &mut Vec<PlannedAction>, name: &str, luks: &Value) 
             &mapper_name,
             "preserveData=false permits replacing the LUKS container",
         )),
-        _ => actions.push(PlannedAction {
+        _ if !has_properties => actions.push(PlannedAction {
             id: format!("luks.devices:{name}:inspect"),
             description: format!("inspect LUKS declaration {mapper_name} on {device_label}"),
             operation: Operation::SetProperty,
@@ -1745,7 +1750,10 @@ fn add_luks_actions(actions: &mut Vec<PlannedAction>, name: &str, luks: &Value) 
             context,
             advice: None,
         }),
+        _ => {}
     }
+
+    add_luks_property_actions(actions, name, &mapper_name, device, luks);
 }
 
 fn luks_format_action(
@@ -1781,6 +1789,89 @@ fn luks_format_action(
             ],
         }),
     }
+}
+
+fn add_luks_property_actions(
+    actions: &mut Vec<PlannedAction>,
+    name: &str,
+    mapper_name: &str,
+    device: Option<String>,
+    luks: &Value,
+) {
+    let Some(properties) = luks.get("properties").and_then(Value::as_object) else {
+        return;
+    };
+
+    for (property, value) in properties {
+        let (risk, advice) = classify_luks_device_property_change(property);
+        actions.push(PlannedAction {
+            id: format!("luks.devices:{name}:set-property:{property}"),
+            description: format!("set LUKS header property {property} on {mapper_name}"),
+            operation: Operation::SetProperty,
+            risk,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("luks.devices".to_string()),
+                name: Some(name.to_string()),
+                target: Some(mapper_name.to_string()),
+                device: device.clone(),
+                property: Some(property.to_string()),
+                property_value: Some(property_value(value)),
+                property_assignments: property_assignments(luks),
+                ..ActionContext::default()
+            },
+            advice,
+        });
+    }
+}
+
+fn classify_luks_device_property_change(property: &str) -> (RiskClass, Option<Advice>) {
+    if is_luks_identity_property(property) {
+        return (
+            RiskClass::OfflineRequired,
+            Some(Advice {
+                summary: format!(
+                    "LUKS header property {property} updates encrypted-container identity metadata"
+                ),
+                alternatives: vec![
+                    "prefer updating consumers to stable by-id paths when possible".to_string(),
+                    "back up the LUKS header before changing header identity metadata".to_string(),
+                    "verify initrd, crypttab, and NixOS LUKS references after identity changes"
+                        .to_string(),
+                ],
+            }),
+        );
+    }
+
+    (
+        RiskClass::Unsupported,
+        Some(Advice {
+            summary: format!("LUKS header property {property} is not mapped to a safe command"),
+            alternatives: vec![
+                "use label, luks.label, subsystem, luks.subsystem, uuid, or luks.uuid for supported LUKS identity changes"
+                    .to_string(),
+                "use luksKeyslots or luksTokens declarations for access-material changes"
+                    .to_string(),
+                "apply unsupported LUKS header changes manually after reviewing cryptsetup documentation"
+                    .to_string(),
+            ],
+        }),
+    )
+}
+
+fn is_luks_identity_property(property: &str) -> bool {
+    matches!(
+        property,
+        "label"
+            | "luks.label"
+            | "cryptsetup.label"
+            | "subsystem"
+            | "luks.subsystem"
+            | "cryptsetup.subsystem"
+            | "uuid"
+            | "luks.uuid"
+            | "cryptsetup.uuid"
+    )
 }
 
 fn filesystem_shrink_action(
@@ -3636,10 +3727,14 @@ pub fn default_capabilities() -> Vec<Capability> {
             operation: Operation::SetProperty,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
-                summary: "LUKS key and token changes update header access material".to_string(),
+                summary: "LUKS property changes update header identity metadata or access material"
+                    .to_string(),
                 alternatives: vec![
+                    "back up the LUKS header before changing label, subsystem, UUID, keys, or tokens"
+                        .to_string(),
                     "verify a recovery key still unlocks the container".to_string(),
-                    "stage replacement access material before deleting old access".to_string(),
+                    "review initrd, crypttab, and stable device references after identity changes"
+                        .to_string(),
                 ],
             }),
         },
@@ -6333,6 +6428,77 @@ mod tests {
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("swap.label"))
+        }));
+    }
+
+    #[test]
+    fn plan_accepts_luks_header_identity_properties() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "name": "cryptroot",
+                    "device": "/dev/disk/by-id/root-luks",
+                    "properties": {
+                      "label": "root",
+                      "luks.subsystem": "nixos",
+                      "luks.uuid": "01234567-89ab-cdef-0123-456789abcdef",
+                      "priority": "prefer"
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.unsupported_count, 1);
+
+        let label = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:cryptroot:set-property:label")
+            .expect("LUKS label property action exists");
+        assert_eq!(label.operation, Operation::SetProperty);
+        assert_eq!(label.risk, RiskClass::OfflineRequired);
+        assert_eq!(label.context.target.as_deref(), Some("cryptroot"));
+        assert_eq!(
+            label.context.device.as_deref(),
+            Some("/dev/disk/by-id/root-luks")
+        );
+        assert_eq!(label.context.property_value.as_deref(), Some("root"));
+
+        let subsystem = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:cryptroot:set-property:luks.subsystem")
+            .expect("LUKS subsystem property action exists");
+        assert_eq!(subsystem.risk, RiskClass::OfflineRequired);
+        assert_eq!(subsystem.context.property_value.as_deref(), Some("nixos"));
+
+        let uuid = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:cryptroot:set-property:luks.uuid")
+            .expect("LUKS UUID property action exists");
+        assert_eq!(uuid.risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            uuid.context.property_value.as_deref(),
+            Some("01234567-89ab-cdef-0123-456789abcdef")
+        );
+
+        let unsupported = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:cryptroot:set-property:priority")
+            .expect("unsupported LUKS property action exists");
+        assert_eq!(unsupported.risk, RiskClass::Unsupported);
+        assert!(unsupported.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("luksKeyslots or luksTokens"))
         }));
     }
 
