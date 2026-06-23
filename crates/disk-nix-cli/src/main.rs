@@ -1861,6 +1861,9 @@ fn usage_details(node: &Node) -> String {
         ("parted.transport", "parted-transport"),
         ("parted.logical-sector-size", "logical-sector"),
         ("parted.physical-sector-size", "physical-sector"),
+        ("swap.active", "swap-active"),
+        ("swap.type", "swap-type"),
+        ("swap.priority", "swap-priority"),
         ("udev.symlink", "udev-link"),
         ("udev.devpath", "udev-devpath"),
         ("udev.id-fs-type", "udev-fstype"),
@@ -2218,6 +2221,13 @@ mod tests {
             )
             .with_path("/var/lib/images/root.img"),
         );
+        graph.add_node(
+            Node::new("swap:/dev/zram0", NodeKind::Swap, "/dev/zram0")
+                .with_path("/dev/zram0")
+                .with_property("swap.active", "true")
+                .with_property("swap.type", "partition")
+                .with_property("swap.priority", "100"),
+        );
 
         let mut output = Vec::new();
         print_devices(&mut output, &graph).expect("devices table renders");
@@ -2231,6 +2241,7 @@ mod tests {
         assert!(output.contains("udev-link=disk/by-id/nvme-Acme_FastDisk"));
         assert!(output.contains("lsblk-type=part fstype=vfat partno=1 udev-fstype=vfat"));
         assert!(output.contains("lsblk-type=loop"));
+        assert!(output.contains("swap-active=true swap-type=partition swap-priority=100"));
         assert!(output.contains("/var/lib/images/root.img"));
     }
 
@@ -2364,6 +2375,15 @@ mod tests {
         assert_eq!(
             usage_details(&bcache),
             "role=backing set-uuid=cache-set-uuid state=clean cache-mode=writeback replacement=lru dirty=64.0M writeback-percent=10"
+        );
+
+        let swap = Node::new("swap:/dev/zram0", NodeKind::Swap, "/dev/zram0")
+            .with_property("swap.active", "true")
+            .with_property("swap.type", "partition")
+            .with_property("swap.priority", "100");
+        assert_eq!(
+            usage_details(&swap),
+            "swap-active=true swap-type=partition swap-priority=100"
         );
     }
 
