@@ -161,6 +161,7 @@ Typed filesystem declarations include:
 - `removeDevices`
 - `replaceDevices`
 - `properties`
+- `metadata`
 - `resizePolicy`
 - `desiredSize`
 - `targetSize`
@@ -169,6 +170,9 @@ Typed filesystem declarations include:
 
 `targetSize` and `size` are serialized as aliases accepted by the planner for
 the desired filesystem size.
+`metadata` is copied only into the disk-nix planner spec, so domain-specific
+inspection context can be carried without changing the generated NixOS
+`fileSystems` entry.
 
 For ext filesystems, `device` is also used by disk-nix grow, shrink, check, and
 repair command plans for `resize2fs` and `e2fsck`. If only `mountpoint` is

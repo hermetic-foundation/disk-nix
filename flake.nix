@@ -156,6 +156,10 @@
                   label = "bulk-data";
                   "btrfs.balance.data" = "usage=50";
                 };
+                metadata = {
+                  pool = "tank";
+                  role = "bulk-data";
+                };
               };
               filesystems.scratch = {
                 device = "/dev/disk/by-label/scratch";
@@ -1163,6 +1167,8 @@
                     and .spec.filesystems.data.replaceDevices."/dev/disk/by-id/nvme-btrfs-aging" == "/dev/disk/by-id/nvme-btrfs-replacement"
                     and .spec.filesystems.data.properties.label == "bulk-data"
                     and .spec.filesystems.data.properties."btrfs.balance.data" == "usage=50"
+                    and .spec.filesystems.data.metadata.pool == "tank"
+                    and .spec.filesystems.data.metadata.role == "bulk-data"
                     and .spec.filesystems.scratch.operation == "check"
                     and .spec.filesystems.scratch.device == "/dev/disk/by-label/scratch"
                     and .spec.filesystems.scrub.operation == "scrub"

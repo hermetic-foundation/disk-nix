@@ -774,6 +774,7 @@ let
       removeDevices
       replaceDevices
       properties
+      metadata
       resizePolicy
       preserveData
       desiredSize
@@ -1116,6 +1117,16 @@ in
                 description = "Filesystem properties to set through disk-nix lifecycle planning.";
                 example = {
                   label = "bulk-data";
+                };
+              };
+
+              metadata = lib.mkOption {
+                type = lib.types.attrsOf json.type;
+                default = { };
+                description = "Domain-specific filesystem metadata copied into the planner spec.";
+                example = {
+                  pool = "tank";
+                  role = "bulk-data";
                 };
               };
 
