@@ -72,6 +72,7 @@ let
       "repair"
       "scrub"
       "trim"
+      "rescan"
       "replace-device"
       "add-device"
       "remove-device"

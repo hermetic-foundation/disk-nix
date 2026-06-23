@@ -213,6 +213,8 @@ Examples:
 - LUN `operation = "attach"` means host-side attach for an existing target-side
   LUN and is online when it only rescans sessions and verifies stable paths.
   Legacy LUN `create` maps to the same host attach lifecycle.
+  LUN `operation = "rescan"` is online and refreshes existing host-visible
+  paths without implying target-side capacity growth.
   LUN `operation = "grow"` is offline-required because the storage target,
   host rescan, multipath, and consumers must be coordinated. LUN
   `operation = "detach"` is modeled as host-side path detach, not target-side
@@ -225,7 +227,8 @@ Examples:
   and is online. Legacy `operation = "create"` remains accepted for the same
   login flow. `operation = "logout"` detaches remote LUN paths from the host,
   is offline-required, and preserves target-side data. Legacy `destroy = true`
-  remains accepted for the same logout flow. Session `operation = "grow"` is
+  remains accepted for the same logout flow. Session `operation = "rescan"` is
+  online and refreshes existing target paths. Session `operation = "grow"` is
   offline-required because target growth, session/path rescan, and dependent
   consumers must be coordinated.
 - `destroy = true` is classified as destructive and recommends backup,
@@ -295,12 +298,12 @@ Lifecycle collections currently accepted by the planner:
 Lifecycle objects may use:
 
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
-  `repair`, `scrub`, `trim`, `replace-device`, `add-device`, `remove-device`,
-  `add-key`, `remove-key`, `import-token`, `remove-token`, `set-property`,
-  `snapshot`, `promote`, `import`, `export`, `unexport`, `attach`, `detach`,
-  `activate`, `deactivate`, `assemble`, `start`, `stop`, `login`, `logout`,
-  `open`, `close`, `mount`, `unmount`, `remount`, `rename`, `rebalance`,
-  `rollback`, or `destroy`
+  `repair`, `scrub`, `trim`, `rescan`, `replace-device`, `add-device`,
+  `remove-device`, `add-key`, `remove-key`, `import-token`, `remove-token`,
+  `set-property`, `snapshot`, `promote`, `import`, `export`, `unexport`,
+  `attach`, `detach`, `activate`, `deactivate`, `assemble`, `start`, `stop`,
+  `login`, `logout`, `open`, `close`, `mount`, `unmount`, `remount`, `rename`,
+  `rebalance`, `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
 - `devices`: member devices for arrays, pools, or explicit LUN paths that
   should receive per-path host rescans
@@ -408,12 +411,14 @@ and `lvchange --cachemode` or `--cachepolicy` for `lvmCaches` lifecycle
 declarations. Executable attach plans require an origin `vg/lv` target and a
 cache-pool LV through `device` or `addDevices`.
 NVMe namespace command plans use `nvme create-ns`, `nvme attach-ns`,
-`nvme ns-rescan`, `nvme detach-ns`, and `nvme delete-ns`. Create and delete
-are destructive controller namespace-management operations. Grow is
-offline-required and means host namespace rescan after controller-side resize
-or replacement. Executable create plans require a `/dev/nvme*` controller
-target and `desiredSize`; attach and delete flows require `namespaceId` plus
-`controllers` when attachment state is changed.
+explicit `operation = "rescan"` plans through `nvme ns-rescan`,
+`nvme detach-ns`, and `nvme delete-ns`. Create and delete are destructive
+controller namespace-management operations. Rescan is online and refreshes
+host namespace inventory. Grow is offline-required and means host namespace
+rescan after controller-side resize or replacement. Executable create plans
+require a `/dev/nvme*` controller target and `desiredSize`; attach and delete
+flows require `namespaceId` plus `controllers` when attachment state is
+changed.
 Swap grow, format, label, and UUID command plans require a path-shaped swap
 target. Label and UUID updates render `swaplabel --label` and
 `swaplabel --uuid`. MD RAID assemble, stop, create, grow, member add,

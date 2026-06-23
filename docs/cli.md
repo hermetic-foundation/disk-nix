@@ -426,13 +426,15 @@ and `destroy` map to the same command plans. Missing sources or path-shaped
 mountpoints keep those commands non-ready.
 iSCSI session command plans use `target` or the lifecycle key as the target IQN
 and `portal` or `metadata.portal` for reviewed `operation = "login"` and
-`operation = "logout"` commands. Legacy session `create` and `destroy` map to
-the same login/logout command plans. LUN command plans model host-side
-`operation = "attach"`, growth rescan, and `operation = "detach"`: attach and
-grow keep the broad `iscsiadm --mode session --rescan` step, grow adds per-path
-SCSI rescans, and detach deletes only declared stable SCSI path devices before
-reloading multipath. Legacy LUN `create` and `destroy` map to the same command
-plans. Attach, grow, and detach remain non-ready until stable `device` or
+`operation = "logout"` commands, plus `operation = "rescan"` for online session
+refresh. Legacy session `create` and `destroy` map to the same login/logout
+command plans. LUN command plans model host-side `operation = "attach"`,
+`operation = "rescan"`, growth rescan, and `operation = "detach"`: attach,
+rescan, and grow keep the broad `iscsiadm --mode session --rescan` step,
+rescan/grow add per-path SCSI rescans when stable paths are declared, and
+detach deletes only declared stable SCSI path devices before reloading
+multipath. Legacy LUN `create` and `destroy` map to the same command plans.
+Attach, rescan, grow, and detach remain non-ready until stable `device` or
 `devices` paths are declared. Target-side array
 provisioning or deletion must be handled outside the host plan unless a future
 target adapter is added.
@@ -440,11 +442,12 @@ The capability inventory advertises iSCSI login/logout and LUN attach/detach
 as host lifecycle operations, distinct from target-side LUN creation or
 deletion.
 NVMe namespace command plans render `nvme create-ns`, `nvme attach-ns`,
-`nvme ns-rescan`, `nvme detach-ns`, and `nvme delete-ns`. Executable create
-plans require a `/dev/nvme*` controller target and `desiredSize`; attach and
-delete flows also require `namespaceId` plus `controllers` where detach or
-attach is involved. Namespace growth is modeled as a host rescan after a
-controller-side namespace size change.
+explicit `operation = "rescan"` plans through `nvme ns-rescan`,
+`nvme detach-ns`, and `nvme delete-ns`. Executable create plans require a
+`/dev/nvme*` controller target and `desiredSize`; attach and delete flows also
+require `namespaceId` plus `controllers` where detach or attach is involved.
+Namespace growth is modeled as a host rescan after a controller-side namespace
+size change.
 LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`, and report
 missing target form and size separately when either is absent. LV grow and

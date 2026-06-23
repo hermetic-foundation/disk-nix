@@ -265,6 +265,12 @@
       "devices": [
         "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3"
       ]
+    },
+    "iqn.2026-06.example:storage/rescan:4": {
+      "operation": "rescan",
+      "devices": [
+        "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4"
+      ]
     }
   },
   "iscsiSessions": {
@@ -275,6 +281,10 @@
     "iqn.2026-06.example:storage.logout": {
       "operation": "logout",
       "portal": "192.0.2.11:3260"
+    },
+    "iqn.2026-06.example:storage.rescan": {
+      "operation": "rescan",
+      "portal": "192.0.2.10:3260"
     }
   },
   "nvmeNamespaces": {
@@ -283,6 +293,9 @@
       "desiredSize": "100G",
       "namespaceId": "4",
       "controllers": "0x1"
+    },
+    "/dev/nvme1": {
+      "operation": "rescan"
     }
   },
   "exports": {

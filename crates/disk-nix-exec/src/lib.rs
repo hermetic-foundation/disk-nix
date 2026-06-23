@@ -1023,22 +1023,31 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "no unexpected partitions or consumers remain after initialization".to_string(),
             ],
         ),
-        Operation::Grow
+        Operation::Grow | Operation::Rescan
             if collection == Some("luns")
                 || collection == Some("iscsiSessions")
                 || action.id.starts_with("luns:")
                 || action.id.starts_with("iscsiSessions:") =>
         {
+            let is_rescan = action.operation == Operation::Rescan;
             let mut commands = vec![command(
                 ["lsblk", "--json", "--bytes", "--output-all"],
                 false,
-                "verify kernel block-device capacity after host rescan",
+                if is_rescan {
+                    "verify kernel block-device inventory after host rescan"
+                } else {
+                    "verify kernel block-device capacity after host rescan"
+                },
             )];
             for device in lun_rescan_devices(action) {
                 commands.push(command_vec(
                     vec!["blockdev", "--getsize64", device.as_str()],
                     false,
-                    "verify the reviewed LUN path reports its post-rescan byte size",
+                    if is_rescan {
+                        "verify the reviewed LUN path is visible after rescan"
+                    } else {
+                        "verify the reviewed LUN path reports its post-rescan byte size"
+                    },
                 ));
             }
             commands.push(command(
@@ -1049,12 +1058,22 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             (
                 commands,
                 vec![
-                    desired_size
-                        .map(|size| format!("every expected path reports capacity {size}"))
-                        .unwrap_or_else(|| {
-                            "every expected path reports the new capacity".to_string()
-                        }),
-                    "multipath maps and dependent volumes no longer report stale sizes".to_string(),
+                    if is_rescan {
+                        "every expected path remains visible after rescan".to_string()
+                    } else {
+                        desired_size
+                            .map(|size| format!("every expected path reports capacity {size}"))
+                            .unwrap_or_else(|| {
+                                "every expected path reports the new capacity".to_string()
+                            })
+                    },
+                    if is_rescan {
+                        "multipath maps and dependent volumes no longer report stale paths"
+                            .to_string()
+                    } else {
+                        "multipath maps and dependent volumes no longer report stale sizes"
+                            .to_string()
+                    },
                     "no consumer remains on a missing or failed path".to_string(),
                 ],
             )
@@ -2142,6 +2161,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Unmount
         | Operation::Remount
         | Operation::Rename
+        | Operation::Rescan
         | Operation::AddKey
         | Operation::RemoveKey
         | Operation::ImportToken
@@ -2463,6 +2483,54 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Rescan if collection == Some("luns") || action.id.starts_with("luns:") => {
+            let target = target.unwrap_or("<lun>");
+            let mut commands = vec![
+                command(
+                    ["iscsiadm", "--mode", "session", "--rescan"],
+                    true,
+                    "rescan iSCSI sessions to refresh existing LUN paths",
+                ),
+                command(
+                    ["disk-nix", "inspect", target],
+                    false,
+                    "inspect current LUN paths before per-device rescans",
+                ),
+            ];
+            let devices = lun_rescan_devices(action);
+            if devices.is_empty() {
+                commands.push(command_with_readiness(
+                    ["<scsi-rescan-device>", "<lun-path>"],
+                    true,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["stable LUN device path"],
+                    "rescan the concrete SCSI path after declaring a stable by-path LUN device",
+                ));
+            }
+            for device in devices {
+                commands.push(scsi_device_rescan_command(&device));
+            }
+            commands.extend([
+                command(
+                    ["multipath", "-r"],
+                    true,
+                    "reload multipath maps after refreshed LUN paths",
+                ),
+                command(
+                    ["disk-nix", "inspect", target],
+                    false,
+                    "verify that refreshed paths and consumers are visible",
+                ),
+            ]);
+            (
+                commands,
+                vec![
+                    "declare stable LUN path devices to render per-path SCSI rescans".to_string(),
+                    "verify multipath maps before exposing dependent consumers".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Grow if collection == Some("luns") || action.id.starts_with("luns:") => {
             let target = target.unwrap_or("<lun>");
             let mut commands = vec![
@@ -2560,7 +2628,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Grow
+        Operation::Grow | Operation::Rescan
             if collection == Some("iscsiSessions") || action.id.starts_with("iscsiSessions:") =>
         {
             let target = target.unwrap_or("<iscsi-session>");
@@ -2875,6 +2943,25 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "rescan each SCSI path before resizing the multipath map".to_string(),
                     "grow dependent volumes or filesystems only after the map reports the new size"
                         .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("nvmeNamespaces") => {
+            let controller = nvme_controller_target(action);
+            (
+                vec![
+                    nvme_list_namespaces_command(
+                        controller,
+                        "inspect NVMe namespaces before rescan",
+                    ),
+                    nvme_namespace_rescan_command(controller),
+                    nvme_list_namespaces_command(controller, "verify NVMe namespaces after rescan"),
+                ],
+                vec![
+                    "verify namespace inventory before exposing refreshed devices to consumers"
+                        .to_string(),
+                    "use grow when controller-side namespace capacity changed".to_string(),
                 ],
                 true,
             )
@@ -5028,6 +5115,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Unmount
         | Operation::Remount
         | Operation::Rename
+        | Operation::Rescan
         | Operation::AddKey
         | Operation::RemoveKey
         | Operation::ImportToken
@@ -7324,7 +7412,7 @@ fn scsi_device_rescan_command(device: &str) -> ExecutionCommand {
             device.to_string(),
         ],
         true,
-        "rescan the reviewed SCSI block path after target-side LUN growth",
+        "rescan the reviewed SCSI block path after target-side changes",
     )
 }
 
@@ -14556,6 +14644,76 @@ mod tests {
                 ]
                 && !command.mutates
         }));
+    }
+
+    #[test]
+    fn host_storage_rescan_reports_online_refresh_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "luns": {
+                  "iqn.2026-06.example:storage/root:0": {
+                    "operation": "rescan",
+                    "devices": [
+                      "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                    ]
+                  }
+                },
+                "iscsiSessions": {
+                  "iqn.2026-06.example:storage.root": {
+                    "operation": "rescan"
+                  }
+                },
+                "nvmeNamespaces": {
+                  "/dev/nvme2": {
+                    "operation": "rescan"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.apply.allowed_count >= 3);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/root:0:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["iscsiadm", "--mode", "session", "--rescan"]
+                        && command.mutates
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "block=$(basename \"$(readlink -f \"$1\")\"); printf '1\\n' > \"/sys/class/block/${block}/device/rescan\"",
+                            "disk-nix-scsi-rescan",
+                            "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["multipath", "-r"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "iscsisessions:iqn.2026-06.example:storage.root:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["iscsiadm", "--mode", "session", "--rescan"] && command.mutates
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:/dev/nvme2:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["nvme", "ns-rescan", "/dev/nvme2"])
+        }));
+        assert!(report.command_summary.all_commands_ready());
     }
 
     #[test]

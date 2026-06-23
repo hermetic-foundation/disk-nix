@@ -42,6 +42,7 @@ pub enum Operation {
     Repair,
     Scrub,
     Trim,
+    Rescan,
     ReplaceDevice,
     AddDevice,
     RemoveDevice,
@@ -2788,6 +2789,7 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "repair" => Some(Operation::Repair),
         "scrub" => Some(Operation::Scrub),
         "trim" => Some(Operation::Trim),
+        "rescan" | "re-scan" => Some(Operation::Rescan),
         "replace-device" | "replaceDevice" => Some(Operation::ReplaceDevice),
         "add-device" | "addDevice" => Some(Operation::AddDevice),
         "remove-device" | "removeDevice" => Some(Operation::RemoveDevice),
@@ -2835,6 +2837,7 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Repair => "repair",
         Operation::Scrub => "scrub",
         Operation::Trim => "trim",
+        Operation::Rescan => "rescan",
         Operation::ReplaceDevice => "replace-device",
         Operation::AddDevice => "add-device",
         Operation::RemoveDevice => "remove-device",
@@ -3547,6 +3550,28 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan
+            if collection == "luns"
+                || collection == "iscsiSessions"
+                || collection == "nvmeNamespaces" =>
+        {
+            (
+                RiskClass::Online,
+                false,
+                Some(Advice {
+                    summary:
+                        "host rescan refreshes existing storage paths without deleting target data"
+                            .to_string(),
+                    alternatives: vec![
+                        "use grow when the target-side capacity changed and consumers must be resized"
+                            .to_string(),
+                        "declare stable path devices so apply can verify each refreshed path"
+                            .to_string(),
+                        "verify multipath and dependent volumes after the rescan".to_string(),
+                    ],
+                }),
+            )
+        }
         Operation::Grow if collection == "luns" || collection == "iscsiSessions" => (
             RiskClass::OfflineRequired,
             false,
@@ -3922,6 +3947,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: "rescan operations are currently supported for LUNs, iSCSI sessions, and NVMe namespaces"
+                    .to_string(),
+                alternatives: vec![
+                    "use luns.<name>.operation = \"rescan\" to refresh reviewed SCSI paths"
+                        .to_string(),
+                    "use iscsiSessions.<target>.operation = \"rescan\" to refresh existing target sessions"
+                        .to_string(),
+                    "use nvmeNamespaces.<controller>.operation = \"rescan\" to refresh namespace inventory"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::AddKey | Operation::RemoveKey => (
             RiskClass::Unsupported,
             false,
@@ -4207,6 +4248,7 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Repair => "repair",
         Operation::Scrub => "scrub",
         Operation::Trim => "trim",
+        Operation::Rescan => "rescan",
         Operation::ReplaceDevice => "replace device",
         Operation::AddDevice => "add device",
         Operation::RemoveDevice => "remove device",
@@ -5814,6 +5856,21 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::Lun,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "LUN rescan refreshes existing host paths without deleting target data"
+                    .to_string(),
+                alternatives: vec![
+                    "declare stable by-path devices before depending on refreshed paths"
+                        .to_string(),
+                    "use grow when target capacity changed and consumers must be resized"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Lun,
             operation: Operation::Destroy,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
@@ -5871,6 +5928,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::NvmeNamespace,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "NVMe namespace rescan refreshes controller namespace inventory"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow when controller-side namespace capacity changed".to_string(),
+                    "verify consumers after namespace inventory changes".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NvmeNamespace,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             advice: Some(Advice {
@@ -5919,6 +5989,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "grow the target LUN before resizing consumers".to_string(),
                     "rescan the iSCSI session and verify every path before filesystem growth"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::IscsiSession,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "iSCSI session rescan refreshes existing target paths".to_string(),
+                alternatives: vec![
+                    "use login for new target sessions and logout for removal".to_string(),
+                    "declare LUN path devices when individual SCSI paths need verification"
                         .to_string(),
                 ],
             }),
@@ -6373,6 +6456,12 @@ mod tests {
                 capability.node_kind == NodeKind::Lun && capability.operation == Operation::Attach
             })
             .expect("LUN attach capability should exist");
+        let lun_rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::Lun && capability.operation == Operation::Rescan
+            })
+            .expect("LUN rescan capability should exist");
         let lun_destroy = capabilities
             .iter()
             .find(|capability| {
@@ -6399,6 +6488,13 @@ mod tests {
                     && capability.operation == Operation::Login
             })
             .expect("iSCSI session login capability should exist");
+        let session_rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::IscsiSession
+                    && capability.operation == Operation::Rescan
+            })
+            .expect("iSCSI session rescan capability should exist");
         let session_destroy = capabilities
             .iter()
             .find(|capability| {
@@ -6416,10 +6512,12 @@ mod tests {
 
         assert_eq!(lun_create.risk, RiskClass::Online);
         assert_eq!(lun_attach.risk, RiskClass::Online);
+        assert_eq!(lun_rescan.risk, RiskClass::Online);
         assert_eq!(lun_destroy.risk, RiskClass::OfflineRequired);
         assert_eq!(lun_detach.risk, RiskClass::OfflineRequired);
         assert_eq!(session_create.risk, RiskClass::Online);
         assert_eq!(session_login.risk, RiskClass::Online);
+        assert_eq!(session_rescan.risk, RiskClass::Online);
         assert_eq!(session_destroy.risk, RiskClass::OfflineRequired);
         assert_eq!(session_logout.risk, RiskClass::OfflineRequired);
         assert!(lun_destroy.advice.as_ref().is_some_and(|advice| {
@@ -6444,6 +6542,13 @@ mod tests {
                     && capability.operation == Operation::Grow
             })
             .expect("NVMe namespace grow capability should exist");
+        let rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NvmeNamespace
+                    && capability.operation == Operation::Rescan
+            })
+            .expect("NVMe namespace rescan capability should exist");
         let destroy = capabilities
             .iter()
             .find(|capability| {
@@ -6454,6 +6559,7 @@ mod tests {
 
         assert_eq!(create.risk, RiskClass::Destructive);
         assert_eq!(grow.risk, RiskClass::OfflineRequired);
+        assert_eq!(rescan.risk, RiskClass::Online);
         assert_eq!(destroy.risk, RiskClass::Destructive);
         assert!(create.advice.is_some());
     }
@@ -9308,6 +9414,39 @@ mod tests {
         assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Grow);
         assert_eq!(plan.actions[0].risk, RiskClass::OfflineRequired);
+    }
+
+    #[test]
+    fn plan_classifies_host_storage_rescans_as_online() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "operation": "rescan"
+                }
+              },
+              "luns": {
+                "iqn.2026-06.example:storage/root:0": {
+                  "operation": "rescan",
+                  "devices": [
+                    "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                  ]
+                }
+              },
+              "nvmeNamespaces": {
+                "/dev/nvme0": {
+                  "operation": "rescan"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        assert!(plan.actions.iter().all(|action| {
+            action.operation == Operation::Rescan && action.risk == RiskClass::Online
+        }));
     }
 
     #[test]

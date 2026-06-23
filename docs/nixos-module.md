@@ -506,7 +506,18 @@ Example lifecycle planning through NixOS options:
         operation = "logout";
         metadata.portal = "192.0.2.11:3260";
       };
+      sessions."iqn.2026-06.example:storage.rescan" = {
+        operation = "rescan";
+        metadata.portal = "192.0.2.10:3260";
+      };
     };
+    luns."iqn.2026-06.example:storage/rescan:4" = {
+      operation = "rescan";
+      devices = [
+        "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4"
+      ];
+    };
+    nvmeNamespaces."/dev/nvme1".operation = "rescan";
     snapshots."tank/home@before-upgrade" = {
       target = "tank/home";
       renameTo = "tank/home@before-upgrade-retained";

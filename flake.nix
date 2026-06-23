@@ -233,6 +233,10 @@
                   operation = "logout";
                   portal = "192.0.2.11:3260";
                 };
+                sessions."iqn.2026-06.example:storage.rescan" = {
+                  operation = "rescan";
+                  portal = "192.0.2.10:3260";
+                };
               };
               pools.tank = {
                 operation = "rebalance";
@@ -394,12 +398,19 @@
                   "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3"
                 ];
               };
+              luns."iqn.2026-06.example:storage/rescan:4" = {
+                operation = "rescan";
+                devices = [
+                  "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4"
+                ];
+              };
               nvmeNamespaces."/dev/nvme0" = {
                 operation = "create";
                 desiredSize = "100G";
                 namespaceId = "4";
                 controllers = "0x1";
               };
+              nvmeNamespaces."/dev/nvme1".operation = "rescan";
               exports."/srv/share" = {
                 operation = "export";
                 client = "192.0.2.0/24";
@@ -553,6 +564,7 @@
               and (."$defs".operation.enum | index("repair") != null)
               and (."$defs".operation.enum | index("scrub") != null)
               and (."$defs".operation.enum | index("trim") != null)
+              and (."$defs".operation.enum | index("rescan") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
               and (."$defs".operation.enum | index("add-key") != null)
               and (."$defs".operation.enum | index("remove-key") != null)
@@ -665,7 +677,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 70
+              .summary.actionCount == 73
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -691,8 +703,10 @@
               and (.actions | any(.id == "lukstokens:cryptroot:1:remove-token" and .risk == "potential-data-loss"))
               and (.actions | any(.id == "iscsisessions:iqn.2026-06.example:storage.login:login" and .risk == "online"))
               and (.actions | any(.id == "iscsisessions:iqn.2026-06.example:storage.logout:logout" and .risk == "offline-required"))
+              and (.actions | any(.id == "iscsisessions:iqn.2026-06.example:storage.rescan:rescan" and .risk == "online"))
               and (.actions | any(.id == "luns:iqn.2026-06.example:storage/new:2:attach" and .risk == "online"))
               and (.actions | any(.id == "luns:iqn.2026-06.example:storage/old:3:detach" and .risk == "offline-required"))
+              and (.actions | any(.id == "luns:iqn.2026-06.example:storage/rescan:4:rescan" and .risk == "online"))
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/newthin:create" and .risk == "online"))
@@ -710,6 +724,7 @@
               and (.actions | any(.id == "luks.devices:cryptarchive:open" and .risk == "offline-required"))
               and (.actions | any(.id == "luks.devices:cryptclosed:close" and .risk == "offline-required"))
               and (.actions | any(.id == "nvmenamespaces:/dev/nvme0:create" and .risk == "destructive"))
+              and (.actions | any(.id == "nvmenamespaces:/dev/nvme1:rescan" and .risk == "online"))
               and (.actions | any(.id == "pools:vault:import" and .risk == "offline-required" and .context.readOnly == true))
               and (.actions | any(.id == "pools:moveme:export" and .risk == "offline-required"))
               and (.actions | any(.id == "volumegroups:importvg:import" and .risk == "offline-required"))
@@ -874,6 +889,7 @@
                   and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
                   and .spec.iscsi.sessions."iqn.2026-06.example:storage.login".operation == "login"
                   and .spec.iscsi.sessions."iqn.2026-06.example:storage.logout".operation == "logout"
+                  and .spec.iscsi.sessions."iqn.2026-06.example:storage.rescan".operation == "rescan"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".portal == "192.0.2.10:3260"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
@@ -881,6 +897,8 @@
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.login".portal == "192.0.2.10:3260"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.logout".operation == "logout"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.logout".portal == "192.0.2.11:3260"
+                  and .spec.iscsiSessions."iqn.2026-06.example:storage.rescan".operation == "rescan"
+                  and .spec.iscsiSessions."iqn.2026-06.example:storage.rescan".portal == "192.0.2.10:3260"
                   and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
                   and .spec.luns."iqn.2026-06.example:storage/root:0".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
                   and (.spec.luns."iqn.2026-06.example:storage/root:0".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0") != null)
@@ -888,10 +906,13 @@
                   and .spec.luns."iqn.2026-06.example:storage/new:2".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-2"
                   and .spec.luns."iqn.2026-06.example:storage/old:3".operation == "detach"
                   and (.spec.luns."iqn.2026-06.example:storage/old:3".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3") != null)
+                  and .spec.luns."iqn.2026-06.example:storage/rescan:4".operation == "rescan"
+                  and (.spec.luns."iqn.2026-06.example:storage/rescan:4".devices | index("/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4") != null)
                   and .spec.nvmeNamespaces."/dev/nvme0".operation == "create"
                   and .spec.nvmeNamespaces."/dev/nvme0".desiredSize == "100G"
                   and .spec.nvmeNamespaces."/dev/nvme0".namespaceId == "4"
                   and .spec.nvmeNamespaces."/dev/nvme0".controllers == "0x1"
+                  and .spec.nvmeNamespaces."/dev/nvme1".operation == "rescan"
                   and .spec.exports."/srv/share".operation == "export"
                   and .spec.exports."/srv/share".client == "192.0.2.0/24"
                   and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
