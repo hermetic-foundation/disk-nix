@@ -2595,6 +2595,26 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::AddDevice if collection == Some("volumeGroups") => {
+            let target = target.unwrap_or("<volume-group>");
+            let device = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| action_id_suffix(&action.id, "add-device"));
+            (
+                vec![
+                    command(
+                        ["vgs", "--reportformat", "json", target],
+                        false,
+                        "inspect current volume group state before adding a physical volume",
+                    ),
+                    volume_group_extend_command(target, device),
+                ],
+                vec!["initialize or verify the physical volume before extending the VG".to_string()],
+                true,
+            )
+        }
         Operation::AddDevice => {
             let target = target.unwrap_or("<target>");
             let device = action
@@ -2612,6 +2632,31 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     add_device_command(collection, target, device),
                 ],
                 vec!["verify the new device identity and redundancy policy before attaching it".to_string()],
+                true,
+            )
+        }
+        Operation::ReplaceDevice if collection == Some("volumeGroups") => {
+            let target = target.unwrap_or("<volume-group>");
+            let from = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| action_id_suffix(&action.id, "replace-device"));
+            let to = action.context.replacement.as_deref();
+            (
+                vec![
+                    lvm_physical_volume_inspect_command(from),
+                    lvm_physical_volume_inspect_command(to),
+                    lvm_volume_group_extend_replacement_command(target, to),
+                    lvm_physical_volume_move_to_command(from, to),
+                    lvm_volume_group_reduce_command(target, from),
+                ],
+                vec![
+                    "add the replacement physical volume before moving extents".to_string(),
+                    "keep the old PV online until pvmove completes and no allocated extents remain"
+                        .to_string(),
+                    "verify logical volumes, thin pools, and filesystems before vgreduce".to_string(),
+                ],
                 true,
             )
         }
@@ -7825,6 +7870,61 @@ fn volume_group_extend_command(target: &str, device: Option<&str>) -> ExecutionC
     }
 }
 
+fn lvm_volume_group_extend_replacement_command(
+    target: &str,
+    replacement: Option<&str>,
+) -> ExecutionCommand {
+    match replacement {
+        Some(replacement) => command(
+            ["vgextend", target, replacement],
+            true,
+            "extend the LVM volume group with the replacement physical volume",
+        ),
+        None => command_with_readiness(
+            ["vgextend", target, "<replacement-physical-volume>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["replacement physical volume"],
+            "extend the LVM volume group after selecting the replacement physical volume",
+        ),
+    }
+}
+
+fn lvm_physical_volume_move_to_command(
+    source: Option<&str>,
+    destination: Option<&str>,
+) -> ExecutionCommand {
+    let source_arg = source.unwrap_or("<physical-volume>");
+    let destination_arg = destination.unwrap_or("<replacement-physical-volume>");
+    let mut missing = Vec::new();
+    if source.is_none() {
+        missing.push("physical volume to replace");
+    }
+    if destination.is_none() {
+        missing.push("replacement physical volume");
+    }
+
+    if missing.is_empty() {
+        command(
+            ["pvmove", source_arg, destination_arg],
+            true,
+            "move allocated extents from the old PV to the replacement PV",
+        )
+    } else {
+        command_vec_with_readiness(
+            vec![
+                "pvmove".to_string(),
+                source_arg.to_string(),
+                destination_arg.to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "move extents after selecting the old and replacement physical volumes",
+        )
+    }
+}
+
 fn loop_device_create_command(target: &str, backing: Option<&str>) -> ExecutionCommand {
     match backing {
         Some(backing) if target.starts_with("/dev/loop") => command(
@@ -9554,6 +9654,95 @@ mod tests {
         assert!(missing_vg_commands.iter().any(|command| {
             command.argv == ["vgreduce", "vg0", "<physical-volume>"]
                 && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["physical volume to remove"]
+        }));
+    }
+
+    #[test]
+    fn volume_group_replacement_renders_lvm_migration_commands() {
+        let action = PlannedAction {
+            id: "volumeGroups:vg0:replace-device:/dev/disk/by-id/old-pv".to_string(),
+            description: "replace old physical volume".to_string(),
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("volumeGroups".to_string()),
+                name: Some("vg0".to_string()),
+                target: Some("vg0".to_string()),
+                device: Some("/dev/disk/by-id/old-pv".to_string()),
+                replacement: Some("/dev/disk/by-id/new-pv".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let missing_action = PlannedAction {
+            id: "volumeGroups:vg0:replacedevice".to_string(),
+            description: "replace unspecified physical volume".to_string(),
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("volumeGroups".to_string()),
+                name: Some("vg0".to_string()),
+                target: Some("vg0".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+
+        let (commands, notes, manual_review) = commands_for_action(&action);
+        let (missing_commands, _, _) = commands_for_action(&missing_action);
+
+        assert!(manual_review);
+        assert!(commands.iter().any(|command| {
+            command.argv == ["pvs", "--reportformat", "json", "/dev/disk/by-id/old-pv"]
+                && !command.mutates
+        }));
+        assert!(commands.iter().any(|command| {
+            command.argv == ["pvs", "--reportformat", "json", "/dev/disk/by-id/new-pv"]
+                && !command.mutates
+        }));
+        assert!(commands.iter().any(|command| {
+            command.argv == ["vgextend", "vg0", "/dev/disk/by-id/new-pv"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(commands.iter().any(|command| {
+            command.argv == ["pvmove", "/dev/disk/by-id/old-pv", "/dev/disk/by-id/new-pv"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(commands.iter().any(|command| {
+            command.argv == ["vgreduce", "vg0", "/dev/disk/by-id/old-pv"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.contains("replacement physical volume"))
+        );
+
+        assert!(missing_commands.iter().any(|command| {
+            command.argv == ["vgextend", "vg0", "<replacement-physical-volume>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["replacement physical volume"]
+        }));
+        assert!(missing_commands.iter().any(|command| {
+            command.argv
+                == [
+                    "pvmove",
+                    "<physical-volume>",
+                    "<replacement-physical-volume>",
+                ]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs
+                    == ["physical volume to replace", "replacement physical volume"]
+        }));
+        assert!(missing_commands.iter().any(|command| {
+            command.argv == ["vgreduce", "vg0", "<physical-volume>"]
                 && command.readiness == CommandReadiness::NeedsDomainImplementation
                 && command.unresolved_inputs == ["physical volume to remove"]
         }));
@@ -11943,7 +12132,8 @@ mod tests {
                 }
               },
               "apply": {
-                "allowDestructive": true
+                "allowDestructive": true,
+                "allowOffline": true
               }
             }"#,
         )
@@ -11976,23 +12166,27 @@ mod tests {
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "volumegroups:vgadd:adddevice"
                 && step.commands.iter().any(|command| {
-                    command.argv == ["<add-device-tool>", "vgadd", "<device>"]
+                    command.argv == ["vgextend", "vgadd", "<physical-volume>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
-                        && command.unresolved_inputs == ["device to add"]
+                        && command.unresolved_inputs == ["physical volume device"]
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "volumegroups:vgreplace:replacedevice"
                 && step.commands.iter().any(|command| {
+                    command.argv == ["vgextend", "vgreplace", "<replacement-physical-volume>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["replacement physical volume"]
+                })
+                && step.commands.iter().any(|command| {
                     command.argv
                         == [
-                            "<replace-device-tool>",
-                            "vgreplace",
+                            "pvmove",
                             "/dev/disk/by-id/old-pv",
-                            "<new-device>",
+                            "<replacement-physical-volume>",
                         ]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
-                        && command.unresolved_inputs == ["replacement device"]
+                        && command.unresolved_inputs == ["replacement physical volume"]
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {

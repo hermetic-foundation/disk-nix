@@ -452,10 +452,11 @@ lifecycle declarations. Executable attach plans require both an origin `vg/lv`
 target and a cache-pool LV.
 LVM volume group command plans render policy-gated `vgcreate` and `vgremove`
 commands for `volumeGroups` lifecycle declarations, reviewed `vgextend`
-commands for grow operations with an explicit physical volume, and reviewed
-`pvmove` then `vgreduce` commands for explicit physical-volume removal.
-Generic add-device, replace-device, and remove-device operations stay non-ready
-until the device to add, source device, replacement device, or device to remove
+commands for grow or add-device operations with an explicit physical volume,
+reviewed `vgextend`, `pvmove <old-pv> <new-pv>`, and `vgreduce` replacement
+workflows, and reviewed `pvmove` then `vgreduce` commands for explicit
+physical-volume removal. Device topology operations stay non-ready until the
+device to add, source device, replacement device, or device to remove
 is declared explicitly.
 Loop-device refresh and detach commands require `/dev/loop*` targets. Multipath
 map growth requires a concrete map target such as `mpatha` or

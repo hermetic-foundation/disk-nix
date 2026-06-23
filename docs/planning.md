@@ -340,9 +340,10 @@ destructive policy gates allow removal. LV grow and remove commands require
 canonical `vg/lv` targets.
 LVM thin-pool command plans require canonical `vg/pool` targets for grow and
 remove operations.
-LVM volume group grow command plans use `vgextend <vg> <pv>` when a physical
-volume device is declared, and mark the command unresolved when it is missing.
-Generic add-device, replace-device, and remove-device lifecycle operations
+LVM volume group grow and add-device command plans use `vgextend <vg> <pv>`
+when a physical volume device is declared. Replacement plans render
+`vgextend <vg> <new-pv>`, `pvmove <old-pv> <new-pv>`, and
+`vgreduce <vg> <old-pv>` when both PVs are explicit. Device topology operations
 remain unresolved until the device to add, the source device, the replacement
 device, or the device to remove is declared explicitly.
 LVM physical volume command plans use `pvcreate`, `pvresize`, and `pvremove`

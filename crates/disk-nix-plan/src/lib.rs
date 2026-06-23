@@ -3464,6 +3464,21 @@ fn classify_replace_device(collection: &str) -> (RiskClass, Advice) {
                 ],
             },
         )
+    } else if collection == "volumeGroups" {
+        (
+            RiskClass::OfflineRequired,
+            Advice {
+                summary: "LVM physical volume replacement must migrate extents before vgreduce"
+                    .to_string(),
+                alternatives: vec![
+                    "vgextend the replacement PV before running pvmove".to_string(),
+                    "keep the old PV available until pvmove completes and LVs are verified"
+                        .to_string(),
+                    "use pvs and vgs reports to confirm no allocated extents remain before vgreduce"
+                        .to_string(),
+                ],
+            },
+        )
     } else {
         (
             RiskClass::Reversible,
@@ -6156,6 +6171,11 @@ mod tests {
                   "operation": "create",
                   "device": "/dev/disk/by-id/nvme-vg0"
                 },
+                "vgdata": {
+                  "replaceDevices": {
+                    "/dev/disk/by-id/old-pv": "/dev/disk/by-id/new-pv"
+                  }
+                },
                 "oldvg": {
                   "destroy": true
                 }
@@ -6164,7 +6184,8 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.summary.destructive_count, 2);
         let create = plan
             .actions
@@ -6189,6 +6210,26 @@ mod tests {
             .find(|action| action.id == "volumegroups:oldvg:destroy")
             .expect("volume group destroy action exists");
         assert_eq!(destroy.risk, RiskClass::Destructive);
+
+        let replace = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumeGroups:vgdata:replace-device:/dev/disk/by-id/old-pv")
+            .expect("volume group replacement action exists");
+        assert_eq!(replace.risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            replace.context.device.as_deref(),
+            Some("/dev/disk/by-id/old-pv")
+        );
+        assert_eq!(
+            replace.context.replacement.as_deref(),
+            Some("/dev/disk/by-id/new-pv")
+        );
+        assert!(
+            replace.advice.as_ref().is_some_and(|advice| {
+                advice.summary.contains("migrate extents before vgreduce")
+            })
+        );
     }
 
     #[test]

@@ -307,12 +307,12 @@ LVM thin-pool apply plans render reviewed `lvcreate --type thin-pool`,
 `vg/pool` targets or sizes. Thin-pool grow and remove commands likewise
 require the canonical `vg/pool` target form.
 LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
-volume group lifecycle declarations, reviewed `vgextend` steps for grow
-operations with an explicit physical volume, and reviewed `pvmove` then
-`vgreduce` steps for explicit physical-volume removal.
-Generic add-device, replace-device, and remove-device operations stay non-ready
-until the device to add, source device, replacement device, or device to remove
-is declared explicitly.
+volume group lifecycle declarations, reviewed `vgextend` steps for grow or
+add-device operations with an explicit physical volume, reviewed replacement
+workflows with `vgextend`, `pvmove <old-pv> <new-pv>`, and `vgreduce`, and
+reviewed `pvmove` then `vgreduce` steps for explicit physical-volume removal.
+Generic device topology operations stay non-ready until the device to add,
+source device, replacement device, or device to remove is declared explicitly.
 Loop-device refresh and detach commands require `/dev/loop*` targets. Multipath
 map growth requires a concrete map target such as `mpatha` or
 `/dev/mapper/mpatha`; arbitrary logical map names remain non-ready.
