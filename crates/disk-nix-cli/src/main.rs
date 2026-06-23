@@ -8,6 +8,7 @@ use std::{
 
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
+use clap_mangen::Man;
 use disk_nix_exec::{ExecutionMode, ExecutionReport, ExecutionStatus, prepare_execution};
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use disk_nix_plan::{
@@ -31,7 +32,11 @@ fn main() -> ExitCode {
 }
 
 #[derive(Debug, Parser)]
-#[command(version, about = "NixOS-native storage topology and lifecycle manager")]
+#[command(
+    name = "disk-nix",
+    version,
+    about = "NixOS-native storage topology and lifecycle manager"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -160,6 +165,8 @@ enum Command {
         /// Shell completion format to emit.
         shell: Shell,
     },
+    /// Generate a roff manpage.
+    Manpage,
 }
 
 #[derive(Debug)]
@@ -414,6 +421,11 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
         Command::Completions { shell } => {
             let mut command = Cli::command();
             generate(shell, &mut command, "disk-nix", output);
+            Ok(())
+        }
+        Command::Manpage => {
+            let command = Cli::command();
+            Man::new(command).render(output)?;
             Ok(())
         }
     }

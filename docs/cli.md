@@ -81,6 +81,18 @@ Completion output is generated from the same Clap command definition used by
 the binary, so new subcommands and flags are reflected in both packaged and
 manual completions.
 
+## Manpage
+
+The Nix package installs a generated `disk-nix(1)` manpage. The CLI can also
+emit the roff source directly:
+
+```sh
+disk-nix manpage
+```
+
+The manpage is generated from the same Clap command definition as `--help`, so
+packaged documentation tracks the supported subcommands and flags.
+
 ## Focused Views
 
 Focused commands filter the graph for common workflows:

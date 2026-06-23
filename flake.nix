@@ -68,6 +68,8 @@
               "$out/share/zsh/site-functions/_disk-nix"
             install -Dm644 <("$out/bin/disk-nix" completions fish) \
               "$out/share/fish/vendor_completions.d/disk-nix.fish"
+            install -Dm644 <("$out/bin/disk-nix" manpage) \
+              "$out/share/man/man1/disk-nix.1"
           '';
           meta = {
             description = "NixOS-native storage topology and lifecycle manager";

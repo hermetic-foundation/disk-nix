@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4.5.61", features = ["derive"] }
 clap_complete = "4.5.61"
+clap_mangen = "0.2.29"
 disk-nix-exec = { path = "../disk-nix-exec" }
 disk-nix-model = { path = "../disk-nix-model" }
 disk-nix-plan = { path = "../disk-nix-plan" }
