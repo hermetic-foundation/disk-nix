@@ -9849,7 +9849,7 @@ mod tests {
     }
 
     #[test]
-    fn vdo_property_lifecycle_requires_supported_properties_and_values() {
+    fn vdo_property_lifecycle_blocks_unsupported_properties_and_values() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
               "spec": {
@@ -9869,30 +9869,20 @@ mod tests {
 
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
-        assert!(!report.command_summary.all_commands_ready());
-        assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "vdoVolumes:archive:set-property:writePolicy"
-                && step.commands.iter().any(|command| {
-                    command.argv == ["<vdo-property-tool>", "archive", "writePolicy"]
-                        && command.readiness == CommandReadiness::NeedsDomainImplementation
-                        && command.unresolved_inputs == ["VDO write policy value"]
-                })
+        assert_eq!(report.status, ExecutionStatus::Blocked);
+        assert_eq!(report.apply.blocked_summary.unsupported_count, 3);
+        assert!(report.command_plan.is_empty());
+        assert!(report.apply.blocked.iter().any(|blocked| {
+            blocked.id == "vdoVolumes:archive:set-property:writePolicy"
+                && blocked.risk == RiskClass::Unsupported
         }));
-        assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "vdoVolumes:archive:set-property:compression"
-                && step.commands.iter().any(|command| {
-                    command.argv == ["<vdo-property-tool>", "archive", "compression"]
-                        && command.readiness == CommandReadiness::NeedsDomainImplementation
-                        && command.unresolved_inputs == ["boolean VDO property value"]
-                })
+        assert!(report.apply.blocked.iter().any(|blocked| {
+            blocked.id == "vdoVolumes:archive:set-property:compression"
+                && blocked.risk == RiskClass::Unsupported
         }));
-        assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "vdoVolumes:archive:set-property:indexMemory"
-                && step.commands.iter().any(|command| {
-                    command.argv == ["<vdo-property-tool>", "archive", "indexMemory"]
-                        && command.readiness == CommandReadiness::NeedsDomainImplementation
-                        && command.unresolved_inputs == ["supported VDO property"]
-                })
+        assert!(report.apply.blocked.iter().any(|blocked| {
+            blocked.id == "vdoVolumes:archive:set-property:indexMemory"
+                && blocked.risk == RiskClass::Unsupported
         }));
     }
 

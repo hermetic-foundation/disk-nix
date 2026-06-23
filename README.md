@@ -254,7 +254,7 @@ online `vdo growLogical` and physical growth review steps. Create preflight is
 marked unresolved until a backing device is declared. VDO property updates
 cover `auto`, `sync`, and `async` write policy changes, compression, and
 deduplication with concrete `vdo` commands; unsupported properties and invalid
-property values remain non-ready for manual review.
+property values are classified as unsupported before execution.
 NFS export apply plans render reviewed `exportfs` create, option update, and
 unexport commands from explicit client and option declarations. Export
 mutations require a path-shaped local export target such as `/srv/share`.

@@ -1648,7 +1648,7 @@ fn add_property_actions(
     };
 
     for (property, value) in properties {
-        let (risk, advice) = classify_property_change(collection, property);
+        let (risk, advice) = classify_property_change(collection, property, value);
         actions.push(PlannedAction {
             id: format!("{collection}:{name}:set-property:{property}"),
             description: format!("set property {property} on {collection} {name}"),
@@ -1665,7 +1665,11 @@ fn add_property_actions(
     }
 }
 
-fn classify_property_change(collection: &str, property: &str) -> (RiskClass, Option<Advice>) {
+fn classify_property_change(
+    collection: &str,
+    property: &str,
+    value: &Value,
+) -> (RiskClass, Option<Advice>) {
     if collection == "btrfsSubvolumes" && !is_btrfs_subvolume_property_supported(property) {
         return (
             RiskClass::Unsupported,
@@ -1679,6 +1683,10 @@ fn classify_property_change(collection: &str, property: &str) -> (RiskClass, Opt
                 ],
             }),
         );
+    }
+
+    if collection == "vdoVolumes" {
+        return classify_vdo_property_change(property, value);
     }
 
     if collection == "lvmCaches" {
@@ -1716,6 +1724,129 @@ fn classify_property_change(collection: &str, property: &str) -> (RiskClass, Opt
     }
 
     (RiskClass::Safe, None)
+}
+
+fn classify_vdo_property_change(property: &str, value: &Value) -> (RiskClass, Option<Advice>) {
+    let property_name = normalize_storage_property_name(property);
+    let normalized_value = normalize_storage_property_name(&property_value(value));
+    let safe_advice = || {
+        Some(Advice {
+            summary: format!("VDO property {property} updates an existing VDO volume in place"),
+            alternatives: vec![
+                "verify vdo status and vdostats before and after the property update".to_string(),
+                "prefer changing the existing VDO volume over recreating it when preserving data"
+                    .to_string(),
+                "review dependent filesystems and mappings before changing write policy"
+                    .to_string(),
+            ],
+        })
+    };
+    let unsupported_advice = |summary: String, alternatives: Vec<String>| {
+        (
+            RiskClass::Unsupported,
+            Some(Advice {
+                summary,
+                alternatives,
+            }),
+        )
+    };
+
+    match property_name.as_str() {
+        "writepolicy" | "write-policy" | "vdo-write-policy" => {
+            if matches!(normalized_value.as_str(), "auto" | "sync" | "async") {
+                (RiskClass::Safe, safe_advice())
+            } else {
+                unsupported_advice(
+                    format!(
+                        "VDO write policy value {} is not supported",
+                        property_value(value)
+                    ),
+                    vec![
+                        "use auto, sync, or async for VDO writePolicy updates".to_string(),
+                        "inspect the backing storage cache behavior before choosing sync or async"
+                            .to_string(),
+                    ],
+                )
+            }
+        }
+        "compression" | "vdo-compression" => {
+            if is_vdo_boolean_property_value(&normalized_value) {
+                (RiskClass::Safe, safe_advice())
+            } else {
+                unsupported_advice(
+                    format!(
+                        "VDO compression value {} is not mapped to enable or disable",
+                        property_value(value)
+                    ),
+                    vec![
+                        "use enabled/disabled, true/false, yes/no, or on/off for compression"
+                            .to_string(),
+                        "leave compression unchanged until the intended boolean state is explicit"
+                            .to_string(),
+                    ],
+                )
+            }
+        }
+        "deduplication" | "dedupe" | "vdo-deduplication" | "vdo-dedupe" => {
+            if is_vdo_boolean_property_value(&normalized_value) {
+                (RiskClass::Safe, safe_advice())
+            } else {
+                unsupported_advice(
+                    format!(
+                        "VDO deduplication value {} is not mapped to enable or disable",
+                        property_value(value)
+                    ),
+                    vec![
+                        "use enabled/disabled, true/false, yes/no, or on/off for deduplication"
+                            .to_string(),
+                        "inspect VDO space savings before changing deduplication state".to_string(),
+                    ],
+                )
+            }
+        }
+        _ => unsupported_advice(
+            format!("VDO property {property} is not mapped to a safe command"),
+            vec![
+                "use writePolicy, compression, or deduplication for supported VDO updates"
+                    .to_string(),
+                "apply unsupported VDO property changes manually after reviewing VDO tooling"
+                    .to_string(),
+            ],
+        ),
+    }
+}
+
+fn is_vdo_boolean_property_value(value: &str) -> bool {
+    matches!(
+        value,
+        "enabled"
+            | "enable"
+            | "true"
+            | "yes"
+            | "on"
+            | "disabled"
+            | "disable"
+            | "false"
+            | "no"
+            | "off"
+    )
+}
+
+fn normalize_storage_property_name(value: &str) -> String {
+    value
+        .trim()
+        .trim_start_matches("vdo.")
+        .chars()
+        .map(|character| match character {
+            'A'..='Z' => character.to_ascii_lowercase(),
+            'a'..='z' | '0'..='9' => character,
+            _ => '-',
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
 }
 
 fn is_btrfs_subvolume_property_supported(property: &str) -> bool {
@@ -5864,6 +5995,54 @@ mod tests {
             .find(|action| action.id == "vdovolumes:old-cache:destroy")
             .expect("VDO destroy action exists");
         assert_eq!(destroy.risk, RiskClass::Destructive);
+    }
+
+    #[test]
+    fn plan_rejects_unsupported_vdo_property_updates() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "properties": {
+                    "writePolicy": "eventual",
+                    "compression": "maybe",
+                    "deduplication": "off",
+                    "indexMemory": "0.5"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.unsupported_count, 3);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "vdoVolumes:archive:set-property:deduplication"
+                && action.risk == RiskClass::Safe
+        }));
+
+        let write_policy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "vdoVolumes:archive:set-property:writePolicy")
+            .expect("VDO write policy property action exists");
+        assert_eq!(write_policy.risk, RiskClass::Unsupported);
+        assert!(write_policy.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("auto, sync, or async"))
+        }));
+
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "vdoVolumes:archive:set-property:compression"
+                && action.risk == RiskClass::Unsupported
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "vdoVolumes:archive:set-property:indexMemory"
+                && action.risk == RiskClass::Unsupported
+        }));
     }
 
     #[test]
