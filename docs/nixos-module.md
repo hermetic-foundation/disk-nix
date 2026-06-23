@@ -150,6 +150,7 @@ Typed filesystem declarations include:
 - `options`
 - `neededForBoot`
 - `operation`
+- `action`
 - `addDevices`
 - `removeDevices`
 - `replaceDevices`
@@ -197,6 +198,7 @@ Typed swap declarations include:
 
 - `device`
 - `operation`
+- `action`
 - `desiredSize`
 - `priority`
 - `randomEncryption`
@@ -208,6 +210,7 @@ Typed LUKS declarations include:
 - `name`
 - `device`
 - `operation`
+- `action`
 - `desiredSize`
 - `allowDiscards`
 - `bypassWorkqueues`
@@ -224,6 +227,7 @@ Typed NFS client mount declarations include:
 - `options`
 - `neededForBoot`
 - `operation`
+- `action`
 - `destroy`
 - `preserveData`
 
@@ -283,6 +287,7 @@ recreating or removing them.
 Each lifecycle declaration includes:
 
 - `operation`
+- `action`
 - `addDevices`
 - `devices`
 - `removeDevices`
@@ -316,6 +321,7 @@ Typed snapshot declarations include:
 - `snapshotPath`
 - `snapshot-path`
 - `operation`
+- `action`
 - `destroy`
 - `rollback`
 - `cloneTo`
@@ -337,17 +343,25 @@ Typed snapshot declarations include:
 
 Address fields have domain-specific meaning:
 
+- `action`: alias for `operation`; action-only teardown declarations are filtered
+  from generated NixOS steady-state resources the same way as operation-based
+  teardown declarations.
+
 - `target`: native object name or required concrete command target; use
   `vg/lv` for logical volumes, `vg/pool` for thin pools, `/dev/md*` for MD
   arrays, `/dev/bcache*` for bcache, and `mpath*` or `/dev/mapper/*` for
   multipath maps
+
 - `path`: local filesystem path for Btrfs subvolumes, Btrfs qgroups, and NFS
   exports; in snapshot declarations it is also accepted as the concrete
   snapshot path when the attribute name is a friendly key
+
 - `snapshotPath`: explicit snapshot identity alias for `path`, useful for
   Btrfs snapshot rescans with non-path attribute names
+
 - `device`: backing block device or image path used by formats, LUKS, swap,
   filesystems, partitions, and loop-device setup
+
 - `portal`: iSCSI target portal; `metadata.portal` is accepted for
   module-derived session declarations
 

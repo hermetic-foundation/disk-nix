@@ -119,6 +119,13 @@ let
           example = "grow";
         };
 
+        action = lib.mkOption {
+          type = operationType;
+          default = null;
+          description = "Alias for operation accepted by the planner.";
+          example = "grow";
+        };
+
         addDevices = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [ ];
@@ -419,6 +426,13 @@ let
           example = "rescan";
         };
 
+        action = lib.mkOption {
+          type = operationType;
+          default = null;
+          description = "Alias for operation accepted by the planner.";
+          example = "rescan";
+        };
+
         destroy = lib.mkOption {
           type = lib.types.bool;
           default = false;
@@ -548,6 +562,7 @@ let
     // cleanSpecAttrs {
       inherit (object)
         operation
+        action
         addDevices
         devices
         removeDevices
@@ -594,6 +609,7 @@ let
         path
         snapshotPath
         operation
+        action
         destroy
         rollback
         cloneTo
@@ -623,6 +639,7 @@ let
       options
       neededForBoot
       operation
+      action
       addDevices
       removeDevices
       replaceDevices
@@ -640,6 +657,7 @@ let
       options
       neededForBoot
       operation
+      action
       destroy
       preserveData
       ;
@@ -659,6 +677,7 @@ let
     inherit (swap)
       device
       operation
+      action
       desiredSize
       priority
       randomEncryption
@@ -671,6 +690,7 @@ let
       device
       name
       operation
+      action
       desiredSize
       allowDiscards
       bypassWorkqueues
@@ -714,8 +734,12 @@ let
     };
   isDestroyLifecycle =
     object:
+    let
+      requestedOperation =
+        if (object.operation or null) != null then object.operation else (object.action or null);
+    in
     (object.destroy or false)
-    || builtins.elem (object.operation or null) [
+    || builtins.elem requestedOperation [
       "destroy"
       "close"
       "logout"
@@ -913,6 +937,13 @@ in
                 example = "rebalance";
               };
 
+              action = lib.mkOption {
+                type = operationType;
+                default = null;
+                description = "Alias for operation accepted by the planner.";
+                example = "rebalance";
+              };
+
               addDevices = lib.mkOption {
                 type = lib.types.listOf lib.types.str;
                 default = [ ];
@@ -1002,6 +1033,13 @@ in
                 example = "grow";
               };
 
+              action = lib.mkOption {
+                type = operationType;
+                default = null;
+                description = "Alias for operation accepted by the planner.";
+                example = "grow";
+              };
+
               desiredSize = lib.mkOption {
                 type = lib.types.nullOr lib.types.str;
                 default = null;
@@ -1079,6 +1117,13 @@ in
                 type = operationType;
                 default = null;
                 description = "Requested LUKS lifecycle operation for disk-nix planning.";
+                example = "grow";
+              };
+
+              action = lib.mkOption {
+                type = operationType;
+                default = null;
+                description = "Alias for operation accepted by the planner.";
                 example = "grow";
               };
 
@@ -1172,6 +1217,13 @@ in
                 default = null;
                 description = "Requested NFS client mount lifecycle operation for disk-nix planning.";
                 example = "create";
+              };
+
+              action = lib.mkOption {
+                type = operationType;
+                default = null;
+                description = "Alias for operation accepted by the planner.";
+                example = "mount";
               };
 
               destroy = lib.mkOption {

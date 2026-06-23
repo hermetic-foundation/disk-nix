@@ -198,6 +198,18 @@
                 mountpoint = "/mnt/local-rescan";
                 operation = "rescan";
               };
+              filesystems.actionRescan = {
+                device = "/dev/disk/by-label/action-rescan";
+                fsType = "xfs";
+                mountpoint = "/mnt/action-rescan";
+                action = "rescan";
+              };
+              filesystems.actionUnmount = {
+                device = "/dev/disk/by-label/action-unmount";
+                fsType = "xfs";
+                mountpoint = "/mnt/action-unmount";
+                action = "unmount";
+              };
               filesystems.runTmpfs = {
                 device = "tmpfs";
                 fsType = "tmpfs";
@@ -257,6 +269,14 @@
                 device = "/dev/disk/by-label/old-swap";
                 operation = "destroy";
               };
+              swaps.actionOld = {
+                device = "/dev/disk/by-label/action-old-swap";
+                action = "destroy";
+              };
+              luks.devices.cryptaction = {
+                device = "/dev/disk/by-id/action-luks";
+                action = "open";
+              };
               nfs.mounts."/srv/shared" = {
                 source = "nas.example.com:/srv/shared";
                 fsType = "nfs4";
@@ -276,6 +296,11 @@
                   "ro"
                   "vers=4.2"
                 ];
+              };
+              nfs.mounts."/srv/action" = {
+                source = "nas.example.com:/srv/action";
+                fsType = "nfs4";
+                action = "remount";
               };
               nfs.mounts."/srv/inventory" = {
                 source = "nas.example.com:/srv/inventory";
@@ -326,6 +351,7 @@
               volumeGroups.exportvg.operation = "export";
               volumeGroups.activevg.operation = "activate";
               volumeGroups.refreshvg.operation = "rescan";
+              volumeGroups.actionvg.action = "rescan";
               partitions.root = {
                 operation = "grow";
                 device = "/dev/disk/by-id/nvme-root";
@@ -551,6 +577,10 @@
                 target = "tank/home";
                 cloneTo = "tank/home-clone";
               };
+              snapshots."tank/home@action-rescan" = {
+                action = "rescan";
+                target = "tank/home";
+              };
               snapshots.aliases = {
                 operation = "clone";
                 target = "tank/home";
@@ -768,6 +798,7 @@
               and (."$defs".operation.enum | index("remount") != null)
               and ."$defs".filesystem.properties.device.type == "string"
               and ."$defs".filesystem.properties.operation["$ref"] == "#/$defs/operation"
+              and ."$defs".filesystem.properties.action["$ref"] == "#/$defs/operation"
               and ."$defs".filesystem.properties.properties.type == "object"
               and ."$defs".filesystem.properties.addDevices.type == "array"
               and ."$defs".filesystem.properties.removeDevices.type == "array"
@@ -776,12 +807,14 @@
               and ."$defs".nfsSpec.properties.mounts["$ref"] == "#/$defs/nfsMountMap"
               and ."$defs".nfsMount.properties.source.type == "string"
               and ."$defs".nfsMount.properties.operation["$ref"] == "#/$defs/operation"
+              and ."$defs".nfsMount.properties.action["$ref"] == "#/$defs/operation"
               and ."$defs".nfsMount.properties.destroy.type == "boolean"
               and ."$defs".nfsMount.properties.options.type == "array"
               and ."$defs".iscsiSpec.properties.sessions["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".iscsiSpec.properties.boot["$ref"] == "#/$defs/iscsiBoot"
               and ."$defs".iscsiBoot.properties.loginAll.type == "boolean"
               and (."$defs".iscsiBoot.properties.extraConfig.type | index("null") != null)
+              and ."$defs".lifecycleObject.properties.action["$ref"] == "#/$defs/operation"
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
               and (."$defs".lifecycleObject.properties.partitionNumber.type | index("string") != null)
               and (."$defs".lifecycleObject.properties.partitionNumber.type | index("number") != null)
@@ -1028,6 +1061,8 @@
                     and .spec.filesystems.localRescan.operation == "rescan"
                     and .spec.filesystems.localRescan.device == "/dev/disk/by-label/local-rescan"
                     and .spec.filesystems.localRescan.mountpoint == "/mnt/local-rescan"
+                    and .spec.filesystems.actionRescan.action == "rescan"
+                    and .spec.filesystems.actionUnmount.action == "unmount"
                     and .spec.filesystems.runTmpfs.device == "tmpfs"
                     and .spec.filesystems.runTmpfs.fsType == "tmpfs"
                     and .spec.filesystems.runTmpfs.mountpoint == "/run/disk-nix-tmp"
@@ -1051,6 +1086,8 @@
                     and .spec.swaps.inventory.operation == "rescan"
                     and .spec.swaps.inventory.device == "/dev/disk/by-label/swap-inventory"
                     and .spec.swaps.old.operation == "destroy"
+                    and .spec.swaps.actionOld.action == "destroy"
+                    and .spec.luks.devices.cryptaction.action == "open"
                     and .spec.swaps.old.device == "/dev/disk/by-label/old-swap"
                     and .spec.luks.devices.cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
                     and .spec.luks.devices.cryptroot.name == "cryptroot"
@@ -1072,6 +1109,7 @@
                     and .spec.nfs.mounts."/srv/shared".operation == "mount"
                     and .spec.nfs.mounts."/srv/tuned".operation == "remount"
                     and (.spec.nfs.mounts."/srv/tuned".options | index("ro") != null)
+                    and .spec.nfs.mounts."/srv/action".action == "remount"
                     and .spec.nfs.mounts."/srv/inventory".operation == "rescan"
                     and .spec.nfs.mounts."/srv/inventory".source == "nas.example.com:/srv/inventory"
                     and .spec.nfs.mounts."/srv/old".source == "nas.example.com:/srv/old"
@@ -1204,6 +1242,7 @@
                     and .spec.volumeGroups.exportvg.operation == "export"
                     and .spec.volumeGroups.activevg.operation == "activate"
                     and .spec.volumeGroups.refreshvg.operation == "rescan"
+                    and .spec.volumeGroups.actionvg.action == "rescan"
                     and .spec.datasets."tank/home-review".operation == "promote"
                     and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
                     and .spec.snapshots."tank/home@before-upgrade".hold == "disk-nix-retain"
@@ -1213,6 +1252,7 @@
                 and .spec.snapshots."tank/home@before-upgrade".recursiveRollback == true
                 and .spec.snapshots."tank/home@clone-only".operation == "clone"
                 and .spec.snapshots."tank/home@clone-only".cloneTo == "tank/home-clone"
+                and .spec.snapshots."tank/home@action-rescan".action == "rescan"
                 and .spec.snapshots.aliases.operation == "clone"
                 and .spec.snapshots.aliases."snapshot-path" == "tank/home@alias-source"
                 and .spec.snapshots.aliases.cloneTarget == "tank/home-alias-clone"
@@ -1275,6 +1315,7 @@
                     length == 2
                     and any(.[]; .device == "/dev/disk/by-label/swap")
                     and any(.[]; .device == "/dev/disk/by-label/swap-inventory")
+                    and all(.[]; .device != "/dev/disk/by-label/action-old-swap")
                   ' swap-devices
                   luksDevices=${
                     pkgs.lib.escapeShellArg (
@@ -1317,6 +1358,13 @@
                     and has("/mnt/local-rescan")
                     and ."/mnt/local-rescan".device == "/dev/disk/by-label/local-rescan"
                     and ."/mnt/local-rescan".fsType == "xfs"
+                    and has("/mnt/action-rescan")
+                    and ."/mnt/action-rescan".device == "/dev/disk/by-label/action-rescan"
+                    and ."/mnt/action-rescan".fsType == "xfs"
+                    and (has("/mnt/action-unmount") | not)
+                    and has("/srv/action")
+                    and ."/srv/action".device == "nas.example.com:/srv/action"
+                    and ."/srv/action".fsType == "nfs4"
                     and has("/run/disk-nix-tmp")
                     and ."/run/disk-nix-tmp".device == "tmpfs"
                     and ."/run/disk-nix-tmp".fsType == "tmpfs"
