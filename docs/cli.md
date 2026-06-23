@@ -382,8 +382,9 @@ LVM volume group command plans render policy-gated `vgcreate` and `vgremove`
 commands for `volumeGroups` lifecycle declarations, reviewed `vgextend`
 commands for grow operations with an explicit physical volume, and reviewed
 `pvmove` then `vgreduce` commands for explicit physical-volume removal.
-Generic add-device and replace-device operations stay non-ready until the
-device to add, source device, and replacement device are declared explicitly.
+Generic add-device, replace-device, and remove-device operations stay non-ready
+until the device to add, source device, replacement device, or device to remove
+is declared explicitly.
 ZFS pool command plans render policy-gated `zpool create` from a single
 `device` or explicit `devices` vdev list, policy-gated `zpool destroy`, plus
 online topology commands such as `zpool add`, `zpool replace`, `zpool remove`,
