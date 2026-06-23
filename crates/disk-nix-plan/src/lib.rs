@@ -22,7 +22,8 @@ pub struct Advice {
     pub alternatives: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Capability {
     pub node_kind: NodeKind,
     pub operation: Operation,

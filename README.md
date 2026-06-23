@@ -50,6 +50,8 @@ disk-nix topology
 disk-nix topology --json
 disk-nix probe-status
 disk-nix probe-status --json
+disk-nix capabilities
+disk-nix capabilities --json
 disk-nix devices
 disk-nix filesystems
 disk-nix volumes
@@ -71,7 +73,7 @@ The canonical interface is intended to be stable JSON. Human tables and tree
 views are presentation layers over the same model. Focused JSON commands such
 as `devices --json`, `filesystems --json`, and `ids --json` return subgraphs
 and preserve relationships between nodes included in the result. `inspect --json` returns matched nodes plus their direct neighbors and relationship
-edges.
+edges. `capabilities --json` returns the modeled operation/risk matrix.
 
 ## NixOS module
 

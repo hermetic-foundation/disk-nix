@@ -49,7 +49,11 @@ enum Command {
         json: bool,
     },
     /// Show modeled storage operation capabilities and risk classes.
-    Capabilities,
+    Capabilities {
+        /// Emit JSON capability records.
+        #[arg(long)]
+        json: bool,
+    },
     /// List block-like storage devices.
     Devices {
         /// Emit JSON for matching graph nodes.
@@ -176,13 +180,23 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             }
             Ok(())
         }
-        Command::Capabilities => {
-            for capability in default_capabilities() {
+        Command::Capabilities { json } => {
+            let capabilities = default_capabilities();
+            if json {
                 writeln!(
                     output,
-                    "{:?} {:?} {:?}",
-                    capability.node_kind, capability.operation, capability.risk
+                    "{}",
+                    serde_json::to_string_pretty(&capabilities)
+                        .map_err(|error| AppError::Message(error.to_string()))?
                 )?;
+            } else {
+                for capability in capabilities {
+                    writeln!(
+                        output,
+                        "{:?} {:?} {:?}",
+                        capability.node_kind, capability.operation, capability.risk
+                    )?;
+                }
             }
             Ok(())
         }
