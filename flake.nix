@@ -210,6 +210,12 @@
                 mountpoint = "/mnt/action-unmount";
                 action = "unmount";
               };
+              filesystems.teardownOnly = {
+                device = "/dev/disk/by-label/teardown-only";
+                fsType = "jfs";
+                mountpoint = "/mnt/teardown-only";
+                operation = "unmount";
+              };
               filesystems.targetSizeAlias = {
                 device = "/dev/disk/by-label/target-size";
                 fsType = "xfs";
@@ -1465,6 +1471,7 @@
                     and ."/mnt/action-rescan".device == "/dev/disk/by-label/action-rescan"
                     and ."/mnt/action-rescan".fsType == "xfs"
                     and (has("/mnt/action-unmount") | not)
+                    and (has("/mnt/teardown-only") | not)
                     and has("/srv/action")
                     and ."/srv/action".device == "nas.example.com:/srv/action"
                     and ."/srv/action".fsType == "nfs4"
@@ -1490,6 +1497,7 @@
                     and .overlay == true
                     and .nfs4 == true
                     and .zfs == true
+                    and (has("jfs") | not)
                   ' supported-filesystems
                   nativeStorage=${
                     pkgs.lib.escapeShellArg (

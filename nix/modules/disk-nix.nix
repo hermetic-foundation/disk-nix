@@ -958,7 +958,7 @@ let
         ) cfg.exports
       );
   supportedFilesystemTypes = lib.unique (
-    (map (filesystem: filesystem.fsType) (lib.attrValues cfg.filesystems))
+    (map (filesystem: filesystem.fsType) (lib.attrValues activeFilesystems))
     ++ (map (mount: mount.fsType) (lib.attrValues activeNfsMounts))
     ++ lib.optional (zfsExtraPools != [ ]) "zfs"
   );

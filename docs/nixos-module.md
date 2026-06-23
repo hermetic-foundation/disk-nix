@@ -87,7 +87,9 @@ while keeping the persistent source, type, mountpoint, and options in the same
 NixOS `fileSystems` entry. `operation = "unmount"` remains in the generated
 disk-nix spec for imperative review, but is filtered out of derived NixOS
 `fileSystems` so NixOS does not immediately re-establish a mount that disk-nix
-was asked to tear down.
+was asked to tear down. Teardown-only filesystem declarations are also filtered
+out of `boot.supportedFilesystems`; only active steady-state filesystems drive
+NixOS filesystem support.
 The same `filesystems` option is also the typed path for non-block mounted
 filesystems that NixOS represents through `fileSystems`, including tmpfs,
 bind mounts, and overlayfs. Declare `device = "tmpfs"; fsType = "tmpfs"` for

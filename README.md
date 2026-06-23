@@ -150,7 +150,8 @@ typed `nfs.mounts` declarations are marked for destroy they stay in the
 disk-nix spec for reviewed unmount planning but are not re-added to NixOS
 `fileSystems`. Local `filesystems` declarations follow the same split for
 `operation = "unmount"`: the planner keeps the teardown request, while derived
-NixOS `fileSystems` only contains active steady-state mounts.
+NixOS `fileSystems` and `boot.supportedFilesystems` only contain active
+steady-state filesystem types.
 `apply.scriptOut` is set, activation validation asks the CLI to write the
 allowed command plan and post-apply verification plan to that reviewable shell
 script path. When `apply.reportOut` is set, activation also writes the JSON
