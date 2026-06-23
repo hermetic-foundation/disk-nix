@@ -3,6 +3,10 @@
 `disk-nix plan` reads a desired storage JSON document and emits a
 risk-classified action plan.
 
+The plan summary reports total actions plus `offlineRequiredCount`,
+`destructiveCount`, `potentialDataLossCount`, and `unsupportedCount` so callers
+can gate workflows before looking at individual actions.
+
 The command accepts either a direct spec:
 
 ```json

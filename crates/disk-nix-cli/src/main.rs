@@ -662,8 +662,9 @@ fn print_relationships(
 fn print_plan(output: &mut impl Write, plan: &Plan) -> io::Result<()> {
     writeln!(
         output,
-        "Plan: {} actions, {} destructive, {} potential data loss, {} unsupported",
+        "Plan: {} actions, {} offline required, {} destructive, {} potential data loss, {} unsupported",
         plan.summary.action_count,
+        plan.summary.offline_required_count,
         plan.summary.destructive_count,
         plan.summary.potential_data_loss_count,
         plan.summary.unsupported_count

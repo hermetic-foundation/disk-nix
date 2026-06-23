@@ -64,6 +64,7 @@ impl Plan {
 #[serde(rename_all = "camelCase")]
 pub struct PlanSummary {
     pub action_count: usize,
+    pub offline_required_count: usize,
     pub destructive_count: usize,
     pub potential_data_loss_count: usize,
     pub unsupported_count: usize,
@@ -217,6 +218,10 @@ pub fn plan_from_value(value: &Value) -> Plan {
 
     let summary = PlanSummary {
         action_count: actions.len(),
+        offline_required_count: actions
+            .iter()
+            .filter(|action| action.risk == RiskClass::OfflineRequired)
+            .count(),
         destructive_count: actions
             .iter()
             .filter(|action| action.risk == RiskClass::Destructive || action.destructive)
@@ -982,6 +987,7 @@ mod tests {
         .expect("plan should parse");
 
         assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Grow);
         assert_eq!(plan.actions[0].risk, RiskClass::OfflineRequired);
         assert!(plan.actions[0].advice.as_ref().is_some_and(|advice| {
@@ -1009,6 +1015,7 @@ mod tests {
         .expect("plan should parse");
 
         assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 2);
         assert!(plan.actions.iter().all(|action| {
             action.operation == Operation::ReplaceDevice
                 && action.risk == RiskClass::OfflineRequired
