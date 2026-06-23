@@ -2052,6 +2052,16 @@ fn usage_details(node: &Node) -> String {
         ("exfat.free-clusters", "free-clusters"),
         ("exfat.bytes-per-sector", "sector-bytes"),
         ("exfat.sectors-per-cluster", "sectors-per-cluster"),
+        ("ntfs.volume-name", "ntfs-name"),
+        ("ntfs.volume-state", "ntfs-state"),
+        ("ntfs.volume-serial", "ntfs-serial"),
+        ("ntfs.volume-flags", "ntfs-flags"),
+        ("ntfs.version", "ntfs-version"),
+        ("ntfs.sector-size", "ntfs-sector"),
+        ("ntfs.cluster-size", "ntfs-cluster"),
+        ("ntfs.volume-size-clusters", "ntfs-clusters"),
+        ("ntfs.index-block-size", "ntfs-index-block"),
+        ("ntfs.mft-record-size", "ntfs-mft-record"),
         ("bcache.role", "role"),
         ("bcache.kind", "kind"),
         ("bcache.set-uuid", "set-uuid"),
@@ -2564,6 +2574,19 @@ mod tests {
             "guid=01234567-89ab-cdef-0123-456789abcdef serial=0x6eef953b clusters=49984 free-clusters=1024 sector-bytes=512 sectors-per-cluster=64"
         );
 
+        let ntfs = Node::new("fs:/dev/sda1", NodeKind::Filesystem, "ntfs")
+            .with_property("ntfs.volume-name", "Windows")
+            .with_property("ntfs.volume-serial", "01234567-89abcdef")
+            .with_property("ntfs.version", "3.1")
+            .with_property("ntfs.sector-size", "512")
+            .with_property("ntfs.cluster-size", "4096")
+            .with_property("ntfs.volume-size-clusters", "262144")
+            .with_property("ntfs.mft-record-size", "1024");
+        assert_eq!(
+            usage_details(&ntfs),
+            "ntfs-name=Windows ntfs-serial=01234567-89abcdef ntfs-version=3.1 ntfs-sector=512 ntfs-cluster=4096 ntfs-clusters=262144 ntfs-mft-record=1024"
+        );
+
         let bcache = Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
             .with_property("bcache.role", "backing")
             .with_property("bcache.kind", "cache-set")
@@ -2676,6 +2699,14 @@ mod tests {
                 .with_property("btrfs.system-size", "64")
                 .with_property("btrfs.system-used", "32"),
         );
+        graph.add_node(
+            Node::new("fs:/dev/sda1", NodeKind::Filesystem, "ntfs")
+                .with_property("ntfs.volume-name", "Windows")
+                .with_property("ntfs.volume-serial", "01234567-89abcdef")
+                .with_property("ntfs.version", "3.1")
+                .with_property("ntfs.cluster-size", "4096")
+                .with_property("ntfs.mft-record-size", "1024"),
+        );
 
         let mut output = Vec::new();
         print_filesystems(&mut output, &graph).expect("filesystems table renders");
@@ -2689,6 +2720,11 @@ mod tests {
         assert!(output.contains(
             "metadata-size=128 metadata-used=64 system-profile=DUP system-size=64 system-used=32"
         ));
+        assert!(
+            output.contains(
+                "ntfs-name=Windows ntfs-serial=01234567-89abcdef ntfs-version=3.1 ntfs-cluster=4096 ntfs-mft-record=1024"
+            )
+        );
     }
 
     #[test]

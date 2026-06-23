@@ -63,6 +63,8 @@ The current probe layer normalizes:
 - `xfs_info` for mounted XFS filesystem geometry, allocation group layout,
   data/log/realtime block sizing, and metadata feature flags such as reflink
   and bigtime
+- `ntfsinfo -m` for NTFS volume identity, serial, state, version, sector and
+  cluster sizing, index block size, MFT record size, and allocated size
 - `/proc/swaps` for active swap devices/files, active size, used/free bytes,
   swap type, and priority
 - `losetup --json --list` for loop device mappings, backing files or block

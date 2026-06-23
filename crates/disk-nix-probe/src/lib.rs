@@ -19,6 +19,7 @@ mod lvm;
 mod mdraid;
 mod multipath;
 mod nfs;
+mod ntfs;
 mod nvme;
 mod parted;
 mod swaps;
@@ -97,6 +98,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_findmnt(&mut result);
         collect_ext(&mut result);
         collect_exfat(&mut result);
+        collect_ntfs(&mut result);
         collect_xfs(&mut result);
         collect_swaps(&mut result);
         collect_loopdev(&mut result);
@@ -397,6 +399,67 @@ fn collect_exfat(result: &mut ProbeResult) {
             message: Some(format!(
                 "normalized {collected} graph nodes from exfatprogs"
             )),
+        }),
+    }
+}
+
+fn collect_ntfs(result: &mut ProbeResult) {
+    let targets = filesystem_targets(&result.graph, |filesystem_type| {
+        matches!(filesystem_type, "ntfs" | "ntfs3")
+    });
+    if targets.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "ntfs".to_string(),
+            status: if command_exists("ntfsinfo") {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Unavailable
+            },
+            message: Some("no NTFS filesystems discovered".to_string()),
+        });
+        return;
+    }
+
+    let mut collected = 0usize;
+    let mut failures = Vec::new();
+    for target in targets {
+        match run_report("ntfsinfo", &["-m", &target]) {
+            Ok(output) => match ntfs::normalize_ntfsinfo(&target, &output) {
+                Ok(graph) => {
+                    collected += graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                }
+                Err(error) => failures.push(format!("{target}: {error}")),
+            },
+            Err(message) => failures.push(format!("{target}: {message}")),
+        }
+    }
+
+    match (collected, failures.is_empty()) {
+        (0, false) => result.reports.push(ProbeReport {
+            adapter: "ntfs".to_string(),
+            status: if failures
+                .iter()
+                .any(|message| message.contains("not found") || message.contains("No such file"))
+            {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(failures.join("; ")),
+        }),
+        (_, false) => result.reports.push(ProbeReport {
+            adapter: "ntfs".to_string(),
+            status: ProbeStatus::Partial,
+            message: Some(format!(
+                "normalized {collected} graph nodes from ntfsinfo; failed targets: {}",
+                failures.join("; ")
+            )),
+        }),
+        _ => result.reports.push(ProbeReport {
+            adapter: "ntfs".to_string(),
+            status: ProbeStatus::Available,
+            message: Some(format!("normalized {collected} graph nodes from ntfsinfo")),
         }),
     }
 }
