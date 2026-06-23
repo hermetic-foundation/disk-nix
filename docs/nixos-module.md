@@ -190,6 +190,8 @@ pool, or `operation = "export"` to detach a pool without deleting data.
 `readOnly = true` on an import renders `zpool import -o readonly=on <pool>`.
 Typed ZFS dataset and zvol declarations can request `operation = "promote"` to
 render reviewed `zfs promote` plans for clones after snapshot-based validation.
+Typed snapshot declarations can request `operation = "clone"` with `cloneTo` to
+render reviewed `zfs clone <snapshot> <dataset>` plans through the NixOS module.
 
 Typed swap declarations include:
 

@@ -546,6 +546,11 @@
                 renameTo = "tank/home@before-upgrade-retained";
                 recursiveRollback = true;
               };
+              snapshots."tank/home@clone-only" = {
+                operation = "clone";
+                target = "tank/home";
+                cloneTo = "tank/home-clone";
+              };
               snapshots."tank/home@old" = {
                 target = "tank/home";
                 releaseHold = "old-retention";
@@ -693,8 +698,9 @@
               and (."$defs".operation.enum | index("add-key") != null)
               and (."$defs".operation.enum | index("remove-key") != null)
               and (."$defs".operation.enum | index("import-token") != null)
-              and (."$defs".operation.enum | index("remove-token") != null)
-              and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
+                    and (."$defs".operation.enum | index("remove-token") != null)
+                    and (."$defs".operation.enum | index("clone") != null)
+                    and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
               and (."$defs".specBody.properties.nfs["$ref"] == "#/$defs/nfsSpec")
               and (."$defs".specBody.properties.iscsi["$ref"] == "#/$defs/iscsiSpec")
               and (."$defs".specBody.properties.disks["$ref"] == "#/$defs/lifecycleMap")
@@ -977,378 +983,380 @@
           nixosModuleSpec =
             pkgs.runCommand "disk-nix-nixos-module-spec-check" { nativeBuildInputs = [ pkgs.jq ]; }
               ''
-                spec=${nixosModuleTest.config.environment.etc."disk-nix/spec.json".source}
-                jq -e '
-                  .spec.filesystems.root.device == "/dev/disk/by-label/nixos-root"
-                  and .spec.filesystems.root.resizePolicy == "grow-only"
-                  and .spec.filesystems.root.desiredSize == "100%"
-                  and .spec.filesystems.data.device == "/dev/disk/by-label/data"
-                  and .spec.filesystems.data.fsType == "btrfs"
-                  and .spec.filesystems.data.operation == "rebalance"
-                  and (.spec.filesystems.data.addDevices | index("/dev/disk/by-id/nvme-btrfs-new") != null)
-                  and (.spec.filesystems.data.removeDevices | index("/dev/disk/by-id/nvme-btrfs-old") != null)
-                  and .spec.filesystems.data.replaceDevices."/dev/disk/by-id/nvme-btrfs-aging" == "/dev/disk/by-id/nvme-btrfs-replacement"
-                  and .spec.filesystems.data.properties.label == "bulk-data"
-                  and .spec.filesystems.data.properties."btrfs.balance.data" == "usage=50"
-                  and .spec.filesystems.scratch.operation == "check"
-                  and .spec.filesystems.scratch.device == "/dev/disk/by-label/scratch"
-                  and .spec.filesystems.scrub.operation == "scrub"
-                  and .spec.filesystems.scrub.device == "/dev/disk/by-label/scrub"
-                  and .spec.filesystems.scrub.mountpoint == "/scrub"
-                  and .spec.filesystems.trim.operation == "trim"
-                  and .spec.filesystems.trim.device == "/dev/disk/by-label/trim"
-                  and .spec.filesystems.remount.operation == "remount"
-                  and .spec.filesystems.remount.mountpoint == "/remount"
-                  and (.spec.filesystems.remount.options | index("discard=async") != null)
-                  and .spec.filesystems.localMount.operation == "mount"
-                  and .spec.filesystems.localMount.device == "/dev/disk/by-label/local-mount"
-                  and .spec.filesystems.localMount.mountpoint == "/mnt/local-mount"
-                  and (.spec.filesystems.localMount.options | index("noatime") != null)
-                  and .spec.filesystems.localUnmount.operation == "unmount"
-                  and .spec.filesystems.localUnmount.device == "/dev/disk/by-label/local-unmount"
-                  and .spec.filesystems.localUnmount.mountpoint == "/mnt/local-unmount"
-                  and .spec.filesystems.localRescan.operation == "rescan"
-                  and .spec.filesystems.localRescan.device == "/dev/disk/by-label/local-rescan"
-                  and .spec.filesystems.localRescan.mountpoint == "/mnt/local-rescan"
-                  and .spec.filesystems.runTmpfs.device == "tmpfs"
-                  and .spec.filesystems.runTmpfs.fsType == "tmpfs"
-                  and .spec.filesystems.runTmpfs.mountpoint == "/run/disk-nix-tmp"
-                  and (.spec.filesystems.runTmpfs.options | index("size=64M") != null)
-                  and .spec.filesystems.bindCache.device == "/var/cache/disk-nix"
-                  and .spec.filesystems.bindCache.fsType == "none"
-                  and .spec.filesystems.bindCache.mountpoint == "/srv/disk-nix-cache"
-                  and (.spec.filesystems.bindCache.options | index("bind") != null)
-                  and .spec.filesystems.overlayScratch.device == "overlay"
-                  and .spec.filesystems.overlayScratch.fsType == "overlay"
-                  and .spec.filesystems.overlayScratch.mountpoint == "/srv/disk-nix-overlay"
-                  and (.spec.filesystems.overlayScratch.options | index("lowerdir=/nix/store") != null)
-                  and (.spec.filesystems.overlayScratch.options | index("upperdir=/var/lib/disk-nix/overlay/upper") != null)
-                  and (.spec.filesystems.overlayScratch.options | index("workdir=/var/lib/disk-nix/overlay/work") != null)
-                  and .spec.swaps.primary.device == "/dev/disk/by-label/swap"
-                  and .spec.swaps.primary.operation == "format"
-                  and .spec.swaps.primary.desiredSize == "8GiB"
-                  and .spec.swaps.primary.preserveData == false
-                  and .spec.swaps.primary.properties.label == "swap"
-                  and .spec.swaps.primary.properties."swap.uuid" == "01234567-89ab-cdef-0123-456789abcdef"
-                  and .spec.swaps.inventory.operation == "rescan"
-                  and .spec.swaps.inventory.device == "/dev/disk/by-label/swap-inventory"
-                  and .spec.swaps.old.operation == "destroy"
-                  and .spec.swaps.old.device == "/dev/disk/by-label/old-swap"
-                  and .spec.luks.devices.cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
-                  and .spec.luks.devices.cryptroot.name == "cryptroot"
-                  and .spec.luks.devices.cryptroot.operation == "grow"
-                  and .spec.luks.devices.cryptroot.desiredSize == "100%"
-                  and .spec.luks.devices.cryptroot.properties.label == "cryptroot"
-                  and .spec.luks.devices.cryptroot.properties."luks.subsystem" == "nixos"
-                  and .spec.luks.devices.cryptold.destroy == true
-                  and .spec.luks.devices.cryptold.device == "/dev/disk/by-partuuid/old-luks"
-                  and .spec.luks.devices.cryptarchive.operation == "open"
-                  and .spec.luks.devices.cryptarchive.device == "/dev/disk/by-id/archive-luks"
-                  and .spec.luks.devices.cryptclosed.operation == "close"
-                  and .spec.luks.devices.cryptclosed.device == "/dev/disk/by-id/closed-luks"
-                  and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"
-                  and .spec.filesystems."/srv/shared".fsType == "nfs4"
-                  and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)
-                  and (.spec.filesystems | has("/srv/old") | not)
-                  and .spec.nfs.mounts."/srv/shared".source == "nas.example.com:/srv/shared"
-                  and .spec.nfs.mounts."/srv/shared".operation == "mount"
-                  and .spec.nfs.mounts."/srv/tuned".operation == "remount"
-                  and (.spec.nfs.mounts."/srv/tuned".options | index("ro") != null)
-                  and .spec.nfs.mounts."/srv/inventory".operation == "rescan"
-                  and .spec.nfs.mounts."/srv/inventory".source == "nas.example.com:/srv/inventory"
-                  and .spec.nfs.mounts."/srv/old".source == "nas.example.com:/srv/old"
-                  and .spec.nfs.mounts."/srv/old".operation == "unmount"
-                  and .spec.iscsi.initiatorName == "iqn.2026-06.example:host"
-                  and (.spec.iscsi | has("discoverPortal") | not)
-                  and (.spec.iscsi.boot | has("discoverPortal") | not)
-                  and .spec.iscsi.boot.target == "iqn.2026-06.example:storage.root"
-                  and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".operation == "grow"
-                  and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
-                  and .spec.iscsi.sessions."iqn.2026-06.example:storage.login".operation == "login"
-                  and .spec.iscsi.sessions."iqn.2026-06.example:storage.logout".operation == "logout"
-                  and .spec.iscsi.sessions."iqn.2026-06.example:storage.rescan".operation == "rescan"
-                  and .spec.iscsiSessions."iqn.2026-06.example:storage.root".portal == "192.0.2.10:3260"
-                  and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
-                  and .spec.iscsiSessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
-                  and .spec.iscsiSessions."iqn.2026-06.example:storage.login".operation == "login"
-                  and .spec.iscsiSessions."iqn.2026-06.example:storage.login".portal == "192.0.2.10:3260"
-                  and .spec.iscsiSessions."iqn.2026-06.example:storage.logout".operation == "logout"
-                  and .spec.iscsiSessions."iqn.2026-06.example:storage.logout".portal == "192.0.2.11:3260"
-                  and .spec.iscsiSessions."iqn.2026-06.example:storage.rescan".operation == "rescan"
-                  and .spec.iscsiSessions."iqn.2026-06.example:storage.rescan".portal == "192.0.2.10:3260"
-                  and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
-                  and .spec.luns."iqn.2026-06.example:storage/root:0".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
-                  and (.spec.luns."iqn.2026-06.example:storage/root:0".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0") != null)
-                  and .spec.luns."iqn.2026-06.example:storage/new:2".operation == "attach"
-                  and .spec.luns."iqn.2026-06.example:storage/new:2".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-2"
-                  and .spec.luns."iqn.2026-06.example:storage/old:3".operation == "detach"
-                  and (.spec.luns."iqn.2026-06.example:storage/old:3".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3") != null)
-                  and .spec.luns."iqn.2026-06.example:storage/rescan:4".operation == "rescan"
-                  and (.spec.luns."iqn.2026-06.example:storage/rescan:4".devices | index("/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4") != null)
-                  and .spec.nvmeNamespaces."/dev/nvme0".operation == "create"
-                  and .spec.nvmeNamespaces."/dev/nvme0".desiredSize == "100G"
-                  and .spec.nvmeNamespaces."/dev/nvme0".namespaceId == "4"
-                  and .spec.nvmeNamespaces."/dev/nvme0".controllers == "0x1"
-                  and .spec.nvmeNamespaces."/dev/nvme1".operation == "rescan"
-                  and .spec.exports."/srv/share".operation == "export"
-                  and .spec.exports."/srv/share".client == "192.0.2.0/24"
-                  and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
-                  and .spec.exports."/srv/inventory".operation == "rescan"
-                  and .spec.exports."/srv/old-share".operation == "unexport"
-                  and .spec.exports."/srv/old-share".client == "192.0.2.55"
-                  and .spec.partitions.root.operation == "grow"
-                  and .spec.partitions.root.device == "/dev/disk/by-id/nvme-root"
-                  and .spec.partitions.root.number == "2"
-                  and .spec.partitions.root.endOffset == "100%"
-                  and .spec.partitions.dataTable.operation == "rescan"
-                  and .spec.partitions.dataTable.device == "/dev/disk/by-id/nvme-data"
-                  and .spec.btrfsSubvolumes."/mnt/persist/@home".operation == "create"
-                  and .spec.btrfsSubvolumes."/mnt/persist/@home".path == "/mnt/persist/@home"
-                  and .spec.btrfsSubvolumes."/mnt/persist/@inventory".operation == "rescan"
-                  and .spec.btrfsSubvolumes."/mnt/persist/@inventory".path == "/mnt/persist/@inventory"
-                  and .spec.btrfsQgroups."0/257".target == "/mnt/persist"
-                  and .spec.btrfsQgroups."0/257".properties.limit == "25GiB"
-                  and .spec.btrfsQgroups."0/258".operation == "rescan"
-                  and .spec.btrfsQgroups."0/258".target == "/mnt/persist"
-                  and .spec.volumes."vg0/scratch".operation == "create"
-                  and .spec.volumes."vg0/scratch".desiredSize == "10GiB"
-                  and .spec.volumes."vg0/reporting".operation == "rescan"
-                  and .spec.datasets."tank/home".operation == "create"
-                  and .spec.datasets."tank/inventory".operation == "rescan"
-                  and .spec.vdoVolumes.archive.operation == "grow"
-                  and .spec.vdoVolumes.archive.desiredSize == "4TiB"
-                  and .spec.vdoVolumes.archive.properties.writePolicy == "sync"
-                  and .spec.vdoVolumes.archive.properties.compression == "enabled"
-                  and .spec.vdoVolumes.archive.properties.deduplication == "disabled"
-                  and .spec.vdoVolumes.warmArchive.operation == "start"
-                  and .spec.vdoVolumes.coldArchive.operation == "stop"
-                  and .spec.vdoVolumes.refreshArchive.operation == "rescan"
-                  and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
-                  and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-refresh".operation == "rescan"
-                  and .spec.luksKeyslots."cryptroot:1".operation == "add-key"
-                  and .spec.luksKeyslots."cryptroot:1".device == "/dev/disk/by-id/root-luks"
-                  and .spec.luksKeyslots."cryptroot:1".keySlot == "1"
-                  and .spec.luksKeyslots."cryptroot:1".newKeyFile == "/run/keys/root-new"
-                  and .spec.luksKeyslots."cryptroot:2".operation == "remove-key"
-                  and .spec.luksKeyslots."cryptroot:2".device == "/dev/disk/by-id/root-luks"
-                  and .spec.luksKeyslots."cryptroot:2".keySlot == "2"
-                  and .spec.luksTokens."cryptroot:0".operation == "import-token"
-                  and .spec.luksTokens."cryptroot:0".device == "/dev/disk/by-id/root-luks"
-                  and .spec.luksTokens."cryptroot:0".tokenId == "0"
-                  and .spec.luksTokens."cryptroot:0".tokenFile == "/run/keys/root-token.json"
-                  and .spec.luksTokens."cryptroot:1".operation == "remove-token"
-                  and .spec.luksTokens."cryptroot:1".device == "/dev/disk/by-id/root-luks"
-                  and .spec.luksTokens."cryptroot:1".tokenId == "1"
-                  and .spec.zvols."tank/vm/root".operation == "grow"
-                  and .spec.zvols."tank/vm/root".desiredSize == "80GiB"
-                  and .spec.zvols."tank/vm/inventory".operation == "rescan"
-                  and .spec.thinPools."vg0/thinpool".operation == "grow"
-                  and .spec.thinPools."vg0/thinpool".desiredSize == "500GiB"
-                  and .spec.thinPools."vg0/newthin".operation == "create"
-                  and .spec.thinPools."vg0/newthin".desiredSize == "100GiB"
-                  and .spec.thinPools."vg0/reporting".operation == "rescan"
-                  and .spec.lvmSnapshots."vg0/root-snap".operation == "snapshot"
-                  and .spec.lvmSnapshots."vg0/root-snap".target == "vg0/root"
-                  and .spec.lvmSnapshots."vg0/root-snap".desiredSize == "20GiB"
-                  and .spec.lvmSnapshots."vg0/root-inspect".operation == "rescan"
-                  and .spec.lvmCaches."vg0/root".operation == "create"
-                  and .spec.lvmCaches."vg0/root".device == "vg0/root-cache"
-                  and .spec.lvmCaches."vg0/root".properties."lvm.cache-mode" == "writethrough"
-                  and .spec.lvmCaches."vg0/archive".operation == "rescan"
-                  and .spec.volumes."vg0/archive".operation == "deactivate"
-                  and .spec.loopDevices."/dev/loop7".operation == "create"
-                  and .spec.loopDevices."/dev/loop7".device == "/var/lib/images/root.img"
-                  and .spec.loopDevices."/dev/loop10".operation == "rescan"
-                  and .spec.mdRaids.root.target == "/dev/md/root"
-                  and .spec.mdRaids.root.raidLevel == "1"
-                  and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-a") != null)
-                  and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-b") != null)
-                  and (.spec.mdRaids.root.addDevices | index("/dev/disk/by-id/nvme-md-spare") != null)
-                  and .spec.mdRaids.root.replaceDevices."/dev/disk/by-id/nvme-md-aging" == "/dev/disk/by-id/nvme-md-replacement"
-                  and .spec.mdRaids.existing.operation == "assemble"
-                  and .spec.mdRaids.existing.target == "/dev/md/existing"
-                  and (.spec.mdRaids.existing.devices | index("/dev/disk/by-id/existing-md-a") != null)
-                  and .spec.mdRaids.oldroot.operation == "stop"
-                  and .spec.mdRaids.oldroot.target == "/dev/md/oldroot"
-                  and .spec.mdRaids.inventory.operation == "rescan"
-                  and .spec.multipathMaps.mpatha.target == "mpatha"
-                  and (.spec.multipathMaps.mpatha.addDevices | index("/dev/sdb") != null)
-                  and .spec.multipathMaps.mpatha.replaceDevices."/dev/sdc" == "/dev/sdd"
-                  and .spec.multipathMaps.mpathb.operation == "rescan"
-                  and .spec.multipathMaps.mpathb.target == "mpathb"
-                  and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
-                  and .spec.caches."/dev/bcache0".operation == "rescan"
-                  and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
-                  and .spec.pools.vault.operation == "import"
-                  and .spec.pools.vault.readOnly == true
-                  and .spec.pools.moveme.operation == "export"
-                  and .spec.volumeGroups.importvg.operation == "import"
-                  and .spec.volumeGroups.exportvg.operation == "export"
-                  and .spec.volumeGroups.activevg.operation == "activate"
-                  and .spec.volumeGroups.refreshvg.operation == "rescan"
-                  and .spec.datasets."tank/home-review".operation == "promote"
-                  and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
-                  and .spec.snapshots."tank/home@before-upgrade".hold == "disk-nix-retain"
-                  and .spec.snapshots."tank/home@before-upgrade".rollback == true
-                  and .spec.snapshots."tank/home@before-upgrade".cloneTo == "tank/home-review"
-                  and .spec.snapshots."tank/home@before-upgrade".renameTo == "tank/home@before-upgrade-retained"
-                  and .spec.snapshots."tank/home@before-upgrade".recursiveRollback == true
-                  and .spec.datasets."tank/legacy".renameTo == "tank/legacy-staged"
-                  and .spec.snapshots."tank/home@old".releaseHold == "old-retention"
-                  and .spec.snapshots."/mnt/persist/@home-before-upgrade".target == "/mnt/persist/@home"
-                  and .spec.snapshots."/mnt/persist/@home-before-upgrade".readOnly == true
-                  and .spec.snapshots."tank/home@inventory".operation == "rescan"
-                  and .spec.snapshots."/mnt/persist/@home-inventory".operation == "rescan"
-                  and .spec.snapshots."/mnt/persist/@home-inventory".readOnly == true
-                  and .spec.snapshots."home-before-friendly".operation == "rescan"
-                  and .spec.snapshots."home-before-friendly".target == "/mnt/persist/@home"
-                  and .spec.snapshots."home-before-friendly".snapshotPath == "/mnt/persist/@home-before-friendly"
-                  and .apply.mode == "activation"
-                  and .apply.allowGrow == true
-                  and .apply.allowOffline == false
-                  and .apply.probeCurrent == true
-                  and .apply.allowDeviceReplacement == true
-                  and .apply.allowRebalance == true
-                  and .apply.allowPotentialDataLoss == false
-                  and .apply.requireBackup == false
-                  and .apply.backupVerified == false
-                  and .apply.requireConfirmation == false
-                  and .apply.confirmation == false
-                  and .apply.requireConfirmationFile == "/run/disk-nix/confirm"
-                  and .apply.failOnBlocked == false
-                  and .apply.scriptOut == "/run/disk-nix/apply.sh"
-                  and .apply.reportOut == "/run/disk-nix/apply-report.json"
-                ' "$spec"
-                applyScript='${nixosModuleTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'
-                grep -- 'validate' "$applyScript"
-                grep -- '--probe-current' "$applyScript"
-                grep -- '--script-out' "$applyScript"
-                grep -- '/run/disk-nix/apply.sh' "$applyScript"
-                grep -- '--report-out' "$applyScript"
-                grep -- '/run/disk-nix/apply-report.json' "$applyScript"
-                printf '%s\n' ${pkgs.lib.escapeShellArgs (map toString nixosModuleTest.config.systemd.services.disk-nix-plan.path)} > service-paths
-                grep -- 'bcachefs-tools-' service-paths
-                grep -- 'btrfs-progs-' service-paths
-                grep -- 'dosfstools-' service-paths
-                grep -- 'exfatprogs-' service-paths
-                grep -- 'f2fs-tools-' service-paths
-                grep -- 'lvm2-' service-paths
-                grep -- 'ntfs3g-' service-paths
-                grep -- 'open-iscsi-' service-paths
-                grep -- 'zfs-user-' service-paths
-                swapDevices=${
-                  pkgs.lib.escapeShellArg (
-                    builtins.toJSON (map (swap: { inherit (swap) device; }) nixosModuleTest.config.swapDevices)
-                  )
-                }
-                printf '%s\n' "$swapDevices" > swap-devices
-                jq -e '
-                  length == 2
-                  and any(.[]; .device == "/dev/disk/by-label/swap")
-                  and any(.[]; .device == "/dev/disk/by-label/swap-inventory")
-                ' swap-devices
-                luksDevices=${
-                  pkgs.lib.escapeShellArg (
-                    builtins.toJSON (
-                      pkgs.lib.mapAttrs (_: luks: {
-                        inherit (luks) device;
-                      }) nixosModuleTest.config.boot.initrd.luks.devices
+                  spec=${nixosModuleTest.config.environment.etc."disk-nix/spec.json".source}
+                  jq -e '
+                    .spec.filesystems.root.device == "/dev/disk/by-label/nixos-root"
+                    and .spec.filesystems.root.resizePolicy == "grow-only"
+                    and .spec.filesystems.root.desiredSize == "100%"
+                    and .spec.filesystems.data.device == "/dev/disk/by-label/data"
+                    and .spec.filesystems.data.fsType == "btrfs"
+                    and .spec.filesystems.data.operation == "rebalance"
+                    and (.spec.filesystems.data.addDevices | index("/dev/disk/by-id/nvme-btrfs-new") != null)
+                    and (.spec.filesystems.data.removeDevices | index("/dev/disk/by-id/nvme-btrfs-old") != null)
+                    and .spec.filesystems.data.replaceDevices."/dev/disk/by-id/nvme-btrfs-aging" == "/dev/disk/by-id/nvme-btrfs-replacement"
+                    and .spec.filesystems.data.properties.label == "bulk-data"
+                    and .spec.filesystems.data.properties."btrfs.balance.data" == "usage=50"
+                    and .spec.filesystems.scratch.operation == "check"
+                    and .spec.filesystems.scratch.device == "/dev/disk/by-label/scratch"
+                    and .spec.filesystems.scrub.operation == "scrub"
+                    and .spec.filesystems.scrub.device == "/dev/disk/by-label/scrub"
+                    and .spec.filesystems.scrub.mountpoint == "/scrub"
+                    and .spec.filesystems.trim.operation == "trim"
+                    and .spec.filesystems.trim.device == "/dev/disk/by-label/trim"
+                    and .spec.filesystems.remount.operation == "remount"
+                    and .spec.filesystems.remount.mountpoint == "/remount"
+                    and (.spec.filesystems.remount.options | index("discard=async") != null)
+                    and .spec.filesystems.localMount.operation == "mount"
+                    and .spec.filesystems.localMount.device == "/dev/disk/by-label/local-mount"
+                    and .spec.filesystems.localMount.mountpoint == "/mnt/local-mount"
+                    and (.spec.filesystems.localMount.options | index("noatime") != null)
+                    and .spec.filesystems.localUnmount.operation == "unmount"
+                    and .spec.filesystems.localUnmount.device == "/dev/disk/by-label/local-unmount"
+                    and .spec.filesystems.localUnmount.mountpoint == "/mnt/local-unmount"
+                    and .spec.filesystems.localRescan.operation == "rescan"
+                    and .spec.filesystems.localRescan.device == "/dev/disk/by-label/local-rescan"
+                    and .spec.filesystems.localRescan.mountpoint == "/mnt/local-rescan"
+                    and .spec.filesystems.runTmpfs.device == "tmpfs"
+                    and .spec.filesystems.runTmpfs.fsType == "tmpfs"
+                    and .spec.filesystems.runTmpfs.mountpoint == "/run/disk-nix-tmp"
+                    and (.spec.filesystems.runTmpfs.options | index("size=64M") != null)
+                    and .spec.filesystems.bindCache.device == "/var/cache/disk-nix"
+                    and .spec.filesystems.bindCache.fsType == "none"
+                    and .spec.filesystems.bindCache.mountpoint == "/srv/disk-nix-cache"
+                    and (.spec.filesystems.bindCache.options | index("bind") != null)
+                    and .spec.filesystems.overlayScratch.device == "overlay"
+                    and .spec.filesystems.overlayScratch.fsType == "overlay"
+                    and .spec.filesystems.overlayScratch.mountpoint == "/srv/disk-nix-overlay"
+                    and (.spec.filesystems.overlayScratch.options | index("lowerdir=/nix/store") != null)
+                    and (.spec.filesystems.overlayScratch.options | index("upperdir=/var/lib/disk-nix/overlay/upper") != null)
+                    and (.spec.filesystems.overlayScratch.options | index("workdir=/var/lib/disk-nix/overlay/work") != null)
+                    and .spec.swaps.primary.device == "/dev/disk/by-label/swap"
+                    and .spec.swaps.primary.operation == "format"
+                    and .spec.swaps.primary.desiredSize == "8GiB"
+                    and .spec.swaps.primary.preserveData == false
+                    and .spec.swaps.primary.properties.label == "swap"
+                    and .spec.swaps.primary.properties."swap.uuid" == "01234567-89ab-cdef-0123-456789abcdef"
+                    and .spec.swaps.inventory.operation == "rescan"
+                    and .spec.swaps.inventory.device == "/dev/disk/by-label/swap-inventory"
+                    and .spec.swaps.old.operation == "destroy"
+                    and .spec.swaps.old.device == "/dev/disk/by-label/old-swap"
+                    and .spec.luks.devices.cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
+                    and .spec.luks.devices.cryptroot.name == "cryptroot"
+                    and .spec.luks.devices.cryptroot.operation == "grow"
+                    and .spec.luks.devices.cryptroot.desiredSize == "100%"
+                    and .spec.luks.devices.cryptroot.properties.label == "cryptroot"
+                    and .spec.luks.devices.cryptroot.properties."luks.subsystem" == "nixos"
+                    and .spec.luks.devices.cryptold.destroy == true
+                    and .spec.luks.devices.cryptold.device == "/dev/disk/by-partuuid/old-luks"
+                    and .spec.luks.devices.cryptarchive.operation == "open"
+                    and .spec.luks.devices.cryptarchive.device == "/dev/disk/by-id/archive-luks"
+                    and .spec.luks.devices.cryptclosed.operation == "close"
+                    and .spec.luks.devices.cryptclosed.device == "/dev/disk/by-id/closed-luks"
+                    and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"
+                    and .spec.filesystems."/srv/shared".fsType == "nfs4"
+                    and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)
+                    and (.spec.filesystems | has("/srv/old") | not)
+                    and .spec.nfs.mounts."/srv/shared".source == "nas.example.com:/srv/shared"
+                    and .spec.nfs.mounts."/srv/shared".operation == "mount"
+                    and .spec.nfs.mounts."/srv/tuned".operation == "remount"
+                    and (.spec.nfs.mounts."/srv/tuned".options | index("ro") != null)
+                    and .spec.nfs.mounts."/srv/inventory".operation == "rescan"
+                    and .spec.nfs.mounts."/srv/inventory".source == "nas.example.com:/srv/inventory"
+                    and .spec.nfs.mounts."/srv/old".source == "nas.example.com:/srv/old"
+                    and .spec.nfs.mounts."/srv/old".operation == "unmount"
+                    and .spec.iscsi.initiatorName == "iqn.2026-06.example:host"
+                    and (.spec.iscsi | has("discoverPortal") | not)
+                    and (.spec.iscsi.boot | has("discoverPortal") | not)
+                    and .spec.iscsi.boot.target == "iqn.2026-06.example:storage.root"
+                    and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".operation == "grow"
+                    and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
+                    and .spec.iscsi.sessions."iqn.2026-06.example:storage.login".operation == "login"
+                    and .spec.iscsi.sessions."iqn.2026-06.example:storage.logout".operation == "logout"
+                    and .spec.iscsi.sessions."iqn.2026-06.example:storage.rescan".operation == "rescan"
+                    and .spec.iscsiSessions."iqn.2026-06.example:storage.root".portal == "192.0.2.10:3260"
+                    and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
+                    and .spec.iscsiSessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
+                    and .spec.iscsiSessions."iqn.2026-06.example:storage.login".operation == "login"
+                    and .spec.iscsiSessions."iqn.2026-06.example:storage.login".portal == "192.0.2.10:3260"
+                    and .spec.iscsiSessions."iqn.2026-06.example:storage.logout".operation == "logout"
+                    and .spec.iscsiSessions."iqn.2026-06.example:storage.logout".portal == "192.0.2.11:3260"
+                    and .spec.iscsiSessions."iqn.2026-06.example:storage.rescan".operation == "rescan"
+                    and .spec.iscsiSessions."iqn.2026-06.example:storage.rescan".portal == "192.0.2.10:3260"
+                    and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
+                    and .spec.luns."iqn.2026-06.example:storage/root:0".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                    and (.spec.luns."iqn.2026-06.example:storage/root:0".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0") != null)
+                    and .spec.luns."iqn.2026-06.example:storage/new:2".operation == "attach"
+                    and .spec.luns."iqn.2026-06.example:storage/new:2".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-2"
+                    and .spec.luns."iqn.2026-06.example:storage/old:3".operation == "detach"
+                    and (.spec.luns."iqn.2026-06.example:storage/old:3".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3") != null)
+                    and .spec.luns."iqn.2026-06.example:storage/rescan:4".operation == "rescan"
+                    and (.spec.luns."iqn.2026-06.example:storage/rescan:4".devices | index("/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4") != null)
+                    and .spec.nvmeNamespaces."/dev/nvme0".operation == "create"
+                    and .spec.nvmeNamespaces."/dev/nvme0".desiredSize == "100G"
+                    and .spec.nvmeNamespaces."/dev/nvme0".namespaceId == "4"
+                    and .spec.nvmeNamespaces."/dev/nvme0".controllers == "0x1"
+                    and .spec.nvmeNamespaces."/dev/nvme1".operation == "rescan"
+                    and .spec.exports."/srv/share".operation == "export"
+                    and .spec.exports."/srv/share".client == "192.0.2.0/24"
+                    and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
+                    and .spec.exports."/srv/inventory".operation == "rescan"
+                    and .spec.exports."/srv/old-share".operation == "unexport"
+                    and .spec.exports."/srv/old-share".client == "192.0.2.55"
+                    and .spec.partitions.root.operation == "grow"
+                    and .spec.partitions.root.device == "/dev/disk/by-id/nvme-root"
+                    and .spec.partitions.root.number == "2"
+                    and .spec.partitions.root.endOffset == "100%"
+                    and .spec.partitions.dataTable.operation == "rescan"
+                    and .spec.partitions.dataTable.device == "/dev/disk/by-id/nvme-data"
+                    and .spec.btrfsSubvolumes."/mnt/persist/@home".operation == "create"
+                    and .spec.btrfsSubvolumes."/mnt/persist/@home".path == "/mnt/persist/@home"
+                    and .spec.btrfsSubvolumes."/mnt/persist/@inventory".operation == "rescan"
+                    and .spec.btrfsSubvolumes."/mnt/persist/@inventory".path == "/mnt/persist/@inventory"
+                    and .spec.btrfsQgroups."0/257".target == "/mnt/persist"
+                    and .spec.btrfsQgroups."0/257".properties.limit == "25GiB"
+                    and .spec.btrfsQgroups."0/258".operation == "rescan"
+                    and .spec.btrfsQgroups."0/258".target == "/mnt/persist"
+                    and .spec.volumes."vg0/scratch".operation == "create"
+                    and .spec.volumes."vg0/scratch".desiredSize == "10GiB"
+                    and .spec.volumes."vg0/reporting".operation == "rescan"
+                    and .spec.datasets."tank/home".operation == "create"
+                    and .spec.datasets."tank/inventory".operation == "rescan"
+                    and .spec.vdoVolumes.archive.operation == "grow"
+                    and .spec.vdoVolumes.archive.desiredSize == "4TiB"
+                    and .spec.vdoVolumes.archive.properties.writePolicy == "sync"
+                    and .spec.vdoVolumes.archive.properties.compression == "enabled"
+                    and .spec.vdoVolumes.archive.properties.deduplication == "disabled"
+                    and .spec.vdoVolumes.warmArchive.operation == "start"
+                    and .spec.vdoVolumes.coldArchive.operation == "stop"
+                    and .spec.vdoVolumes.refreshArchive.operation == "rescan"
+                    and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
+                    and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-refresh".operation == "rescan"
+                    and .spec.luksKeyslots."cryptroot:1".operation == "add-key"
+                    and .spec.luksKeyslots."cryptroot:1".device == "/dev/disk/by-id/root-luks"
+                    and .spec.luksKeyslots."cryptroot:1".keySlot == "1"
+                    and .spec.luksKeyslots."cryptroot:1".newKeyFile == "/run/keys/root-new"
+                    and .spec.luksKeyslots."cryptroot:2".operation == "remove-key"
+                    and .spec.luksKeyslots."cryptroot:2".device == "/dev/disk/by-id/root-luks"
+                    and .spec.luksKeyslots."cryptroot:2".keySlot == "2"
+                    and .spec.luksTokens."cryptroot:0".operation == "import-token"
+                    and .spec.luksTokens."cryptroot:0".device == "/dev/disk/by-id/root-luks"
+                    and .spec.luksTokens."cryptroot:0".tokenId == "0"
+                    and .spec.luksTokens."cryptroot:0".tokenFile == "/run/keys/root-token.json"
+                    and .spec.luksTokens."cryptroot:1".operation == "remove-token"
+                    and .spec.luksTokens."cryptroot:1".device == "/dev/disk/by-id/root-luks"
+                    and .spec.luksTokens."cryptroot:1".tokenId == "1"
+                    and .spec.zvols."tank/vm/root".operation == "grow"
+                    and .spec.zvols."tank/vm/root".desiredSize == "80GiB"
+                    and .spec.zvols."tank/vm/inventory".operation == "rescan"
+                    and .spec.thinPools."vg0/thinpool".operation == "grow"
+                    and .spec.thinPools."vg0/thinpool".desiredSize == "500GiB"
+                    and .spec.thinPools."vg0/newthin".operation == "create"
+                    and .spec.thinPools."vg0/newthin".desiredSize == "100GiB"
+                    and .spec.thinPools."vg0/reporting".operation == "rescan"
+                    and .spec.lvmSnapshots."vg0/root-snap".operation == "snapshot"
+                    and .spec.lvmSnapshots."vg0/root-snap".target == "vg0/root"
+                    and .spec.lvmSnapshots."vg0/root-snap".desiredSize == "20GiB"
+                    and .spec.lvmSnapshots."vg0/root-inspect".operation == "rescan"
+                    and .spec.lvmCaches."vg0/root".operation == "create"
+                    and .spec.lvmCaches."vg0/root".device == "vg0/root-cache"
+                    and .spec.lvmCaches."vg0/root".properties."lvm.cache-mode" == "writethrough"
+                    and .spec.lvmCaches."vg0/archive".operation == "rescan"
+                    and .spec.volumes."vg0/archive".operation == "deactivate"
+                    and .spec.loopDevices."/dev/loop7".operation == "create"
+                    and .spec.loopDevices."/dev/loop7".device == "/var/lib/images/root.img"
+                    and .spec.loopDevices."/dev/loop10".operation == "rescan"
+                    and .spec.mdRaids.root.target == "/dev/md/root"
+                    and .spec.mdRaids.root.raidLevel == "1"
+                    and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-a") != null)
+                    and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-b") != null)
+                    and (.spec.mdRaids.root.addDevices | index("/dev/disk/by-id/nvme-md-spare") != null)
+                    and .spec.mdRaids.root.replaceDevices."/dev/disk/by-id/nvme-md-aging" == "/dev/disk/by-id/nvme-md-replacement"
+                    and .spec.mdRaids.existing.operation == "assemble"
+                    and .spec.mdRaids.existing.target == "/dev/md/existing"
+                    and (.spec.mdRaids.existing.devices | index("/dev/disk/by-id/existing-md-a") != null)
+                    and .spec.mdRaids.oldroot.operation == "stop"
+                    and .spec.mdRaids.oldroot.target == "/dev/md/oldroot"
+                    and .spec.mdRaids.inventory.operation == "rescan"
+                    and .spec.multipathMaps.mpatha.target == "mpatha"
+                    and (.spec.multipathMaps.mpatha.addDevices | index("/dev/sdb") != null)
+                    and .spec.multipathMaps.mpatha.replaceDevices."/dev/sdc" == "/dev/sdd"
+                    and .spec.multipathMaps.mpathb.operation == "rescan"
+                    and .spec.multipathMaps.mpathb.target == "mpathb"
+                    and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
+                    and .spec.caches."/dev/bcache0".operation == "rescan"
+                    and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
+                    and .spec.pools.vault.operation == "import"
+                    and .spec.pools.vault.readOnly == true
+                    and .spec.pools.moveme.operation == "export"
+                    and .spec.volumeGroups.importvg.operation == "import"
+                    and .spec.volumeGroups.exportvg.operation == "export"
+                    and .spec.volumeGroups.activevg.operation == "activate"
+                    and .spec.volumeGroups.refreshvg.operation == "rescan"
+                    and .spec.datasets."tank/home-review".operation == "promote"
+                    and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
+                    and .spec.snapshots."tank/home@before-upgrade".hold == "disk-nix-retain"
+                    and .spec.snapshots."tank/home@before-upgrade".rollback == true
+                and .spec.snapshots."tank/home@before-upgrade".cloneTo == "tank/home-review"
+                and .spec.snapshots."tank/home@before-upgrade".renameTo == "tank/home@before-upgrade-retained"
+                and .spec.snapshots."tank/home@before-upgrade".recursiveRollback == true
+                and .spec.snapshots."tank/home@clone-only".operation == "clone"
+                and .spec.snapshots."tank/home@clone-only".cloneTo == "tank/home-clone"
+                and .spec.datasets."tank/legacy".renameTo == "tank/legacy-staged"
+                    and .spec.snapshots."tank/home@old".releaseHold == "old-retention"
+                    and .spec.snapshots."/mnt/persist/@home-before-upgrade".target == "/mnt/persist/@home"
+                    and .spec.snapshots."/mnt/persist/@home-before-upgrade".readOnly == true
+                    and .spec.snapshots."tank/home@inventory".operation == "rescan"
+                    and .spec.snapshots."/mnt/persist/@home-inventory".operation == "rescan"
+                    and .spec.snapshots."/mnt/persist/@home-inventory".readOnly == true
+                    and .spec.snapshots."home-before-friendly".operation == "rescan"
+                    and .spec.snapshots."home-before-friendly".target == "/mnt/persist/@home"
+                    and .spec.snapshots."home-before-friendly".snapshotPath == "/mnt/persist/@home-before-friendly"
+                    and .apply.mode == "activation"
+                    and .apply.allowGrow == true
+                    and .apply.allowOffline == false
+                    and .apply.probeCurrent == true
+                    and .apply.allowDeviceReplacement == true
+                    and .apply.allowRebalance == true
+                    and .apply.allowPotentialDataLoss == false
+                    and .apply.requireBackup == false
+                    and .apply.backupVerified == false
+                    and .apply.requireConfirmation == false
+                    and .apply.confirmation == false
+                    and .apply.requireConfirmationFile == "/run/disk-nix/confirm"
+                    and .apply.failOnBlocked == false
+                    and .apply.scriptOut == "/run/disk-nix/apply.sh"
+                    and .apply.reportOut == "/run/disk-nix/apply-report.json"
+                  ' "$spec"
+                  applyScript='${nixosModuleTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'
+                  grep -- 'validate' "$applyScript"
+                  grep -- '--probe-current' "$applyScript"
+                  grep -- '--script-out' "$applyScript"
+                  grep -- '/run/disk-nix/apply.sh' "$applyScript"
+                  grep -- '--report-out' "$applyScript"
+                  grep -- '/run/disk-nix/apply-report.json' "$applyScript"
+                  printf '%s\n' ${pkgs.lib.escapeShellArgs (map toString nixosModuleTest.config.systemd.services.disk-nix-plan.path)} > service-paths
+                  grep -- 'bcachefs-tools-' service-paths
+                  grep -- 'btrfs-progs-' service-paths
+                  grep -- 'dosfstools-' service-paths
+                  grep -- 'exfatprogs-' service-paths
+                  grep -- 'f2fs-tools-' service-paths
+                  grep -- 'lvm2-' service-paths
+                  grep -- 'ntfs3g-' service-paths
+                  grep -- 'open-iscsi-' service-paths
+                  grep -- 'zfs-user-' service-paths
+                  swapDevices=${
+                    pkgs.lib.escapeShellArg (
+                      builtins.toJSON (map (swap: { inherit (swap) device; }) nixosModuleTest.config.swapDevices)
                     )
-                  )
-                }
-                printf '%s\n' "$luksDevices" > luks-devices
-                jq -e '
-                  has("cryptroot")
-                  and .cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
-                  and has("cryptarchive")
-                  and .cryptarchive.device == "/dev/disk/by-id/archive-luks"
-                  and (has("cryptold") | not)
-                  and (has("cryptclosed") | not)
-                ' luks-devices
-                fileSystems=${
-                  pkgs.lib.escapeShellArg (
-                    builtins.toJSON (
-                      pkgs.lib.mapAttrs (_: fs: {
-                        inherit (fs) device fsType;
-                      }) nixosModuleTest.config.fileSystems
+                  }
+                  printf '%s\n' "$swapDevices" > swap-devices
+                  jq -e '
+                    length == 2
+                    and any(.[]; .device == "/dev/disk/by-label/swap")
+                    and any(.[]; .device == "/dev/disk/by-label/swap-inventory")
+                  ' swap-devices
+                  luksDevices=${
+                    pkgs.lib.escapeShellArg (
+                      builtins.toJSON (
+                        pkgs.lib.mapAttrs (_: luks: {
+                          inherit (luks) device;
+                        }) nixosModuleTest.config.boot.initrd.luks.devices
+                      )
                     )
-                  )
-                }
-                printf '%s\n' "$fileSystems" > file-systems
-                jq -e '
-                  has("/srv/shared")
-                  and ."/srv/shared".device == "nas.example.com:/srv/shared"
-                  and has("/srv/tuned")
-                  and ."/srv/tuned".device == "nas.example.com:/srv/tuned"
-                  and ."/srv/tuned".fsType == "nfs4"
-                  and has("/mnt/local-mount")
-                  and ."/mnt/local-mount".device == "/dev/disk/by-label/local-mount"
-                  and ."/mnt/local-mount".fsType == "xfs"
-                  and (has("/mnt/local-unmount") | not)
-                  and has("/mnt/local-rescan")
-                  and ."/mnt/local-rescan".device == "/dev/disk/by-label/local-rescan"
-                  and ."/mnt/local-rescan".fsType == "xfs"
-                  and has("/run/disk-nix-tmp")
-                  and ."/run/disk-nix-tmp".device == "tmpfs"
-                  and ."/run/disk-nix-tmp".fsType == "tmpfs"
-                  and has("/srv/disk-nix-cache")
-                  and ."/srv/disk-nix-cache".device == "/var/cache/disk-nix"
-                  and ."/srv/disk-nix-cache".fsType == "none"
-                  and has("/srv/disk-nix-overlay")
-                  and ."/srv/disk-nix-overlay".device == "overlay"
-                  and ."/srv/disk-nix-overlay".fsType == "overlay"
-                  and (has("/srv/old") | not)
-                ' file-systems
-                supportedFilesystems=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleTest.config.boot.supportedFilesystems)}
-                printf '%s\n' "$supportedFilesystems" > supported-filesystems
-                jq -e '
-                  .xfs == true
-                  and .btrfs == true
-                  and .bcachefs == true
-                  and .f2fs == true
-                  and .tmpfs == true
-                  and .overlay == true
-                  and .nfs4 == true
-                  and .zfs == true
-                ' supported-filesystems
-                nativeStorage=${
-                  pkgs.lib.escapeShellArg (
-                    builtins.toJSON {
-                      lvm = nixosModuleTest.config.services.lvm.enable;
-                      lvmInitrd = nixosModuleTest.config.boot.initrd.services.lvm.enable;
-                      lvmThin = nixosModuleTest.config.services.lvm.boot.thin.enable;
-                      lvmVdo = nixosModuleTest.config.services.lvm.boot.vdo.enable;
-                      swraid = nixosModuleTest.config.boot.swraid.enable;
-                      mdadmConf = nixosModuleTest.config.boot.swraid.mdadmConf;
-                      multipath = nixosModuleTest.config.services.multipath.enable;
-                      zfsExtraPools = nixosModuleTest.config.boot.zfs.extraPools;
-                      bcache = nixosModuleTest.config.boot.bcache.enable;
-                      bcacheInitrd = nixosModuleTest.config.boot.initrd.services.bcache.enable;
-                      openIscsiDiscoverPortal = nixosModuleTest.config.services.openiscsi.discoverPortal;
-                      bootIscsiDiscoverPortal = nixosModuleTest.config.boot.iscsi-initiator.discoverPortal;
-                    }
-                  )
-                }
-                printf '%s\n' "$nativeStorage" > native-storage
-                jq -e '
-                  .lvm == true
-                  and .lvmInitrd == true
-                  and .lvmThin == true
-                  and .lvmVdo == true
-                  and .swraid == true
-                  and (.mdadmConf | test("^PROGRAM .*/bin/true$"))
-                  and .multipath == true
-                  and (.zfsExtraPools | index("tank") != null)
-                  and (.zfsExtraPools | index("mnt") == null)
-                  and .bcache == true
-                  and .bcacheInitrd == true
-                  and .openIscsiDiscoverPortal == "192.0.2.10:3260"
-                  and .bootIscsiDiscoverPortal == "192.0.2.10:3260"
-                ' native-storage
-                printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
-                grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
-                ! grep -- '/srv/old-share' nfs-exports
-                touch "$out"
+                  }
+                  printf '%s\n' "$luksDevices" > luks-devices
+                  jq -e '
+                    has("cryptroot")
+                    and .cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
+                    and has("cryptarchive")
+                    and .cryptarchive.device == "/dev/disk/by-id/archive-luks"
+                    and (has("cryptold") | not)
+                    and (has("cryptclosed") | not)
+                  ' luks-devices
+                  fileSystems=${
+                    pkgs.lib.escapeShellArg (
+                      builtins.toJSON (
+                        pkgs.lib.mapAttrs (_: fs: {
+                          inherit (fs) device fsType;
+                        }) nixosModuleTest.config.fileSystems
+                      )
+                    )
+                  }
+                  printf '%s\n' "$fileSystems" > file-systems
+                  jq -e '
+                    has("/srv/shared")
+                    and ."/srv/shared".device == "nas.example.com:/srv/shared"
+                    and has("/srv/tuned")
+                    and ."/srv/tuned".device == "nas.example.com:/srv/tuned"
+                    and ."/srv/tuned".fsType == "nfs4"
+                    and has("/mnt/local-mount")
+                    and ."/mnt/local-mount".device == "/dev/disk/by-label/local-mount"
+                    and ."/mnt/local-mount".fsType == "xfs"
+                    and (has("/mnt/local-unmount") | not)
+                    and has("/mnt/local-rescan")
+                    and ."/mnt/local-rescan".device == "/dev/disk/by-label/local-rescan"
+                    and ."/mnt/local-rescan".fsType == "xfs"
+                    and has("/run/disk-nix-tmp")
+                    and ."/run/disk-nix-tmp".device == "tmpfs"
+                    and ."/run/disk-nix-tmp".fsType == "tmpfs"
+                    and has("/srv/disk-nix-cache")
+                    and ."/srv/disk-nix-cache".device == "/var/cache/disk-nix"
+                    and ."/srv/disk-nix-cache".fsType == "none"
+                    and has("/srv/disk-nix-overlay")
+                    and ."/srv/disk-nix-overlay".device == "overlay"
+                    and ."/srv/disk-nix-overlay".fsType == "overlay"
+                    and (has("/srv/old") | not)
+                  ' file-systems
+                  supportedFilesystems=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleTest.config.boot.supportedFilesystems)}
+                  printf '%s\n' "$supportedFilesystems" > supported-filesystems
+                  jq -e '
+                    .xfs == true
+                    and .btrfs == true
+                    and .bcachefs == true
+                    and .f2fs == true
+                    and .tmpfs == true
+                    and .overlay == true
+                    and .nfs4 == true
+                    and .zfs == true
+                  ' supported-filesystems
+                  nativeStorage=${
+                    pkgs.lib.escapeShellArg (
+                      builtins.toJSON {
+                        lvm = nixosModuleTest.config.services.lvm.enable;
+                        lvmInitrd = nixosModuleTest.config.boot.initrd.services.lvm.enable;
+                        lvmThin = nixosModuleTest.config.services.lvm.boot.thin.enable;
+                        lvmVdo = nixosModuleTest.config.services.lvm.boot.vdo.enable;
+                        swraid = nixosModuleTest.config.boot.swraid.enable;
+                        mdadmConf = nixosModuleTest.config.boot.swraid.mdadmConf;
+                        multipath = nixosModuleTest.config.services.multipath.enable;
+                        zfsExtraPools = nixosModuleTest.config.boot.zfs.extraPools;
+                        bcache = nixosModuleTest.config.boot.bcache.enable;
+                        bcacheInitrd = nixosModuleTest.config.boot.initrd.services.bcache.enable;
+                        openIscsiDiscoverPortal = nixosModuleTest.config.services.openiscsi.discoverPortal;
+                        bootIscsiDiscoverPortal = nixosModuleTest.config.boot.iscsi-initiator.discoverPortal;
+                      }
+                    )
+                  }
+                  printf '%s\n' "$nativeStorage" > native-storage
+                  jq -e '
+                    .lvm == true
+                    and .lvmInitrd == true
+                    and .lvmThin == true
+                    and .lvmVdo == true
+                    and .swraid == true
+                    and (.mdadmConf | test("^PROGRAM .*/bin/true$"))
+                    and .multipath == true
+                    and (.zfsExtraPools | index("tank") != null)
+                    and (.zfsExtraPools | index("mnt") == null)
+                    and .bcache == true
+                    and .bcacheInitrd == true
+                    and .openIscsiDiscoverPortal == "192.0.2.10:3260"
+                    and .bootIscsiDiscoverPortal == "192.0.2.10:3260"
+                  ' native-storage
+                  printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
+                  grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
+                  ! grep -- '/srv/old-share' nfs-exports
+                  touch "$out"
               '';
           nixosModuleExecute =
             pkgs.runCommand "disk-nix-nixos-module-execute-check" { nativeBuildInputs = [ pkgs.jq ]; }

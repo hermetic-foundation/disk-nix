@@ -83,6 +83,7 @@ let
       "remove-token"
       "set-property"
       "snapshot"
+      "clone"
       "promote"
       "import"
       "export"
