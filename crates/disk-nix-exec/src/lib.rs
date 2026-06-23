@@ -1315,6 +1315,29 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "snapshots, qgroups, and mount consumers are reviewed after deletion".to_string(),
             ],
         ),
+        Operation::Destroy if collection == Some("snapshots") => {
+            let snapshot = action.context.name.as_deref().unwrap_or(target);
+            let source = action.context.target.as_deref().unwrap_or(target);
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", source, "--json"],
+                        false,
+                        "verify source target after snapshot deletion",
+                    ),
+                    command(
+                        ["disk-nix", "topology", "--json"],
+                        false,
+                        "re-probe full topology after snapshot deletion",
+                    ),
+                ],
+                vec![
+                    format!("snapshot {snapshot} no longer appears in topology"),
+                    "source target remains present with expected consumers and mount state"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Format
         | Operation::Shrink
         | Operation::RemoveDevice
@@ -2443,6 +2466,68 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 ],
                 true,
             )
+        }
+        Operation::Destroy if collection == Some("snapshots") => {
+            let snapshot = action.context.name.as_deref().unwrap_or("<snapshot>");
+            let source = action.context.target.as_deref().unwrap_or("<snapshot-source>");
+            if is_zfs_snapshot_name(snapshot) {
+                (
+                    vec![
+                        command(
+                            ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
+                            false,
+                            "inspect ZFS snapshot before destruction",
+                        ),
+                        command(
+                            ["zfs", "destroy", snapshot],
+                            true,
+                            "destroy the reviewed ZFS snapshot recovery point",
+                        ),
+                    ],
+                    vec![
+                        "verify the snapshot is no longer needed as a recovery point".to_string(),
+                        "hold, rename, clone, or replicate the snapshot before destruction when retention is uncertain"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            } else if is_btrfs_snapshot_pair(source, snapshot) {
+                (
+                    vec![
+                        command(
+                            ["btrfs", "subvolume", "show", snapshot],
+                            false,
+                            "inspect Btrfs snapshot subvolume before deletion",
+                        ),
+                        command(
+                            ["btrfs", "subvolume", "delete", snapshot],
+                            true,
+                            "delete the reviewed Btrfs snapshot subvolume",
+                        ),
+                    ],
+                    vec![
+                        "verify the snapshot is no longer needed as a recovery point".to_string(),
+                        "keep or clone the read-only snapshot before deletion when retention is uncertain"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            } else {
+                (
+                    vec![command_with_readiness(
+                        ["<snapshot-destroy-tool>", source, snapshot],
+                        true,
+                        CommandReadiness::NeedsDomainImplementation,
+                        ["snapshot destroy tool"],
+                        "destroy the snapshot with zfs, btrfs, lvm, or the target-specific tool",
+                    )],
+                    vec![
+                        "snapshot destruction command is only rendered for unambiguous ZFS names or Btrfs absolute paths"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            }
         }
         Operation::Destroy if collection == Some("lvmSnapshots") => {
             let target = target.unwrap_or("<lvm-snapshot>");
@@ -4056,6 +4141,55 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::Blocked);
         assert!(report.command_plan.is_empty());
         assert_eq!(report.command_summary.step_count, 0);
+    }
+
+    #[test]
+    fn snapshot_destroy_reports_domain_specific_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@old": {
+                  "target": "tank/home",
+                  "destroy": true
+                },
+                "/mnt/persist/@home-old": {
+                  "target": "/mnt/persist/@home",
+                  "destroy": true
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.apply.blocked.len(), 0);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:tank/home@old:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "destroy", "tank/home@old"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:/mnt/persist/@home-old:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "subvolume", "delete", "/mnt/persist/@home-old"]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "snapshot:tank/home@old:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "tank/home", "--json"])
+        }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
     }
 
     #[test]

@@ -345,7 +345,9 @@ ZFS dataset command plans render reviewed `zfs create` and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations.
 Generic snapshot declarations render concrete `zfs snapshot` commands for
 `dataset@snapshot` names and Btrfs `subvolume snapshot` commands when both the
-source target and snapshot name are absolute paths.
+source target and snapshot name are absolute paths. Destructive snapshot
+declarations render policy-gated `zfs destroy` or `btrfs subvolume delete`
+commands for the same unambiguous domains.
 ZFS snapshot rollback declarations render reviewed `zfs rollback` command
 details internally, but apply remains blocked as potential data loss.
 `verificationSummary` and `verificationPlan` record read-only commands and
