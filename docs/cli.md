@@ -325,8 +325,9 @@ containers, while close plans render offline-policy-gated `cryptsetup close`
 steps and keep the backing LUKS container intact for later reopen.
 Disk initialization plans render policy-gated `parted mklabel` and partition
 table reread commands after inspecting the target disk.
-Partition grow command plans render concrete `parted resizepart` commands when
-`device`, `partitionNumber`, and `end` or `desiredSize` are declared.
+Partition grow command plans render concrete `parted resizepart`, `partprobe`,
+and `blockdev --rereadpt` commands when `device`, `partitionNumber`, and `end`
+or `desiredSize` are declared.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit `level` and `devices` fields, with `/proc/mdstat` verification.
 VDO command plans render policy-gated `vdo create` and `vdo remove` commands,

@@ -1983,13 +1983,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         true,
                         "ask the kernel to reread partition tables after the geometry change",
                     ),
-                    command_with_readiness(
-                        ["blockdev", "--rereadpt", "<disk>"],
-                        true,
-                        CommandReadiness::NeedsDomainImplementation,
-                        ["disk path"],
-                        "force a partition table reread when supported by the block device",
-                    ),
+                    partition_table_reread_command(disk),
                 ],
                 vec![
                     "confirm the backing disk or LUN has already grown".to_string(),
@@ -3900,6 +3894,23 @@ fn missing_partition_resize_inputs(
     missing
 }
 
+fn partition_table_reread_command(disk: Option<&str>) -> ExecutionCommand {
+    match disk {
+        Some(disk) => command(
+            ["blockdev", "--rereadpt", disk],
+            true,
+            "force a partition table reread for the reviewed backing disk",
+        ),
+        None => command_with_readiness(
+            ["blockdev", "--rereadpt", "<disk>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["disk path"],
+            "force a partition table reread when supported by the block device",
+        ),
+    }
+}
+
 fn swap_resize_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
     if !target.starts_with("/dev/") {
         return match desired_size {
@@ -4940,6 +4951,11 @@ mod tests {
                     "2",
                     "100%",
                 ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["blockdev", "--rereadpt", "/dev/disk/by-id/nvme-root"]
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));
