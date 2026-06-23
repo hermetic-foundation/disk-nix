@@ -20,6 +20,9 @@ struct MultipathPath {
     host_path: Option<String>,
     device: String,
     major_minor: Option<String>,
+    group_policy: Option<String>,
+    group_prio: Option<String>,
+    group_status: Option<String>,
     state: Vec<String>,
 }
 
@@ -40,6 +43,7 @@ fn parse_maps(bytes: &[u8]) -> Result<Vec<MultipathMap>, ProbeError> {
     })?;
     let mut maps = Vec::new();
     let mut current: Option<MultipathMap> = None;
+    let mut current_group = MultipathPathGroup::default();
 
     for line in text.lines() {
         let trimmed = strip_tree_prefix(line.trim());
@@ -62,11 +66,14 @@ fn parse_maps(bytes: &[u8]) -> Result<Vec<MultipathMap>, ProbeError> {
                 wp: None,
                 paths: Vec::new(),
             });
+            current_group = MultipathPathGroup::default();
         } else if let Some(map) = &mut current {
             if trimmed.starts_with("size=") {
                 parse_properties(map, trimmed);
+            } else if trimmed.starts_with("policy=") {
+                current_group = parse_path_group(trimmed);
             } else if let Some(path) = parse_path(trimmed) {
-                map.paths.push(path);
+                map.paths.push(path.with_group(&current_group));
             } else if map.vendor_product.is_none() && trimmed.contains(',') {
                 map.vendor_product = Some(trimmed.to_string());
             }
@@ -78,6 +85,13 @@ fn parse_maps(bytes: &[u8]) -> Result<Vec<MultipathMap>, ProbeError> {
     }
 
     Ok(maps)
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct MultipathPathGroup {
+    policy: Option<String>,
+    prio: Option<String>,
+    status: Option<String>,
 }
 
 fn add_map(graph: &mut StorageGraph, map: MultipathMap) {
@@ -120,6 +134,15 @@ fn add_map(graph: &mut StorageGraph, map: MultipathMap) {
         if let Some(major_minor) = path.major_minor {
             path_node = path_node.with_property("major-minor", major_minor);
         }
+        if let Some(policy) = path.group_policy {
+            path_node = path_node.with_property("multipath.group-policy", policy);
+        }
+        if let Some(prio) = path.group_prio {
+            path_node = path_node.with_property("multipath.group-prio", prio);
+        }
+        if let Some(status) = path.group_status {
+            path_node = path_node.with_property("multipath.group-status", status);
+        }
         if !path.state.is_empty() {
             path_node = path_node.with_property("multipath.path-state", path.state.join(" "));
         }
@@ -149,17 +172,28 @@ fn parse_header(line: &str) -> Option<(String, Option<String>, Option<String>)> 
 }
 
 fn parse_properties(map: &mut MultipathMap, line: &str) {
-    for part in line.split_whitespace() {
-        if let Some((key, value)) = part.split_once('=') {
-            match key {
-                "size" => map.size = Some(value.to_string()),
-                "features" => map.features = Some(value.to_string()),
-                "hwhandler" => map.hwhandler = Some(value.to_string()),
-                "wp" => map.wp = Some(value.to_string()),
-                _ => {}
-            }
+    for (key, value) in parse_key_values(line) {
+        match key.as_str() {
+            "size" => map.size = Some(value),
+            "features" => map.features = Some(value),
+            "hwhandler" => map.hwhandler = Some(value),
+            "wp" => map.wp = Some(value),
+            _ => {}
         }
     }
+}
+
+fn parse_path_group(line: &str) -> MultipathPathGroup {
+    let mut group = MultipathPathGroup::default();
+    for (key, value) in parse_key_values(line) {
+        match key.as_str() {
+            "policy" => group.policy = Some(value),
+            "prio" => group.prio = Some(value),
+            "status" => group.status = Some(value),
+            _ => {}
+        }
+    }
+    group
 }
 
 fn parse_path(line: &str) -> Option<MultipathPath> {
@@ -181,8 +215,93 @@ fn parse_path(line: &str) -> Option<MultipathPath> {
         host_path,
         device,
         major_minor,
+        group_policy: None,
+        group_prio: None,
+        group_status: None,
         state,
     })
+}
+
+impl MultipathPath {
+    fn with_group(mut self, group: &MultipathPathGroup) -> Self {
+        self.group_policy.clone_from(&group.policy);
+        self.group_prio.clone_from(&group.prio);
+        self.group_status.clone_from(&group.status);
+        self
+    }
+}
+
+fn parse_key_values(line: &str) -> Vec<(String, String)> {
+    let mut pairs = Vec::new();
+    let mut iter = line.char_indices().peekable();
+
+    while let Some((_, character)) = iter.peek().copied() {
+        if character.is_whitespace() {
+            iter.next();
+            continue;
+        }
+
+        let key_start = iter.peek().map(|(index, _)| *index).unwrap_or(line.len());
+        while let Some((_, character)) = iter.peek().copied() {
+            if character == '=' || character.is_whitespace() {
+                break;
+            }
+            iter.next();
+        }
+        let key_end = iter.peek().map(|(index, _)| *index).unwrap_or(line.len());
+
+        while let Some((_, character)) = iter.peek().copied() {
+            if character == '=' {
+                iter.next();
+                break;
+            }
+            if !character.is_whitespace() {
+                break;
+            }
+            iter.next();
+        }
+
+        let Some((_, character)) = iter.peek().copied() else {
+            break;
+        };
+        if character != '=' && key_end == key_start {
+            iter.next();
+            continue;
+        }
+
+        let value = if character == '\'' || character == '"' {
+            iter.next();
+            let quote = character;
+            let value_start = iter.peek().map(|(index, _)| *index).unwrap_or(line.len());
+            while let Some((_, character)) = iter.peek().copied() {
+                if character == quote {
+                    break;
+                }
+                iter.next();
+            }
+            let value_end = iter.peek().map(|(index, _)| *index).unwrap_or(line.len());
+            if iter.peek().is_some() {
+                iter.next();
+            }
+            line[value_start..value_end].to_string()
+        } else {
+            let value_start = iter.peek().map(|(index, _)| *index).unwrap_or(line.len());
+            while let Some((_, character)) = iter.peek().copied() {
+                if character.is_whitespace() {
+                    break;
+                }
+                iter.next();
+            }
+            let value_end = iter.peek().map(|(index, _)| *index).unwrap_or(line.len());
+            line[value_start..value_end].to_string()
+        };
+
+        if key_end > key_start {
+            pairs.push((line[key_start..key_end].to_string(), value));
+        }
+    }
+
+    pairs
 }
 
 fn strip_tree_prefix(line: &str) -> &str {
@@ -221,6 +340,46 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
                 .iter()
                 .any(|node| node.kind == NodeKind::MultipathDevice && node.name == "mpatha")
         );
+        let map = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::MultipathDevice && node.name == "mpatha")
+            .expect("multipath map should exist");
+        assert!(map.properties.iter().any(|property| {
+            property.key == "multipath.features" && property.value == "1 queue_if_no_path"
+        }));
+        assert!(map.properties.iter().any(|property| {
+            property.key == "multipath.hwhandler" && property.value == "1 alua"
+        }));
+        let active_path = graph
+            .nodes
+            .iter()
+            .find(|node| node.path.as_deref() == Some("/dev/sdb"))
+            .expect("active path should exist");
+        assert!(active_path.properties.iter().any(|property| {
+            property.key == "multipath.group-policy" && property.value == "service-time 0"
+        }));
+        assert!(
+            active_path.properties.iter().any(|property| {
+                property.key == "multipath.group-prio" && property.value == "50"
+            })
+        );
+        assert!(active_path.properties.iter().any(|property| {
+            property.key == "multipath.group-status" && property.value == "active"
+        }));
+        let enabled_path = graph
+            .nodes
+            .iter()
+            .find(|node| node.path.as_deref() == Some("/dev/sdc"))
+            .expect("enabled path should exist");
+        assert!(
+            enabled_path.properties.iter().any(|property| {
+                property.key == "multipath.group-prio" && property.value == "10"
+            })
+        );
+        assert!(enabled_path.properties.iter().any(|property| {
+            property.key == "multipath.group-status" && property.value == "enabled"
+        }));
         assert_eq!(
             graph
                 .edges

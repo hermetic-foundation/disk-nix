@@ -265,8 +265,8 @@ Use these commands for:
   blocks when probes expose them
 - `multipath`: multipath maps and their backing paths, including WWID, dm
   device, vendor/product, size, features, hardware handler, write protection,
-  path count, host path, major/minor, and path state when `multipath -ll`
-  exposes them
+  path count, host path, major/minor, path-group policy, priority, group
+  status, and path state when `multipath -ll` exposes them
 - `nvme`: NVMe namespaces, including path, serial, model, firmware, namespace
   index, maximum LBA, sector size, physical size, used bytes, free bytes, and
   utilization when `nvme list -o json` exposes them

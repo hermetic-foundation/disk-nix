@@ -1685,17 +1685,18 @@ fn print_vdo(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
 fn print_multipath(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<32} {:<28} {:>5} {:<20} DETAILS",
-        "KIND", "NAME", "WWID", "PATHS", "PATH-STATE"
+        "{:<22} {:<32} {:<28} {:>5} {:<12} {:<20} DETAILS",
+        "KIND", "NAME", "WWID", "PATHS", "GROUP", "PATH-STATE"
     )?;
     for node in graph.nodes.iter().filter(|node| is_multipath_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<32} {:<28} {:>5} {:<20} {}",
+            "{:<22} {:<32} {:<28} {:>5} {:<12} {:<20} {}",
             node.kind,
             node.name,
             property_value(node, "multipath.wwid").unwrap_or("-"),
             backing_count(graph, node),
+            property_value(node, "multipath.group-status").unwrap_or("-"),
             property_value(node, "multipath.path-state").unwrap_or("-"),
             usage_details(node)
         )?;
@@ -2699,6 +2700,9 @@ fn usage_details(node: &Node) -> String {
         ("multipath.write-protect", "wp"),
         ("multipath.host-path", "host-path"),
         ("major-minor", "major-minor"),
+        ("multipath.group-policy", "group-policy"),
+        ("multipath.group-prio", "group-prio"),
+        ("multipath.group-status", "group-status"),
         ("multipath.path-state", "path-state"),
         ("md.version", "md-version"),
         ("md.level", "level"),
@@ -3241,6 +3245,10 @@ mod tests {
         assert!(is_multipath_node(
             &Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
                 .with_property("multipath.path-state", "active ready running")
+        ));
+        assert!(is_multipath_node(
+            &Node::new("block:/dev/sdc", NodeKind::PhysicalDisk, "/dev/sdc")
+                .with_property("multipath.group-policy", "service-time 0")
         ));
         assert!(is_nvme_node(&Node::new(
             "block:/dev/nvme0n1",
@@ -4620,8 +4628,8 @@ mod tests {
                 .with_property("multipath.wwid", "3600508b400105e210000900000490000")
                 .with_property("multipath.vendor-product", "IBM,2145")
                 .with_property("multipath.size", "100G")
-                .with_property("multipath.features", "'1 queue_if_no_path'")
-                .with_property("multipath.hwhandler", "'1 alua'")
+                .with_property("multipath.features", "1 queue_if_no_path")
+                .with_property("multipath.hwhandler", "1 alua")
                 .with_property("multipath.write-protect", "rw"),
         );
         graph.add_node(
@@ -4629,6 +4637,9 @@ mod tests {
                 .with_path("/dev/sdb")
                 .with_property("multipath.host-path", "2:0:0:1")
                 .with_property("major-minor", "8:16")
+                .with_property("multipath.group-policy", "service-time 0")
+                .with_property("multipath.group-prio", "50")
+                .with_property("multipath.group-status", "active")
                 .with_property("multipath.path-state", "active ready running"),
         );
         graph.add_node(
@@ -4636,6 +4647,9 @@ mod tests {
                 .with_path("/dev/sdc")
                 .with_property("multipath.host-path", "3:0:0:1")
                 .with_property("major-minor", "8:32")
+                .with_property("multipath.group-policy", "service-time 0")
+                .with_property("multipath.group-prio", "10")
+                .with_property("multipath.group-status", "enabled")
                 .with_property("multipath.path-state", "active ready running"),
         );
         graph.add_edge(Edge::new(
@@ -4655,17 +4669,20 @@ mod tests {
 
         assert!(output.contains("WWID"));
         assert!(output.contains("PATHS"));
+        assert!(output.contains("GROUP"));
         assert!(output.contains("PATH-STATE"));
         assert!(output.contains("mpatha"));
         assert!(output.contains("3600508b400105e210000900000490000"));
         assert!(output.contains("dm=dm-2 wwid=3600508b400105e210000900000490000"));
         assert!(output.contains("vendor=IBM,2145 size=100G"));
-        assert!(output.contains("features='1 queue_if_no_path' handler='1 alua' wp=rw"));
+        assert!(output.contains("features=1 queue_if_no_path handler=1 alua wp=rw"));
         assert!(output.contains("/dev/sdb"));
         assert!(output.contains("host-path=2:0:0:1 major-minor=8:16"));
+        assert!(output.contains("group-policy=service-time 0 group-prio=50 group-status=active"));
         assert!(output.contains("path-state=active ready running"));
         assert!(output.contains("/dev/sdc"));
         assert!(output.contains("host-path=3:0:0:1 major-minor=8:32"));
+        assert!(output.contains("group-policy=service-time 0 group-prio=10 group-status=enabled"));
     }
 
     #[test]

@@ -121,7 +121,8 @@ The current probe layer normalizes:
 - MD RAID arrays through `mdadm --detail --scan` and `mdadm --detail <array>`
   for array UUID, level, state, size, device counts, and member devices
 - Multipath maps through `multipath -ll` for map name, WWID, dm device,
-  vendor/product, policy metadata, and backing path devices
+  vendor/product, map features, hardware handler, write-protect state,
+  path-group policy/priority/status, and backing path device state
 - NVMe namespaces through `nvme list -o json` for namespace path, serial,
   model, firmware, capacity, usage, LBA, and sector size
 
