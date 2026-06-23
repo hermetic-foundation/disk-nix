@@ -657,6 +657,32 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "LV size and VG free space match the desired allocation".to_string(),
             ],
         ),
+        Operation::Activate | Operation::Deactivate
+            if collection == Some("volumes")
+                || collection == Some("thinPools")
+                || collection == Some("lvmSnapshots") =>
+        {
+            (
+                vec![
+                    command(
+                        ["lvs", "--reportformat", "json", target],
+                        false,
+                        "verify LVM logical volume activation state",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify modeled LV graph relationships after activation change",
+                    ),
+                ],
+                vec![
+                    "logical volume activation state matches the declared lifecycle operation"
+                        .to_string(),
+                    "dependent filesystems, mappings, mounts, and services are reviewed after activation state change"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Create if collection == Some("volumeGroups") => (
             vec![
                 command(
@@ -701,6 +727,31 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             vec![
                 "volume group includes the expected new physical volume members".to_string(),
                 "VG free extents reflect the added capacity before downstream LV growth"
+                    .to_string(),
+            ],
+        ),
+        Operation::Activate | Operation::Deactivate if collection == Some("volumeGroups") => (
+            vec![
+                command(
+                    ["vgs", "--reportformat", "json", target],
+                    false,
+                    "verify LVM volume group activation state",
+                ),
+                command(
+                    ["lvs", "--reportformat", "json", target],
+                    false,
+                    "verify contained logical volume activation state",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled VG graph relationships after activation change",
+                ),
+            ],
+            vec![
+                "volume group activation state matches the declared lifecycle operation"
+                    .to_string(),
+                "contained logical volumes and dependent consumers are reviewed after activation state change"
                     .to_string(),
             ],
         ),
@@ -1957,6 +2008,8 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Promote
         | Operation::Import
         | Operation::Export
+        | Operation::Activate
+        | Operation::Deactivate
         | Operation::Rename
         | Operation::RemoveDevice
         | Operation::Repair
@@ -4092,6 +4145,55 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Activate | Operation::Deactivate
+            if collection == Some("volumes")
+                || collection == Some("thinPools")
+                || collection == Some("lvmSnapshots") =>
+        {
+            let target = lvm_volume_target_path(target);
+            let (flag, verb, placeholder, input) = match collection {
+                Some("thinPools") => (
+                    "y",
+                    "activate",
+                    "<thin-pool>",
+                    "target in volume-group/thin-pool form",
+                ),
+                Some("lvmSnapshots") => (
+                    "y",
+                    "activate",
+                    "<lvm-snapshot>",
+                    "target in volume-group/snapshot form",
+                ),
+                _ => (
+                    "y",
+                    "activate",
+                    "<logical-volume>",
+                    "target in volume-group/logical-volume form",
+                ),
+            };
+            let (flag, verb) = if action.operation == Operation::Deactivate {
+                ("n", "deactivate")
+            } else {
+                (flag, verb)
+            };
+            (
+                vec![
+                    lvm_lvs_report_command(
+                        target,
+                        None,
+                        "inspect logical volume before activation change",
+                    ),
+                    lvm_lvchange_activate_command(target, flag, placeholder, input),
+                ],
+                vec![
+                    format!(
+                        "{verb} only after filesystem, mapping, mount, and service consumers are reviewed"
+                    ),
+                    "activation state changes do not create or delete LV data".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Destroy if collection == Some("thinPools") => {
             let target = lvm_volume_target_path(target);
             (
@@ -4212,6 +4314,40 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "update every LV path, initrd reference, mount, and service before reboot"
                         .to_string(),
                     "validate boot and activation with the renamed volume group before cleanup"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Activate | Operation::Deactivate if collection == Some("volumeGroups") => {
+            let target = target.unwrap_or("<volume-group>");
+            let (flag, verb) = if action.operation == Operation::Deactivate {
+                ("n", "deactivate")
+            } else {
+                ("y", "activate")
+            };
+            (
+                vec![
+                    command(
+                        ["vgs", "--reportformat", "json", target],
+                        false,
+                        "inspect volume group before activation change",
+                    ),
+                    command(
+                        ["vgchange", "--activate", flag, target],
+                        true,
+                        if flag == "y" {
+                            "activate the reviewed LVM volume group"
+                        } else {
+                            "deactivate the reviewed LVM volume group without deleting data"
+                        },
+                    ),
+                ],
+                vec![
+                    format!(
+                        "{verb} the VG only after PV membership and dependent consumers are reviewed"
+                    ),
+                    "volume group activation changes do not create or remove VG metadata"
                         .to_string(),
                 ],
                 true,
@@ -4642,6 +4778,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Promote
         | Operation::Import
         | Operation::Export
+        | Operation::Activate
+        | Operation::Deactivate
         | Operation::Rename
         | Operation::RemoveDevice
         | Operation::Rollback
@@ -8446,6 +8584,38 @@ fn lvm_lvrename_command(
             CommandReadiness::NeedsDomainImplementation,
             missing_rename_inputs(target_input, rename_input, target, rename_to),
             description,
+        ),
+    }
+}
+
+fn lvm_lvchange_activate_command(
+    target: Option<&str>,
+    flag: &'static str,
+    placeholder: &'static str,
+    target_input: &'static str,
+) -> ExecutionCommand {
+    let description = if flag == "y" {
+        "activate the reviewed LVM logical volume"
+    } else {
+        "deactivate the reviewed LVM logical volume without deleting data"
+    };
+    match target {
+        Some(target) => command(["lvchange", "--activate", flag, target], true, description),
+        None => command_vec_with_readiness(
+            vec![
+                "lvchange".to_string(),
+                "--activate".to_string(),
+                flag.to_string(),
+                placeholder.to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            [target_input],
+            if flag == "y" {
+                "activate the LVM logical volume after selecting the target"
+            } else {
+                "deactivate the LVM logical volume after selecting the target"
+            },
         ),
     }
 }
@@ -13065,13 +13235,20 @@ mod tests {
                   "scratch": {
                     "operation": "create"
                   },
+                  "vg0/home": {
+                    "operation": "activate"
+                  },
+                  "vg0/archive": {
+                    "operation": "deactivate"
+                  },
                   "vg0/old": {
                     "destroy": true
                   }
                 }
               },
               "apply": {
-                "allowDestructive": false
+                "allowDestructive": false,
+                "allowOffline": true
               }
             }"#,
         )
@@ -13105,6 +13282,20 @@ mod tests {
                             ]
                 })
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumes:vg0/home:activate"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvchange", "--activate", "y", "vg0/home"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumes:vg0/archive:deactivate"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvchange", "--activate", "n", "vg0/archive"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(
             !report.command_plan.iter().any(|step| {
                 step.commands
@@ -13117,6 +13308,13 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["lvs", "--reportformat", "json", "vg0/scratch"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "volumes:vg0/home:activate"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["lvs", "--reportformat", "json", "vg0/home"])
         }));
     }
 
@@ -13229,6 +13427,12 @@ mod tests {
                   "exportvg": {
                     "operation": "export"
                   },
+                  "activevg": {
+                    "operation": "activate"
+                  },
+                  "coldvg": {
+                    "operation": "deactivate"
+                  },
                   "oldvg": {
                     "destroy": true
                   }
@@ -13319,6 +13523,20 @@ mod tests {
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumegroups:activevg:activate"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vgchange", "--activate", "y", "activevg"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumegroups:coldvg:deactivate"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vgchange", "--activate", "n", "coldvg"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "volumegroups:vg0:create"
                 && step
@@ -13353,6 +13571,13 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["disk-nix", "inspect", "exportvg", "--json"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "volumegroups:activevg:activate"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["lvs", "--reportformat", "json", "activevg"])
         }));
     }
 

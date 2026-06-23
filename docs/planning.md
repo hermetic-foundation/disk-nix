@@ -125,8 +125,10 @@ Examples:
   separately.
 - LVM thin-pool creation and growth are online allocations inside an existing
   volume group; thin-pool removal is destructive because it removes contained
-  thin volumes and their data. Create command plans report missing `vg/pool`
-  target form and size inputs separately.
+  thin volumes and their data. LVM logical volume, thin-pool, snapshot, and VG
+  activation/deactivation are offline-required but non-destructive because they
+  change availability without creating or removing data. Create command plans
+  report missing `vg/pool` target form and size inputs separately.
 - LVM volume group creation and removal are destructive because they write or
   remove VG metadata on member physical volumes; prefer `vgextend` when
   preserving an existing group is possible. VG growth with an explicit physical
@@ -279,8 +281,8 @@ Lifecycle objects may use:
 
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
   `repair`, `scrub`, `trim`, `replace-device`, `add-device`, `remove-device`,
-  `set-property`, `snapshot`, `promote`, `rename`, `rebalance`, `rollback`, or
-  `destroy`
+  `set-property`, `snapshot`, `promote`, `import`, `export`, `activate`,
+  `deactivate`, `rename`, `rebalance`, `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
 - `devices`: member devices for arrays, pools, or explicit LUN paths that
   should receive per-path host rescans

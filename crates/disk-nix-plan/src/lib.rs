@@ -51,6 +51,8 @@ pub enum Operation {
     Promote,
     Import,
     Export,
+    Activate,
+    Deactivate,
     Rename,
     Rebalance,
     Rollback,
@@ -2730,6 +2732,8 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "promote" => Some(Operation::Promote),
         "import" => Some(Operation::Import),
         "export" => Some(Operation::Export),
+        "activate" => Some(Operation::Activate),
+        "deactivate" => Some(Operation::Deactivate),
         "rename" => Some(Operation::Rename),
         "rebalance" => Some(Operation::Rebalance),
         "rollback" => Some(Operation::Rollback),
@@ -2757,6 +2761,8 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Promote => "promote",
         Operation::Import => "import",
         Operation::Export => "export",
+        Operation::Activate => "activate",
+        Operation::Deactivate => "deactivate",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
@@ -3241,6 +3247,50 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Activate
+            if collection == "volumes"
+                || collection == "thinPools"
+                || collection == "lvmSnapshots"
+                || collection == "volumeGroups" =>
+        {
+            (
+                RiskClass::OfflineRequired,
+                false,
+                Some(Advice {
+                    summary: format!(
+                        "{collection} activation makes an existing LVM object available without creating it"
+                    ),
+                    alternatives: vec![
+                        "inspect LVM metadata and dependent mappings before activation"
+                            .to_string(),
+                        "activate only the reviewed VG or LV needed for consumers".to_string(),
+                        "verify filesystems, mounts, and services after activation".to_string(),
+                    ],
+                }),
+            )
+        }
+        Operation::Deactivate
+            if collection == "volumes"
+                || collection == "thinPools"
+                || collection == "lvmSnapshots"
+                || collection == "volumeGroups" =>
+        {
+            (
+                RiskClass::OfflineRequired,
+                false,
+                Some(Advice {
+                    summary: format!(
+                        "{collection} deactivation makes an existing LVM object unavailable without deleting it"
+                    ),
+                    alternatives: vec![
+                        "unmount filesystems and stop services before deactivation".to_string(),
+                        "deactivate instead of removing storage when preserving data".to_string(),
+                        "verify no dm, filesystem, LUN, or service consumers remain active"
+                            .to_string(),
+                    ],
+                }),
+            )
+        }
         Operation::Rename => (
             RiskClass::OfflineRequired,
             false,
@@ -3581,6 +3631,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Activate | Operation::Deactivate => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} is currently only supported for LVM volumes, thin pools, snapshots, and volume groups",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "use volumes, thinPools, lvmSnapshots, or volumeGroups for LVM activation lifecycle"
+                        .to_string(),
+                    "use mount, login, attach, or import operations for non-LVM domains where available"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Shrink
         | Operation::Check
         | Operation::Repair
@@ -3824,6 +3890,8 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Promote => "promote",
         Operation::Import => "import",
         Operation::Export => "export",
+        Operation::Activate => "activate",
+        Operation::Deactivate => "deactivate",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
@@ -4102,6 +4170,32 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::LvmThinPool,
+            operation: Operation::Activate,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "thin pool activation makes existing thin volumes available".to_string(),
+                alternatives: vec![
+                    "activate only after VG metadata and dependent consumers are reviewed"
+                        .to_string(),
+                    "verify thin metadata health before exposing consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmThinPool,
+            operation: Operation::Deactivate,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "thin pool deactivation makes contained thin volumes unavailable without deleting them"
+                    .to_string(),
+                alternatives: vec![
+                    "stop consumers before deactivation".to_string(),
+                    "deactivate instead of removing a thin pool when preserving data".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmThinPool,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             advice: Some(Advice {
@@ -4145,6 +4239,32 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "keep the snapshot until backups are verified".to_string(),
                     "merge or clone the snapshot before deletion".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmSnapshot,
+            operation: Operation::Activate,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LVM snapshot activation exposes an existing recovery volume"
+                    .to_string(),
+                alternatives: vec![
+                    "activate snapshots only for reviewed inspection or recovery".to_string(),
+                    "mount read-only where possible before data validation".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmSnapshot,
+            operation: Operation::Deactivate,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LVM snapshot deactivation hides the recovery volume without deleting it"
+                    .to_string(),
+                alternatives: vec![
+                    "unmount any snapshot filesystem before deactivation".to_string(),
+                    "keep the snapshot until recovery needs are resolved".to_string(),
                 ],
             }),
         },
@@ -4758,6 +4878,31 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::LvmLogicalVolume,
+            operation: Operation::Activate,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "logical volume activation exposes an existing LV without creating it"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect LV metadata and dependent mappings before activation".to_string(),
+                    "activate only the reviewed LV needed by consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmLogicalVolume,
+            operation: Operation::Deactivate,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "logical volume deactivation hides an LV without deleting data".to_string(),
+                alternatives: vec![
+                    "unmount filesystems and stop services before deactivation".to_string(),
+                    "deactivate instead of removing an LV when preserving data".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmLogicalVolume,
             operation: Operation::Rename,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
@@ -4820,6 +4965,31 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "deactivate logical volumes before vgexport".to_string(),
                     "export instead of removing a VG that will be moved".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmVolumeGroup,
+            operation: Operation::Activate,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "volume group activation makes contained LVs available".to_string(),
+                alternatives: vec![
+                    "inspect PV membership and VG metadata before vgchange -ay".to_string(),
+                    "activate only reviewed VGs needed by the host".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmVolumeGroup,
+            operation: Operation::Deactivate,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "volume group deactivation makes contained LVs unavailable without deletion"
+                    .to_string(),
+                alternatives: vec![
+                    "stop mounts, mappings, and services before vgchange -an".to_string(),
+                    "deactivate instead of removing a VG when preserving storage".to_string(),
                 ],
             }),
         },
@@ -6497,6 +6667,12 @@ mod tests {
                   "operation": "create",
                   "desiredSize": "10GiB"
                 },
+                "vg0/home": {
+                  "operation": "activate"
+                },
+                "vg0/archive": {
+                  "operation": "deactivate"
+                },
                 "vg0/old": {
                   "destroy": true
                 }
@@ -6505,7 +6681,8 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 2);
         assert_eq!(plan.summary.destructive_count, 1);
         let create = plan
             .actions
@@ -6521,6 +6698,20 @@ mod tests {
             .expect("LV destroy action exists");
         assert_eq!(destroy.risk, RiskClass::Destructive);
         assert!(destroy.destructive);
+        let activate = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumes:vg0/home:activate")
+            .expect("LV activate action exists");
+        assert_eq!(activate.risk, RiskClass::OfflineRequired);
+        assert!(!activate.destructive);
+        let deactivate = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumes:vg0/archive:deactivate")
+            .expect("LV deactivate action exists");
+        assert_eq!(deactivate.risk, RiskClass::OfflineRequired);
+        assert!(!deactivate.destructive);
     }
 
     #[test]
@@ -6591,6 +6782,12 @@ mod tests {
                 "exportvg": {
                   "operation": "export"
                 },
+                "activevg": {
+                  "operation": "activate"
+                },
+                "coldvg": {
+                  "operation": "deactivate"
+                },
                 "oldvg": {
                   "destroy": true
                 }
@@ -6599,8 +6796,8 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 5);
-        assert_eq!(plan.summary.offline_required_count, 3);
+        assert_eq!(plan.summary.action_count, 7);
+        assert_eq!(plan.summary.offline_required_count, 5);
         assert_eq!(plan.summary.destructive_count, 2);
         let create = plan
             .actions
@@ -6665,6 +6862,20 @@ mod tests {
             .expect("volume group export action exists");
         assert_eq!(export.risk, RiskClass::OfflineRequired);
         assert!(!export.destructive);
+        let activate = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumegroups:activevg:activate")
+            .expect("volume group activate action exists");
+        assert_eq!(activate.risk, RiskClass::OfflineRequired);
+        assert!(!activate.destructive);
+        let deactivate = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumegroups:coldvg:deactivate")
+            .expect("volume group deactivate action exists");
+        assert_eq!(deactivate.risk, RiskClass::OfflineRequired);
+        assert!(!deactivate.destructive);
     }
 
     #[test]

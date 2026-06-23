@@ -220,6 +220,7 @@
               pools.moveme.operation = "export";
               volumeGroups.importvg.operation = "import";
               volumeGroups.exportvg.operation = "export";
+              volumeGroups.activevg.operation = "activate";
               partitions.root = {
                 operation = "grow";
                 device = "/dev/disk/by-id/nvme-root";
@@ -262,6 +263,7 @@
                 operation = "create";
                 desiredSize = "10GiB";
               };
+              volumes."vg0/archive".operation = "deactivate";
               datasets."tank/archive" = {
                 destroy = true;
               };
@@ -522,6 +524,8 @@
               and (."$defs".operation.enum | index("promote") != null)
               and (."$defs".operation.enum | index("import") != null)
               and (."$defs".operation.enum | index("export") != null)
+              and (."$defs".operation.enum | index("activate") != null)
+              and (."$defs".operation.enum | index("deactivate") != null)
               and ."$defs".filesystem.properties.device.type == "string"
               and ."$defs".filesystem.properties.operation["$ref"] == "#/$defs/operation"
               and ."$defs".filesystem.properties.properties.type == "object"
@@ -579,8 +583,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 52
-              and .summary.offlineRequiredCount == 16
+              .summary.actionCount == 54
+              and .summary.offlineRequiredCount == 18
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -591,6 +595,7 @@
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:limit" and .risk == "safe"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
               and (.actions | any(.id == "volumes:vg0/scratch:create" and .risk == "online"))
+              and (.actions | any(.id == "volumes:vg0/archive:deactivate" and .risk == "offline-required"))
               and (.actions | any(.id == "vdovolumes:archive:grow" and .risk == "online"))
               and (.actions | any(.id == "vdoVolumes:archive:set-property:writePolicy" and .risk == "safe"))
               and (.actions | any(.id == "vdoVolumes:archive:set-property:compression" and .risk == "safe"))
@@ -615,6 +620,7 @@
               and (.actions | any(.id == "pools:moveme:export" and .risk == "offline-required"))
               and (.actions | any(.id == "volumegroups:importvg:import" and .risk == "offline-required"))
               and (.actions | any(.id == "volumegroups:exportvg:export" and .risk == "offline-required"))
+              and (.actions | any(.id == "volumegroups:activevg:activate" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/home:create" and .risk == "online"))
               and (.actions | any(.id == "datasets:tank/home-review:promote" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/legacy:rename" and .risk == "offline-required"))
@@ -655,8 +661,8 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 21
-              and .apply.blockedSummary.offlineRequiredCount == 16
+              and .apply.blockedCount == 23
+              and .apply.blockedSummary.offlineRequiredCount == 18
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
@@ -666,18 +672,20 @@
               and (.apply.blocked | any(.id == "pools:moveme:export"))
               and (.apply.blocked | any(.id == "volumegroups:importvg:import"))
               and (.apply.blocked | any(.id == "volumegroups:exportvg:export"))
+              and (.apply.blocked | any(.id == "volumegroups:activevg:activate"))
+              and (.apply.blocked | any(.id == "volumes:vg0/archive:deactivate"))
               and (.apply.blocked | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained"))
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 21
+              and .apply.blockedCount == 23
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 21
-              and .messages[0] == "apply policy blocked 21 action(s)"
+              and .apply.blockedCount == 23
+              and .messages[0] == "apply policy blocked 23 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -797,6 +805,7 @@
                   and .spec.lvmCaches."vg0/root".operation == "create"
                   and .spec.lvmCaches."vg0/root".device == "vg0/root-cache"
                   and .spec.lvmCaches."vg0/root".properties."lvm.cache-mode" == "writethrough"
+                  and .spec.volumes."vg0/archive".operation == "deactivate"
                   and .spec.loopDevices."/dev/loop7".operation == "create"
                   and .spec.loopDevices."/dev/loop7".device == "/var/lib/images/root.img"
                   and .spec.mdRaids.root.target == "/dev/md/root"
@@ -815,6 +824,7 @@
                   and .spec.pools.moveme.operation == "export"
                   and .spec.volumeGroups.importvg.operation == "import"
                   and .spec.volumeGroups.exportvg.operation == "export"
+                  and .spec.volumeGroups.activevg.operation == "activate"
                   and .spec.datasets."tank/home-review".operation == "promote"
                   and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
                   and .spec.snapshots."tank/home@before-upgrade".hold == "disk-nix-retain"

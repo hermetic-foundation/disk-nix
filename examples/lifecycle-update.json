@@ -68,6 +68,9 @@
     "vg0/scratch": {
       "operation": "create",
       "desiredSize": "10GiB"
+    },
+    "vg0/archive": {
+      "operation": "deactivate"
     }
   },
   "thinPools": {
@@ -86,6 +89,9 @@
     },
     "exportvg": {
       "operation": "export"
+    },
+    "activevg": {
+      "operation": "activate"
     }
   },
   "lvmSnapshots": {

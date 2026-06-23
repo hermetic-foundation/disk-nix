@@ -239,6 +239,9 @@ Typed lifecycle declarations are available for:
 `volumeGroups.<name>.operation = "import"` and `"export"` render reviewed
 `vgimport <name>` and `vgexport <name>` plans for moving existing VGs without
 recreating or removing them.
+`volumes`, `thinPools`, `lvmSnapshots`, and `volumeGroups` can also use
+`operation = "activate"` or `"deactivate"` to render reviewed `lvchange` or
+`vgchange` activation-state plans.
 
 Each lifecycle declaration includes:
 

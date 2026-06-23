@@ -80,6 +80,8 @@ let
       "promote"
       "import"
       "export"
+      "activate"
+      "deactivate"
       "rename"
       "rebalance"
       "rollback"
