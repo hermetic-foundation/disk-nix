@@ -151,6 +151,7 @@ disk-nix nvme
 disk-nix raid
 disk-nix loop
 disk-nix swap
+disk-nix iscsi
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -177,6 +178,7 @@ disk-nix nvme --json
 disk-nix raid --json
 disk-nix loop --json
 disk-nix swap --json
+disk-nix iscsi --json
 disk-nix mounts --json
 disk-nix network-storage --json
 disk-nix ids --json
@@ -269,6 +271,10 @@ Use these commands for:
 - `swap`: active swap devices and files, including type, priority, active
   state, size, used bytes, free bytes, utilization, and backing relationship
   when `/proc/swaps` exposes them
+- `iscsi`: iSCSI sessions, targets, and LUNs, including current and persistent
+  portals, connection state, target IQNs, LUN sizes, attached disks, session to
+  target imports, target-contained LUN counts, and LUN-to-block-device backing
+  relationships when `iscsiadm --mode session -P 3` exposes them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them

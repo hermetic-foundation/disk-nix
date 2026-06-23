@@ -166,6 +166,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered iSCSI sessions, targets, and LUNs.
+    Iscsi {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -489,6 +495,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_swap_node)?;
             } else {
                 print_swap(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Iscsi { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_iscsi_node)?;
+            } else {
+                print_iscsi(output, &graph)?;
             }
             Ok(())
         }
@@ -1724,6 +1739,30 @@ fn print_swap(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     Ok(())
 }
 
+fn print_iscsi(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<48} {:>12} {:<22} {:<14} {:>5} DETAILS",
+        "KIND", "NAME", "SIZE", "PORTAL", "STATE", "LUNS"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_iscsi_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<48} {:>12} {:<22} {:<14} {:>5} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            property_value(node, "iscsi.portal")
+                .or_else(|| property_value(node, "iscsi.persistent-portal"))
+                .unwrap_or("-"),
+            property_value(node, "iscsi.connection-state").unwrap_or("-"),
+            iscsi_lun_count(graph, node),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2359,6 +2398,16 @@ fn is_swap_node(node: &Node) -> bool {
             .any(|property| property.key.starts_with("swap."))
 }
 
+fn is_iscsi_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::IscsiSession | NodeKind::IscsiTarget | NodeKind::Lun
+    ) || node
+        .properties
+        .iter()
+        .any(|property| property.key.starts_with("iscsi."))
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
@@ -2738,6 +2787,61 @@ fn member_count(graph: &StorageGraph, node: &Node) -> usize {
         .count()
 }
 
+fn iscsi_lun_count(graph: &StorageGraph, node: &Node) -> usize {
+    match node.kind {
+        NodeKind::IscsiSession => {
+            let direct_luns = graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.from == node.id
+                        && edge.relationship == disk_nix_model::Relationship::Contains
+                        && graph.nodes.iter().any(|candidate| {
+                            candidate.id == edge.to && candidate.kind == NodeKind::Lun
+                        })
+                })
+                .count();
+            let target_luns = graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.from == node.id
+                        && edge.relationship == disk_nix_model::Relationship::ImportedFrom
+                })
+                .map(|edge| {
+                    graph
+                        .edges
+                        .iter()
+                        .filter(|candidate_edge| {
+                            candidate_edge.from == edge.to
+                                && candidate_edge.relationship
+                                    == disk_nix_model::Relationship::Contains
+                                && graph.nodes.iter().any(|candidate_node| {
+                                    candidate_node.id == candidate_edge.to
+                                        && candidate_node.kind == NodeKind::Lun
+                                })
+                        })
+                        .count()
+                })
+                .sum::<usize>();
+            direct_luns + target_luns
+        }
+        NodeKind::IscsiTarget => graph
+            .edges
+            .iter()
+            .filter(|edge| {
+                edge.from == node.id
+                    && edge.relationship == disk_nix_model::Relationship::Contains
+                    && graph
+                        .nodes
+                        .iter()
+                        .any(|candidate| candidate.id == edge.to && candidate.kind == NodeKind::Lun)
+            })
+            .count(),
+        _ => 0,
+    }
+}
+
 fn snapshot_source<'a>(graph: &'a StorageGraph, node: &Node) -> Option<&'a str> {
     graph
         .edges
@@ -2806,14 +2910,14 @@ mod tests {
 
     use super::{
         confirmation_file_accepts, is_cache_node, is_complex_filesystem_node, is_device_node,
-        is_encryption_node, is_filesystem_node, is_loop_node, is_lvm_node, is_mapping_node,
-        is_multipath_node, is_network_storage_node, is_nvme_node, is_partition_node, is_pool_node,
-        is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node, is_volume_node, mount_details,
-        print_cache, print_complex_filesystems, print_devices, print_encryption, print_filesystems,
-        print_loop, print_lvm, print_mappings, print_mounts, print_multipath,
-        print_network_storage, print_nvme, print_partitions, print_pools, print_raid,
-        print_snapshots, print_swap, print_usage, print_vdo, print_volumes, snapshot_source,
-        usage_details, usage_percent,
+        is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node, is_lvm_node,
+        is_mapping_node, is_multipath_node, is_network_storage_node, is_nvme_node,
+        is_partition_node, is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node,
+        is_volume_node, iscsi_lun_count, mount_details, print_cache, print_complex_filesystems,
+        print_devices, print_encryption, print_filesystems, print_iscsi, print_loop, print_lvm,
+        print_mappings, print_mounts, print_multipath, print_network_storage, print_nvme,
+        print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
+        print_vdo, print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2899,6 +3003,15 @@ mod tests {
             NodeKind::Lun,
             "iqn.example:0"
         )));
+        assert!(is_iscsi_node(&Node::new(
+            "iscsi-session:1",
+            NodeKind::IscsiSession,
+            "iscsi-session:1"
+        )));
+        assert!(is_iscsi_node(
+            &Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
+                .with_property("iscsi.attached-disk", "sdb")
+        ));
         assert!(is_network_storage_node(&Node::new(
             "nfs:server:/export",
             NodeKind::NfsExport,
@@ -3752,6 +3865,83 @@ mod tests {
             output
                 .contains("segment-type=thin segment-start=0 segment-size=200.00g devices=pool(0)")
         );
+    }
+
+    #[test]
+    fn iscsi_table_includes_session_target_lun_and_disk_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "iscsi-session:12",
+                NodeKind::IscsiSession,
+                "iscsi-session:12",
+            )
+            .with_property("iscsi.portal", "10.0.0.10:3260,1")
+            .with_property("iscsi.persistent-portal", "10.0.0.11:3260,1")
+            .with_property("iscsi.connection-state", "LOGGED IN"),
+        );
+        graph.add_node(Node::new(
+            "iscsi-target:iqn.2026-06.example:storage",
+            NodeKind::IscsiTarget,
+            "iqn.2026-06.example:storage",
+        ));
+        graph.add_node(
+            Node::new(
+                "iscsi-lun:iqn.2026-06.example:storage:0",
+                NodeKind::Lun,
+                "0",
+            )
+            .with_size_bytes(1_073_741_824)
+            .with_property("iscsi.attached-disk", "sdb"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
+                .with_path("/dev/sdb")
+                .with_property("iscsi.attached-disk", "sdb"),
+        );
+        graph.add_edge(Edge::new(
+            "iscsi-session:12",
+            "iscsi-target:iqn.2026-06.example:storage",
+            Relationship::ImportedFrom,
+        ));
+        graph.add_edge(Edge::new(
+            "iscsi-target:iqn.2026-06.example:storage",
+            "iscsi-lun:iqn.2026-06.example:storage:0",
+            Relationship::Contains,
+        ));
+        graph.add_edge(Edge::new(
+            "iscsi-lun:iqn.2026-06.example:storage:0",
+            "block:/dev/sdb",
+            Relationship::Backs,
+        ));
+
+        let session = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "iscsi-session:12")
+            .expect("session fixture exists");
+        let target = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::IscsiTarget)
+            .expect("target fixture exists");
+        assert_eq!(iscsi_lun_count(&graph, session), 1);
+        assert_eq!(iscsi_lun_count(&graph, target), 1);
+
+        let mut output = Vec::new();
+        print_iscsi(&mut output, &graph).expect("iscsi table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("PORTAL"));
+        assert!(output.contains("STATE"));
+        assert!(output.contains("LUNS"));
+        assert!(output.contains("iscsi-session:12"));
+        assert!(output.contains("10.0.0.10:3260,1"));
+        assert!(output.contains("LOGGED IN"));
+        assert!(output.contains("persistent-portal=10.0.0.11:3260,1"));
+        assert!(output.contains("iqn.2026-06.example:storage"));
+        assert!(output.contains("1.0 GiB"));
+        assert!(output.contains("attached-disk=sdb"));
     }
 
     #[test]

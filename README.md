@@ -75,6 +75,7 @@ disk-nix nvme
 disk-nix raid
 disk-nix loop
 disk-nix swap
+disk-nix iscsi
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -104,9 +105,10 @@ views are presentation layers over the same model. Focused JSON commands such
 as `devices --json`, `partitions --json`, `complex-filesystems --json`,
 `pools --json`, `snapshots --json`, `mappings --json`,
 `encryption --json`, `cache --json`, `lvm --json`, `vdo --json`,
-`multipath --json`, `nvme --json`, `raid --json`, `loop --json`, `swap --json`,
-`network-storage --json`, `ids --json`, and `usage --json` return subgraphs
-and preserve relationships between nodes included in the result. `usage`
+`multipath --json`, `nvme --json`, `raid --json`, `loop --json`,
+`swap --json`, `iscsi --json`, `network-storage --json`, `ids --json`, and
+`usage --json` return subgraphs and preserve relationships between nodes
+included in the result. `usage`
 summarizes size, used, free, allocated, utilization, and selected metadata
 details across graph nodes that expose capacity data.
 exFAT probing uses `tune.exfat` and `dump.exfat` to add label, GUID, serial,
