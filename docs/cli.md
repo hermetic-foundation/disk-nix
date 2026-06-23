@@ -204,14 +204,16 @@ The report includes:
 - `apply.blocked`
 - `commandSummary`
 - `commandPlan`
+- `verificationSummary`
+- `verificationPlan`
 - `messages`
 
 The default policy allows online grow and property-change intents, but blocks
 offline-required, destructive, irreversible, format, shrink, and
 potential-data-loss actions. Unsupported actions are always blocked.
 
-`--execute` is intentionally refused until the executor and post-apply
-verification layers are implemented:
+`--execute` is intentionally refused until the mutating executor is
+implemented:
 
 ```sh
 disk-nix apply --spec ./examples/lifecycle-update.json --execute
@@ -227,3 +229,9 @@ whether each command would mutate system state, and notes that still require
 manual or future executor review. Each command also reports readiness:
 `ready`, `needs-desired-size`, `needs-domain-implementation`, or `manual-only`,
 plus unresolved inputs when applicable.
+`verificationSummary` and `verificationPlan` record read-only commands and
+state checks that should run after a future mutating executor or manual apply
+finishes. These checks re-probe the relevant graph node and include
+domain-specific commands such as `findmnt`, `lvs`, `zpool status`,
+`zfs list`, `btrfs filesystem usage`, `lsblk`, or `exportfs` when the
+planned action has enough context.

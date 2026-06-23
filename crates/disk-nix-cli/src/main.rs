@@ -766,6 +766,30 @@ fn print_execution_report(
                 }
             }
         }
+        if !report.verification_plan.is_empty() {
+            writeln!(
+                output,
+                "Verification summary: {} steps, {} read-only commands, {} checks",
+                report.verification_summary.step_count,
+                report.verification_summary.command_count,
+                report.verification_summary.check_count
+            )?;
+            writeln!(output, "Verification plan:")?;
+            for step in &report.verification_plan {
+                writeln!(
+                    output,
+                    "- {:?} {:?} {}",
+                    step.risk, step.operation, step.action_id
+                )?;
+                for command in &step.commands {
+                    writeln!(output, "  read-only: {}", command.argv.join(" "))?;
+                    writeln!(output, "    {}", command.note)?;
+                }
+                for check in &step.checks {
+                    writeln!(output, "  check: {check}")?;
+                }
+            }
+        }
     } else {
         writeln!(
             output,

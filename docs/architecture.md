@@ -85,5 +85,5 @@ Dangerous or unsupported requests should return actionable alternatives instead
 of only failing.
 
 The execution boundary must remain policy-gated. Until a real command runner
-and post-apply verification exist, `disk-nix-exec` only emits dry-run,
-blocked, or executor-unavailable reports.
+exists, `disk-nix-exec` only emits dry-run, blocked, or executor-unavailable
+reports with advisory command and verification plans.

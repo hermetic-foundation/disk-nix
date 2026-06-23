@@ -111,8 +111,10 @@ destructive, potential-data-loss, and unsupported blocked actions in addition
 to the detailed blocked action list. When policy allows an action, the report
 also includes a `commandSummary` plus a `commandPlan` with non-executed command
 argv, mutation markers, manual-review flags, readiness, unresolved inputs, and
-notes. These command plans are intentionally advisory until the executor can
-compare desired state with the live probed graph and verify post-apply state.
+notes. It also includes a `verificationSummary` plus a `verificationPlan` with
+read-only post-apply commands and checks for the relevant storage domain. These
+plans are intentionally advisory until the executor can compare desired state
+with the live probed graph and run mutating commands directly.
 
 Policy fields currently supported:
 

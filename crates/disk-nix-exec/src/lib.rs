@@ -27,6 +27,8 @@ pub struct ExecutionReport {
     pub status: ExecutionStatus,
     pub command_summary: CommandPlanSummary,
     pub command_plan: Vec<ExecutionStep>,
+    pub verification_summary: VerificationPlanSummary,
+    pub verification_plan: Vec<VerificationStep>,
     pub messages: Vec<String>,
 }
 
@@ -62,6 +64,16 @@ pub struct ExecutionCommand {
     pub note: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerificationStep {
+    pub action_id: String,
+    pub operation: Operation,
+    pub risk: RiskClass,
+    pub commands: Vec<ExecutionCommand>,
+    pub checks: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CommandReadiness {
@@ -84,6 +96,14 @@ pub struct CommandPlanSummary {
     pub manual_only_count: usize,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerificationPlanSummary {
+    pub step_count: usize,
+    pub command_count: usize,
+    pub check_count: usize,
+}
+
 impl CommandPlanSummary {
     #[must_use]
     pub fn all_commands_ready(&self) -> bool {
@@ -98,6 +118,8 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
     let apply = evaluate_apply_policy(plan, policy);
     let command_plan = command_plan(plan, &apply);
     let command_summary = summarize_command_plan(&command_plan);
+    let verification_plan = verification_plan(plan, &apply);
+    let verification_summary = summarize_verification_plan(&verification_plan);
     if !apply.can_execute() {
         let blocked_count = apply.blocked_count;
         return ExecutionReport {
@@ -105,6 +127,8 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
             status: ExecutionStatus::Blocked,
             command_summary,
             command_plan,
+            verification_summary,
+            verification_plan,
             messages: vec![format!("apply policy blocked {blocked_count} action(s)")],
         };
     }
@@ -114,17 +138,22 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
             apply,
             status: ExecutionStatus::DryRun,
             command_summary,
+            verification_summary,
             messages: vec![format!(
-                "dry run only: generated {} command plan step(s), no storage commands were run",
-                command_plan.len()
+                "dry run only: generated {} command plan step(s) and {} verification step(s), no storage commands were run",
+                command_plan.len(),
+                verification_plan.len()
             )],
             command_plan,
+            verification_plan,
         },
         ExecutionMode::Execute => ExecutionReport {
             apply,
             status: ExecutionStatus::ExecutorUnavailable,
             command_summary,
             command_plan,
+            verification_summary,
+            verification_plan,
             messages: vec![
                 "executor is not implemented yet; policy validation passed but no storage commands were run"
                     .to_string(),
@@ -161,6 +190,17 @@ fn summarize_command_plan(command_plan: &[ExecutionStep]) -> CommandPlanSummary 
     summary
 }
 
+fn summarize_verification_plan(verification_plan: &[VerificationStep]) -> VerificationPlanSummary {
+    VerificationPlanSummary {
+        step_count: verification_plan.len(),
+        command_count: verification_plan
+            .iter()
+            .map(|step| step.commands.len())
+            .sum(),
+        check_count: verification_plan.iter().map(|step| step.checks.len()).sum(),
+    }
+}
+
 fn command_plan(plan: &Plan, apply: &ApplyReport) -> Vec<ExecutionStep> {
     let blocked: BTreeSet<&str> = apply
         .blocked
@@ -172,6 +212,20 @@ fn command_plan(plan: &Plan, apply: &ApplyReport) -> Vec<ExecutionStep> {
         .iter()
         .filter(|action| !blocked.contains(action.id.as_str()))
         .map(execution_step)
+        .collect()
+}
+
+fn verification_plan(plan: &Plan, apply: &ApplyReport) -> Vec<VerificationStep> {
+    let blocked: BTreeSet<&str> = apply
+        .blocked
+        .iter()
+        .map(|blocked| blocked.id.as_str())
+        .collect();
+
+    plan.actions
+        .iter()
+        .filter(|action| !blocked.contains(action.id.as_str()))
+        .map(verification_step)
         .collect()
 }
 
@@ -194,6 +248,279 @@ fn execution_step(action: &PlannedAction) -> ExecutionStep {
         requires_manual_review,
         commands,
         notes,
+    }
+}
+
+fn verification_step(action: &PlannedAction) -> VerificationStep {
+    let (commands, checks) = verification_for_action(action);
+    VerificationStep {
+        action_id: action.id.clone(),
+        operation: action.operation,
+        risk: action.risk,
+        commands,
+        checks,
+    }
+}
+
+fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<String>) {
+    let parts: Vec<&str> = action.id.split(':').collect();
+    let collection = action
+        .context
+        .collection
+        .as_deref()
+        .or_else(|| parts.first().copied());
+    let target = action
+        .context
+        .target
+        .as_deref()
+        .or(action.context.name.as_deref())
+        .or_else(|| parts.get(1).copied())
+        .unwrap_or("<target>");
+    let mountpoint = action.context.mountpoint.as_deref();
+    let fs_type = action.context.fs_type.as_deref();
+
+    match action.operation {
+        Operation::Grow
+            if collection == Some("filesystems") || action.id.starts_with("filesystem:") =>
+        {
+            let mut commands = vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify the post-apply filesystem graph node",
+            )];
+            if let Some(mountpoint) = mountpoint {
+                commands.push(command(
+                    ["findmnt", "--json", "--bytes", mountpoint],
+                    false,
+                    "confirm the mounted filesystem reports the expected capacity",
+                ));
+            }
+            match fs_type {
+                Some("btrfs") => commands.push(command(
+                    ["btrfs", "filesystem", "usage", "-b", target],
+                    false,
+                    "inspect Btrfs allocation and free space after resize",
+                )),
+                Some("zfs") => commands.push(command(
+                    ["zfs", "list", "-H", "-p", target],
+                    false,
+                    "inspect ZFS dataset or zvol size after resize",
+                )),
+                _ => {}
+            }
+            (
+                commands,
+                vec![
+                    "filesystem size is at least the desired size".to_string(),
+                    "mountpoint remains present and writable when it was mounted before apply"
+                        .to_string(),
+                    "free and used byte counters are internally consistent after re-probe"
+                        .to_string(),
+                ],
+            )
+        }
+        Operation::Grow if collection == Some("volumes") || action.id.starts_with("volumes:") => (
+            vec![
+                command(
+                    ["lvs", "--reportformat", "json", target],
+                    false,
+                    "verify LVM logical volume size and attributes",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify dependent filesystem and mapping graph state",
+                ),
+            ],
+            vec![
+                "logical volume reports the desired size".to_string(),
+                "dependent filesystem capacity reflects the grown backing volume".to_string(),
+            ],
+        ),
+        Operation::Grow
+            if collection == Some("luns")
+                || collection == Some("iscsiSessions")
+                || action.id.starts_with("luns:")
+                || action.id.starts_with("iscsiSessions:") =>
+        {
+            (
+                vec![
+                    command(
+                        ["lsblk", "--json", "--bytes", "--output-all"],
+                        false,
+                        "verify kernel block-device capacity after host rescan",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify LUN, iSCSI session, multipath, and consumers in the graph",
+                    ),
+                ],
+                vec![
+                    "every expected path reports the new capacity".to_string(),
+                    "multipath maps and dependent volumes no longer report stale sizes".to_string(),
+                    "no consumer remains on a missing or failed path".to_string(),
+                ],
+            )
+        }
+        Operation::AddDevice | Operation::ReplaceDevice | Operation::Rebalance
+            if collection == Some("pools") =>
+        {
+            (
+                vec![
+                    command(
+                        ["zpool", "status", "-P", target],
+                        false,
+                        "verify ZFS pool health and device topology",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify pool graph relationships after topology change",
+                    ),
+                ],
+                vec![
+                    "pool is online or degraded only in an explicitly accepted state".to_string(),
+                    "new, replaced, or rebalanced devices match desired topology".to_string(),
+                    "scrub, resilver, or rebalance status is reviewed to completion".to_string(),
+                ],
+            )
+        }
+        Operation::AddDevice | Operation::ReplaceDevice | Operation::Rebalance
+            if collection == Some("filesystems") =>
+        {
+            (
+                vec![
+                    command(
+                        ["btrfs", "filesystem", "usage", "-b", target],
+                        false,
+                        "verify Btrfs device allocation after topology change",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify filesystem graph relationships after topology change",
+                    ),
+                ],
+                vec![
+                    "Btrfs device list matches desired topology".to_string(),
+                    "allocation profiles remain intentional after rebalance".to_string(),
+                ],
+            )
+        }
+        Operation::AddDevice | Operation::ReplaceDevice | Operation::Rebalance => (
+            vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify storage topology after device-level operation",
+            )],
+            vec!["target topology and health match the desired state".to_string()],
+        ),
+        Operation::SetProperty if collection == Some("pools") => (
+            vec![
+                command(
+                    ["zpool", "get", "all", target],
+                    false,
+                    "verify ZFS pool properties after update",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled pool properties after re-probe",
+                ),
+            ],
+            vec!["changed property equals the desired value".to_string()],
+        ),
+        Operation::SetProperty if collection == Some("datasets") => (
+            vec![
+                command(
+                    ["zfs", "get", "all", target],
+                    false,
+                    "verify ZFS dataset properties after update",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled dataset properties after re-probe",
+                ),
+            ],
+            vec!["changed property equals the desired value".to_string()],
+        ),
+        Operation::SetProperty if collection == Some("exports") => (
+            vec![
+                command(
+                    ["exportfs", "-v"],
+                    false,
+                    "verify exported NFS paths and options",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled NFS export properties after re-probe",
+                ),
+            ],
+            vec!["exported path and options match the desired value".to_string()],
+        ),
+        Operation::SetProperty => (
+            vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify modeled storage properties after re-probe",
+            )],
+            vec!["changed property equals the desired value".to_string()],
+        ),
+        Operation::Snapshot => {
+            let snapshot = action.context.name.as_deref().unwrap_or(target);
+            let mut commands = vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify snapshot target and relationships after creation",
+            )];
+            if snapshot.contains('@') {
+                commands.push(command(
+                    ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
+                    false,
+                    "verify ZFS snapshot existence and metadata",
+                ));
+            }
+            (
+                commands,
+                vec![
+                    "snapshot exists with the expected name".to_string(),
+                    "snapshot source still resolves to the intended dataset or volume".to_string(),
+                ],
+            )
+        }
+        Operation::Create => (
+            vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify the created storage object is present in the graph",
+            )],
+            vec![
+                "created object identity, size, and relationships match desired state".to_string(),
+            ],
+        ),
+        Operation::Format
+        | Operation::Shrink
+        | Operation::RemoveDevice
+        | Operation::Rollback
+        | Operation::Destroy => (
+            vec![command(
+                ["disk-nix", "topology", "--json"],
+                false,
+                "re-probe full topology after high-risk operation",
+            )],
+            vec!["operator performs explicit high-risk post-change validation".to_string()],
+        ),
+        Operation::Grow => (
+            vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify target state after grow operation",
+            )],
+            vec!["target capacity and consumers match desired state".to_string()],
+        ),
     }
 }
 
@@ -668,6 +995,14 @@ mod tests {
         assert_eq!(report.command_summary.needs_desired_size_count, 1);
         assert!(!report.command_summary.all_commands_ready());
         assert!(report.command_plan[0].requires_manual_review);
+        assert_eq!(report.verification_summary.step_count, 1);
+        assert!(report.verification_summary.command_count >= 1);
+        assert_eq!(report.verification_plan.len(), 1);
+        assert!(
+            report.verification_plan[0].commands.iter().all(|command| {
+                !command.mutates && command.readiness == CommandReadiness::Ready
+            })
+        );
         assert!(report.command_plan[0].commands.iter().any(|command| {
             command
                 .argv
@@ -725,6 +1060,41 @@ mod tests {
         assert_eq!(report.command_summary.command_count, 0);
         assert!(report.command_summary.all_commands_ready());
         assert!(report.command_plan.is_empty());
+        assert_eq!(report.verification_summary.step_count, 0);
+        assert!(report.verification_plan.is_empty());
+    }
+
+    #[test]
+    fn filesystem_growth_reports_read_only_verification_steps() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "xfs",
+                  "resizePolicy": "grow-only"
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.verification_plan.len(), 1);
+        assert!(report.verification_plan[0].commands.iter().any(|command| {
+            command.argv == ["findmnt", "--json", "--bytes", "/"] && !command.mutates
+        }));
+        assert!(
+            report.verification_plan[0]
+                .checks
+                .iter()
+                .any(|check| check.contains("filesystem size"))
+        );
     }
 
     #[test]
@@ -797,6 +1167,25 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["zfs", "snapshot", "tank/home@before"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["zpool", "status", "-P", "tank"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "zfs",
+                        "list",
+                        "-t",
+                        "snapshot",
+                        "-H",
+                        "-p",
+                        "tank/home@before",
+                    ]
+            })
         }));
         assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
         assert!(report.command_summary.all_commands_ready());
