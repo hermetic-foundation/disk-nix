@@ -309,6 +309,8 @@ that concrete target and no longer report `needs-desired-size`.
 Cache-layer command plans include bcache sysfs operations for attaching an
 existing cache-set UUID, changing cache mode, checking dirty data, and staging
 replacement cache media without silently formatting unknown devices.
+VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
+plus online `vdo growLogical` and `vdo growPhysical` growth steps.
 NFS export command plans use explicit `client` and `options` lifecycle fields
 to render reviewed `exportfs` create and unexport commands.
 LVM logical volume command plans render concrete `lvcreate` commands when a

@@ -156,12 +156,15 @@ reviewable shell script with `--script-out`. The `--execute` flag is
 intentionally refused until a direct mutating executor exists.
 Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS format/resize
-workflows, Btrfs subvolume creation/deletion, VDO growth, LVM thin-pool growth,
-LVM snapshot create/merge/remove, loop-device mapping updates, MD RAID member
-updates, multipath map updates, ZFS dataset and zvol updates, volume and pool
-updates, network LUN growth, snapshots, and cache replacement.
+workflows, Btrfs subvolume creation/deletion, VDO create/grow/remove, LVM
+thin-pool growth, LVM snapshot create/merge/remove, loop-device mapping
+updates, MD RAID member updates, multipath map updates, ZFS dataset and zvol
+updates, volume and pool updates, network LUN growth, snapshots, and cache
+replacement.
 Cache apply plans include bcache-aware attach, cache-mode, dirty-data, and
 replacement review steps instead of a generic cache placeholder.
+VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
+online `vdo growLogical` and physical growth review steps.
 NFS export apply plans render reviewed `exportfs` create/unexport commands
 from explicit client and option declarations.
 ZFS dataset apply plans render reviewed `zfs create` commands and

@@ -597,6 +597,29 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent filesystems or mappings see the intended capacity".to_string(),
             ],
         ),
+        Operation::Create if collection == Some("vdoVolumes") => (
+            vec![
+                command(
+                    ["vdo", "status", "--name", target],
+                    false,
+                    "verify VDO volume configuration after creation",
+                ),
+                command(
+                    ["vdostats", "--human-readable", target],
+                    false,
+                    "verify VDO runtime capacity and savings counters after creation",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify VDO graph node and backing relationships after creation",
+                ),
+            ],
+            vec![
+                "VDO device exists with the intended logical size and backing device".to_string(),
+                "deduplication, compression, and write policy are reviewed before use".to_string(),
+            ],
+        ),
         Operation::Grow if collection == Some("zvols") => (
             vec![
                 command(
@@ -1014,6 +1037,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             vec![
                 "removed volume group no longer appears in LVM reports".to_string(),
                 "no logical volumes or device-mapper nodes still depend on the removed VG"
+                    .to_string(),
+            ],
+        ),
+        Operation::Destroy if collection == Some("vdoVolumes") => (
+            vec![
+                command(
+                    ["vdo", "status"],
+                    false,
+                    "verify VDO volume inventory after removal",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "re-probe topology after VDO volume removal",
+                ),
+            ],
+            vec![
+                "removed VDO volume no longer appears in VDO status output".to_string(),
+                "dependent filesystems, mappings, and mounts no longer reference the VDO device"
                     .to_string(),
             ],
         ),
@@ -1692,6 +1734,28 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("vdoVolumes") => {
+            let target = target.unwrap_or("<vdo-volume>");
+            let device = action.context.device.as_deref();
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", device.unwrap_or("<backing-device>")],
+                        false,
+                        "inspect backing device before creating the VDO volume",
+                    ),
+                    vdo_create_command(target, device, desired_size),
+                ],
+                vec![
+                    "verify the backing device has no signatures or data that must be preserved"
+                        .to_string(),
+                    "select logical size, deduplication, and compression policy before exposing the VDO device"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create if collection == Some("volumeGroups") => {
             let target = target.unwrap_or("<volume-group>");
             let device = action.context.device.as_deref();
@@ -1981,6 +2045,29 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "remove or migrate logical volumes before removing the volume group".to_string(),
                     "verify no filesystems, mappings, or services still reference the VG".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("vdoVolumes") => {
+            let target = target.unwrap_or("<vdo-volume>");
+            (
+                vec![
+                    command(
+                        ["vdo", "status", "--name", target],
+                        false,
+                        "inspect VDO volume before removal",
+                    ),
+                    command(
+                        ["vdo", "remove", "--name", target],
+                        true,
+                        "remove the reviewed VDO volume after consumers are migrated",
+                    ),
+                ],
+                vec![
+                    "migrate data away from the VDO device before removal".to_string(),
+                    "unmount filesystems and deactivate mappings that reference the VDO device"
+                        .to_string(),
                 ],
                 true,
             )
@@ -2667,6 +2754,77 @@ fn vdo_grow_logical_command(target: &str, desired_size: Option<&str>) -> Executi
     }
 }
 
+fn vdo_create_command(
+    target: &str,
+    device: Option<&str>,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
+    match (device, desired_size) {
+        (Some(device), Some(size)) => command_vec(
+            vec![
+                "vdo",
+                "create",
+                "--name",
+                target,
+                "--device",
+                device,
+                "--vdoLogicalSize",
+                size,
+            ],
+            true,
+            "create a VDO volume on the reviewed backing device",
+        ),
+        (Some(device), None) => command_vec_with_readiness(
+            vec![
+                "vdo",
+                "create",
+                "--name",
+                target,
+                "--device",
+                device,
+                "--vdoLogicalSize",
+                "<size>",
+            ],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired VDO logical size"],
+            "create a VDO volume after selecting the logical size",
+        ),
+        (None, Some(size)) => command_vec_with_readiness(
+            vec![
+                "vdo",
+                "create",
+                "--name",
+                target,
+                "--device",
+                "<backing-device>",
+                "--vdoLogicalSize",
+                size,
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing device"],
+            "create a VDO volume after selecting the backing device",
+        ),
+        (None, None) => command_with_readiness(
+            [
+                "vdo",
+                "create",
+                "--name",
+                target,
+                "--device",
+                "<backing-device>",
+                "--vdoLogicalSize",
+                "<size>",
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing device", "desired VDO logical size"],
+            "create a VDO volume after selecting backing device and logical size",
+        ),
+    }
+}
+
 fn thin_pool_extend_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
     match desired_size {
         Some(size) => command_vec(
@@ -3120,19 +3278,28 @@ mod tests {
     }
 
     #[test]
-    fn vdo_growth_reports_vdo_commands_and_verification() {
+    fn vdo_lifecycle_reports_vdo_commands_and_verification() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
               "spec": {
                 "vdoVolumes": {
+                  "new-cache": {
+                    "operation": "create",
+                    "device": "/dev/disk/by-id/vdo-backing",
+                    "desiredSize": "2TiB"
+                  },
                   "archive": {
                     "operation": "grow",
                     "desiredSize": "4TiB"
+                  },
+                  "old-cache": {
+                    "destroy": true
                   }
                 }
               },
               "apply": {
-                "allowGrow": true
+                "allowGrow": true,
+                "allowDestructive": true
               }
             }"#,
         )
@@ -3141,6 +3308,22 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "vdo",
+                        "create",
+                        "--name",
+                        "new-cache",
+                        "--device",
+                        "/dev/disk/by-id/vdo-backing",
+                        "--vdoLogicalSize",
+                        "2TiB",
+                    ]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
                 command.argv
@@ -3155,10 +3338,30 @@ mod tests {
                     && command.readiness == CommandReadiness::Ready
             })
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["vdo", "remove", "--name", "old-cache"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:new-cache:create"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["vdo", "status", "--name", "new-cache"])
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["vdostats", "--human-readable", "archive"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:old-cache:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["vdo", "status"])
         }));
     }
 

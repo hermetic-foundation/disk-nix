@@ -1555,6 +1555,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "vdoVolumes" => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: "VDO volume creation writes VDO metadata to the selected backing device"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the backing device identity and existing signatures before creation"
+                        .to_string(),
+                    "grow or migrate an existing VDO volume when preserving data is required"
+                        .to_string(),
+                    "choose logical size, compression, and deduplication policy before use"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "mdRaids" => (
             RiskClass::Destructive,
             true,
@@ -2232,9 +2248,28 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::VdoVolume,
-            operation: Operation::Grow,
-            risk: RiskClass::Online,
-            advice: None,
+            operation: Operation::Create,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "creating a VDO volume writes metadata to the backing device".to_string(),
+                alternatives: vec![
+                    "inspect existing signatures before creation".to_string(),
+                    "migrate data or grow an existing VDO volume instead of recreating it"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::VdoVolume,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "removing a VDO volume destroys the deduplicated block layer".to_string(),
+                alternatives: vec![
+                    "migrate data away from the VDO device before removal".to_string(),
+                    "deactivate dependent filesystems and mappings before vdo remove".to_string(),
+                ],
+            }),
         },
         Capability {
             node_kind: NodeKind::LvmLogicalVolume,
@@ -2784,30 +2819,61 @@ mod tests {
     }
 
     #[test]
-    fn plan_classifies_vdo_growth_as_online_with_vdo_advice() {
+    fn plan_classifies_vdo_lifecycle_with_vdo_advice() {
         let plan = plan_from_json_bytes(
             br#"{
               "vdoVolumes": {
+                "new-cache": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/vdo-backing",
+                  "desiredSize": "2TiB"
+                },
                 "archive": {
                   "operation": "grow",
                   "desiredSize": "4TiB"
+                },
+                "old-cache": {
+                  "destroy": true
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.summary.action_count, 3);
         assert_eq!(plan.summary.offline_required_count, 0);
-        assert_eq!(plan.actions[0].id, "vdovolumes:archive:grow");
-        assert_eq!(plan.actions[0].risk, RiskClass::Online);
-        assert!(plan.actions[0].advice.as_ref().is_some_and(|advice| {
+        assert_eq!(plan.summary.destructive_count, 2);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "vdovolumes:new-cache:create")
+            .expect("VDO create action exists");
+        assert_eq!(create.risk, RiskClass::Destructive);
+        assert!(create.destructive);
+        assert_eq!(
+            create.context.device.as_deref(),
+            Some("/dev/disk/by-id/vdo-backing")
+        );
+        assert_eq!(create.context.desired_size.as_deref(), Some("2TiB"));
+        let grow = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "vdovolumes:archive:grow")
+            .expect("VDO grow action exists");
+        assert_eq!(grow.risk, RiskClass::Online);
+        assert!(grow.advice.as_ref().is_some_and(|advice| {
             advice.summary.contains("logical size")
                 && advice
                     .alternatives
                     .iter()
                     .any(|alternative| alternative.contains("vdostats"))
         }));
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "vdovolumes:old-cache:destroy")
+            .expect("VDO destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::Destructive);
     }
 
     #[test]

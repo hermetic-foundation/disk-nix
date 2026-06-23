@@ -73,8 +73,10 @@ Examples:
   backing capacity, mapper state, and dependent consumers must be coordinated.
 - Btrfs subvolume creation is online, while destruction is destructive and
   suggests read-only snapshots or rename-first validation.
-- VDO growth is classified as online, with advice to distinguish logical
-  growth from physical backing growth and verify `vdostats`.
+- VDO creation and removal are destructive because they write or remove VDO
+  metadata on the backing device; VDO growth is online, with advice to
+  distinguish logical growth from physical backing growth and verify
+  `vdostats`.
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV removal is destructive because it deletes the volume
   contents.
