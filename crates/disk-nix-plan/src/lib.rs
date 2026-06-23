@@ -1169,6 +1169,28 @@ fn classify_filesystem_property_change(
         );
     }
 
+    if is_exfat_filesystem_uuid_property(fs_type, property)
+        && !is_valid_exfat_volume_serial(&property_value(value))
+    {
+        return (
+            RiskClass::Unsupported,
+            Some(Advice {
+                summary: format!(
+                    "{fs_type} filesystem volume serial {} is not a valid exFAT serial",
+                    property_value(value)
+                ),
+                alternatives: vec![
+                    "use an 8-hex-digit exFAT volume serial such as A1B2-C3D4 or A1B2C3D4"
+                        .to_string(),
+                    "update NixOS fileSystems and dependent mount references instead of changing the exFAT serial when possible"
+                        .to_string(),
+                    "leave the exFAT serial unchanged unless consumers explicitly depend on it"
+                        .to_string(),
+                ],
+            }),
+        );
+    }
+
     if is_filesystem_uuid_property_supported(fs_type, property) {
         return (
             RiskClass::OfflineRequired,
@@ -1197,9 +1219,9 @@ fn classify_filesystem_property_change(
                 "{fs_type} filesystem property {property} is not mapped to a safe command"
             ),
             alternatives: vec![
-                "use label, filesystem.label, btrfs.label, ext.label, fat.label, ntfs.label, vfat.label, or xfs.label when changing filesystem labels"
+                "use label, filesystem.label, btrfs.label, exfat.label, ext.label, fat.label, ntfs.label, vfat.label, or xfs.label when changing filesystem labels"
                     .to_string(),
-                "use uuid, filesystem.uuid, btrfs.uuid, ext.uuid, fat.uuid, ntfs.uuid, vfat.uuid, or xfs.uuid when changing supported filesystem UUIDs"
+                "use uuid, filesystem.uuid, btrfs.uuid, exfat.uuid, ext.uuid, fat.uuid, ntfs.uuid, vfat.uuid, or xfs.uuid when changing supported filesystem UUIDs"
                     .to_string(),
                 "use ZFS dataset declarations for arbitrary zfs set property updates".to_string(),
                 "apply unsupported filesystem property changes manually after reviewing filesystem-specific tooling"
@@ -1260,6 +1282,20 @@ fn is_filesystem_property_supported(fs_type: &str, property: &str) -> bool {
                 | "ntfs.serial"
                 | "ntfs.volume-serial"
         ),
+        "exfat" => matches!(
+            property,
+            "label"
+                | "exfat.label"
+                | "filesystem.label"
+                | "uuid"
+                | "exfat.uuid"
+                | "filesystem.uuid"
+                | "serial"
+                | "volumeSerial"
+                | "volume-serial"
+                | "exfat.serial"
+                | "exfat.volume-serial"
+        ),
         "xfs" => matches!(
             property,
             "label" | "xfs.label" | "filesystem.label" | "uuid" | "xfs.uuid" | "filesystem.uuid"
@@ -1298,6 +1334,17 @@ fn is_filesystem_uuid_property_supported(fs_type: &str, property: &str) -> bool 
                     | "volume-serial"
                     | "ntfs.serial"
                     | "ntfs.volume-serial"
+            )
+            | (
+                "exfat",
+                "uuid"
+                    | "exfat.uuid"
+                    | "filesystem.uuid"
+                    | "serial"
+                    | "volumeSerial"
+                    | "volume-serial"
+                    | "exfat.serial"
+                    | "exfat.volume-serial"
             )
             | ("xfs", "uuid" | "xfs.uuid" | "filesystem.uuid")
     )
@@ -1369,6 +1416,44 @@ fn ntfs_volume_serial(value: &str) -> Option<String> {
         .filter(|character| *character != '-')
         .collect();
     if normalized.len() == 16
+        && normalized
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        Some(normalized.to_ascii_uppercase())
+    } else {
+        None
+    }
+}
+
+fn is_exfat_filesystem_uuid_property(fs_type: &str, property: &str) -> bool {
+    matches!(
+        (fs_type, property),
+        (
+            "exfat",
+            "uuid"
+                | "exfat.uuid"
+                | "filesystem.uuid"
+                | "serial"
+                | "volumeSerial"
+                | "volume-serial"
+                | "exfat.serial"
+                | "exfat.volume-serial"
+        )
+    )
+}
+
+fn is_valid_exfat_volume_serial(value: &str) -> bool {
+    exfat_volume_serial(value).is_some()
+}
+
+fn exfat_volume_serial(value: &str) -> Option<String> {
+    let normalized: String = value
+        .trim()
+        .chars()
+        .filter(|character| *character != '-')
+        .collect();
+    if normalized.len() == 8
         && normalized
             .chars()
             .all(|character| character.is_ascii_hexdigit())
@@ -5423,6 +5508,68 @@ mod tests {
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("16-hex-digit NTFS volume serial"))
+        }));
+    }
+
+    #[test]
+    fn plan_accepts_exfat_label_and_volume_serial_properties() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "shared": {
+                  "mountpoint": "/mnt/shared",
+                  "device": "/dev/disk/by-label/Shared",
+                  "fsType": "exfat",
+                  "properties": {
+                    "exfat.label": "Shared",
+                    "exfat.uuid": "A1B2-C3D4",
+                    "exfat.volume-serial": "not-a-serial"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.unsupported_count, 1);
+
+        let label = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:shared:set-property:exfat.label")
+            .expect("exFAT label property action should exist");
+        assert_eq!(label.operation, Operation::SetProperty);
+        assert_eq!(label.risk, RiskClass::Safe);
+        assert_eq!(label.context.fs_type.as_deref(), Some("exfat"));
+        assert_eq!(label.context.property_value.as_deref(), Some("Shared"));
+
+        let serial = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:shared:set-property:exfat.uuid")
+            .expect("exFAT serial property action should exist");
+        assert_eq!(serial.risk, RiskClass::OfflineRequired);
+        assert!(serial.advice.as_ref().is_some_and(|advice| {
+            advice.summary.contains("UUID")
+                && advice
+                    .alternatives
+                    .iter()
+                    .any(|alternative| alternative.contains("NixOS fileSystems"))
+        }));
+
+        let invalid_serial = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:shared:set-property:exfat.volume-serial")
+            .expect("invalid exFAT serial property action should exist");
+        assert_eq!(invalid_serial.risk, RiskClass::Unsupported);
+        assert!(invalid_serial.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("8-hex-digit exFAT volume serial"))
         }));
     }
 

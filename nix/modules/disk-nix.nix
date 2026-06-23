@@ -22,6 +22,7 @@ let
     cryptsetup
     dosfstools
     e2fsprogs
+    exfatprogs
     lvm2
     mdadm
     multipath-tools
@@ -602,6 +603,7 @@ in
           cryptsetup
           dosfstools
           e2fsprogs
+          exfatprogs
           lvm2
           mdadm
           multipath-tools

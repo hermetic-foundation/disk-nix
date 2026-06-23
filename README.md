@@ -200,12 +200,14 @@ Regular Btrfs filesystem label updates render
 `btrfs filesystem label <path> <label>`. Ext filesystem label updates render
 `e2label <device> <label>` when the declaration includes an explicit backing
 device. FAT/vfat label updates render `fatlabel <device> <label>`. NTFS label
-updates render `ntfslabel <device> <label>`. XFS filesystem label updates render
-`xfs_admin -L <label> <device>`. Btrfs, ext, FAT/vfat, NTFS, and XFS filesystem
-UUID, volume-ID, or volume-serial updates render
+updates render `ntfslabel <device> <label>`. exFAT label updates render
+`exfatlabel <device> <label>`. XFS filesystem label updates render
+`xfs_admin -L <label> <device>`. Btrfs, ext, FAT/vfat, NTFS, exFAT, and XFS
+filesystem UUID, volume-ID, or volume-serial updates render
 `btrfstune -U <uuid> <device>`, `tune2fs -U <uuid> <device>`,
 `fatlabel -i <device> <volume-id>`, `ntfslabel --new-serial=<serial> <device>`,
-and `xfs_admin -U <uuid> <device>` as offline-required identity changes.
+`exfatlabel -i <device> <serial>`, and `xfs_admin -U <uuid> <device>` as
+offline-required identity changes.
 Missing backing devices keep the command non-ready until the source device is
 resolved.
 Unsupported filesystem properties are classified as unsupported so apply policy

@@ -5065,6 +5065,7 @@ fn filesystem_property_command(
         Some("ntfs" | "ntfs3") => {
             ntfs_filesystem_property_command(device, target, property, assignment)
         }
+        Some("exfat") => exfat_filesystem_property_command(device, target, property, assignment),
         Some("xfs") => xfs_filesystem_property_command(device, target, property, assignment),
         Some("zfs") => command(
             ["zfs", "set", assignment, target],
@@ -5270,6 +5271,114 @@ fn ntfs_volume_serial(value: &str) -> Option<String> {
         .filter(|character| *character != '-')
         .collect();
     if normalized.len() == 16
+        && normalized
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        Some(normalized.to_ascii_uppercase())
+    } else {
+        None
+    }
+}
+
+fn exfat_filesystem_property_command(
+    device: Option<&str>,
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            ["<exfat-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["exFAT filesystem property value"],
+            "set an exFAT filesystem property after resolving the desired value",
+        );
+    };
+    match (property, device) {
+        ("label" | "exfat.label" | "filesystem.label", Some(device)) => command(
+            ["exfatlabel", device, value],
+            true,
+            "set the exFAT filesystem label on the reviewed backing device",
+        ),
+        ("label" | "exfat.label" | "filesystem.label", None) => command_with_readiness(
+            ["exfatlabel", "<filesystem-device>", value],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "set the exFAT filesystem label after resolving the backing device",
+        ),
+        (
+            "uuid"
+            | "exfat.uuid"
+            | "filesystem.uuid"
+            | "serial"
+            | "volumeSerial"
+            | "volume-serial"
+            | "exfat.serial"
+            | "exfat.volume-serial",
+            Some(device),
+        ) => match exfat_volume_serial(value) {
+            Some(serial) => command_vec(
+                ["exfatlabel", "-i", device, serial.as_str()],
+                true,
+                "set the exFAT filesystem volume serial on the reviewed unmounted backing device",
+            ),
+            None => command_with_readiness(
+                ["<exfat-filesystem-property-tool>", target, property],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["8-hex-digit exFAT volume serial"],
+                "set an exFAT filesystem volume serial after resolving a valid value",
+            ),
+        },
+        (
+            "uuid"
+            | "exfat.uuid"
+            | "filesystem.uuid"
+            | "serial"
+            | "volumeSerial"
+            | "volume-serial"
+            | "exfat.serial"
+            | "exfat.volume-serial",
+            None,
+        ) => match exfat_volume_serial(value) {
+            Some(serial) => command_vec_with_readiness(
+                ["exfatlabel", "-i", "<filesystem-device>", serial.as_str()],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["filesystem source device"],
+                "set the exFAT filesystem volume serial after resolving the backing device",
+            ),
+            None => command_with_readiness(
+                ["<exfat-filesystem-property-tool>", target, property],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                [
+                    "filesystem source device",
+                    "8-hex-digit exFAT volume serial",
+                ],
+                "set an exFAT filesystem volume serial after resolving device and value",
+            ),
+        },
+        _ => command_with_readiness(
+            ["<exfat-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported exFAT filesystem property"],
+            "set an exFAT filesystem property after selecting a supported property mapping",
+        ),
+    }
+}
+
+fn exfat_volume_serial(value: &str) -> Option<String> {
+    let normalized: String = value
+        .trim()
+        .chars()
+        .filter(|character| *character != '-')
+        .collect();
+    if normalized.len() == 8
         && normalized
             .chars()
             .all(|character| character.is_ascii_hexdigit())
@@ -8681,6 +8790,64 @@ mod tests {
                             "--new-serial=FEDCBA9876543210",
                             "<filesystem-device>",
                         ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+    }
+
+    #[test]
+    fn exfat_filesystem_properties_use_exfatlabel() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "shared": {
+                    "mountpoint": "/mnt/shared",
+                    "device": "/dev/disk/by-label/Shared",
+                    "fsType": "exfat",
+                    "properties": {
+                      "label": "Shared",
+                      "exfat.uuid": "a1b2-c3d4"
+                    }
+                  },
+                  "missing-device": {
+                    "mountpoint": "/mnt/camera",
+                    "fsType": "exfat",
+                    "properties": {
+                      "volume-serial": "deadbeef"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:shared:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["exfatlabel", "/dev/disk/by-label/Shared", "Shared"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:shared:set-property:exfat.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["exfatlabel", "-i", "/dev/disk/by-label/Shared", "A1B2C3D4"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:missing-device:set-property:volume-serial"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["exfatlabel", "-i", "<filesystem-device>", "DEADBEEF"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["filesystem source device"]
                 })

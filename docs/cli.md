@@ -374,12 +374,14 @@ Btrfs filesystem label property updates render
 `btrfs filesystem label <path> <label>` as ready commands. Ext filesystem label
 updates render `e2label <device> <label>` when an explicit backing device is
 declared. FAT/vfat label updates render `fatlabel <device> <label>`. NTFS label
-updates render `ntfslabel <device> <label>`. XFS filesystem label updates render
-`xfs_admin -L <label> <device>`. Btrfs, ext, FAT/vfat, NTFS, and XFS UUID,
+updates render `ntfslabel <device> <label>`. exFAT label updates render
+`exfatlabel <device> <label>`. XFS filesystem label updates render
+`xfs_admin -L <label> <device>`. Btrfs, ext, FAT/vfat, NTFS, exFAT, and XFS UUID,
 volume-ID, or volume-serial updates render
 `btrfstune -U <uuid> <device>`, `tune2fs -U <uuid> <device>`,
 `fatlabel -i <device> <volume-id>`, `ntfslabel --new-serial=<serial> <device>`,
-and `xfs_admin -U <uuid> <device>` as offline-required changes. Missing devices remain marked
+`exfatlabel -i <device> <serial>`, and `xfs_admin -U <uuid> <device>` as
+offline-required changes. Missing devices remain marked
 `needs-domain-implementation`, while unsupported filesystem property keys are
 classified as unsupported before execution.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands

@@ -753,6 +753,7 @@
                 printf '%s\n' ${pkgs.lib.escapeShellArgs (map toString nixosModuleTest.config.systemd.services.disk-nix-plan.path)} > service-paths
                 grep -- 'btrfs-progs-' service-paths
                 grep -- 'dosfstools-' service-paths
+                grep -- 'exfatprogs-' service-paths
                 grep -- 'lvm2-' service-paths
                 grep -- 'ntfs3g-' service-paths
                 grep -- 'open-iscsi-' service-paths

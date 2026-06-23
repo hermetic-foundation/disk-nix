@@ -103,11 +103,12 @@ repair command plans for `resize2fs` and `e2fsck`. If only `mountpoint` is
 declared, source-device maintenance commands remain non-ready until the backing
 block device is selected explicitly. XFS label changes also use `device` for
 `xfs_admin -L`; FAT/vfat label changes use `device` for `fatlabel`; NTFS label
-changes use `device` for `ntfslabel`. Btrfs, ext, FAT/vfat, NTFS, and XFS UUID,
-volume-ID, or volume-serial changes use `device` for `btrfstune -U`,
-`tune2fs -U`, `fatlabel -i`, `ntfslabel --new-serial`, and `xfs_admin -U` and
-are offline-required. XFS and Btrfs check/repair declarations require a stable
-source device for `xfs_repair` or `btrfs check`.
+changes use `device` for `ntfslabel`; exFAT label changes use `device` for
+`exfatlabel`. Btrfs, ext, FAT/vfat, NTFS, exFAT, and XFS UUID, volume-ID, or
+volume-serial changes use `device` for `btrfstune -U`, `tune2fs -U`,
+`fatlabel -i`, `ntfslabel --new-serial`, `exfatlabel -i`, and `xfs_admin -U`
+and are offline-required. XFS and Btrfs check/repair declarations require a
+stable source device for `xfs_repair` or `btrfs check`.
 For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, `operation = "trim"`, device add/remove/replace operations, and filesystem property
 updates such as labels or balance filters while still deriving the regular
 NixOS `fileSystems` entry from the same declaration.
