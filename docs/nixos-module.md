@@ -125,7 +125,8 @@ addresses still produce reviewable plans, but their command plans stay
 non-ready instead of guessing from logical keys.
 MD RAID assemble, stop, member add, replacement, and removal declarations use
 the same explicit array target requirement as create and grow plans. Assemble
-also requires explicit reviewed member devices. Multipath replacement
+also requires explicit reviewed member devices. MD RAID rescan declarations can
+refresh array metadata inventory without assembling arrays. Multipath replacement
 declarations use the concrete map target for preflight inspection, then render
 separate path add and delete commands from the `replaceDevices` mapping.
 
@@ -453,6 +454,7 @@ Example lifecycle planning through NixOS options:
       target = "/dev/md/oldroot";
       operation = "stop";
     };
+    mdRaids.inventory.operation = "rescan";
     multipathMaps.mpatha = {
       target = "mpatha";
       addDevices = [ "/dev/sdb" ];

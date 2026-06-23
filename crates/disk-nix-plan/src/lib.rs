@@ -3250,6 +3250,23 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "mdRaids" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary:
+                    "MD RAID rescan refreshes array metadata inventory without assembling arrays"
+                        .to_string(),
+                alternatives: vec![
+                    "use assemble when existing member metadata should activate an array"
+                        .to_string(),
+                    "inspect member event counts with mdadm --examine before assembly or replacement"
+                        .to_string(),
+                    "verify /proc/mdstat and dependent consumers after devices reappear"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Start if collection == "vdoVolumes" => (
             RiskClass::OfflineRequired,
             false,
@@ -4002,7 +4019,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, and LVM PV/VG metadata"
+                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG metadata, and MD RAID metadata"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4018,6 +4035,8 @@ fn classify_operation(
                     "use multipathMaps.<name>.operation = \"rescan\" to reload reviewed path maps"
                         .to_string(),
                     "use physicalVolumes or volumeGroups operation = \"rescan\" to refresh LVM metadata"
+                        .to_string(),
+                    "use mdRaids.<name>.operation = \"rescan\" to refresh MD RAID metadata inventory"
                         .to_string(),
                 ],
             }),
@@ -5697,6 +5716,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::MdRaid,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "MD RAID rescan refreshes array and member metadata inventory"
+                    .to_string(),
+                alternatives: vec![
+                    "use assemble only after member identities and event counts are reviewed"
+                        .to_string(),
+                    "verify /proc/mdstat before starting dependent consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MdRaid,
             operation: Operation::Grow,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
@@ -6879,6 +6912,7 @@ mod tests {
                 Operation::Grow,
                 RiskClass::OfflineRequired,
             ),
+            (NodeKind::MdRaid, Operation::Rescan, RiskClass::Online),
             (NodeKind::MdRaid, Operation::Destroy, RiskClass::Destructive),
             (
                 NodeKind::MultipathDevice,
@@ -8753,6 +8787,9 @@ mod tests {
                   "target": "/dev/md/oldroot",
                   "operation": "stop"
                 },
+                "inventory": {
+                  "operation": "rescan"
+                },
                 "root": {
                   "target": "/dev/md/root",
                   "operation": "grow",
@@ -8767,7 +8804,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 6);
+        assert_eq!(plan.summary.action_count, 7);
         assert_eq!(plan.summary.destructive_count, 1);
         assert_eq!(plan.summary.offline_required_count, 4);
         let create = plan
@@ -8808,6 +8845,14 @@ mod tests {
         assert_eq!(stop.operation, Operation::Stop);
         assert_eq!(stop.risk, RiskClass::OfflineRequired);
         assert!(!stop.destructive);
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "mdraids:inventory:rescan")
+            .expect("md rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
         let grow = plan
             .actions
             .iter()

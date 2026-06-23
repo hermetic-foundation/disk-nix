@@ -142,6 +142,9 @@
       "target": "/dev/md/oldroot",
       "operation": "stop"
     },
+    "inventory": {
+      "operation": "rescan"
+    },
     "root": {
       "target": "/dev/md/root",
       "addDevices": [

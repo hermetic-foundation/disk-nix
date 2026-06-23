@@ -1393,6 +1393,49 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Rescan if collection == Some("mdRaids") => {
+            let target = md_array_target_path(action);
+            let mut commands = Vec::new();
+            if let Some(target) = target {
+                commands.push(command(
+                    ["mdadm", "--detail", target],
+                    false,
+                    "verify targeted MD RAID array state after metadata rescan",
+                ));
+            }
+            commands.extend([
+                command(
+                    ["mdadm", "--detail", "--scan"],
+                    false,
+                    "verify assembled MD RAID array inventory after metadata rescan",
+                ),
+                command(
+                    ["mdadm", "--examine", "--scan"],
+                    false,
+                    "verify member metadata inventory after MD RAID rescan",
+                ),
+                command(
+                    ["cat", "/proc/mdstat"],
+                    false,
+                    "verify MD RAID kernel status after metadata rescan",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "re-probe topology after MD RAID metadata rescan",
+                ),
+            ]);
+            (
+                commands,
+                vec![
+                    "array metadata inventory matches the reviewed member devices".to_string(),
+                    "no unexpected arrays are assembled or missing after metadata refresh"
+                        .to_string(),
+                    "dependent filesystems and mappings still reference expected MD devices"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::AddDevice
         | Operation::ReplaceDevice
         | Operation::RemoveDevice
@@ -3094,6 +3137,44 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "verify backups and redundancy before reshape".to_string(),
                     "do not grow dependent filesystems until mdadm reports the new array size"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("mdRaids") => {
+            let target = md_array_target_path(action);
+            let mut commands = Vec::new();
+            if let Some(target) = target {
+                commands.push(command(
+                    ["mdadm", "--detail", target],
+                    false,
+                    "inspect targeted MD RAID array before metadata rescan",
+                ));
+            }
+            commands.extend([
+                command(
+                    ["mdadm", "--detail", "--scan"],
+                    false,
+                    "list assembled MD RAID arrays from current metadata",
+                ),
+                command(
+                    ["mdadm", "--examine", "--scan"],
+                    false,
+                    "scan member devices for MD RAID metadata without assembling arrays",
+                ),
+                command(
+                    ["cat", "/proc/mdstat"],
+                    false,
+                    "inspect kernel MD RAID status after metadata scan",
+                ),
+            ]);
+            (
+                commands,
+                vec![
+                    "use assemble when reviewed member metadata should activate an array"
+                        .to_string(),
+                    "verify member event counts before any replacement, grow, or assemble operation"
                         .to_string(),
                 ],
                 true,
@@ -13640,6 +13721,10 @@ mod tests {
                     "target": "/dev/md/oldroot",
                     "operation": "stop"
                   },
+                  "inventory": {
+                    "target": "/dev/md/root",
+                    "operation": "rescan"
+                  },
                   "root": {
                     "target": "/dev/md/root",
                     "operation": "grow",
@@ -13682,6 +13767,17 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["mdadm", "--stop", "/dev/md/oldroot"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:inventory:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["mdadm", "--detail", "/dev/md/root"])
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["mdadm", "--examine", "--scan"])
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
@@ -13730,6 +13826,13 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["cat", "/proc/mdstat"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "mdraids:inventory:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
         }));
     }
 
@@ -13884,6 +13987,9 @@ mod tests {
                   },
                   "oldroot": {
                     "operation": "stop"
+                  },
+                  "inventory": {
+                    "operation": "rescan"
                   }
                 }
               },
@@ -13943,6 +14049,17 @@ mod tests {
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["MD array path"]
                 })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:inventory:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .all(|command| command.readiness == CommandReadiness::Ready)
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["mdadm", "--detail", "--scan"])
         }));
 
         let remove_action = PlannedAction {

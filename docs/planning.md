@@ -436,7 +436,10 @@ Swap grow, format, label, and UUID command plans require a path-shaped swap
 target. Label and UUID updates render `swaplabel --label` and
 `swaplabel --uuid`. MD RAID assemble, stop, create, grow, member add,
 replacement, and removal command plans require an explicit array path such as
-`/dev/md/root`; assemble also requires explicit reviewed member devices.
+`/dev/md/root`; assemble also requires explicit reviewed member devices. MD
+RAID rescan plans render read-only `mdadm --detail --scan`,
+`mdadm --examine --scan`, and `/proc/mdstat` inventory checks without
+assembling arrays.
 Loop-device refresh and detach command plans require `/dev/loop*` targets.
 Multipath map growth and path replacement preflight require a concrete map
 target such as `mpatha` or `/dev/mapper/mpatha`; replacement renders separate

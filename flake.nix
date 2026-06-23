@@ -389,6 +389,7 @@
                 target = "/dev/md/oldroot";
                 operation = "stop";
               };
+              mdRaids.inventory.operation = "rescan";
               multipathMaps.mpatha = {
                 target = "mpatha";
                 addDevices = [ "/dev/sdb" ];
@@ -700,7 +701,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 79
+              .summary.actionCount == 80
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -1009,6 +1010,7 @@
                   and (.spec.mdRaids.existing.devices | index("/dev/disk/by-id/existing-md-a") != null)
                   and .spec.mdRaids.oldroot.operation == "stop"
                   and .spec.mdRaids.oldroot.target == "/dev/md/oldroot"
+                  and .spec.mdRaids.inventory.operation == "rescan"
                   and .spec.multipathMaps.mpatha.target == "mpatha"
                   and (.spec.multipathMaps.mpatha.addDevices | index("/dev/sdb") != null)
                   and .spec.multipathMaps.mpatha.replaceDevices."/dev/sdc" == "/dev/sdd"
