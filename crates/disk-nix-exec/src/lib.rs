@@ -25,6 +25,7 @@ pub enum ExecutionStatus {
 pub struct ExecutionReport {
     pub apply: ApplyReport,
     pub status: ExecutionStatus,
+    pub command_summary: CommandPlanSummary,
     pub command_plan: Vec<ExecutionStep>,
     pub messages: Vec<String>,
 }
@@ -70,15 +71,39 @@ pub enum CommandReadiness {
     ManualOnly,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandPlanSummary {
+    pub step_count: usize,
+    pub command_count: usize,
+    pub mutating_count: usize,
+    pub manual_review_count: usize,
+    pub ready_count: usize,
+    pub needs_desired_size_count: usize,
+    pub needs_domain_implementation_count: usize,
+    pub manual_only_count: usize,
+}
+
+impl CommandPlanSummary {
+    #[must_use]
+    pub fn all_commands_ready(&self) -> bool {
+        self.needs_desired_size_count == 0
+            && self.needs_domain_implementation_count == 0
+            && self.manual_only_count == 0
+    }
+}
+
 #[must_use]
 pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) -> ExecutionReport {
     let apply = evaluate_apply_policy(plan, policy);
     let command_plan = command_plan(plan, &apply);
+    let command_summary = summarize_command_plan(&command_plan);
     if !apply.can_execute() {
         let blocked_count = apply.blocked_count;
         return ExecutionReport {
             apply,
             status: ExecutionStatus::Blocked,
+            command_summary,
             command_plan,
             messages: vec![format!("apply policy blocked {blocked_count} action(s)")],
         };
@@ -88,6 +113,7 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
         ExecutionMode::DryRun => ExecutionReport {
             apply,
             status: ExecutionStatus::DryRun,
+            command_summary,
             messages: vec![format!(
                 "dry run only: generated {} command plan step(s), no storage commands were run",
                 command_plan.len()
@@ -97,6 +123,7 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
         ExecutionMode::Execute => ExecutionReport {
             apply,
             status: ExecutionStatus::ExecutorUnavailable,
+            command_summary,
             command_plan,
             messages: vec![
                 "executor is not implemented yet; policy validation passed but no storage commands were run"
@@ -104,6 +131,34 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
             ],
         },
     }
+}
+
+fn summarize_command_plan(command_plan: &[ExecutionStep]) -> CommandPlanSummary {
+    let mut summary = CommandPlanSummary {
+        step_count: command_plan.len(),
+        manual_review_count: command_plan
+            .iter()
+            .filter(|step| step.requires_manual_review)
+            .count(),
+        ..CommandPlanSummary::default()
+    };
+
+    for command in command_plan.iter().flat_map(|step| &step.commands) {
+        summary.command_count += 1;
+        if command.mutates {
+            summary.mutating_count += 1;
+        }
+        match command.readiness {
+            CommandReadiness::Ready => summary.ready_count += 1,
+            CommandReadiness::NeedsDesiredSize => summary.needs_desired_size_count += 1,
+            CommandReadiness::NeedsDomainImplementation => {
+                summary.needs_domain_implementation_count += 1;
+            }
+            CommandReadiness::ManualOnly => summary.manual_only_count += 1,
+        }
+    }
+
+    summary
 }
 
 fn command_plan(plan: &Plan, apply: &ApplyReport) -> Vec<ExecutionStep> {
@@ -607,6 +662,11 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(report.can_apply());
         assert_eq!(report.command_plan.len(), 1);
+        assert_eq!(report.command_summary.step_count, 1);
+        assert_eq!(report.command_summary.command_count, 2);
+        assert_eq!(report.command_summary.ready_count, 1);
+        assert_eq!(report.command_summary.needs_desired_size_count, 1);
+        assert!(!report.command_summary.all_commands_ready());
         assert!(report.command_plan[0].requires_manual_review);
         assert!(report.command_plan[0].commands.iter().any(|command| {
             command
@@ -662,6 +722,8 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::Blocked);
         assert_eq!(report.apply.blocked_count, 1);
+        assert_eq!(report.command_summary.command_count, 0);
+        assert!(report.command_summary.all_commands_ready());
         assert!(report.command_plan.is_empty());
     }
 
@@ -736,5 +798,7 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["zfs", "snapshot", "tank/home@before"])
         }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
     }
 }

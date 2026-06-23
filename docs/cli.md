@@ -202,6 +202,7 @@ The report includes:
 - `apply.blockedCount`
 - `apply.blockedSummary`
 - `apply.blocked`
+- `commandSummary`
 - `commandPlan`
 - `messages`
 
@@ -218,6 +219,9 @@ disk-nix apply --spec ./examples/lifecycle-update.json --execute
 
 Automation should treat a blocked apply report as a hard stop and surface the
 reported advice before requesting a more permissive policy.
+`commandSummary` reports total steps, total commands, mutating commands,
+manual-review steps, and readiness counts so callers can gate automation before
+iterating detailed commands.
 When policy allows an action, `commandPlan` records the non-executed commands,
 whether each command would mutate system state, and notes that still require
 manual or future executor review. Each command also reports readiness:

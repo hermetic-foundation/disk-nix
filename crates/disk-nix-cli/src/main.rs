@@ -722,6 +722,18 @@ fn print_execution_report(
             writeln!(output, "{message}")?;
         }
         if !report.command_plan.is_empty() {
+            writeln!(
+                output,
+                "Command summary: {} steps, {} commands, {} mutating, {} manual review, {} ready, {} need size, {} need implementation, {} manual only",
+                report.command_summary.step_count,
+                report.command_summary.command_count,
+                report.command_summary.mutating_count,
+                report.command_summary.manual_review_count,
+                report.command_summary.ready_count,
+                report.command_summary.needs_desired_size_count,
+                report.command_summary.needs_domain_implementation_count,
+                report.command_summary.manual_only_count
+            )?;
             writeln!(output, "Command plan:")?;
             for step in &report.command_plan {
                 writeln!(
