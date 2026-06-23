@@ -1373,7 +1373,11 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
-        Operation::Create | Operation::SetProperty | Operation::Destroy
+        Operation::Create
+        | Operation::AddKey
+        | Operation::SetProperty
+        | Operation::Destroy
+        | Operation::RemoveKey
             if collection == Some("luksKeyslots") =>
         {
             let device = luks_keyslot_device(action);
@@ -1394,7 +1398,11 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
-        Operation::Create | Operation::SetProperty | Operation::Destroy
+        Operation::Create
+        | Operation::ImportToken
+        | Operation::SetProperty
+        | Operation::Destroy
+        | Operation::RemoveToken
             if collection == Some("luksTokens") =>
         {
             let device = luks_token_device(action);
@@ -2134,6 +2142,10 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Unmount
         | Operation::Remount
         | Operation::Rename
+        | Operation::AddKey
+        | Operation::RemoveKey
+        | Operation::ImportToken
+        | Operation::RemoveToken
         | Operation::RemoveDevice
         | Operation::Repair
         | Operation::Rollback
@@ -3776,7 +3788,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Create if collection == Some("luksKeyslots") => {
+        Operation::Create | Operation::AddKey if collection == Some("luksKeyslots") => {
             let device = luks_keyslot_device(action);
             let key_slot = luks_keyslot_id(action);
             let new_key_file = luks_new_key_file(action);
@@ -3792,7 +3804,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Create if collection == Some("luksTokens") => {
+        Operation::Create | Operation::ImportToken if collection == Some("luksTokens") => {
             let device = luks_token_device(action);
             let token_id = luks_token_id(action);
             let token_file = luks_token_file(action);
@@ -3832,7 +3844,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Destroy if collection == Some("luksKeyslots") => {
+        Operation::Destroy | Operation::RemoveKey if collection == Some("luksKeyslots") => {
             let device = luks_keyslot_device(action);
             let key_slot = luks_keyslot_id(action);
             (
@@ -3849,7 +3861,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Destroy if collection == Some("luksTokens") => {
+        Operation::Destroy | Operation::RemoveToken if collection == Some("luksTokens") => {
             let device = luks_token_device(action);
             let token_id = luks_token_id(action);
             (
@@ -5016,6 +5028,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Unmount
         | Operation::Remount
         | Operation::Rename
+        | Operation::AddKey
+        | Operation::RemoveKey
+        | Operation::ImportToken
+        | Operation::RemoveToken
         | Operation::RemoveDevice
         | Operation::Rollback
         | Operation::Destroy => (
@@ -11601,7 +11617,7 @@ mod tests {
               "spec": {
                 "luksKeyslots": {
                   "cryptroot:1": {
-                    "operation": "create",
+                    "operation": "add-key",
                     "device": "/dev/disk/by-id/root-luks",
                     "metadata": {
                       "keySlot": "1",
@@ -11631,7 +11647,7 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "lukskeyslots:cryptroot:1:create"
+            step.action_id == "lukskeyslots:cryptroot:1:add-key"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
@@ -11663,7 +11679,7 @@ mod tests {
                 })
         }));
         assert!(report.verification_plan.iter().any(|step| {
-            step.action_id == "lukskeyslots:cryptroot:1:create"
+            step.action_id == "lukskeyslots:cryptroot:1:add-key"
                 && step.commands.iter().any(|command| {
                     command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
                 })
@@ -11677,7 +11693,7 @@ mod tests {
               "spec": {
                 "luksKeyslots": {
                   "root-add": {
-                    "operation": "create"
+                    "operation": "add-key"
                   }
                 }
               },
@@ -11693,7 +11709,7 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(!report.command_summary.all_commands_ready());
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "lukskeyslots:root-add:create"
+            step.action_id == "lukskeyslots:root-add:add-key"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
@@ -11748,7 +11764,7 @@ mod tests {
               "spec": {
                 "luksTokens": {
                   "cryptroot:0": {
-                    "operation": "create",
+                    "operation": "import-token",
                     "device": "/dev/disk/by-id/root-luks",
                     "metadata": {
                       "tokenId": "0",
@@ -11777,7 +11793,7 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "lukstokens:cryptroot:0:create"
+            step.action_id == "lukstokens:cryptroot:0:import-token"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
@@ -11811,7 +11827,7 @@ mod tests {
                 })
         }));
         assert!(report.verification_plan.iter().any(|step| {
-            step.action_id == "lukstokens:cryptroot:0:create"
+            step.action_id == "lukstokens:cryptroot:0:import-token"
                 && step.commands.iter().any(|command| {
                     command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
                 })
@@ -11825,7 +11841,7 @@ mod tests {
               "spec": {
                 "luksTokens": {
                   "root-token": {
-                    "operation": "create"
+                    "operation": "import-token"
                   }
                 }
               },
@@ -11841,7 +11857,7 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(!report.command_summary.all_commands_ready());
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "lukstokens:root-token:create"
+            step.action_id == "lukstokens:root-token:import-token"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [

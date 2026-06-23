@@ -296,10 +296,11 @@ Lifecycle objects may use:
 
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
   `repair`, `scrub`, `trim`, `replace-device`, `add-device`, `remove-device`,
-  `set-property`, `snapshot`, `promote`, `import`, `export`, `activate`,
-  `deactivate`, `assemble`, `start`, `stop`, `login`, `logout`, `open`,
-  `close`, `mount`, `unmount`, `remount`, `rename`, `rebalance`, `rollback`,
-  or `destroy`
+  `add-key`, `remove-key`, `import-token`, `remove-token`, `set-property`,
+  `snapshot`, `promote`, `import`, `export`, `unexport`, `attach`, `detach`,
+  `activate`, `deactivate`, `assemble`, `start`, `stop`, `login`, `logout`,
+  `open`, `close`, `mount`, `unmount`, `remount`, `rename`, `rebalance`,
+  `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
 - `devices`: member devices for arrays, pools, or explicit LUN paths that
   should receive per-path host rescans
@@ -393,13 +394,15 @@ LVM physical volume command plans use `pvcreate`, `pvresize`, and `pvremove`
 for `physicalVolumes` lifecycle declarations. Executable plans require a
 concrete path-shaped target or `device`, and PV removal advice recommends
 `pvmove` plus `vgreduce` before `pvremove`.
-LUKS keyslot and token command plans use `cryptsetup luksAddKey`,
-`luksChangeKey`, `luksKillSlot`, `cryptsetup token import`, and
-`cryptsetup token remove` for `luksKeyslots` and `luksTokens` lifecycle
-declarations. Executable keyslot add/change plans require a LUKS backing device
-and replacement key file; token imports require a token JSON file. Removal
-requires both the device and keyslot number or token id, and remains blocked by
-the potential-data-loss policy.
+LUKS keyslot and token command plans use explicit `add-key`, `remove-key`,
+`import-token`, and `remove-token` lifecycle declarations for
+`cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and
+`cryptsetup token remove`. Legacy preserved `create` and `destroy` map to the
+same access-material command plans. `luksChangeKey` is used for key-file
+property updates. Executable keyslot add/change plans require a LUKS backing
+device and replacement key file; token imports require a token JSON file.
+Removal requires both the device and keyslot number or token id, and remains
+blocked by the potential-data-loss policy.
 LVM cache command plans use `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` for `lvmCaches` lifecycle
 declarations. Executable attach plans require an origin `vg/lv` target and a

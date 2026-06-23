@@ -75,6 +75,10 @@ let
       "replace-device"
       "add-device"
       "remove-device"
+      "add-key"
+      "remove-key"
+      "import-token"
+      "remove-token"
       "set-property"
       "snapshot"
       "promote"
@@ -629,6 +633,8 @@ let
       "unmount"
       "unexport"
       "detach"
+      "remove-key"
+      "remove-token"
     ];
   activeLifecycleAttrs = attrs: lib.filterAttrs (_: object: !isDestroyLifecycle object) attrs;
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;

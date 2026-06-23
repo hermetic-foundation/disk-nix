@@ -412,16 +412,26 @@ Example lifecycle planning through NixOS options:
       properties."lvm.cache-mode" = "writethrough";
     };
     luksKeyslots."cryptroot:1" = {
-      operation = "create";
+      operation = "add-key";
       device = "/dev/disk/by-id/root-luks";
       keySlot = "1";
       newKeyFile = "/run/keys/root-new";
     };
+    luksKeyslots."cryptroot:2" = {
+      operation = "remove-key";
+      device = "/dev/disk/by-id/root-luks";
+      keySlot = "2";
+    };
     luksTokens."cryptroot:0" = {
-      operation = "create";
+      operation = "import-token";
       device = "/dev/disk/by-id/root-luks";
       tokenId = "0";
       tokenFile = "/run/keys/root-token.json";
+    };
+    luksTokens."cryptroot:1" = {
+      operation = "remove-token";
+      device = "/dev/disk/by-id/root-luks";
+      tokenId = "1";
     };
     loopDevices."/dev/loop7" = {
       operation = "create";

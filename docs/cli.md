@@ -452,12 +452,15 @@ remove commands also require the canonical `vg/lv` target form.
 LVM physical volume command plans render `pvcreate`, `pvresize`, and
 policy-gated `pvremove` for `physicalVolumes` lifecycle declarations.
 Executable plans require a concrete block-device path such as `/dev/disk/by-id/*`.
-LUKS keyslot and token command plans render `cryptsetup luksAddKey`,
-`luksChangeKey`, policy-blocked `luksKillSlot`, `cryptsetup token import`, and
-policy-blocked `cryptsetup token remove` commands for `luksKeyslots` and
-`luksTokens` lifecycle declarations. Executable keyslot add/change plans require
-a LUKS backing device and new key file; token imports require a token JSON file;
-removal also requires a keyslot number or token id.
+LUKS keyslot and token command plans render explicit `operation = "add-key"`,
+`operation = "remove-key"`, `operation = "import-token"`, and
+`operation = "remove-token"` declarations as `cryptsetup luksAddKey`,
+policy-blocked `luksKillSlot`, `cryptsetup token import`, and policy-blocked
+`cryptsetup token remove` commands. Legacy preserved `create`/`destroy`
+declarations still map to the same access-material command plans.
+`luksChangeKey` is used for key-file property updates. Executable keyslot
+add/change plans require a LUKS backing device and new key file; token imports
+require a token JSON file; removal also requires a keyslot number or token id.
 LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
 and policy-gated `lvremove` commands for `thinPools` lifecycle declarations,
 with separate unresolved-input markers for target form and size. Thin-pool grow

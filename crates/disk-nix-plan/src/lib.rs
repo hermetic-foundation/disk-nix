@@ -45,6 +45,10 @@ pub enum Operation {
     ReplaceDevice,
     AddDevice,
     RemoveDevice,
+    AddKey,
+    RemoveKey,
+    ImportToken,
+    RemoveToken,
     SetProperty,
     Snapshot,
     Clone,
@@ -2046,8 +2050,15 @@ fn add_requested_operation(
         return;
     };
     let (risk, destructive, advice) = classify_operation(collection, operation, object);
+    let operation_name = match operation {
+        Operation::AddKey
+        | Operation::RemoveKey
+        | Operation::ImportToken
+        | Operation::RemoveToken => operation_id(operation).to_string(),
+        _ => format!("{operation:?}").to_ascii_lowercase(),
+    };
     actions.push(PlannedAction {
-        id: format!("{collection}:{name}:{operation:?}").to_ascii_lowercase(),
+        id: format!("{collection}:{name}:{operation_name}").to_ascii_lowercase(),
         description: format!(
             "plan {} operation for {collection} {name}",
             operation_label(operation)
@@ -2780,6 +2791,11 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "replace-device" | "replaceDevice" => Some(Operation::ReplaceDevice),
         "add-device" | "addDevice" => Some(Operation::AddDevice),
         "remove-device" | "removeDevice" => Some(Operation::RemoveDevice),
+        "add-key" | "addKey" | "add-keyslot" | "addKeyslot" => Some(Operation::AddKey),
+        "remove-key" | "removeKey" | "remove-keyslot" | "removeKeyslot" | "kill-slot"
+        | "killSlot" => Some(Operation::RemoveKey),
+        "import-token" | "importToken" => Some(Operation::ImportToken),
+        "remove-token" | "removeToken" => Some(Operation::RemoveToken),
         "set-property" | "setProperty" => Some(Operation::SetProperty),
         "snapshot" => Some(Operation::Snapshot),
         "clone" => Some(Operation::Clone),
@@ -2822,6 +2838,10 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::ReplaceDevice => "replace-device",
         Operation::AddDevice => "add-device",
         Operation::RemoveDevice => "remove-device",
+        Operation::AddKey => "add-key",
+        Operation::RemoveKey => "remove-key",
+        Operation::ImportToken => "import-token",
+        Operation::RemoveToken => "remove-token",
         Operation::SetProperty => "set-property",
         Operation::Snapshot => "snapshot",
         Operation::Clone => "clone",
@@ -3043,7 +3063,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Create if collection == "luksKeyslots" => (
+        Operation::Create | Operation::AddKey if collection == "luksKeyslots" => (
             RiskClass::OfflineRequired,
             false,
             Some(Advice {
@@ -3057,7 +3077,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Create if collection == "luksTokens" => (
+        Operation::Create | Operation::ImportToken if collection == "luksTokens" => (
             RiskClass::OfflineRequired,
             false,
             Some(Advice {
@@ -3704,7 +3724,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Destroy if collection == "luksKeyslots" => (
+        Operation::Destroy | Operation::RemoveKey if collection == "luksKeyslots" => (
             RiskClass::PotentialDataLoss,
             false,
             Some(Advice {
@@ -3717,7 +3737,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Destroy if collection == "luksTokens" => (
+        Operation::Destroy | Operation::RemoveToken if collection == "luksTokens" => (
             RiskClass::PotentialDataLoss,
             false,
             Some(Advice {
@@ -3898,6 +3918,41 @@ fn classify_operation(
                     "use luks.devices.<name>.operation for encrypted mapper open or close"
                         .to_string(),
                     "use activate, deactivate, import, export, mount, or remount for other storage domains"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::AddKey | Operation::RemoveKey => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} operations are currently only supported for luksKeyslots",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "use luksKeyslots.<name>.operation for LUKS keyslot add or remove lifecycle"
+                        .to_string(),
+                    "use luks.devices.<name>.operation for encrypted mapper open or close"
+                        .to_string(),
+                    "use set-property for LUKS label, UUID, or key rotation updates".to_string(),
+                ],
+            }),
+        ),
+        Operation::ImportToken | Operation::RemoveToken => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} operations are currently only supported for luksTokens",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "use luksTokens.<name>.operation for LUKS token import or remove lifecycle"
+                        .to_string(),
+                    "verify a fallback keyslot or recovery passphrase before changing tokens"
+                        .to_string(),
+                    "use luksKeyslots declarations when changing passphrase/key-file access"
                         .to_string(),
                 ],
             }),
@@ -4155,6 +4210,10 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::ReplaceDevice => "replace device",
         Operation::AddDevice => "add device",
         Operation::RemoveDevice => "remove device",
+        Operation::AddKey => "add key",
+        Operation::RemoveKey => "remove key",
+        Operation::ImportToken => "import token",
+        Operation::RemoveToken => "remove token",
         Operation::SetProperty => "set property",
         Operation::Snapshot => "snapshot",
         Operation::Clone => "clone",
@@ -4316,6 +4375,30 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::LuksContainer,
+            operation: Operation::AddKey,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LUKS keyslot enrollment changes encrypted-container access".to_string(),
+                alternatives: vec![
+                    "back up the LUKS header before adding key material".to_string(),
+                    "test the new keyslot before removing any old recovery key".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
+            operation: Operation::ImportToken,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LUKS token import changes automated unlock access".to_string(),
+                alternatives: vec![
+                    "back up the LUKS header before importing token metadata".to_string(),
+                    "test the token unlock path before removing any older token".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
             operation: Operation::SetProperty,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
@@ -4339,6 +4422,30 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "verify another key or token unlocks the device first".to_string(),
                     "take a LUKS header backup before removing access material".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
+            operation: Operation::RemoveKey,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "LUKS keyslot removal can lock out encrypted data".to_string(),
+                alternatives: vec![
+                    "verify another key or token unlocks the device first".to_string(),
+                    "take a LUKS header backup before removing the keyslot".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
+            operation: Operation::RemoveToken,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "LUKS token removal can lock out automated unlock".to_string(),
+                alternatives: vec![
+                    "verify another token, keyslot, or passphrase unlocks first".to_string(),
+                    "take a LUKS header backup before removing the token".to_string(),
                 ],
             }),
         },
@@ -6199,6 +6306,20 @@ mod tests {
                     && capability.operation == Operation::Create
             })
             .expect("LUKS keyslot create capability should exist");
+        let add_key = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LuksContainer
+                    && capability.operation == Operation::AddKey
+            })
+            .expect("LUKS add-key capability should exist");
+        let import_token = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LuksContainer
+                    && capability.operation == Operation::ImportToken
+            })
+            .expect("LUKS import-token capability should exist");
         let change = capabilities
             .iter()
             .find(|capability| {
@@ -6213,10 +6334,28 @@ mod tests {
                     && capability.operation == Operation::Destroy
             })
             .expect("LUKS keyslot destroy capability should exist");
+        let remove_key = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LuksContainer
+                    && capability.operation == Operation::RemoveKey
+            })
+            .expect("LUKS remove-key capability should exist");
+        let remove_token = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LuksContainer
+                    && capability.operation == Operation::RemoveToken
+            })
+            .expect("LUKS remove-token capability should exist");
 
         assert_eq!(create.risk, RiskClass::OfflineRequired);
+        assert_eq!(add_key.risk, RiskClass::OfflineRequired);
+        assert_eq!(import_token.risk, RiskClass::OfflineRequired);
         assert_eq!(change.risk, RiskClass::OfflineRequired);
         assert_eq!(destroy.risk, RiskClass::PotentialDataLoss);
+        assert_eq!(remove_key.risk, RiskClass::PotentialDataLoss);
+        assert_eq!(remove_token.risk, RiskClass::PotentialDataLoss);
     }
 
     #[test]
@@ -7777,7 +7916,7 @@ mod tests {
             br#"{
               "luksKeyslots": {
                 "cryptroot:1": {
-                  "operation": "create",
+                  "operation": "add-key",
                   "device": "/dev/disk/by-id/root-luks",
                   "metadata": {
                     "keySlot": "1",
@@ -7785,7 +7924,7 @@ mod tests {
                   }
                 },
                 "cryptroot:2": {
-                  "destroy": true,
+                  "operation": "remove-key",
                   "device": "/dev/disk/by-id/root-luks",
                   "metadata": {
                     "keySlot": "2"
@@ -7812,8 +7951,8 @@ mod tests {
         let create = plan
             .actions
             .iter()
-            .find(|action| action.id == "lukskeyslots:cryptroot:1:create")
-            .expect("LUKS keyslot create action exists");
+            .find(|action| action.id == "lukskeyslots:cryptroot:1:add-key")
+            .expect("LUKS keyslot add-key action exists");
         assert_eq!(create.risk, RiskClass::OfflineRequired);
         assert_eq!(
             create.context.device.as_deref(),
@@ -7828,8 +7967,8 @@ mod tests {
         let destroy = plan
             .actions
             .iter()
-            .find(|action| action.id == "lukskeyslots:cryptroot:2:destroy")
-            .expect("LUKS keyslot destroy action exists");
+            .find(|action| action.id == "lukskeyslots:cryptroot:2:remove-key")
+            .expect("LUKS keyslot remove-key action exists");
         assert_eq!(destroy.risk, RiskClass::PotentialDataLoss);
         assert!(!destroy.destructive);
 
@@ -7856,7 +7995,7 @@ mod tests {
             br#"{
               "luksTokens": {
                 "cryptroot:0": {
-                  "operation": "create",
+                  "operation": "import-token",
                   "device": "/dev/disk/by-id/root-luks",
                   "metadata": {
                     "tokenId": "0",
@@ -7864,7 +8003,7 @@ mod tests {
                   }
                 },
                 "cryptroot:1": {
-                  "destroy": true,
+                  "operation": "remove-token",
                   "device": "/dev/disk/by-id/root-luks",
                   "metadata": {
                     "tokenId": "1"
@@ -7890,8 +8029,8 @@ mod tests {
         let create = plan
             .actions
             .iter()
-            .find(|action| action.id == "lukstokens:cryptroot:0:create")
-            .expect("LUKS token create action exists");
+            .find(|action| action.id == "lukstokens:cryptroot:0:import-token")
+            .expect("LUKS token import-token action exists");
         assert_eq!(create.risk, RiskClass::OfflineRequired);
         assert_eq!(
             create.context.device.as_deref(),
@@ -7906,8 +8045,8 @@ mod tests {
         let destroy = plan
             .actions
             .iter()
-            .find(|action| action.id == "lukstokens:cryptroot:1:destroy")
-            .expect("LUKS token destroy action exists");
+            .find(|action| action.id == "lukstokens:cryptroot:1:remove-token")
+            .expect("LUKS token remove-token action exists");
         assert_eq!(destroy.risk, RiskClass::PotentialDataLoss);
         assert!(!destroy.destructive);
 

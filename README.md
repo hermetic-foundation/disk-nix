@@ -183,8 +183,9 @@ only policy-allowed plans where every command is ready, records each command
 result, stops on the first failure, and runs verification commands only after
 the planned command phase succeeds.
 Planner coverage includes filesystem resize intent, disk and partition
-lifecycle declarations, swap signature/resize workflows, LUKS format/resize/close/keyslot/token
-workflows, Btrfs subvolume creation/deletion, VDO create/grow/remove, LVM
+lifecycle declarations, swap signature/resize workflows, LUKS
+format/resize/open/close/keyslot/token workflows, Btrfs subvolume
+creation/deletion, VDO create/grow/remove, LVM
 physical-volume create/grow/remove, logical-volume growth/removal,
 LVM volume-group extension/device removal, LVM thin-pool create/grow/remove,
 LVM snapshot create/merge/remove, LVM cache attach/detach/property updates,
@@ -262,10 +263,13 @@ encrypted data. LUKS header label and subsystem property updates render
 `cryptsetup config <device> --label` or `--subsystem`, and UUID updates render
 `cryptsetup luksUUID <device> --uuid`; missing backing devices stay non-ready
 until the LUKS header device is explicit.
-LUKS keyslot and token plans render `cryptsetup luksAddKey`, `luksChangeKey`,
-`luksKillSlot`, `cryptsetup token import`, and `cryptsetup token remove` with
-header verification. Keyslot and token removal are potential data loss because
-they can remove the last working unlock path.
+LUKS keyslot and token plans use explicit `add-key`, `remove-key`,
+`import-token`, and `remove-token` lifecycle declarations to render
+`cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and
+`cryptsetup token remove` with header verification. Key-file property updates
+render `luksChangeKey`. Legacy `create` and `destroy` declarations still map to
+the same access-material command plans. Keyslot and token removal are potential
+data loss because they can remove the last working unlock path.
 Disk initialization plans render destructive-policy-gated `parted mklabel` and
 partition table reread steps after disk identity inspection.
 Partition create plans render reviewed `parted mkpart`, `partprobe`, and

@@ -269,16 +269,26 @@
                 operation = "grow";
               };
               luksKeyslots."cryptroot:1" = {
-                operation = "create";
+                operation = "add-key";
                 device = "/dev/disk/by-id/root-luks";
                 keySlot = "1";
                 newKeyFile = "/run/keys/root-new";
               };
+              luksKeyslots."cryptroot:2" = {
+                operation = "remove-key";
+                device = "/dev/disk/by-id/root-luks";
+                keySlot = "2";
+              };
               luksTokens."cryptroot:0" = {
-                operation = "create";
+                operation = "import-token";
                 device = "/dev/disk/by-id/root-luks";
                 tokenId = "0";
                 tokenFile = "/run/keys/root-token.json";
+              };
+              luksTokens."cryptroot:1" = {
+                operation = "remove-token";
+                device = "/dev/disk/by-id/root-luks";
+                tokenId = "1";
               };
               btrfsSubvolumes."/mnt/persist/@home" = {
                 operation = "create";
@@ -544,6 +554,10 @@
               and (."$defs".operation.enum | index("scrub") != null)
               and (."$defs".operation.enum | index("trim") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
+              and (."$defs".operation.enum | index("add-key") != null)
+              and (."$defs".operation.enum | index("remove-key") != null)
+              and (."$defs".operation.enum | index("import-token") != null)
+              and (."$defs".operation.enum | index("remove-token") != null)
               and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
               and (."$defs".specBody.properties.nfs["$ref"] == "#/$defs/nfsSpec")
               and (."$defs".specBody.properties.iscsi["$ref"] == "#/$defs/iscsiSpec")
@@ -651,10 +665,10 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 68
+              .summary.actionCount == 70
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
-              and .summary.potentialDataLossCount == 2
+              and .summary.potentialDataLossCount == 4
               and .summary.unsupportedCount == 0
               and (.actions | any(.id == "filesystems:home-check:check" and .risk == "offline-required"))
               and (.actions | any(.id == "filesystems:data-scrub:scrub" and .risk == "online"))
@@ -671,8 +685,10 @@
               and (.actions | any(.id == "vdoVolumes:archive:set-property:compression" and .risk == "safe"))
               and (.actions | any(.id == "vdoVolumes:archive:set-property:deduplication" and .risk == "safe"))
               and (.actions | any(.id == "physicalvolumes:/dev/disk/by-id/nvme-pv-grow:grow" and .risk == "online"))
-              and (.actions | any(.id == "lukskeyslots:cryptroot:1:create" and .risk == "offline-required"))
-              and (.actions | any(.id == "lukstokens:cryptroot:0:create" and .risk == "offline-required"))
+              and (.actions | any(.id == "lukskeyslots:cryptroot:1:add-key" and .risk == "offline-required"))
+              and (.actions | any(.id == "lukskeyslots:cryptroot:2:remove-key" and .risk == "potential-data-loss"))
+              and (.actions | any(.id == "lukstokens:cryptroot:0:import-token" and .risk == "offline-required"))
+              and (.actions | any(.id == "lukstokens:cryptroot:1:remove-token" and .risk == "potential-data-loss"))
               and (.actions | any(.id == "iscsisessions:iqn.2026-06.example:storage.login:login" and .risk == "online"))
               and (.actions | any(.id == "iscsisessions:iqn.2026-06.example:storage.logout:logout" and .risk == "offline-required"))
               and (.actions | any(.id == "luns:iqn.2026-06.example:storage/new:2:attach" and .risk == "online"))
@@ -743,10 +759,10 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 33
+              and .apply.blockedCount == 35
               and .apply.blockedSummary.offlineRequiredCount == 28
               and .apply.blockedSummary.destructiveCount == 3
-              and .apply.blockedSummary.potentialDataLossCount == 2
+              and .apply.blockedSummary.potentialDataLossCount == 4
               and .apply.blockedSummary.unsupportedCount == 0
               and (.apply.blocked | any(.id == "datasets:tank/legacy:rename"))
               and (.apply.blocked | any(.id == "datasets:tank/home-review:promote"))
@@ -764,20 +780,22 @@
               and (.apply.blocked | any(.id == "vdovolumes:coldarchive:stop"))
               and (.apply.blocked | any(.id == "luks.devices:cryptarchive:open"))
               and (.apply.blocked | any(.id == "luks.devices:cryptclosed:close"))
+              and (.apply.blocked | any(.id == "lukskeyslots:cryptroot:2:remove-key"))
+              and (.apply.blocked | any(.id == "lukstokens:cryptroot:1:remove-token"))
               and (.apply.blocked | any(.id == "mdraids:existing:assemble"))
               and (.apply.blocked | any(.id == "mdraids:oldroot:stop"))
               and (.apply.blocked | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained"))
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 33
+              and .apply.blockedCount == 35
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 33
-              and .messages[0] == "apply policy blocked 33 action(s)"
+              and .apply.blockedCount == 35
+              and .messages[0] == "apply policy blocked 35 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -898,14 +916,20 @@
                   and .spec.vdoVolumes.warmArchive.operation == "start"
                   and .spec.vdoVolumes.coldArchive.operation == "stop"
                   and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
-                  and .spec.luksKeyslots."cryptroot:1".operation == "create"
+                  and .spec.luksKeyslots."cryptroot:1".operation == "add-key"
                   and .spec.luksKeyslots."cryptroot:1".device == "/dev/disk/by-id/root-luks"
                   and .spec.luksKeyslots."cryptroot:1".keySlot == "1"
                   and .spec.luksKeyslots."cryptroot:1".newKeyFile == "/run/keys/root-new"
-                  and .spec.luksTokens."cryptroot:0".operation == "create"
+                  and .spec.luksKeyslots."cryptroot:2".operation == "remove-key"
+                  and .spec.luksKeyslots."cryptroot:2".device == "/dev/disk/by-id/root-luks"
+                  and .spec.luksKeyslots."cryptroot:2".keySlot == "2"
+                  and .spec.luksTokens."cryptroot:0".operation == "import-token"
                   and .spec.luksTokens."cryptroot:0".device == "/dev/disk/by-id/root-luks"
                   and .spec.luksTokens."cryptroot:0".tokenId == "0"
                   and .spec.luksTokens."cryptroot:0".tokenFile == "/run/keys/root-token.json"
+                  and .spec.luksTokens."cryptroot:1".operation == "remove-token"
+                  and .spec.luksTokens."cryptroot:1".device == "/dev/disk/by-id/root-luks"
+                  and .spec.luksTokens."cryptroot:1".tokenId == "1"
                   and .spec.zvols."tank/vm/root".operation == "grow"
                   and .spec.zvols."tank/vm/root".desiredSize == "80GiB"
                   and .spec.thinPools."vg0/thinpool".operation == "grow"
