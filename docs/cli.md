@@ -164,8 +164,9 @@ Use these commands for:
   cache devices, multipath devices, NVMe namespaces, loop devices, and swap,
   including model/vendor, transport, rotational, NVMe model/firmware/namespace
   geometry, partition table/number, filesystem type, loop
-  backing/offset/autoclear metadata, active swap state/type/priority, and udev
-  link details when probes expose them
+  backing/offset/autoclear metadata, multipath path host/major-minor/state
+  details, active swap state/type/priority, and udev link details when probes
+  expose them
 - `partitions`: partition nodes with size, PARTUUID, path, filesystem type,
   `blkid` signature details, partition number, start/end geometry, type/name,
   and flags when probes expose them

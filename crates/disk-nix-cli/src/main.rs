@@ -1931,6 +1931,8 @@ fn usage_details(node: &Node) -> String {
         ("multipath.features", "features"),
         ("multipath.hwhandler", "handler"),
         ("multipath.write-protect", "wp"),
+        ("multipath.host-path", "host-path"),
+        ("major-minor", "major-minor"),
         ("multipath.path-state", "path-state"),
         ("md.level", "level"),
         ("md.state", "state"),
@@ -2273,6 +2275,13 @@ mod tests {
                 .with_property("swap.type", "partition")
                 .with_property("swap.priority", "100"),
         );
+        graph.add_node(
+            Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
+                .with_path("/dev/sdb")
+                .with_property("multipath.host-path", "2:0:0:1")
+                .with_property("major-minor", "8:16")
+                .with_property("multipath.path-state", "active ready running"),
+        );
 
         let mut output = Vec::new();
         print_devices(&mut output, &graph).expect("devices table renders");
@@ -2290,6 +2299,9 @@ mod tests {
         ));
         assert!(output.contains("loop-backing=true"));
         assert!(output.contains("swap-active=true swap-type=partition swap-priority=100"));
+        assert!(
+            output.contains("host-path=2:0:0:1 major-minor=8:16 path-state=active ready running")
+        );
         assert!(output.contains("/var/lib/images/root.img"));
     }
 
