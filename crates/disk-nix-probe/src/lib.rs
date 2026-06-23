@@ -1280,7 +1280,7 @@ fn collect_lvm(result: &mut ProbeResult) {
             "--reportformat",
             "json",
             "-o",
-            "lv_name,vg_name,segtype,seg_start,seg_size,devices,seg_pe_ranges",
+            "lv_name,vg_name,segtype,seg_start,seg_size,chunk_size,thin_count,discards,zero,transaction_id,thin_id,devices,metadata_devices,seg_pe_ranges,seg_monitor,cache_metadata_format,cache_mode,cache_policy,cache_settings,vdo_compression,vdo_deduplication,vdo_write_policy",
         ],
     );
 

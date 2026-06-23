@@ -87,8 +87,23 @@ struct LogicalVolumeSegment {
     segtype: Option<String>,
     seg_start: Option<String>,
     seg_size: Option<String>,
+    chunk_size: Option<String>,
+    thin_count: Option<String>,
+    discards: Option<String>,
+    zero: Option<String>,
+    transaction_id: Option<String>,
+    thin_id: Option<String>,
     devices: Option<String>,
+    metadata_devices: Option<String>,
     seg_pe_ranges: Option<String>,
+    seg_monitor: Option<String>,
+    cache_metadata_format: Option<String>,
+    cache_mode: Option<String>,
+    cache_policy: Option<String>,
+    cache_settings: Option<String>,
+    vdo_compression: Option<String>,
+    vdo_deduplication: Option<String>,
+    vdo_write_policy: Option<String>,
 }
 
 pub fn normalize_lvm_json(
@@ -343,8 +358,26 @@ fn add_logical_volume_segment(
         ("lvm.segment-type", segment.segtype.clone()),
         ("lvm.segment-start", segment.seg_start.clone()),
         ("lvm.segment-size", segment.seg_size.clone()),
+        ("lvm.chunk-size", segment.chunk_size.clone()),
+        ("lvm.thin-count", segment.thin_count.clone()),
+        ("lvm.discards", segment.discards.clone()),
+        ("lvm.zero", segment.zero.clone()),
+        ("lvm.transaction-id", segment.transaction_id.clone()),
+        ("lvm.thin-id", segment.thin_id.clone()),
         ("lvm.devices", segment.devices.clone()),
+        ("lvm.metadata-devices", segment.metadata_devices.clone()),
         ("lvm.segment-pe-ranges", segment.seg_pe_ranges.clone()),
+        ("lvm.segment-monitor", segment.seg_monitor.clone()),
+        (
+            "lvm.cache-metadata-format",
+            segment.cache_metadata_format.clone(),
+        ),
+        ("lvm.segment-cache-mode", segment.cache_mode.clone()),
+        ("lvm.segment-cache-policy", segment.cache_policy.clone()),
+        ("lvm.cache-settings", segment.cache_settings.clone()),
+        ("lvm.vdo-compression", segment.vdo_compression.clone()),
+        ("lvm.vdo-deduplication", segment.vdo_deduplication.clone()),
+        ("lvm.vdo-write-policy", segment.vdo_write_policy.clone()),
     ] {
         if let Some(value) = value.filter(|value| !value.is_empty()) {
             node = node.with_property(key, value);
@@ -354,8 +387,17 @@ fn add_logical_volume_segment(
     graph.add_node(node);
     graph.add_edge(Edge::new(lv_id.clone(), id.clone(), Relationship::Contains));
 
-    if let Some(devices) = segment.devices {
-        for device in split_lvm_devices(&devices) {
+    if let Some(devices) = &segment.devices {
+        for device in split_lvm_devices(devices) {
+            graph.add_edge(Edge::new(
+                id.clone(),
+                dependency_id(&segment.vg_name, &device),
+                Relationship::DependsOn,
+            ));
+        }
+    }
+    if let Some(metadata_devices) = &segment.metadata_devices {
+        for device in split_lvm_devices(metadata_devices) {
             graph.add_edge(Edge::new(
                 id.clone(),
                 dependency_id(&segment.vg_name, &device),
@@ -570,8 +612,23 @@ mod tests {
             "segtype": "linear",
             "seg_start": "0",
             "seg_size": "40.00g",
+            "chunk_size": "",
+            "thin_count": "",
+            "discards": "",
+            "zero": "",
+            "transaction_id": "",
+            "thin_id": "",
             "devices": "/dev/mapper/cryptroot(0)",
-            "seg_pe_ranges": "/dev/mapper/cryptroot:0-10239"
+            "metadata_devices": "",
+            "seg_pe_ranges": "/dev/mapper/cryptroot:0-10239",
+            "seg_monitor": "monitored",
+            "cache_metadata_format": "",
+            "cache_mode": "",
+            "cache_policy": "",
+            "cache_settings": "",
+            "vdo_compression": "",
+            "vdo_deduplication": "",
+            "vdo_write_policy": ""
           },
           {
             "lv_name": "root-snap",
@@ -579,8 +636,23 @@ mod tests {
             "segtype": "snapshot",
             "seg_start": "0",
             "seg_size": "10.00g",
+            "chunk_size": "64.00k",
+            "thin_count": "3",
+            "discards": "passdown",
+            "zero": "zero",
+            "transaction_id": "42",
+            "thin_id": "7",
             "devices": "root(0)",
-            "seg_pe_ranges": "root:0-2559"
+            "metadata_devices": "root_tmeta(0)",
+            "seg_pe_ranges": "root:0-2559",
+            "seg_monitor": "monitored",
+            "cache_metadata_format": "2",
+            "cache_mode": "writeback",
+            "cache_policy": "smq",
+            "cache_settings": "migration_threshold=2048",
+            "vdo_compression": "enabled",
+            "vdo_deduplication": "enabled",
+            "vdo_write_policy": "auto"
           }
         ]
       }]
@@ -619,6 +691,27 @@ mod tests {
             node.kind == NodeKind::LvmSegment
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.segment-type" && property.value == "linear"
+                })
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::LvmSegment
+                && node.name == "vg0/root-snap:1"
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.metadata-devices" && property.value == "root_tmeta(0)"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.chunk-size" && property.value == "64.00k")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.segment-monitor" && property.value == "monitored"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.cache-settings"
+                        && property.value == "migration_threshold=2048"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.vdo-write-policy" && property.value == "auto"
                 })
         }));
         assert!(graph.nodes.iter().any(|node| {
@@ -661,6 +754,11 @@ mod tests {
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0.starts_with("lvm-seg:vg0/root-snap:")
                 && edge.to.0 == "lvm-lv:vg0/root"
+                && edge.relationship == Relationship::DependsOn
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0.starts_with("lvm-seg:vg0/root-snap:")
+                && edge.to.0 == "lvm-lv:vg0/root_tmeta"
                 && edge.relationship == Relationship::DependsOn
         }));
     }

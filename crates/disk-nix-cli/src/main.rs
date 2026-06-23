@@ -1763,6 +1763,7 @@ fn is_volume_node(node: &Node) -> bool {
         node.kind,
         NodeKind::LvmVolumeGroup
             | NodeKind::LvmLogicalVolume
+            | NodeKind::LvmSegment
             | NodeKind::LvmThinPool
             | NodeKind::LvmSnapshot
             | NodeKind::LvmCache
@@ -1807,6 +1808,7 @@ fn is_mapping_node(node: &Node) -> bool {
         NodeKind::LuksContainer
             | NodeKind::DeviceMapper
             | NodeKind::LvmLogicalVolume
+            | NodeKind::LvmSegment
             | NodeKind::LvmThinPool
             | NodeKind::LvmSnapshot
             | NodeKind::LvmCache
@@ -1895,6 +1897,26 @@ fn usage_details(node: &Node) -> String {
         ("lvm.sync-percent", "sync"),
         ("lvm.attr", "attr"),
         ("lvm.layout", "layout"),
+        ("lvm.segment-type", "segment-type"),
+        ("lvm.segment-start", "segment-start"),
+        ("lvm.segment-size", "segment-size"),
+        ("lvm.chunk-size", "chunk-size"),
+        ("lvm.thin-count", "thin-count"),
+        ("lvm.discards", "discards"),
+        ("lvm.zero", "zero"),
+        ("lvm.transaction-id", "transaction-id"),
+        ("lvm.thin-id", "thin-id"),
+        ("lvm.devices", "devices"),
+        ("lvm.metadata-devices", "metadata-devices"),
+        ("lvm.segment-pe-ranges", "pe-ranges"),
+        ("lvm.segment-monitor", "segment-monitor"),
+        ("lvm.cache-metadata-format", "cache-metadata-format"),
+        ("lvm.segment-cache-mode", "segment-cache-mode"),
+        ("lvm.segment-cache-policy", "segment-cache-policy"),
+        ("lvm.cache-settings", "cache-settings"),
+        ("lvm.vdo-compression", "vdo-compression"),
+        ("lvm.vdo-deduplication", "vdo-deduplication"),
+        ("lvm.vdo-write-policy", "vdo-write-policy"),
         ("lvm.origin", "origin"),
         ("lvm.pool", "pool"),
         ("lvm.extent-size", "extent"),
@@ -2953,6 +2975,35 @@ mod tests {
                 .with_property("vdo.compression", "enabled")
                 .with_property("vdo.deduplication", "disabled"),
         );
+        let segment = Node::new(
+            "lvm-seg:vg0/thinpool:0",
+            NodeKind::LvmSegment,
+            "vg0/thinpool:0",
+        )
+        .with_property("lvm.segment-type", "thin-pool")
+        .with_property("lvm.segment-start", "0")
+        .with_property("lvm.segment-size", "100.00g")
+        .with_property("lvm.chunk-size", "64.00k")
+        .with_property("lvm.thin-count", "3")
+        .with_property("lvm.discards", "passdown")
+        .with_property("lvm.zero", "zero")
+        .with_property("lvm.transaction-id", "42")
+        .with_property("lvm.devices", "thinpool_tdata(0)")
+        .with_property("lvm.metadata-devices", "thinpool_tmeta(0)")
+        .with_property("lvm.segment-monitor", "monitored")
+        .with_property("lvm.cache-metadata-format", "2")
+        .with_property("lvm.segment-cache-mode", "writeback")
+        .with_property("lvm.segment-cache-policy", "smq")
+        .with_property("lvm.cache-settings", "migration_threshold=2048")
+        .with_property("lvm.vdo-compression", "enabled")
+        .with_property("lvm.vdo-deduplication", "enabled")
+        .with_property("lvm.vdo-write-policy", "auto");
+        let segment_details = usage_details(&segment);
+        assert!(segment_details.contains("segment-type=thin-pool"));
+        assert!(segment_details.contains("metadata-devices=thinpool_tmeta(0)"));
+        assert!(segment_details.contains("segment-cache-policy=smq"));
+        assert!(segment_details.contains("vdo-write-policy=auto"));
+        graph.add_node(segment);
         graph.add_node(
             Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
                 .with_path("/dev/bcache0")
@@ -2988,6 +3039,11 @@ mod tests {
                 "backing=/dev/sdb logical=1T physical=250G mode=normal write-policy=sync compression=enabled deduplication=disabled"
             )
         );
+        assert!(output.contains("vg0/thinpool:0"));
+        assert!(output.contains("segment-type=thin-pool"));
+        assert!(output.contains("metadata-devices=thinpool_tmeta(0)"));
+        assert!(output.contains("segment-cache-policy=smq"));
+        assert!(output.contains("vdo-write-policy=auto"));
         assert!(output.contains(
             "role=backing kind=cache-set label=fast-cache state=clean cache-mode=writeback readahead=0 sequential-cutoff=4.0M writeback-rate=1.0M/sec"
         ));

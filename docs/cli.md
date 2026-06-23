@@ -191,9 +191,11 @@ Use these commands for:
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
   counts, header area/epoch/flag details, data-segment cipher/offset/length
-  details, dm open/segment counters, multipath WWID/size/path state, VDO
-  backing device, logical/physical size, mode, and data-reduction settings,
-  loop backing/offset/read-only/direct-I/O settings, and bcache
+  details, dm open/segment counters, LVM segment data/metadata device mappings,
+  thin-pool discard/zeroing/transaction details, cache segment policy/settings,
+  VDO segment compression/dedup/write-policy details, multipath WWID/size/path
+  state, VDO backing device, logical/physical size, mode, and data-reduction
+  settings, loop backing/offset/read-only/direct-I/O settings, and bcache
   role/cache-set/tuning details such as label, state,
   cache mode, readahead, sequential cutoff, and writeback rate when probes
   expose them
