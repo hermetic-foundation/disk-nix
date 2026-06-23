@@ -141,6 +141,12 @@
                 mountpoint = "/scratch";
                 operation = "check";
               };
+              filesystems.scrub = {
+                device = "/dev/disk/by-label/scrub";
+                fsType = "btrfs";
+                mountpoint = "/scrub";
+                operation = "scrub";
+              };
               swaps.primary = {
                 device = "/dev/disk/by-label/swap";
                 operation = "format";
@@ -416,6 +422,7 @@
               and (."$defs".operation.enum | index("grow") != null)
               and (."$defs".operation.enum | index("check") != null)
               and (."$defs".operation.enum | index("repair") != null)
+              and (."$defs".operation.enum | index("scrub") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
               and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
               and (."$defs".specBody.properties.nfs["$ref"] == "#/$defs/nfsSpec")
@@ -494,12 +501,13 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 38
+              .summary.actionCount == 40
               and .summary.offlineRequiredCount == 9
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
               and (.actions | any(.id == "filesystems:home-check:check" and .risk == "offline-required"))
+              and (.actions | any(.id == "filesystems:data-scrub:scrub" and .risk == "online"))
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@home:create" and .risk == "online"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:limit" and .risk == "safe"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
@@ -609,6 +617,9 @@
                   and .spec.filesystems.data.properties."btrfs.balance.data" == "usage=50"
                   and .spec.filesystems.scratch.operation == "check"
                   and .spec.filesystems.scratch.device == "/dev/disk/by-label/scratch"
+                  and .spec.filesystems.scrub.operation == "scrub"
+                  and .spec.filesystems.scrub.device == "/dev/disk/by-label/scrub"
+                  and .spec.filesystems.scrub.mountpoint == "/scrub"
                   and .spec.swaps.primary.device == "/dev/disk/by-label/swap"
                   and .spec.swaps.primary.operation == "format"
                   and .spec.swaps.primary.desiredSize == "8GiB"

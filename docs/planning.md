@@ -75,6 +75,8 @@ Examples:
   Optional `properties.balance.data`, `properties.balance.metadata`, and
   `properties.balance.system` values become `-d`, `-m`, and `-s` balance
   filters so operators can prefer scoped balances over a full balance.
+- Btrfs filesystem `operation = "scrub"` renders `btrfs scrub start -B`.
+  ZFS pool `operation = "scrub"` renders `zpool scrub`.
 - `replaceDevices = { old = new; }` is classified as reversible because the
   original device can remain available until verification passes.
 - Cache `replace-device` is classified as offline-required because dirty or
@@ -251,8 +253,8 @@ Lifecycle collections currently accepted by the planner:
 Lifecycle objects may use:
 
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
-  `repair`, `replace-device`, `add-device`, `remove-device`, `set-property`,
-  `snapshot`, `rebalance`, `rollback`, or `destroy`
+  `repair`, `scrub`, `replace-device`, `add-device`, `remove-device`,
+  `set-property`, `snapshot`, `rebalance`, `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
 - `devices`: member devices for arrays, pools, or explicit LUN paths that
   should receive per-path host rescans
@@ -387,6 +389,8 @@ Filesystem check and repair actions carry the declared `device` or `disk` into
 read-only and mutating maintenance command plans. Ext uses `e2fsck`, XFS uses
 `xfs_repair`, and Btrfs uses `btrfs check`; repair variants remain
 offline-required and should be reviewed after a read-only check.
+Btrfs scrub actions use the mounted path and render `btrfs scrub start -B`;
+ZFS pool scrub actions render `zpool scrub`.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.

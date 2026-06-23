@@ -65,6 +65,7 @@ let
       "shrink"
       "check"
       "repair"
+      "scrub"
       "replace-device"
       "add-device"
       "remove-device"

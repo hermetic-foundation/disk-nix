@@ -1836,6 +1836,14 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             )],
             vec!["read-only check completed and no repair action was applied".to_string()],
         ),
+        Operation::Scrub => (
+            vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify target state after scrub operation",
+            )],
+            vec!["scrub completed or is running with reviewed health status".to_string()],
+        ),
     }
 }
 
@@ -2599,6 +2607,21 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     rebalance,
                 ],
                 vec!["monitor progress and health until the rebalance operation completes".to_string()],
+                true,
+            )
+        }
+        Operation::Scrub => {
+            let target = target.unwrap_or("<target>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect pool or filesystem health before scrub",
+                    ),
+                    scrub_command(collection, target),
+                ],
+                vec!["monitor scrub progress and health until completion".to_string()],
                 true,
             )
         }
@@ -4766,6 +4789,28 @@ fn rebalance_command(
             CommandReadiness::NeedsDomainImplementation,
             ["rebalance tool"],
             "run the storage-domain rebalance command",
+        ),
+    }
+}
+
+fn scrub_command(collection: Option<&str>, target: &str) -> ExecutionCommand {
+    match collection {
+        Some("pools") => command(
+            ["zpool", "scrub", target],
+            true,
+            "start the reviewed ZFS pool scrub",
+        ),
+        Some("filesystems") => command(
+            ["btrfs", "scrub", "start", "-B", target],
+            true,
+            "run the reviewed Btrfs scrub and wait for completion",
+        ),
+        _ => command_with_readiness(
+            ["<scrub-tool>", target],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["scrub tool"],
+            "run the storage-domain scrub command",
         ),
     }
 }
@@ -8057,6 +8102,57 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["btrfs", "filesystem", "usage", "-b", "/data"])
+        }));
+    }
+
+    #[test]
+    fn scrub_lifecycle_reports_btrfs_and_zpool_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "data": {
+                    "mountpoint": "/data",
+                    "fsType": "btrfs",
+                    "operation": "scrub"
+                  }
+                },
+                "pools": {
+                  "tank": {
+                    "operation": "scrub"
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:data:scrub"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "scrub", "start", "-B", "/data"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "pools:tank:scrub"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zpool", "scrub", "tank"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "pools:tank:scrub"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "tank", "--json"])
         }));
     }
 

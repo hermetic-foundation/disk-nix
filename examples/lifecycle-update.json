@@ -6,6 +6,11 @@
       "device": "/dev/disk/by-label/home",
       "fsType": "ext4",
       "operation": "check"
+    },
+    "data-scrub": {
+      "mountpoint": "/data",
+      "fsType": "btrfs",
+      "operation": "scrub"
     }
   },
   "pools": {

@@ -40,6 +40,7 @@ pub enum Operation {
     Shrink,
     Check,
     Repair,
+    Scrub,
     ReplaceDevice,
     AddDevice,
     RemoveDevice,
@@ -1038,12 +1039,14 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
         });
     }
 
-    if let Some(operation @ (Operation::Check | Operation::Repair | Operation::Rebalance)) =
-        filesystem
-            .get("operation")
-            .or_else(|| filesystem.get("action"))
-            .and_then(Value::as_str)
-            .and_then(parse_operation)
+    if let Some(
+        operation
+        @ (Operation::Check | Operation::Repair | Operation::Scrub | Operation::Rebalance),
+    ) = filesystem
+        .get("operation")
+        .or_else(|| filesystem.get("action"))
+        .and_then(Value::as_str)
+        .and_then(parse_operation)
     {
         let (risk, destructive, advice) = classify_operation("filesystems", operation, filesystem);
         actions.push(PlannedAction {
@@ -2039,6 +2042,7 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "shrink" => Some(Operation::Shrink),
         "check" => Some(Operation::Check),
         "repair" => Some(Operation::Repair),
+        "scrub" => Some(Operation::Scrub),
         "replace-device" | "replaceDevice" => Some(Operation::ReplaceDevice),
         "add-device" | "addDevice" => Some(Operation::AddDevice),
         "remove-device" | "removeDevice" => Some(Operation::RemoveDevice),
@@ -2059,6 +2063,7 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Shrink => "shrink",
         Operation::Check => "check",
         Operation::Repair => "repair",
+        Operation::Scrub => "scrub",
         Operation::ReplaceDevice => "replace-device",
         Operation::AddDevice => "add-device",
         Operation::RemoveDevice => "remove-device",
@@ -2112,6 +2117,42 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Scrub if collection == "filesystems" => {
+            if string_field(object, &["fsType", "type"]).as_deref() == Some("btrfs") {
+                (
+                    RiskClass::Online,
+                    false,
+                    Some(Advice {
+                        summary: "Btrfs scrub verifies checksums and repairs redundant data online"
+                            .to_string(),
+                        alternatives: vec![
+                            "run a read-only filesystem check when metadata corruption is suspected"
+                                .to_string(),
+                            "verify device health and backups before scrubbing degraded filesystems"
+                                .to_string(),
+                            "monitor scrub status until completion".to_string(),
+                        ],
+                    }),
+                )
+            } else {
+                (
+                    RiskClass::Unsupported,
+                    false,
+                    Some(Advice {
+                        summary:
+                            "filesystem scrub command mapping is currently available for Btrfs"
+                                .to_string(),
+                        alternatives: vec![
+                            "use filesystem check for ext or XFS consistency validation"
+                                .to_string(),
+                            "model ZFS scrubs through pool lifecycle declarations".to_string(),
+                            "run filesystem-specific scrub tooling manually after review"
+                                .to_string(),
+                        ],
+                    }),
+                )
+            }
+        }
         Operation::Create if collection == "partitions" => (
             RiskClass::OfflineRequired,
             false,
@@ -2460,6 +2501,18 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Scrub if collection == "pools" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "pool scrub verifies data and repairs redundant copies online".to_string(),
+                alternatives: vec![
+                    "review pool health before starting a scrub".to_string(),
+                    "schedule scrubs outside latency-sensitive windows".to_string(),
+                    "monitor scrub, resilver, or repair status until completion".to_string(),
+                ],
+            }),
+        ),
         Operation::Grow if collection == "zvols" => (
             RiskClass::Online,
             false,
@@ -2720,6 +2773,7 @@ fn classify_operation(
         Operation::Shrink
         | Operation::Check
         | Operation::Repair
+        | Operation::Scrub
         | Operation::RemoveDevice
         | Operation::Rollback => (
             RiskClass::PotentialDataLoss,
@@ -2932,6 +2986,7 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Shrink => "shrink",
         Operation::Check => "check",
         Operation::Repair => "repair",
+        Operation::Scrub => "scrub",
         Operation::ReplaceDevice => "replace device",
         Operation::AddDevice => "add device",
         Operation::RemoveDevice => "remove device",
@@ -3139,6 +3194,30 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "restore from backup or snapshot instead of repairing in place".to_string(),
                     "repair a cloned device first when production risk is high".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Filesystem,
+            operation: Operation::Scrub,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "Btrfs scrub verifies checksummed filesystem data online".to_string(),
+                alternatives: vec![
+                    "use filesystem check when metadata corruption is suspected".to_string(),
+                    "monitor scrub status until completion".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsPool,
+            operation: Operation::Scrub,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "ZFS pool scrub verifies data and repairs redundant copies".to_string(),
+                alternatives: vec![
+                    "review pool health before starting a scrub".to_string(),
+                    "schedule scrubs outside latency-sensitive windows".to_string(),
                 ],
             }),
         },
@@ -4906,6 +4985,64 @@ mod tests {
                 .advice
                 .as_ref()
                 .is_some_and(|advice| { advice.summary.contains("repair mutates metadata") })
+        );
+    }
+
+    #[test]
+    fn plan_accepts_scrub_lifecycle_for_btrfs_and_pools() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "data": {
+                  "mountpoint": "/data",
+                  "fsType": "btrfs",
+                  "operation": "scrub"
+                },
+                "archive": {
+                  "mountpoint": "/archive",
+                  "fsType": "ext4",
+                  "operation": "scrub"
+                }
+              },
+              "pools": {
+                "tank": {
+                  "operation": "scrub"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 5);
+        assert_eq!(plan.summary.unsupported_count, 1);
+        let btrfs = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:data:scrub")
+            .expect("Btrfs scrub action exists");
+        assert_eq!(btrfs.operation, Operation::Scrub);
+        assert_eq!(btrfs.risk, RiskClass::Online);
+        assert_eq!(btrfs.context.target.as_deref(), Some("/data"));
+
+        let pool = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "pools:tank:scrub")
+            .expect("pool scrub action exists");
+        assert_eq!(pool.operation, Operation::Scrub);
+        assert_eq!(pool.risk, RiskClass::Online);
+
+        let unsupported = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:archive:scrub")
+            .expect("unsupported filesystem scrub action exists");
+        assert_eq!(unsupported.risk, RiskClass::Unsupported);
+        assert!(
+            unsupported
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("available for Btrfs") })
         );
     }
 

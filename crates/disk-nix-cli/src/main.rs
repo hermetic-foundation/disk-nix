@@ -874,6 +874,7 @@ fn spec_schema() -> serde_json::Value {
                     "shrink",
                     "check",
                     "repair",
+                    "scrub",
                     "replace-device",
                     "add-device",
                     "remove-device",

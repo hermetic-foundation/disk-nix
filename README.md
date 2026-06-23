@@ -192,6 +192,8 @@ for review. Removal remains blocked by the current potential-data-loss policy
 gate.
 Btrfs filesystem rebalance plans render `btrfs balance start` and use declared
 data, metadata, and system balance filters from lifecycle properties when set.
+Btrfs scrub plans render `btrfs scrub start -B`; ZFS pool scrub plans render
+`zpool scrub`.
 Regular Btrfs filesystem label updates render
 `btrfs filesystem label <path> <label>`. Ext filesystem label updates render
 `e2label <device> <label>` when the declaration includes an explicit backing
