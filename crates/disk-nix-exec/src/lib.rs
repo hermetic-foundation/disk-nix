@@ -1025,13 +1025,15 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 false,
                 "verify snapshot target and relationships after creation",
             )];
-            if snapshot.contains('@') {
+            if is_zfs_snapshot_name(snapshot) {
                 commands.push(command(
                     ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
                     false,
                     "verify ZFS snapshot existence and metadata",
                 ));
-            } else if collection == Some("btrfsSubvolumes") {
+            } else if collection == Some("btrfsSubvolumes")
+                || is_btrfs_snapshot_pair(target, snapshot)
+            {
                 commands.push(command(
                     ["btrfs", "subvolume", "show", snapshot],
                     false,
@@ -3063,9 +3065,9 @@ fn nfs_export_destroy_command(target: &str, client: Option<&str>) -> ExecutionCo
 }
 
 fn snapshot_command(collection: Option<&str>, target: &str, snapshot: &str) -> ExecutionCommand {
-    if snapshot.contains('@') {
+    if is_zfs_snapshot_name(snapshot) {
         command(["zfs", "snapshot", snapshot], true, "create a ZFS snapshot")
-    } else if collection == Some("btrfsSubvolumes") {
+    } else if collection == Some("btrfsSubvolumes") || is_btrfs_snapshot_pair(target, snapshot) {
         command(
             ["btrfs", "subvolume", "snapshot", target, snapshot],
             true,
@@ -3080,6 +3082,17 @@ fn snapshot_command(collection: Option<&str>, target: &str, snapshot: &str) -> E
             "create the snapshot with zfs, btrfs, lvm, or the target-specific tool",
         )
     }
+}
+
+fn is_zfs_snapshot_name(snapshot: &str) -> bool {
+    let Some((dataset, name)) = snapshot.split_once('@') else {
+        return false;
+    };
+    !dataset.is_empty() && !name.is_empty() && !dataset.starts_with('/')
+}
+
+fn is_btrfs_snapshot_pair(target: &str, snapshot: &str) -> bool {
+    target.starts_with('/') && snapshot.starts_with('/')
 }
 
 fn disk_create_label_command(target: &str, label: &str) -> ExecutionCommand {
@@ -4917,6 +4930,9 @@ mod tests {
               "snapshots": {
                 "tank/home@before": {
                   "target": "tank/home"
+                },
+                "/mnt/persist/@home-before": {
+                  "target": "/mnt/persist/@home"
                 }
               },
               "apply": {
@@ -4960,6 +4976,18 @@ mod tests {
                 .any(|command| command.argv == ["zfs", "snapshot", "tank/home@before"])
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "btrfs",
+                        "subvolume",
+                        "snapshot",
+                        "/mnt/persist/@home",
+                        "/mnt/persist/@home-before",
+                    ]
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["zpool", "destroy", "oldtank"])
@@ -4995,6 +5023,11 @@ mod tests {
                         "-p",
                         "tank/home@before",
                     ]
+            })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["btrfs", "subvolume", "show", "/mnt/persist/@home-before"]
             })
         }));
         assert_eq!(report.command_summary.needs_domain_implementation_count, 0);

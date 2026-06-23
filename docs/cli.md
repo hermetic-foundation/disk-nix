@@ -334,6 +334,9 @@ ZFS pool command plans render policy-gated `zpool create` and `zpool destroy`,
 plus online topology commands such as `zpool add`, `zpool replace`, and scrub.
 ZFS dataset command plans render reviewed `zfs create` and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations.
+Generic snapshot declarations render concrete `zfs snapshot` commands for
+`dataset@snapshot` names and Btrfs `subvolume snapshot` commands when both the
+source target and snapshot name are absolute paths.
 `verificationSummary` and `verificationPlan` record read-only commands and
 state checks that should run after a future mutating executor or manual apply
 finishes. These checks re-probe the relevant graph node and include

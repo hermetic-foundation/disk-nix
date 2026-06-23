@@ -176,6 +176,9 @@ NFS export apply plans render reviewed `exportfs` create/unexport commands
 from explicit client and option declarations.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
 and rescan commands from explicit target IQN and portal declarations.
+Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
+`subvolume snapshot` commands when the snapshot naming clearly identifies the
+domain.
 ZFS dataset apply plans render reviewed `zfs create` commands and
 policy-gated `zfs destroy` commands.
 LVM logical volume apply plans render reviewed `lvcreate` and gated

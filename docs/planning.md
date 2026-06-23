@@ -130,6 +130,8 @@ Examples:
   target type.
 - snapshot creation is reversible; snapshot rollback is potential data loss;
   snapshot destruction is destructive because it removes a recovery point.
+  Generic snapshot names such as `pool/dataset@snap` map to ZFS snapshots;
+  absolute source and snapshot paths map to Btrfs subvolume snapshots.
 
 The checked-in specs under `examples/` are part of `nix flake check`. The
 flake validates stable plan summaries, selected action ids, allowed simple
