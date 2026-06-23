@@ -1729,13 +1729,13 @@ fn print_nvme(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
 fn print_raid(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<32} {:>12} {:<10} {:<14} {:>7} DETAILS",
-        "KIND", "NAME", "SIZE", "LEVEL", "STATE", "MEMBERS"
+        "{:<22} {:<32} {:>12} {:<10} {:<14} {:>6} {:>6} {:>6} {:>7} DETAILS",
+        "KIND", "NAME", "SIZE", "LEVEL", "STATE", "ACTIVE", "FAILED", "SPARE", "MEMBERS"
     )?;
     for node in graph.nodes.iter().filter(|node| is_raid_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<32} {:>12} {:<10} {:<14} {:>7} {}",
+            "{:<22} {:<32} {:>12} {:<10} {:<14} {:>6} {:>6} {:>6} {:>7} {}",
             node.kind,
             node.name,
             human_bytes(node.size_bytes),
@@ -1743,6 +1743,9 @@ fn print_raid(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
             property_value(node, "md.state")
                 .or_else(|| property_value(node, "md.member-state"))
                 .unwrap_or("-"),
+            property_value(node, "md.active-devices").unwrap_or("-"),
+            property_value(node, "md.failed-devices").unwrap_or("-"),
+            property_value(node, "md.spare-devices").unwrap_or("-"),
             member_count(graph, node),
             usage_details(node)
         )?;
@@ -2702,10 +2705,19 @@ fn usage_details(node: &Node) -> String {
         ("md.state", "state"),
         ("md.raid-devices", "raid-devices"),
         ("md.total-devices", "total-devices"),
+        ("md.active-devices", "active-devices"),
+        ("md.working-devices", "working-devices"),
+        ("md.failed-devices", "failed-devices"),
+        ("md.spare-devices", "spare-devices"),
         ("md.name", "md-name"),
         ("md.events", "events"),
         ("md.chunk-size", "chunk"),
         ("md.layout", "layout"),
+        ("md.consistency-policy", "consistency"),
+        ("md.rebuild-status", "rebuild"),
+        ("md.resync-status", "resync"),
+        ("md.check-status", "check"),
+        ("md.intent-bitmap", "bitmap"),
         ("md.creation-time", "created"),
         ("md.update-time", "updated"),
         ("md.member-state", "member-state"),
@@ -4712,12 +4724,21 @@ mod tests {
                 .with_property("md.state", "clean")
                 .with_property("md.raid-devices", "2")
                 .with_property("md.total-devices", "2")
+                .with_property("md.active-devices", "1")
+                .with_property("md.working-devices", "2")
+                .with_property("md.failed-devices", "1")
+                .with_property("md.spare-devices", "1")
                 .with_property("md.name", "host:0")
                 .with_property("md.creation-time", "Tue Jun 23 10:15:00 2026")
                 .with_property("md.update-time", "Tue Jun 23 10:16:00 2026")
                 .with_property("md.events", "17")
                 .with_property("md.chunk-size", "512K")
-                .with_property("md.layout", "near=2"),
+                .with_property("md.layout", "near=2")
+                .with_property("md.consistency-policy", "bitmap")
+                .with_property("md.rebuild-status", "42% complete")
+                .with_property("md.resync-status", "delayed")
+                .with_property("md.check-status", "10% complete")
+                .with_property("md.intent-bitmap", "Internal"),
         );
         graph.add_node(
             Node::new("block:/dev/sda1", NodeKind::Partition, "/dev/sda1")
@@ -4746,16 +4767,23 @@ mod tests {
 
         assert!(output.contains("LEVEL"));
         assert!(output.contains("STATE"));
+        assert!(output.contains("ACTIVE"));
+        assert!(output.contains("FAILED"));
+        assert!(output.contains("SPARE"));
         assert!(output.contains("MEMBERS"));
         assert!(output.contains("/dev/md0"));
         assert!(output.contains("raid1"));
         assert!(output.contains("clean"));
         assert!(output.contains("md-version=1.2 level=raid1 state=clean"));
-        assert!(output.contains("raid-devices=2 total-devices=2 md-name=host:0"));
+        assert!(output.contains("raid-devices=2 total-devices=2 active-devices=1"));
+        assert!(output.contains("working-devices=2 failed-devices=1 spare-devices=1"));
+        assert!(output.contains("md-name=host:0"));
         assert!(output.contains("created=Tue Jun 23 10:15:00 2026"));
         assert!(output.contains("updated=Tue Jun 23 10:16:00 2026"));
         assert!(output.contains("events=17"));
         assert!(output.contains("chunk=512K layout=near=2"));
+        assert!(output.contains("consistency=bitmap rebuild=42% complete"));
+        assert!(output.contains("resync=delayed check=10% complete bitmap=Internal"));
         assert!(output.contains("/dev/sda1"));
         assert!(output.contains("active sync"));
         assert!(output.contains("member-state=active sync"));

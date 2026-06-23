@@ -18,12 +18,21 @@ struct MdArray {
     size_bytes: Option<u64>,
     used_devices: Option<String>,
     total_devices: Option<String>,
+    active_devices: Option<String>,
+    working_devices: Option<String>,
+    failed_devices: Option<String>,
+    spare_devices: Option<String>,
     name_property: Option<String>,
     creation_time: Option<String>,
     update_time: Option<String>,
     events: Option<String>,
     chunk_size: Option<String>,
     layout: Option<String>,
+    consistency_policy: Option<String>,
+    rebuild_status: Option<String>,
+    resync_status: Option<String>,
+    check_status: Option<String>,
+    intent_bitmap: Option<String>,
     members: Vec<MdMember>,
 }
 
@@ -73,12 +82,21 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
         size_bytes: None,
         used_devices: None,
         total_devices: None,
+        active_devices: None,
+        working_devices: None,
+        failed_devices: None,
+        spare_devices: None,
         name_property: None,
         creation_time: None,
         update_time: None,
         events: None,
         chunk_size: None,
         layout: None,
+        consistency_policy: None,
+        rebuild_status: None,
+        resync_status: None,
+        check_status: None,
+        intent_bitmap: None,
         members: Vec::new(),
     };
     let mut in_member_table = false;
@@ -111,6 +129,24 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
             array.used_devices = value_after_colon(trimmed);
         } else if trimmed.starts_with("Total Devices :") {
             array.total_devices = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Active Devices :") {
+            array.active_devices = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Working Devices :") {
+            array.working_devices = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Failed Devices :") {
+            array.failed_devices = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Spare Devices :") {
+            array.spare_devices = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Consistency Policy :") {
+            array.consistency_policy = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Rebuild Status :") {
+            array.rebuild_status = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Resync Status :") {
+            array.resync_status = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Check Status :") {
+            array.check_status = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Intent Bitmap :") {
+            array.intent_bitmap = value_after_colon(trimmed);
         } else if trimmed.starts_with("Number")
             && trimmed.contains("Major")
             && trimmed.contains("RaidDevice")
@@ -157,12 +193,21 @@ fn add_array(graph: &mut StorageGraph, array: MdArray) {
         ("md.state", array.state),
         ("md.raid-devices", array.used_devices),
         ("md.total-devices", array.total_devices),
+        ("md.active-devices", array.active_devices),
+        ("md.working-devices", array.working_devices),
+        ("md.failed-devices", array.failed_devices),
+        ("md.spare-devices", array.spare_devices),
         ("md.name", array.name_property),
         ("md.creation-time", array.creation_time),
         ("md.update-time", array.update_time),
         ("md.events", array.events),
         ("md.chunk-size", array.chunk_size),
         ("md.layout", array.layout),
+        ("md.consistency-policy", array.consistency_policy),
+        ("md.rebuild-status", array.rebuild_status),
+        ("md.resync-status", array.resync_status),
+        ("md.check-status", array.check_status),
+        ("md.intent-bitmap", array.intent_bitmap),
     ] {
         if let Some(value) = value {
             node = node.with_property(key, value);
@@ -226,7 +271,16 @@ mod tests {
         Array Size : 1046528 (1022.00 MiB 1071.64 MB)\n\
        Raid Devices : 2\n\
       Total Devices : 2\n\
+     Active Devices : 2\n\
+    Working Devices : 2\n\
+     Failed Devices : 0\n\
+      Spare Devices : 1\n\
               State : clean\n\
+ Consistency Policy : bitmap\n\
+    Rebuild Status : 42% complete\n\
+      Resync Status : delayed\n\
+       Check Status : 10% complete\n\
+      Intent Bitmap : Internal\n\
         Update Time : Tue Jun 23 10:16:00 2026\n\
                UUID : aaaa:bbbb:cccc:dddd\n\
                Name : host:0\n\
@@ -273,6 +327,29 @@ mod tests {
                     .properties
                     .iter()
                     .any(|property| property.key == "md.name" && property.value == "host:0")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.active-devices" && property.value == "2")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.spare-devices" && property.value == "1")
+                && node.properties.iter().any(|property| {
+                    property.key == "md.consistency-policy" && property.value == "bitmap"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "md.rebuild-status" && property.value == "42% complete"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "md.resync-status" && property.value == "delayed"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "md.check-status" && property.value == "10% complete"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "md.intent-bitmap" && property.value == "Internal"
+                })
         }));
         assert_eq!(
             graph
