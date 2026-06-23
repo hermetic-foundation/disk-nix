@@ -81,6 +81,10 @@ operations need `/dev/bcache*`, and LVM logical volumes and thin pools need
 canonical `vg/lv` or `vg/pool` targets. Declarations that omit these concrete
 addresses still produce reviewable plans, but their command plans stay
 non-ready instead of guessing from logical keys.
+MD RAID member add, replacement, and removal declarations use the same explicit
+array target requirement as create and grow plans. Multipath replacement
+declarations use the concrete map target for preflight inspection, then render
+separate path add and delete commands from the `replaceDevices` mapping.
 
 Typed filesystem declarations include:
 

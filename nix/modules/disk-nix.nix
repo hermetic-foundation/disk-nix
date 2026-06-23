@@ -1134,13 +1134,13 @@ in
     mdRaids = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed MD RAID lifecycle declarations emitted into the disk-nix planner spec. Executable create, grow, and member-removal plans require an explicit /dev/md* array target.";
+      description = "Typed MD RAID lifecycle declarations emitted into the disk-nix planner spec. Executable create, grow, member-add, member-replacement, and member-removal plans require an explicit /dev/md* array target.";
     };
 
     multipathMaps = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed multipath map lifecycle declarations emitted into the disk-nix planner spec. Executable grow plans require a concrete mpath* or /dev/mapper/* map target.";
+      description = "Typed multipath map lifecycle declarations emitted into the disk-nix planner spec. Executable grow and replacement preflight plans require a concrete mpath* or /dev/mapper/* map target.";
     };
 
     pools = lib.mkOption {

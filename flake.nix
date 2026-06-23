@@ -282,10 +282,16 @@
                   "/dev/disk/by-id/nvme-md-b"
                 ];
                 addDevices = [ "/dev/disk/by-id/nvme-md-spare" ];
+                replaceDevices = {
+                  "/dev/disk/by-id/nvme-md-aging" = "/dev/disk/by-id/nvme-md-replacement";
+                };
               };
               multipathMaps.mpatha = {
                 target = "mpatha";
                 addDevices = [ "/dev/sdb" ];
+                replaceDevices = {
+                  "/dev/sdc" = "/dev/sdd";
+                };
               };
               luns."iqn.2026-06.example:storage/root:0" = {
                 operation = "grow";
@@ -745,8 +751,10 @@
                   and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-a") != null)
                   and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-b") != null)
                   and (.spec.mdRaids.root.addDevices | index("/dev/disk/by-id/nvme-md-spare") != null)
+                  and .spec.mdRaids.root.replaceDevices."/dev/disk/by-id/nvme-md-aging" == "/dev/disk/by-id/nvme-md-replacement"
                   and .spec.multipathMaps.mpatha.target == "mpatha"
                   and (.spec.multipathMaps.mpatha.addDevices | index("/dev/sdb") != null)
+                  and .spec.multipathMaps.mpatha.replaceDevices."/dev/sdc" == "/dev/sdd"
                   and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
                   and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
                   and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
