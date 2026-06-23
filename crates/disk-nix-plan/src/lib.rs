@@ -2635,6 +2635,87 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::ZfsSnapshot,
+            operation: Operation::Snapshot,
+            risk: RiskClass::Reversible,
+            advice: Some(Advice {
+                summary: "ZFS snapshot creation preserves a point-in-time recovery point"
+                    .to_string(),
+                alternatives: vec![
+                    "use recursive snapshots when descendants must be captured together"
+                        .to_string(),
+                    "add holds for snapshots that retention jobs must not prune".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsSnapshot,
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            advice: Some(Advice {
+                summary: "ZFS snapshot holds and releases update retention references"
+                    .to_string(),
+                alternatives: vec![
+                    "hold snapshots before risky migrations or destructive changes".to_string(),
+                    "release only after replacement backups or snapshots are verified"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsSnapshot,
+            operation: Operation::Rollback,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "ZFS rollback can discard changes newer than the snapshot".to_string(),
+                alternatives: vec![
+                    "clone the snapshot and inspect data before rollback".to_string(),
+                    "take a pre-rollback snapshot of the current state".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsSnapshot,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "destroying a ZFS snapshot removes a recovery point".to_string(),
+                alternatives: vec![
+                    "keep or hold the snapshot until replacement backups are verified"
+                        .to_string(),
+                    "clone the snapshot before pruning if data may still be needed".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsSnapshot,
+            operation: Operation::Snapshot,
+            risk: RiskClass::Reversible,
+            advice: Some(Advice {
+                summary: "Btrfs snapshot creation preserves a subvolume recovery point"
+                    .to_string(),
+                alternatives: vec![
+                    "prefer read-only snapshots for backup or migration checkpoints"
+                        .to_string(),
+                    "verify qgroup policy before creating many snapshots".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsSnapshot,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "deleting a Btrfs snapshot removes its recovery tree".to_string(),
+                alternatives: vec![
+                    "keep a read-only snapshot until replacement backups are verified"
+                        .to_string(),
+                    "rename the snapshot before final deletion when consumers are uncertain"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::LoopDevice,
             operation: Operation::Create,
             risk: RiskClass::Online,
@@ -3345,6 +3426,52 @@ mod tests {
         assert!(lun_destroy.advice.as_ref().is_some_and(|advice| {
             advice.summary.contains("without deleting target-side data")
         }));
+    }
+
+    #[test]
+    fn snapshot_capabilities_cover_zfs_and_btrfs_lifecycle() {
+        let capabilities = default_capabilities();
+        let zfs_snapshot = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::ZfsSnapshot
+                    && capability.operation == Operation::Snapshot
+            })
+            .expect("ZFS snapshot create capability should exist");
+        let zfs_hold = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::ZfsSnapshot
+                    && capability.operation == Operation::SetProperty
+            })
+            .expect("ZFS snapshot hold capability should exist");
+        let zfs_rollback = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::ZfsSnapshot
+                    && capability.operation == Operation::Rollback
+            })
+            .expect("ZFS snapshot rollback capability should exist");
+        let btrfs_snapshot = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsSnapshot
+                    && capability.operation == Operation::Snapshot
+            })
+            .expect("Btrfs snapshot create capability should exist");
+        let btrfs_destroy = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsSnapshot
+                    && capability.operation == Operation::Destroy
+            })
+            .expect("Btrfs snapshot destroy capability should exist");
+
+        assert_eq!(zfs_snapshot.risk, RiskClass::Reversible);
+        assert_eq!(zfs_hold.risk, RiskClass::Safe);
+        assert_eq!(zfs_rollback.risk, RiskClass::PotentialDataLoss);
+        assert_eq!(btrfs_snapshot.risk, RiskClass::Reversible);
+        assert_eq!(btrfs_destroy.risk, RiskClass::Destructive);
     }
 
     #[test]

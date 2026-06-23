@@ -437,6 +437,8 @@ ZFS snapshot retention declarations render safe `zfs hold <tag> <snapshot>`
 and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
 ZFS snapshot rollback declarations render reviewed `zfs rollback` command
 details internally, but apply remains blocked as potential data loss.
+The capability inventory advertises ZFS snapshot create, hold/release,
+rollback, and destroy risks plus Btrfs snapshot create and destroy risks.
 `verificationSummary` and `verificationPlan` record read-only commands and
 state checks that run after a successful `--execute` command phase or can be
 used for manual review after applying a generated script. These checks re-probe
