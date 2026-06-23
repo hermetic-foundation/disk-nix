@@ -559,6 +559,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Grow if collection == Some("loopDevices") => (
+            vec![
+                command(
+                    ["losetup", "--json", "--list", target],
+                    false,
+                    "verify loop device size and backing file after refresh",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify loop graph node and dependent consumers",
+                ),
+            ],
+            vec![
+                "loop device reports the refreshed backing size".to_string(),
+                "dependent mappings or filesystems see the intended capacity".to_string(),
+            ],
+        ),
         Operation::Create | Operation::Grow if collection == Some("partitions") => (
             vec![
                 command(
@@ -845,6 +863,17 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "origin logical volume remains active and healthy".to_string(),
             ],
         ),
+        Operation::Destroy if collection == Some("loopDevices") => (
+            vec![command(
+                ["losetup", "--json", "--list"],
+                false,
+                "verify loop device is detached while backing file remains",
+            )],
+            vec![
+                "loop device no longer appears in losetup inventory".to_string(),
+                "backing file or block device remains intact".to_string(),
+            ],
+        ),
         Operation::Rollback if collection == Some("lvmSnapshots") => (
             vec![
                 command(
@@ -1026,6 +1055,30 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "extend metadata before it approaches exhaustion".to_string(),
                     "verify thin pool autoextend policy and monitoring before growth".to_string(),
                     "review thin volume overcommit before adding virtual capacity".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Grow if collection == Some("loopDevices") => {
+            let target = target.unwrap_or("<loop-device>");
+            (
+                vec![
+                    command(
+                        ["losetup", "--json", "--list", target],
+                        false,
+                        "inspect loop device before refreshing backing size",
+                    ),
+                    command(
+                        ["losetup", "-c", target],
+                        true,
+                        "refresh the loop device size after backing storage growth",
+                    ),
+                ],
+                vec![
+                    "grow the backing file or block device before refreshing the loop mapping"
+                        .to_string(),
+                    "resize dependent filesystems only after losetup reports the new size"
+                        .to_string(),
                 ],
                 true,
             )
@@ -1442,6 +1495,18 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("loopDevices") => {
+            let target = target.unwrap_or("<loop-device>");
+            let backing = action.context.device.as_deref();
+            (
+                vec![loop_device_create_command(target, backing)],
+                vec![
+                    "verify the backing file or block device is the intended source".to_string(),
+                    "persist the mapping declaratively when it must survive reboot".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create if collection == Some("partitions") => {
             let target = target.unwrap_or("<partition>");
             let disk = action.context.device.as_deref().unwrap_or("<disk>");
@@ -1611,6 +1676,28 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "verify the snapshot is no longer needed as a recovery point".to_string(),
                     "prefer a fresh snapshot or backup before deleting old snapshots".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("loopDevices") => {
+            let target = target.unwrap_or("<loop-device>");
+            (
+                vec![
+                    command(
+                        ["losetup", "--json", "--list", target],
+                        false,
+                        "inspect loop device and backing file before detach",
+                    ),
+                    command(
+                        ["losetup", "--detach", target],
+                        true,
+                        "detach the loop device without deleting the backing file",
+                    ),
+                ],
+                vec![
+                    "unmount filesystems and deactivate mappings before detach".to_string(),
+                    "verify the backing file remains available after detach".to_string(),
                 ],
                 true,
             )
@@ -2126,6 +2213,28 @@ fn lvm_snapshot_create_command(
             CommandReadiness::NeedsDesiredSize,
             ["desired LVM snapshot size"],
             "create an LVM snapshot after selecting the snapshot size",
+        ),
+    }
+}
+
+fn loop_device_create_command(target: &str, backing: Option<&str>) -> ExecutionCommand {
+    match backing {
+        Some(backing) if target.starts_with("/dev/loop") => command(
+            ["losetup", target, backing],
+            true,
+            "create the requested loop-device mapping",
+        ),
+        Some(backing) => command(
+            ["losetup", "--find", "--show", backing],
+            true,
+            "create a loop-device mapping with the next available loop device",
+        ),
+        None => command_with_readiness(
+            ["losetup", "--find", "--show", "<backing-file>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing file or block device"],
+            "create a loop-device mapping after selecting the backing path",
         ),
     }
 }
@@ -2828,6 +2937,59 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["lvs", "--reportformat", "json", "vg0/root-snap"])
+        }));
+    }
+
+    #[test]
+    fn loop_device_lifecycle_reports_losetup_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "loopDevices": {
+                  "/dev/loop7": {
+                    "operation": "create",
+                    "device": "/var/lib/images/root.img"
+                  },
+                  "/dev/loop8": {
+                    "operation": "grow"
+                  },
+                  "/dev/loop9": {
+                    "operation": "destroy"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::Blocked);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["losetup", "/dev/loop7", "/var/lib/images/root.img"]
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["losetup", "-c", "/dev/loop8"])
+        }));
+        assert!(
+            !report.command_plan.iter().any(|step| {
+                step.commands
+                    .iter()
+                    .any(|command| command.argv == ["losetup", "--detach", "/dev/loop9"])
+            }),
+            "offline detach remains blocked by default policy"
+        );
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["losetup", "--json", "--list", "/dev/loop8"])
         }));
     }
 

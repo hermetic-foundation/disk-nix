@@ -390,6 +390,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "volumeGroups",
         "thinPools",
         "lvmSnapshots",
+        "loopDevices",
         "mdRaids",
         "multipathMaps",
         "pools",
@@ -1488,6 +1489,19 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "loopDevices" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "loop device creation maps an existing backing file or block device"
+                    .to_string(),
+                alternatives: vec![
+                    "use a stable backing file path and explicit loop device name when needed"
+                        .to_string(),
+                    "verify the backing file is not concurrently managed elsewhere".to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
         Operation::Grow if collection == "mdRaids" => (
             RiskClass::OfflineRequired,
@@ -1590,6 +1604,20 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Grow if collection == "loopDevices" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "loop device growth refreshes the mapping after backing size changes"
+                    .to_string(),
+                alternatives: vec![
+                    "grow the backing file or block device before refreshing the loop mapping"
+                        .to_string(),
+                    "resize dependent partitions or filesystems only after losetup reports the new size"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Grow | Operation::AddDevice | Operation::Rebalance => {
             (RiskClass::Online, false, None)
         }
@@ -1598,6 +1626,19 @@ fn classify_operation(
             (risk, false, Some(advice))
         }
         Operation::Snapshot => (RiskClass::Reversible, false, None),
+        Operation::Destroy if collection == "loopDevices" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "detaching a loop device requires consumers to be unmounted or stopped"
+                    .to_string(),
+                alternatives: vec![
+                    "unmount filesystems and deactivate mappings before detach".to_string(),
+                    "keep the backing file intact and recreate the loop mapping after validation"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Rollback if collection == "lvmSnapshots" => (
             RiskClass::PotentialDataLoss,
             false,
@@ -1720,6 +1761,11 @@ fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
         "volumes" | "volumeGroups" | "thinPools" | "luns" | "mdRaids" | "multipathMaps" => {
             alternatives
                 .push("grow or attach replacement capacity instead of reformatting".to_string());
+        }
+        "loopDevices" => {
+            alternatives
+                .push("detach the loop device without deleting its backing file".to_string());
+            alternatives.push("unmount consumers before changing the backing file".to_string());
         }
         "lvmSnapshots" => {
             alternatives.push("merge or mount the snapshot before deleting it".to_string());
@@ -1942,6 +1988,43 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "keep the snapshot until backups are verified".to_string(),
                     "merge or clone the snapshot before deletion".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LoopDevice,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "loop device creation maps a backing file or block device".to_string(),
+                alternatives: vec![
+                    "verify backing path identity before mapping".to_string(),
+                    "use stable loop configuration when the mapping must survive reboot"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LoopDevice,
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "loop device growth refreshes backing size visibility".to_string(),
+                alternatives: vec![
+                    "grow the backing file first".to_string(),
+                    "refresh dependent consumers after losetup -c".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LoopDevice,
+            operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "loop detach requires inactive consumers".to_string(),
+                alternatives: vec![
+                    "unmount filesystems before detach".to_string(),
+                    "preserve the backing file for remapping".to_string(),
                 ],
             }),
         },
@@ -2660,6 +2743,48 @@ mod tests {
                 .as_ref()
                 .is_some_and(|advice| advice.summary.contains("rolls the origin back"))
         );
+    }
+
+    #[test]
+    fn plan_classifies_loop_device_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "loopDevices": {
+                "/dev/loop7": {
+                  "operation": "create",
+                  "device": "/var/lib/images/root.img"
+                },
+                "/dev/loop8": {
+                  "operation": "grow"
+                },
+                "/dev/loop9": {
+                  "operation": "destroy"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.destructive_count, 0);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "loopdevices:/dev/loop7:create")
+            .expect("loop create action exists");
+        assert_eq!(create.risk, RiskClass::Online);
+        assert_eq!(
+            create.context.device.as_deref(),
+            Some("/var/lib/images/root.img")
+        );
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "loopdevices:/dev/loop9:destroy")
+            .expect("loop destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::OfflineRequired);
+        assert!(!destroy.destructive);
     }
 
     #[test]

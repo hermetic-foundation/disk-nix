@@ -123,6 +123,7 @@ Typed lifecycle declarations are available for:
 - `volumeGroups`
 - `thinPools`
 - `lvmSnapshots`
+- `loopDevices`
 - `mdRaids`
 - `multipathMaps`
 - `pools`
@@ -213,6 +214,10 @@ Example lifecycle planning through NixOS options:
       operation = "snapshot";
       target = "vg0/root";
       desiredSize = "20GiB";
+    };
+    loopDevices."/dev/loop7" = {
+      operation = "create";
+      device = "/var/lib/images/root.img";
     };
     mdRaids.root = {
       target = "/dev/md/root";

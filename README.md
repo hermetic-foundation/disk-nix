@@ -157,9 +157,9 @@ intentionally refused until a direct mutating executor exists.
 Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS format/resize
 workflows, Btrfs subvolume creation/deletion, VDO growth, LVM thin-pool growth,
-LVM snapshot create/merge/remove, MD RAID member updates, multipath map
-updates, zvol updates, volume and pool updates, network LUN growth, snapshots,
-and cache replacement.
+LVM snapshot create/merge/remove, loop-device mapping updates, MD RAID member
+updates, multipath map updates, zvol updates, volume and pool updates, network
+LUN growth, snapshots, and cache replacement.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
 Use `--report-out` with either command to persist the JSON report for review

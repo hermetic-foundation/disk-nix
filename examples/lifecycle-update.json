@@ -44,6 +44,12 @@
       "desiredSize": "20GiB"
     }
   },
+  "loopDevices": {
+    "/dev/loop7": {
+      "operation": "create",
+      "device": "/var/lib/images/root.img"
+    }
+  },
   "mdRaids": {
     "root": {
       "target": "/dev/md/root",

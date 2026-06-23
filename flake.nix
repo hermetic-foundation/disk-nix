@@ -182,6 +182,10 @@
                 target = "vg0/root";
                 desiredSize = "20GiB";
               };
+              loopDevices."/dev/loop7" = {
+                operation = "create";
+                device = "/var/lib/images/root.img";
+              };
               mdRaids.root = {
                 target = "/dev/md/root";
                 addDevices = [ "/dev/disk/by-id/nvme-md-spare" ];
@@ -252,6 +256,7 @@
               and .properties.zvols["$ref"] == "#/$defs/lifecycleMap"
               and .properties.thinPools["$ref"] == "#/$defs/lifecycleMap"
               and .properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.loopDevices["$ref"] == "#/$defs/lifecycleMap"
               and .properties.mdRaids["$ref"] == "#/$defs/lifecycleMap"
               and .properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap"
               and (."$defs".operation.enum | index("grow") != null)
@@ -263,6 +268,7 @@
               and (."$defs".specBody.properties.zvols["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.thinPools["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.loopDevices["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.mdRaids["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
@@ -288,7 +294,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 21
+              .summary.actionCount == 22
               and .summary.offlineRequiredCount == 5
               and .summary.destructiveCount == 2
               and .summary.potentialDataLossCount == 2
@@ -298,6 +304,7 @@
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
               and (.actions | any(.id == "lvmsnapshots:vg0/root-snap:snapshot" and .risk == "reversible"))
+              and (.actions | any(.id == "loopdevices:/dev/loop7:create" and .risk == "online"))
               and (.actions | any(.id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-md-spare" and .risk == "online"))
               and (.actions | any(.id == "multipathMaps:mpatha:add-device:/dev/sdb" and .risk == "online"))
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
@@ -402,6 +409,8 @@
                   and .spec.lvmSnapshots."vg0/root-snap".operation == "snapshot"
                   and .spec.lvmSnapshots."vg0/root-snap".target == "vg0/root"
                   and .spec.lvmSnapshots."vg0/root-snap".desiredSize == "20GiB"
+                  and .spec.loopDevices."/dev/loop7".operation == "create"
+                  and .spec.loopDevices."/dev/loop7".device == "/var/lib/images/root.img"
                   and .spec.mdRaids.root.target == "/dev/md/root"
                   and (.spec.mdRaids.root.addDevices | index("/dev/disk/by-id/nvme-md-spare") != null)
                   and .spec.multipathMaps.mpatha.target == "mpatha"
