@@ -217,8 +217,9 @@ ZFS snapshot hold plans render safe `zfs hold <tag> <snapshot>` and
 declarations so retention can be changed without deleting recovery points.
 ZFS snapshot rollback plans render reviewed `zfs rollback` details while
 remaining blocked by the potential-data-loss policy gate.
-ZFS dataset apply plans render reviewed `zfs create` commands and
-policy-gated `zfs destroy` commands.
+ZFS dataset apply plans render reviewed `zfs create` commands with declared
+properties as create-time `-o key=value` options, plus policy-gated
+`zfs destroy` commands.
 LVM logical volume apply plans render reviewed `lvcreate` and gated
 `lvremove` steps for volume lifecycle declarations, with unresolved markers for
 missing `vg/lv` targets or sizes.

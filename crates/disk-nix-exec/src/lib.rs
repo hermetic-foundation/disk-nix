@@ -2318,7 +2318,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect ZFS pool free space before creating the zvol",
                     ),
-                    zvol_create_command(target, desired_size),
+                    zvol_create_command(
+                        target,
+                        desired_size,
+                        &action.context.property_assignments,
+                    ),
                 ],
                 vec![
                     "decide sparse versus reserved allocation before creation".to_string(),
@@ -2336,11 +2340,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect ZFS pool free space before creating the dataset",
                     ),
-                    command(
-                        ["zfs", "create", target],
-                        true,
-                        "create the reviewed ZFS filesystem dataset",
-                    ),
+                    zfs_dataset_create_command(target, &action.context.property_assignments),
                 ],
                 vec![
                     "review inherited mountpoint, quota, reservation, and encryption properties"
@@ -4643,21 +4643,48 @@ fn loop_device_create_command(target: &str, backing: Option<&str>) -> ExecutionC
     }
 }
 
-fn zvol_create_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+fn zvol_create_command(
+    target: &str,
+    desired_size: Option<&str>,
+    property_assignments: &[String],
+) -> ExecutionCommand {
     match desired_size {
-        Some(size) => command_vec(
-            vec!["zfs", "create", "-V", size, target],
-            true,
-            "create a zvol with the desired volume size",
-        ),
-        None => command_with_readiness(
-            ["zfs", "create", "-V", "<size>", target],
-            true,
-            CommandReadiness::NeedsDesiredSize,
-            ["desired zvol size"],
-            "create a zvol after selecting the desired volume size",
-        ),
+        Some(size) => {
+            let mut argv = zfs_create_argv(property_assignments);
+            argv.push("-V".to_string());
+            argv.push(size.to_string());
+            argv.push(target.to_string());
+            command_vec(argv, true, "create a zvol with the desired volume size")
+        }
+        None => {
+            let mut argv = zfs_create_argv(property_assignments);
+            argv.push("-V".to_string());
+            argv.push("<size>".to_string());
+            argv.push(target.to_string());
+            command_vec_with_readiness(
+                argv,
+                true,
+                CommandReadiness::NeedsDesiredSize,
+                ["desired zvol size"],
+                "create a zvol after selecting the desired volume size",
+            )
+        }
     }
+}
+
+fn zfs_dataset_create_command(target: &str, property_assignments: &[String]) -> ExecutionCommand {
+    let mut argv = zfs_create_argv(property_assignments);
+    argv.push(target.to_string());
+    command_vec(argv, true, "create the reviewed ZFS filesystem dataset")
+}
+
+fn zfs_create_argv(property_assignments: &[String]) -> Vec<String> {
+    let mut argv = vec!["zfs".to_string(), "create".to_string()];
+    for assignment in property_assignments {
+        argv.push("-o".to_string());
+        argv.push(assignment.clone());
+    }
+    argv
 }
 
 fn zvol_set_volsize_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
@@ -5905,7 +5932,11 @@ mod tests {
                   },
                   "tank/vm/tmp": {
                     "operation": "create",
-                    "desiredSize": "20GiB"
+                    "desiredSize": "20GiB",
+                    "properties": {
+                      "compression": "zstd",
+                      "volblocksize": "16K"
+                    }
                   },
                   "tank/vm/old": {
                     "destroy": true
@@ -5938,7 +5969,18 @@ mod tests {
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
-                command.argv == ["zfs", "create", "-V", "20GiB", "tank/vm/tmp"]
+                command.argv
+                    == [
+                        "zfs",
+                        "create",
+                        "-o",
+                        "compression=zstd",
+                        "-o",
+                        "volblocksize=16K",
+                        "-V",
+                        "20GiB",
+                        "tank/vm/tmp",
+                    ]
                     && command.readiness == CommandReadiness::Ready
             })
         }));
@@ -5968,7 +6010,11 @@ mod tests {
               "spec": {
                 "datasets": {
                   "tank/home": {
-                    "operation": "create"
+                    "operation": "create",
+                    "properties": {
+                      "compression": "zstd",
+                      "mountpoint": "/home"
+                    }
                   },
                   "tank/archive": {
                     "destroy": true
@@ -5987,7 +6033,16 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
-                command.argv == ["zfs", "create", "tank/home"]
+                command.argv
+                    == [
+                        "zfs",
+                        "create",
+                        "-o",
+                        "compression=zstd",
+                        "-o",
+                        "mountpoint=/home",
+                        "tank/home",
+                    ]
                     && command.readiness == CommandReadiness::Ready
             })
         }));

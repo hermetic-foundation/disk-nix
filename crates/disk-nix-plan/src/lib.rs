@@ -168,6 +168,8 @@ pub struct ActionContext {
     pub property: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub property_value: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub property_assignments: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fs_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -205,6 +207,7 @@ impl ActionContext {
             && self.replacement.is_none()
             && self.property.is_none()
             && self.property_value.is_none()
+            && self.property_assignments.is_empty()
             && self.fs_type.is_none()
             && self.mountpoint.is_none()
             && self.desired_size.is_none()
@@ -806,6 +809,7 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         client: string_field(object, &["client"]),
         portal: lifecycle_portal(object),
         options: lifecycle_options(object),
+        property_assignments: property_assignments(object),
         ..ActionContext::default()
     }
 }
@@ -853,6 +857,19 @@ fn lifecycle_options(object: &Value) -> Option<String> {
             .get("properties")
             .and_then(|properties| string_field(properties, &["options"]))
     })
+}
+
+fn property_assignments(object: &Value) -> Vec<String> {
+    object
+        .get("properties")
+        .and_then(Value::as_object)
+        .map(|properties| {
+            properties
+                .iter()
+                .map(|(property, value)| format!("{property}={}", property_value(value)))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn lifecycle_portal(object: &Value) -> Option<String> {
@@ -3358,7 +3375,11 @@ mod tests {
             br#"{
               "datasets": {
                 "tank/home": {
-                  "operation": "create"
+                  "operation": "create",
+                  "properties": {
+                    "compression": "zstd",
+                    "mountpoint": "/home"
+                  }
                 },
                 "tank/archive": {
                   "destroy": true
@@ -3368,7 +3389,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.action_count, 4);
         assert_eq!(plan.summary.destructive_count, 1);
         let create = plan
             .actions
@@ -3376,6 +3397,13 @@ mod tests {
             .find(|action| action.id == "datasets:tank/home:create")
             .expect("dataset create action exists");
         assert_eq!(create.risk, RiskClass::Online);
+        assert_eq!(
+            create.context.property_assignments,
+            vec![
+                "compression=zstd".to_string(),
+                "mountpoint=/home".to_string()
+            ]
+        );
         assert!(create.advice.as_ref().is_some_and(|advice| {
             advice
                 .alternatives

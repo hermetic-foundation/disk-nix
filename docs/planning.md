@@ -112,12 +112,15 @@ Examples:
   Preflight inspection targets path-like vdev entries, while topology keywords
   such as `mirror` stay in the rendered `zpool create` command. Import/export
   is preferred when moving an existing pool.
-- ZFS dataset creation is online, with advice to review inherited mountpoint,
-  quota, reservation, and encryption policy; dataset destruction remains
-  destructive and recommends snapshots or rename-first validation.
+- ZFS dataset creation is online, with declared `properties = { ... }`
+  rendered as create-time `zfs create -o key=value` options as well as
+  explicit property reconciliation actions. Advice still calls out inherited
+  mountpoint, quota, reservation, and encryption policy; dataset destruction
+  remains destructive and recommends snapshots or rename-first validation.
 - zvol creation, growth, and property updates are online operations, with
   advice to verify pool capacity, reservation policy, and downstream block
-  consumers. zvol `properties = { ... }` render `zfs set key=value <zvol>`.
+  consumers. zvol `properties = { ... }` render create-time `-o key=value`
+  options and `zfs set key=value <zvol>` reconciliation actions.
 - MD RAID creation is destructive because it writes array metadata to member
   devices. Create command plans identify missing RAID level and member-device
   fields separately. Member add is online; replacement and grow/reshape are
