@@ -739,6 +739,14 @@ fn print_execution_report(
                         "read-only"
                     };
                     writeln!(output, "  {mutation}: {}", command.argv.join(" "))?;
+                    writeln!(output, "    readiness: {:?}", command.readiness)?;
+                    if !command.unresolved_inputs.is_empty() {
+                        writeln!(
+                            output,
+                            "    unresolved: {}",
+                            command.unresolved_inputs.join(", ")
+                        )?;
+                    }
                     writeln!(output, "    {}", command.note)?;
                 }
                 for note in &step.notes {

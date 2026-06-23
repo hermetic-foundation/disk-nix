@@ -56,7 +56,18 @@ pub struct ExecutionStep {
 pub struct ExecutionCommand {
     pub argv: Vec<String>,
     pub mutates: bool,
+    pub readiness: CommandReadiness,
+    pub unresolved_inputs: Vec<String>,
     pub note: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CommandReadiness {
+    Ready,
+    NeedsDesiredSize,
+    NeedsDomainImplementation,
+    ManualOnly,
 }
 
 #[must_use]
@@ -176,9 +187,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect current LVM logical volume state",
                     ),
-                    command(
+                    command_with_readiness(
                         ["lvextend", "--resizefs", "--size", "+<size>", target],
                         true,
+                        CommandReadiness::NeedsDesiredSize,
+                        ["desired size delta"],
                         "grow the logical volume and filesystem together",
                     ),
                 ],
@@ -240,9 +253,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect current target state before growth",
                     ),
-                    command(
+                    command_with_readiness(
                         ["<grow-storage-object-tool>", target],
                         true,
+                        CommandReadiness::NeedsDomainImplementation,
+                        ["grow tool", "desired size"],
                         "grow the storage object with the target-domain-specific command",
                     ),
                 ],
@@ -351,9 +366,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Create => (
-            vec![command(
+            vec![command_with_readiness(
                 ["<create-storage-object-tool>", "<target>"],
                 true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["create tool", "target"],
                 "create the requested storage object",
             )],
             vec!["creation commands require target-kind-specific arguments from the desired spec".to_string()],
@@ -368,9 +385,24 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
 }
 
 fn command<const N: usize>(argv: [&str; N], mutates: bool, note: &str) -> ExecutionCommand {
+    command_with_readiness(argv, mutates, CommandReadiness::Ready, [], note)
+}
+
+fn command_with_readiness<const N: usize, const M: usize>(
+    argv: [&str; N],
+    mutates: bool,
+    readiness: CommandReadiness,
+    unresolved_inputs: [&str; M],
+    note: &str,
+) -> ExecutionCommand {
     ExecutionCommand {
         argv: argv.iter().map(|value| (*value).to_string()).collect(),
         mutates,
+        readiness,
+        unresolved_inputs: unresolved_inputs
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect(),
         note: note.to_string(),
     }
 }
@@ -392,14 +424,18 @@ fn filesystem_grow_command(fs_type: &str, target: &str) -> ExecutionCommand {
             true,
             "grow a Btrfs filesystem to the maximum visible device size",
         ),
-        "zfs" => command(
+        "zfs" => command_with_readiness(
             ["zfs", "set", "volsize=<size>", target],
             true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired zvol size"],
             "set the ZFS volume size after selecting the desired size",
         ),
-        _ => command(
+        _ => command_with_readiness(
             ["<filesystem-grow-tool>", target],
             true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem grow tool"],
             "run the filesystem-specific online grow command after device growth is visible",
         ),
     }
@@ -422,9 +458,11 @@ fn add_device_command(collection: Option<&str>, target: &str, device: &str) -> E
             true,
             "add a device to a mounted Btrfs filesystem",
         ),
-        _ => command(
+        _ => command_with_readiness(
             ["<add-device-tool>", target, device],
             true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["add-device tool"],
             "attach the new device with the storage-domain-specific tool",
         ),
     }
@@ -447,14 +485,18 @@ fn replace_device_command(
             true,
             "replace a Btrfs filesystem device",
         ),
-        Some("caches") => command(
+        Some("caches") => command_with_readiness(
             ["<cache-replace-tool>", target, from, to],
             true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["cache replacement tool", "cache flush or detach workflow"],
             "flush or detach dirty cache state before replacing the cache device",
         ),
-        _ => command(
+        _ => command_with_readiness(
             ["<replace-device-tool>", target, from, to],
             true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["replace-device tool"],
             "start the storage-domain replacement operation",
         ),
     }
@@ -472,9 +514,11 @@ fn rebalance_command(collection: Option<&str>, target: &str) -> ExecutionCommand
             true,
             "rebalance Btrfs chunks across available devices",
         ),
-        _ => command(
+        _ => command_with_readiness(
             ["<rebalance-tool>", target],
             true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["rebalance tool"],
             "run the storage-domain rebalance command",
         ),
     }
@@ -502,9 +546,11 @@ fn set_property_command(
             true,
             "reload NFS exports after export property changes",
         ),
-        _ => command(
+        _ => command_with_readiness(
             ["<set-property-tool>", target, property],
             true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["property update tool"],
             "apply the storage-domain property update",
         ),
     }
@@ -514,9 +560,11 @@ fn snapshot_command(target: &str, snapshot: &str) -> ExecutionCommand {
     if snapshot.contains('@') {
         command(["zfs", "snapshot", snapshot], true, "create a ZFS snapshot")
     } else {
-        command(
+        command_with_readiness(
             ["<snapshot-tool>", target, snapshot],
             true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["snapshot tool"],
             "create the snapshot with zfs, btrfs, lvm, or the target-specific tool",
         )
     }
@@ -566,6 +614,8 @@ mod tests {
                 .first()
                 .is_some_and(|program| program == "lvextend")
                 && command.argv.contains(&"vg/root".to_string())
+                && command.readiness == CommandReadiness::NeedsDesiredSize
+                && command.unresolved_inputs == ["desired size delta"]
         }));
     }
 
@@ -671,9 +721,10 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(report.command_plan.iter().any(|step| {
-            step.commands
-                .iter()
-                .any(|command| command.argv == ["zpool", "add", "tank", "/dev/disk/by-id/new"])
+            step.commands.iter().any(|command| {
+                command.argv == ["zpool", "add", "tank", "/dev/disk/by-id/new"]
+                    && command.readiness == CommandReadiness::Ready
+            })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands
