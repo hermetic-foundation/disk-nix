@@ -3211,6 +3211,36 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Import if collection == "volumeGroups" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "LVM volume group import reactivates an exported VG on this host"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect PV identities and VG UUIDs before vgimport".to_string(),
+                    "prefer vgimport over vgcreate when preserving existing logical volumes"
+                        .to_string(),
+                    "activate and mount consumers only after the imported VG is verified"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Export if collection == "volumeGroups" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "LVM volume group export marks a VG inactive for movement without deleting data"
+                    .to_string(),
+                alternatives: vec![
+                    "export a VG instead of removing it when moving disks between hosts"
+                        .to_string(),
+                    "deactivate logical volumes and stop mounts or services before vgexport"
+                        .to_string(),
+                    "verify metadata backups before changing VG activation state".to_string(),
+                ],
+            }),
+        ),
         Operation::Rename => (
             RiskClass::OfflineRequired,
             false,
@@ -3540,11 +3570,12 @@ fn classify_operation(
             false,
             Some(Advice {
                 summary: format!(
-                    "{} is currently only supported for ZFS pool lifecycle declarations",
+                    "{} is currently only supported for ZFS pools and LVM volume groups",
                     operation_label(operation)
                 ),
                 alternatives: vec![
                     "use pools.<name>.operation for ZFS pool import or export".to_string(),
+                    "use volumeGroups.<name>.operation for LVM VG import or export".to_string(),
                     "use domain-specific attach, detach, mount, or unmount operations where available"
                         .to_string(),
                 ],
@@ -4763,6 +4794,32 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "inspect the candidate PV before vgextend".to_string(),
                     "extend the existing VG instead of recreating it".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmVolumeGroup,
+            operation: Operation::Import,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "volume group import reactivates an exported VG without recreating it"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect PV identities and VG UUIDs before vgimport".to_string(),
+                    "activate consumers only after imported metadata is verified".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmVolumeGroup,
+            operation: Operation::Export,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "volume group export prepares a VG for movement without deleting data"
+                    .to_string(),
+                alternatives: vec![
+                    "deactivate logical volumes before vgexport".to_string(),
+                    "export instead of removing a VG that will be moved".to_string(),
                 ],
             }),
         },
@@ -6528,6 +6585,12 @@ mod tests {
                     "/dev/disk/by-id/old-pv": "/dev/disk/by-id/new-pv"
                   }
                 },
+                "importvg": {
+                  "operation": "import"
+                },
+                "exportvg": {
+                  "operation": "export"
+                },
                 "oldvg": {
                   "destroy": true
                 }
@@ -6536,8 +6599,8 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
-        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.action_count, 5);
+        assert_eq!(plan.summary.offline_required_count, 3);
         assert_eq!(plan.summary.destructive_count, 2);
         let create = plan
             .actions
@@ -6582,6 +6645,26 @@ mod tests {
                 advice.summary.contains("migrate extents before vgreduce")
             })
         );
+        let import = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumegroups:importvg:import")
+            .expect("volume group import action exists");
+        assert_eq!(import.risk, RiskClass::OfflineRequired);
+        assert!(!import.destructive);
+        assert!(import.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("vgimport"))
+        }));
+        let export = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumegroups:exportvg:export")
+            .expect("volume group export action exists");
+        assert_eq!(export.risk, RiskClass::OfflineRequired);
+        assert!(!export.destructive);
     }
 
     #[test]

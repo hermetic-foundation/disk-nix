@@ -80,6 +80,14 @@
       "desiredSize": "100GiB"
     }
   },
+  "volumeGroups": {
+    "importvg": {
+      "operation": "import"
+    },
+    "exportvg": {
+      "operation": "export"
+    }
+  },
   "lvmSnapshots": {
     "vg0/root-snap": {
       "operation": "snapshot",

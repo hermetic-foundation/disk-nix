@@ -132,6 +132,8 @@ Examples:
   preserving an existing group is possible. VG growth with an explicit physical
   volume is an online `vgextend` workflow. VG device removal is
   potential-data-loss unless allocated extents are evacuated before `vgreduce`.
+  VG import/export operations are offline-required but non-destructive, and are
+  preferred over `vgcreate`/`vgremove` when moving existing disks between hosts.
 - ZFS pool creation and destruction are destructive because they write labels
   to vdev devices or remove all contained datasets and zvols; create command
   plans accept either a single `device` or an explicit `devices` vdev list.

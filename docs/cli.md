@@ -460,9 +460,10 @@ commands for `volumeGroups` lifecycle declarations, reviewed `vgextend`
 commands for grow or add-device operations with an explicit physical volume,
 reviewed `vgextend`, `pvmove <old-pv> <new-pv>`, and `vgreduce` replacement
 workflows, and reviewed `pvmove` then `vgreduce` commands for explicit
-physical-volume removal. Device topology operations stay non-ready until the
-device to add, source device, replacement device, or device to remove
-is declared explicitly.
+physical-volume removal. Volume group import/export declarations render
+reviewed `vgimport <vg>` and `vgexport <vg>` commands. Device topology
+operations stay non-ready until the device to add, source device, replacement
+device, or device to remove is declared explicitly.
 Loop-device refresh and detach commands require `/dev/loop*` targets. Multipath
 map growth requires a concrete map target such as `mpatha` or
 `/dev/mapper/mpatha`; arbitrary logical map names remain non-ready.

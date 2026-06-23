@@ -1663,6 +1663,31 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Import | Operation::Export if collection == Some("volumeGroups") => (
+            vec![
+                command(
+                    ["vgs", "--reportformat", "json", target],
+                    false,
+                    "verify LVM volume group inventory after import or export",
+                ),
+                command(
+                    ["pvs", "--reportformat", "json"],
+                    false,
+                    "verify physical volume membership after VG import or export",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled VG graph relationships after import or export",
+                ),
+            ],
+            vec![
+                "volume group import or export state matches the declared lifecycle operation"
+                    .to_string(),
+                "logical volumes, filesystems, mappings, mounts, and services are reviewed after the VG state change"
+                    .to_string(),
+            ],
+        ),
         Operation::Destroy if collection == Some("vdoVolumes") => (
             vec![
                 command(
@@ -4110,6 +4135,54 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "remove or migrate logical volumes before removing the volume group"
                         .to_string(),
                     "verify no filesystems, mappings, or services still reference the VG"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Import if collection == Some("volumeGroups") => {
+            let target = target.unwrap_or("<volume-group>");
+            (
+                vec![
+                    command(
+                        ["pvs", "--reportformat", "json"],
+                        false,
+                        "inspect physical volumes and exported VG metadata before import",
+                    ),
+                    command(
+                        ["vgimport", target],
+                        true,
+                        "import the reviewed LVM volume group without recreating it",
+                    ),
+                ],
+                vec![
+                    "verify PV identities, VG UUID, and metadata backups before vgimport"
+                        .to_string(),
+                    "activate logical volumes and mount consumers only after the VG is verified"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Export if collection == Some("volumeGroups") => {
+            let target = target.unwrap_or("<volume-group>");
+            (
+                vec![
+                    command(
+                        ["vgs", "--reportformat", "json", target],
+                        false,
+                        "inspect volume group before export",
+                    ),
+                    command(
+                        ["vgexport", target],
+                        true,
+                        "export the reviewed LVM volume group without deleting data",
+                    ),
+                ],
+                vec![
+                    "deactivate logical volumes and stop mount, mapping, and service consumers before vgexport"
+                        .to_string(),
+                    "export instead of removing a VG that will be moved to another host"
                         .to_string(),
                 ],
                 true,
@@ -13150,6 +13223,12 @@ mod tests {
                     "operation": "replace-device",
                     "device": "/dev/disk/by-id/old-pv"
                   },
+                  "importvg": {
+                    "operation": "import"
+                  },
+                  "exportvg": {
+                    "operation": "export"
+                  },
                   "oldvg": {
                     "destroy": true
                   }
@@ -13218,6 +13297,28 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["vgremove", "--yes", "oldvg"])
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumegroups:importvg:import"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["pvs", "--reportformat", "json"])
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vgimport", "importvg"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumegroups:exportvg:export"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["vgs", "--reportformat", "json", "exportvg"])
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vgexport", "exportvg"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "volumegroups:vg0:create"
                 && step
@@ -13238,6 +13339,20 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["pvs", "--reportformat", "json"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "volumegroups:importvg:import"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["vgs", "--reportformat", "json", "importvg"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "volumegroups:exportvg:export"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "exportvg", "--json"])
         }));
     }
 

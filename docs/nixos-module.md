@@ -236,6 +236,10 @@ Typed lifecycle declarations are available for:
 - `exports`
 - `caches`
 
+`volumeGroups.<name>.operation = "import"` and `"export"` render reviewed
+`vgimport <name>` and `vgexport <name>` plans for moving existing VGs without
+recreating or removing them.
+
 Each lifecycle declaration includes:
 
 - `operation`

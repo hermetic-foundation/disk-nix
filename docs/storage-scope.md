@@ -30,6 +30,7 @@ Creation is only one lifecycle operation. The planner should also support:
   final cleanup
 - promote ZFS clones after snapshot-based validation or migration
 - import and export ZFS pools when moving or recovering existing storage
+- import and export LVM volume groups when moving existing PV sets
 - create and prune snapshots
 - rebalance data
 - convert or attach cache layers
