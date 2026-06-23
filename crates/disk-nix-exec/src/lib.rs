@@ -4264,6 +4264,42 @@ fn filesystem_check_command(fs_type: &str, target: &str, device: Option<&str>) -
             ["filesystem source device"],
             "run Btrfs check after resolving the source device",
         ),
+        ("fat" | "fat12" | "fat16" | "fat32" | "msdos" | "vfat", Some(source)) => command(
+            ["fsck.fat", "-n", source],
+            false,
+            "run a no-write FAT filesystem consistency check",
+        ),
+        ("fat" | "fat12" | "fat16" | "fat32" | "msdos" | "vfat", None) => command_with_readiness(
+            ["fsck.fat", "-n", "<filesystem-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "run FAT filesystem check after resolving the source device",
+        ),
+        ("exfat", Some(source)) => command(
+            ["fsck.exfat", "-n", source],
+            false,
+            "run a no-write exFAT filesystem consistency check",
+        ),
+        ("exfat", None) => command_with_readiness(
+            ["fsck.exfat", "-n", "<filesystem-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "run exFAT filesystem check after resolving the source device",
+        ),
+        ("ntfs" | "ntfs3", Some(source)) => command(
+            ["ntfsfix", "--no-action", source],
+            false,
+            "run a no-action NTFS consistency probe",
+        ),
+        ("ntfs" | "ntfs3", None) => command_with_readiness(
+            ["ntfsfix", "--no-action", "<filesystem-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "run NTFS consistency probe after resolving the source device",
+        ),
         (_, Some(source)) => command_vec_with_readiness(
             vec!["<filesystem-check-tool>", source],
             false,
@@ -4323,6 +4359,42 @@ fn filesystem_repair_command(
             CommandReadiness::NeedsDomainImplementation,
             ["filesystem source device"],
             "repair Btrfs after resolving the source device",
+        ),
+        ("fat" | "fat12" | "fat16" | "fat32" | "msdos" | "vfat", Some(source)) => command(
+            ["fsck.fat", "-a", source],
+            true,
+            "repair FAT filesystem metadata after offline review",
+        ),
+        ("fat" | "fat12" | "fat16" | "fat32" | "msdos" | "vfat", None) => command_with_readiness(
+            ["fsck.fat", "-a", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "repair FAT filesystem after resolving the source device",
+        ),
+        ("exfat", Some(source)) => command(
+            ["fsck.exfat", "-p", source],
+            true,
+            "repair exFAT filesystem metadata after offline review",
+        ),
+        ("exfat", None) => command_with_readiness(
+            ["fsck.exfat", "-p", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "repair exFAT filesystem after resolving the source device",
+        ),
+        ("ntfs" | "ntfs3", Some(source)) => command(
+            ["ntfsfix", source],
+            true,
+            "apply limited NTFS fixes and schedule Windows consistency check after offline review",
+        ),
+        ("ntfs" | "ntfs3", None) => command_with_readiness(
+            ["ntfsfix", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "run limited NTFS repair after resolving the source device",
         ),
         (_, Some(source)) => command_vec_with_readiness(
             vec!["<filesystem-repair-tool>", source],
@@ -8208,6 +8280,24 @@ mod tests {
                     "device": "/dev/disk/by-label/scratch",
                     "fsType": "xfs",
                     "operation": "check"
+                  },
+                  "efi": {
+                    "mountpoint": "/boot",
+                    "device": "/dev/disk/by-partlabel/EFI",
+                    "fsType": "vfat",
+                    "operation": "check"
+                  },
+                  "shared": {
+                    "mountpoint": "/mnt/shared",
+                    "device": "/dev/disk/by-label/Shared",
+                    "fsType": "exfat",
+                    "operation": "repair"
+                  },
+                  "windows": {
+                    "mountpoint": "/mnt/windows",
+                    "device": "/dev/disk/by-label/Windows",
+                    "fsType": "ntfs",
+                    "operation": "repair"
                   }
                 }
               },
@@ -8245,6 +8335,30 @@ mod tests {
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:efi:check"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["fsck.fat", "-n", "/dev/disk/by-partlabel/EFI"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:shared:repair"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["fsck.exfat", "-p", "/dev/disk/by-label/Shared"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:windows:repair"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["ntfsfix", "/dev/disk/by-label/Windows"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "filesystems:home:check"
                 && step
@@ -8269,6 +8383,11 @@ mod tests {
                     "mountpoint": "/data",
                     "fsType": "btrfs",
                     "operation": "repair"
+                  },
+                  "shared": {
+                    "mountpoint": "/mnt/shared",
+                    "fsType": "exfat",
+                    "operation": "check"
                   }
                 }
               },
@@ -8295,6 +8414,14 @@ mod tests {
             step.action_id == "filesystems:data:repair"
                 && step.commands.iter().any(|command| {
                     command.argv == ["btrfs", "check", "--repair", "<filesystem-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:shared:check"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["fsck.exfat", "-n", "<filesystem-device>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["filesystem source device"]
                 })

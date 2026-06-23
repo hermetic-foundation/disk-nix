@@ -107,8 +107,10 @@ changes use `device` for `ntfslabel`; exFAT label changes use `device` for
 `exfatlabel`. Btrfs, ext, FAT/vfat, NTFS, exFAT, and XFS UUID, volume-ID, or
 volume-serial changes use `device` for `btrfstune -U`, `tune2fs -U`,
 `fatlabel -i`, `ntfslabel --new-serial`, `exfatlabel -i`, and `xfs_admin -U`
-and are offline-required. XFS and Btrfs check/repair declarations require a
-stable source device for `xfs_repair` or `btrfs check`.
+and are offline-required. Check and repair declarations require a stable source
+device for tools such as `e2fsck`, `xfs_repair`, `btrfs check`, `fsck.fat`,
+`fsck.exfat`, or `ntfsfix`; NTFS repair remains limited Linux-side remediation,
+not a replacement for Windows `chkdsk`.
 For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, `operation = "trim"`, device add/remove/replace operations, and filesystem property
 updates such as labels or balance filters while still deriving the regular
 NixOS `fileSystems` entry from the same declaration.

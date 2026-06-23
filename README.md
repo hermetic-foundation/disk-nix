@@ -221,10 +221,13 @@ commands use a declared filesystem `device` or `disk` when present, and leave
 source-device commands unresolved when only a mountpoint is declared. XFS shrink
 remains manual-only migration guidance.
 Filesystem check and repair plans render `e2fsck -n`/`e2fsck -f -y`,
-`xfs_repair -n`/`xfs_repair`, and `btrfs check --readonly`/`--repair` command
-plans for ext, XFS, and Btrfs. Repair is offline-required and mutates
-filesystem metadata; mountpoint-only declarations remain non-ready until the
-source block device is selected.
+`xfs_repair -n`/`xfs_repair`, `btrfs check --readonly`/`--repair`,
+`fsck.fat -n`/`-a`, `fsck.exfat -n`/`-p`, and `ntfsfix --no-action`/`ntfsfix`
+command plans for ext, XFS, Btrfs, FAT/vfat, exFAT, and NTFS. Repair is
+offline-required and mutates filesystem metadata; NTFS repair is limited
+Linux-side remediation and not a replacement for Windows `chkdsk`.
+Mountpoint-only declarations remain non-ready until the source block device is
+selected.
 Btrfs subvolume property updates render read-only toggles with
 `btrfs property set -ts <path> ro true|false`; unsupported Btrfs subvolume
 properties are classified as unsupported with manual-review alternatives.
