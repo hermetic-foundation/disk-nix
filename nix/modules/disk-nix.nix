@@ -523,6 +523,7 @@ let
       bypassWorkqueues
       preLVM
       preserveData
+      destroy
       ;
   }) cfg.luks.devices;
   typedIscsiSpec = cleanSpecAttrs {
@@ -865,6 +866,12 @@ in
                 type = lib.types.bool;
                 default = true;
                 description = "Whether the planner must preserve the existing LUKS container.";
+              };
+
+              destroy = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Request LUKS mapper teardown in disk-nix planning without adding the device to boot.initrd.luks.devices.";
               };
             };
           }

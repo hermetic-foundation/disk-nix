@@ -137,6 +137,7 @@ Typed LUKS declarations include:
 - `bypassWorkqueues`
 - `preLVM`
 - `preserveData`
+- `destroy`
 
 Typed NFS client mount declarations include:
 

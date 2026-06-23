@@ -110,7 +110,7 @@
               };
               luks.devices.cryptold = {
                 device = "/dev/disk/by-partuuid/old-luks";
-                operation = "destroy";
+                destroy = true;
               };
               filesystems.root = {
                 device = "/dev/disk/by-label/nixos-root";
@@ -652,7 +652,7 @@
                   and .spec.luks.devices.cryptroot.name == "cryptroot"
                   and .spec.luks.devices.cryptroot.operation == "grow"
                   and .spec.luks.devices.cryptroot.desiredSize == "100%"
-                  and .spec.luks.devices.cryptold.operation == "destroy"
+                  and .spec.luks.devices.cryptold.destroy == true
                   and .spec.luks.devices.cryptold.device == "/dev/disk/by-partuuid/old-luks"
                   and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"
                   and .spec.filesystems."/srv/shared".fsType == "nfs4"
