@@ -1158,14 +1158,19 @@ fn print_probe_reports(
 }
 
 fn print_devices(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
-    writeln!(output, "{:<22} {:<38} {:>12} PATH", "KIND", "NAME", "SIZE")?;
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:<36} PATH",
+        "KIND", "NAME", "SIZE", "DETAILS"
+    )?;
     for node in graph.nodes.iter().filter(|node| is_device_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<38} {:>12} {}",
+            "{:<22} {:<38} {:>12} {:<36} {}",
             node.kind,
             node.name,
             human_bytes(node.size_bytes),
+            usage_details(node),
             node.path.as_deref().unwrap_or("-")
         )?;
     }
@@ -1838,6 +1843,19 @@ fn has_capacity_or_usage(node: &Node) -> bool {
 
 fn usage_details(node: &Node) -> String {
     const DETAIL_KEYS: &[(&str, &str)] = &[
+        ("model", "model"),
+        ("vendor", "vendor"),
+        ("transport", "transport"),
+        ("rotational", "rotational"),
+        ("lsblk.type", "lsblk-type"),
+        ("filesystem.type", "fstype"),
+        ("partition.table", "ptable"),
+        ("partition.number", "partno"),
+        ("parted.transport", "parted-transport"),
+        ("udev.symlink", "udev-link"),
+        ("udev.devpath", "udev-devpath"),
+        ("udev.id-fs-type", "udev-fstype"),
+        ("udev.id-bus", "udev-bus"),
         ("lvm.data-percent", "data"),
         ("lvm.metadata-percent", "metadata"),
         ("lvm.attr", "attr"),
@@ -2060,9 +2078,9 @@ mod tests {
 
     use super::{
         confirmation_file_accepts, is_device_node, is_mapping_node, is_network_storage_node,
-        is_partition_node, is_pool_node, is_snapshot_node, mount_details, print_filesystems,
-        print_mappings, print_mounts, print_network_storage, print_pools, print_snapshots,
-        print_usage, print_volumes, snapshot_source, usage_details, usage_percent,
+        is_partition_node, is_pool_node, is_snapshot_node, mount_details, print_devices,
+        print_filesystems, print_mappings, print_mounts, print_network_storage, print_pools,
+        print_snapshots, print_usage, print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2149,6 +2167,61 @@ mod tests {
             .find(|node| node.kind == NodeKind::ZfsSnapshot)
             .expect("snapshot exists");
         assert_eq!(snapshot_source(&graph, snapshot), Some("tank/home"));
+    }
+
+    #[test]
+    fn devices_table_includes_probe_metadata_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/nvme0n1", NodeKind::PhysicalDisk, "/dev/nvme0n1")
+                .with_path("/dev/nvme0n1")
+                .with_size_bytes(1_000_000_000_000)
+                .with_property("model", "FastDisk")
+                .with_property("vendor", "Acme")
+                .with_property("transport", "nvme")
+                .with_property("rotational", "false")
+                .with_property("partition.table", "gpt")
+                .with_property("udev.symlink", "disk/by-id/nvme-Acme_FastDisk"),
+        );
+        graph.add_node(
+            Node::new(
+                "block:/dev/nvme0n1p1",
+                NodeKind::Partition,
+                "/dev/nvme0n1p1",
+            )
+            .with_path("/dev/nvme0n1p1")
+            .with_property("lsblk.type", "part")
+            .with_property("filesystem.type", "vfat")
+            .with_property("partition.number", "1")
+            .with_property("udev.id-fs-type", "vfat"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/loop0", NodeKind::LoopDevice, "/dev/loop0")
+                .with_path("/dev/loop0")
+                .with_property("lsblk.type", "loop"),
+        );
+        graph.add_node(
+            Node::new(
+                "file:/var/lib/images/root.img",
+                NodeKind::BackingFile,
+                "/var/lib/images/root.img",
+            )
+            .with_path("/var/lib/images/root.img"),
+        );
+
+        let mut output = Vec::new();
+        print_devices(&mut output, &graph).expect("devices table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DETAILS"));
+        assert!(
+            output
+                .contains("model=FastDisk vendor=Acme transport=nvme rotational=false ptable=gpt")
+        );
+        assert!(output.contains("udev-link=disk/by-id/nvme-Acme_FastDisk"));
+        assert!(output.contains("lsblk-type=part fstype=vfat partno=1 udev-fstype=vfat"));
+        assert!(output.contains("lsblk-type=loop"));
+        assert!(output.contains("/var/lib/images/root.img"));
     }
 
     #[test]

@@ -161,7 +161,9 @@ endpoints are included in the filtered node set.
 Use these commands for:
 
 - `devices`: disks, partitions, dm devices, LVM objects, VDO, RAID, zvols,
-  cache devices, multipath devices, NVMe namespaces, loop devices, and swap
+  cache devices, multipath devices, NVMe namespaces, loop devices, and swap,
+  including model/vendor, transport, rotational, partition table/number,
+  filesystem type, and udev link details when probes expose them
 - `partitions`: partition nodes with size, PARTUUID, and path
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
   ZFS datasets/snapshots, and NFS exports, with selected filesystem metadata
