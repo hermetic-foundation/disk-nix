@@ -3343,8 +3343,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .context
                 .device
                 .as_deref()
-                .or_else(|| parts.last().copied())
-                .unwrap_or("<device>");
+                .or_else(|| action_id_suffix(&action.id, "remove-device"));
             (
                 vec![
                     command(
@@ -3352,11 +3351,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect ZFS pool layout and health before device removal",
                     ),
-                    command(
-                        ["zpool", "remove", target, device],
-                        true,
-                        "remove the reviewed device from the ZFS pool when the layout supports evacuation",
-                    ),
+                    zpool_remove_device_command(target, device),
                 ],
                 vec![
                     "verify the pool supports device removal for the selected vdev class"
@@ -3373,25 +3368,12 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .context
                 .device
                 .as_deref()
-                .or_else(|| parts.last().copied())
-                .unwrap_or("<physical-volume>");
+                .or_else(|| action_id_suffix(&action.id, "remove-device"));
             (
                 vec![
-                    command(
-                        ["pvs", "--reportformat", "json", device],
-                        false,
-                        "inspect physical volume allocation before vgreduce",
-                    ),
-                    command(
-                        ["pvmove", device],
-                        true,
-                        "evacuate allocated extents from the reviewed physical volume before vgreduce",
-                    ),
-                    command(
-                        ["vgreduce", target, device],
-                        true,
-                        "remove the reviewed physical volume from the LVM volume group after extents are evacuated",
-                    ),
+                    lvm_physical_volume_inspect_command(device),
+                    lvm_physical_volume_move_command(device),
+                    lvm_volume_group_reduce_command(target, device),
                 ],
                 vec![
                     "run pvmove or add replacement capacity before reducing a PV with allocated extents"
@@ -3408,8 +3390,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .context
                 .device
                 .as_deref()
-                .or_else(|| parts.last().copied())
-                .unwrap_or("<device>");
+                .or_else(|| action_id_suffix(&action.id, "remove-device"));
             (
                 vec![
                     command(
@@ -3417,16 +3398,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect MD RAID redundancy before member removal",
                     ),
-                    command(
-                        ["mdadm", target, "--fail", device],
-                        true,
-                        "mark the MD RAID member failed before removal",
-                    ),
-                    command(
-                        ["mdadm", target, "--remove", device],
-                        true,
-                        "remove the reviewed MD RAID member",
-                    ),
+                    md_raid_fail_member_command(target, device),
+                    md_raid_remove_member_command(target, device),
                 ],
                 vec![
                     "remove a member only when redundancy and free capacity remain sufficient"
@@ -3442,8 +3415,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .context
                 .device
                 .as_deref()
-                .or_else(|| parts.last().copied())
-                .unwrap_or("<path>");
+                .or_else(|| action_id_suffix(&action.id, "remove-device"));
             (
                 vec![
                     command(
@@ -3451,11 +3423,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect live multipath paths before deletion",
                     ),
-                    command(
-                        ["multipathd", "del", "path", path],
-                        true,
-                        "delete the reviewed path from multipathd",
-                    ),
+                    multipath_delete_path_command(path),
                 ],
                 vec![
                     "remove a path only when alternate paths remain active".to_string(),
@@ -3470,8 +3438,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .context
                 .device
                 .as_deref()
-                .or_else(|| parts.last().copied())
-                .unwrap_or("<device>");
+                .or_else(|| action_id_suffix(&action.id, "remove-device"));
             (
                 vec![
                     command(
@@ -3479,11 +3446,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect Btrfs allocation and free space before device removal",
                     ),
-                    command(
-                        ["btrfs", "device", "remove", device, target],
-                        true,
-                        "remove the reviewed device from the Btrfs filesystem after data evacuation checks",
-                    ),
+                    btrfs_remove_device_command(target, device),
                 ],
                 vec![
                     "remove a Btrfs device only when remaining data and metadata space are sufficient"
@@ -4021,6 +3984,142 @@ fn missing_replacement_inputs(from: Option<&str>, to: Option<&str>) -> Vec<&'sta
         missing.push("replacement device");
     }
     missing
+}
+
+fn zpool_remove_device_command(target: &str, device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["zpool", "remove", target, device],
+            true,
+            "remove the reviewed device from the ZFS pool when the layout supports evacuation",
+        ),
+        None => command_with_readiness(
+            ["zpool", "remove", target, "<device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device to remove"],
+            "remove a ZFS pool device after selecting the reviewed vdev or device",
+        ),
+    }
+}
+
+fn lvm_physical_volume_inspect_command(device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["pvs", "--reportformat", "json", device],
+            false,
+            "inspect physical volume allocation before vgreduce",
+        ),
+        None => command_with_readiness(
+            ["pvs", "--reportformat", "json", "<physical-volume>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["physical volume to remove"],
+            "inspect physical volume allocation after selecting the reviewed PV",
+        ),
+    }
+}
+
+fn lvm_physical_volume_move_command(device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["pvmove", device],
+            true,
+            "evacuate allocated extents from the reviewed physical volume before vgreduce",
+        ),
+        None => command_with_readiness(
+            ["pvmove", "<physical-volume>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["physical volume to remove"],
+            "evacuate allocated extents after selecting the reviewed physical volume",
+        ),
+    }
+}
+
+fn lvm_volume_group_reduce_command(target: &str, device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["vgreduce", target, device],
+            true,
+            "remove the reviewed physical volume from the LVM volume group after extents are evacuated",
+        ),
+        None => command_with_readiness(
+            ["vgreduce", target, "<physical-volume>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["physical volume to remove"],
+            "remove the physical volume from the volume group after selecting it",
+        ),
+    }
+}
+
+fn md_raid_fail_member_command(target: &str, device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["mdadm", target, "--fail", device],
+            true,
+            "mark the MD RAID member failed before removal",
+        ),
+        None => command_with_readiness(
+            ["mdadm", target, "--fail", "<device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["member device to remove"],
+            "mark the MD RAID member failed after selecting it",
+        ),
+    }
+}
+
+fn md_raid_remove_member_command(target: &str, device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["mdadm", target, "--remove", device],
+            true,
+            "remove the reviewed MD RAID member",
+        ),
+        None => command_with_readiness(
+            ["mdadm", target, "--remove", "<device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["member device to remove"],
+            "remove the MD RAID member after selecting it",
+        ),
+    }
+}
+
+fn multipath_delete_path_command(path: Option<&str>) -> ExecutionCommand {
+    match path {
+        Some(path) => command(
+            ["multipathd", "del", "path", path],
+            true,
+            "delete the reviewed path from multipathd",
+        ),
+        None => command_with_readiness(
+            ["multipathd", "del", "path", "<path>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["multipath path to remove"],
+            "delete the multipath path after selecting the reviewed path",
+        ),
+    }
+}
+
+fn btrfs_remove_device_command(target: &str, device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["btrfs", "device", "remove", device, target],
+            true,
+            "remove the reviewed device from the Btrfs filesystem after data evacuation checks",
+        ),
+        None => command_with_readiness(
+            ["btrfs", "device", "remove", "<device>", target],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device to remove"],
+            "remove the Btrfs device after selecting the reviewed device",
+        ),
+    }
 }
 
 fn rebalance_command(
@@ -5982,9 +6081,39 @@ mod tests {
             },
             advice: None,
         };
+        let missing_pool_action = PlannedAction {
+            id: "pools:tank:removedevice".to_string(),
+            description: "remove unspecified pool device".to_string(),
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("pools".to_string()),
+                name: Some("tank".to_string()),
+                target: Some("tank".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let missing_vg_action = PlannedAction {
+            id: "volumeGroups:vg0:removedevice".to_string(),
+            description: "remove unspecified physical volume".to_string(),
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("volumeGroups".to_string()),
+                name: Some("vg0".to_string()),
+                target: Some("vg0".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
 
         let (pool_commands, pool_notes, pool_manual_review) = commands_for_action(&pool_action);
         let (vg_commands, vg_notes, vg_manual_review) = commands_for_action(&vg_action);
+        let (missing_pool_commands, _, _) = commands_for_action(&missing_pool_action);
+        let (missing_vg_commands, _, _) = commands_for_action(&missing_vg_action);
 
         assert!(pool_manual_review);
         assert!(pool_commands.iter().any(|command| {
@@ -6021,6 +6150,24 @@ mod tests {
                 .iter()
                 .any(|note| note.contains("pvmove or add replacement capacity"))
         );
+        assert!(missing_pool_commands.iter().any(|command| {
+            command.argv == ["zpool", "remove", "tank", "<device>"]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["device to remove"]
+        }));
+        assert!(missing_vg_commands.iter().any(|command| {
+            command.argv == ["pvmove", "<physical-volume>"]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["physical volume to remove"]
+        }));
+        assert!(missing_vg_commands.iter().any(|command| {
+            command.argv == ["vgreduce", "vg0", "<physical-volume>"]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["physical volume to remove"]
+        }));
     }
 
     #[test]
