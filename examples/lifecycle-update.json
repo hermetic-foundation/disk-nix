@@ -30,6 +30,13 @@
       "properties": {
         "autotrim": "on"
       }
+    },
+    "vault": {
+      "operation": "import",
+      "readOnly": true
+    },
+    "moveme": {
+      "operation": "export"
     }
   },
   "datasets": {

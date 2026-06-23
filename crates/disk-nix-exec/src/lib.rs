@@ -1813,6 +1813,30 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Import | Operation::Export if collection == Some("pools") => (
+            vec![
+                command(
+                    ["zpool", "status", "-P", target],
+                    false,
+                    "verify ZFS pool health after import or export",
+                ),
+                command(
+                    ["zpool", "list", "-H", "-p"],
+                    false,
+                    "verify active ZFS pool inventory after import or export",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled pool graph relationships after import or export",
+                ),
+            ],
+            vec![
+                "pool import or export state matches the declared lifecycle operation".to_string(),
+                "datasets, mountpoints, shares, LUN mappings, and services are reviewed after the pool state change"
+                    .to_string(),
+            ],
+        ),
         Operation::Format if collection == Some("swaps") => (
             vec![
                 command(
@@ -1906,6 +1930,8 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Shrink
         | Operation::Clone
         | Operation::Promote
+        | Operation::Import
+        | Operation::Export
         | Operation::Rename
         | Operation::RemoveDevice
         | Operation::Repair
@@ -3732,6 +3758,48 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Import if collection == Some("pools") => {
+            let target = target.unwrap_or("<zfs-pool>");
+            (
+                vec![
+                    command(
+                        ["zpool", "import"],
+                        false,
+                        "inspect importable ZFS pools before import",
+                    ),
+                    zfs_pool_import_command(target, action.context.read_only.unwrap_or(false)),
+                ],
+                vec![
+                    "verify the pool identity, hostid, cachefile, mountpoints, and encryption keys before import"
+                        .to_string(),
+                    "use readOnly=true first when validating a moved or recovered pool".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Export if collection == Some("pools") => {
+            let target = target.unwrap_or("<zfs-pool>");
+            (
+                vec![
+                    command(
+                        ["zpool", "status", "-P", target],
+                        false,
+                        "inspect pool health and active consumers before export",
+                    ),
+                    command(
+                        ["zpool", "export", target],
+                        true,
+                        "export the reviewed ZFS pool without deleting data",
+                    ),
+                ],
+                vec![
+                    "stop mount, share, LUN, VM, and service consumers before export".to_string(),
+                    "export instead of destroying a pool that will be moved or recovered elsewhere"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Destroy if collection == Some("datasets") => {
             let target = target.unwrap_or("<zfs-dataset>");
             (
@@ -4499,6 +4567,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Repair
         | Operation::Clone
         | Operation::Promote
+        | Operation::Import
+        | Operation::Export
         | Operation::Rename
         | Operation::RemoveDevice
         | Operation::Rollback
@@ -7369,6 +7439,19 @@ fn zfs_pool_create_command(target: &str, devices: &[String]) -> ExecutionCommand
             "create a ZFS pool on the reviewed vdev device set",
         )
     }
+}
+
+fn zfs_pool_import_command(target: &str, read_only: bool) -> ExecutionCommand {
+    let mut argv = vec!["zpool".to_string(), "import".to_string()];
+    if read_only {
+        argv.extend(["-o".to_string(), "readonly=on".to_string()]);
+    }
+    argv.push(target.to_string());
+    command_vec(
+        argv,
+        true,
+        "import the reviewed ZFS pool without recreating it",
+    )
 }
 
 fn zfs_pool_preflight_commands(devices: &[String]) -> Vec<ExecutionCommand> {
@@ -14099,6 +14182,13 @@ mod tests {
                     "autotrim": "on"
                   }
                 },
+                "vault": {
+                  "operation": "import",
+                  "readOnly": true
+                },
+                "moveme": {
+                  "operation": "export"
+                },
                 "oldtank": {
                   "destroy": true
                 }
@@ -14115,6 +14205,7 @@ mod tests {
               "apply": {
                 "allowGrow": true,
                 "allowDestructive": true,
+                "allowOffline": true,
                 "allowPropertyChanges": true
               }
             }"#,
@@ -14175,6 +14266,28 @@ mod tests {
                 .any(|command| command.argv == ["zpool", "set", "autotrim=on", "tank"])
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "pools:vault:import"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zpool", "import"])
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zpool", "import", "-o", "readonly=on", "vault"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "pools:moveme:export"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zpool", "status", "-P", "moveme"])
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zpool", "export", "moveme"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["zfs", "snapshot", "tank/home@before"])
@@ -14208,6 +14321,20 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["zpool", "status", "-P", "tank"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "pools:vault:import"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zpool", "status", "-P", "vault"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "pools:moveme:export"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "moveme", "--json"])
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "pools:oldtank:destroy"

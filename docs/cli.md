@@ -470,7 +470,10 @@ ZFS pool command plans render policy-gated `zpool create` from a single
 `device` or explicit `devices` vdev list, policy-gated `zpool destroy`, plus
 online topology commands such as `zpool add`, `zpool replace`, `zpool remove`,
 and scrub. Pool create preflight inspects declared path-like vdev entries
-instead of topology keywords such as `mirror`.
+instead of topology keywords such as `mirror`. Pool import/export lifecycle
+declarations render `zpool import`, optional
+`zpool import -o readonly=on <pool>` for `readOnly = true`, and
+`zpool export <pool>` command plans.
 ZFS dataset command plans render reviewed `zfs create` commands, including
 create-time `-o key=value` options from declared properties, and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations. Dataset and zvol

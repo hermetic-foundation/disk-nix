@@ -213,6 +213,11 @@
                 removeDevices = [ "/dev/disk/by-id/old-disk" ];
                 properties.autotrim = "on";
               };
+              pools.vault = {
+                operation = "import";
+                readOnly = true;
+              };
+              pools.moveme.operation = "export";
               partitions.root = {
                 operation = "grow";
                 device = "/dev/disk/by-id/nvme-root";
@@ -513,6 +518,8 @@
               and ."$defs".snapshot.properties.recursiveRollback.type == "boolean"
               and ."$defs".snapshot.properties."zfs.rollbackRecursive".type == "boolean"
               and (."$defs".operation.enum | index("promote") != null)
+              and (."$defs".operation.enum | index("import") != null)
+              and (."$defs".operation.enum | index("export") != null)
               and ."$defs".filesystem.properties.device.type == "string"
               and ."$defs".filesystem.properties.operation["$ref"] == "#/$defs/operation"
               and ."$defs".filesystem.properties.properties.type == "object"
@@ -570,8 +577,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 48
-              and .summary.offlineRequiredCount == 12
+              .summary.actionCount == 50
+              and .summary.offlineRequiredCount == 14
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -602,6 +609,8 @@
               and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "nvmenamespaces:/dev/nvme0:create" and .risk == "destructive"))
+              and (.actions | any(.id == "pools:vault:import" and .risk == "offline-required" and .context.readOnly == true))
+              and (.actions | any(.id == "pools:moveme:export" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/home:create" and .risk == "online"))
               and (.actions | any(.id == "datasets:tank/home-review:promote" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/legacy:rename" and .risk == "offline-required"))
@@ -642,25 +651,27 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 17
-              and .apply.blockedSummary.offlineRequiredCount == 12
+              and .apply.blockedCount == 19
+              and .apply.blockedSummary.offlineRequiredCount == 14
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
               and (.apply.blocked | any(.id == "datasets:tank/legacy:rename"))
               and (.apply.blocked | any(.id == "datasets:tank/home-review:promote"))
+              and (.apply.blocked | any(.id == "pools:vault:import"))
+              and (.apply.blocked | any(.id == "pools:moveme:export"))
               and (.apply.blocked | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained"))
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 17
+              and .apply.blockedCount == 19
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 17
-              and .messages[0] == "apply policy blocked 17 action(s)"
+              and .apply.blockedCount == 19
+              and .messages[0] == "apply policy blocked 19 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -793,6 +804,9 @@
                   and .spec.multipathMaps.mpatha.replaceDevices."/dev/sdc" == "/dev/sdd"
                   and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
                   and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
+                  and .spec.pools.vault.operation == "import"
+                  and .spec.pools.vault.readOnly == true
+                  and .spec.pools.moveme.operation == "export"
                   and .spec.datasets."tank/home-review".operation == "promote"
                   and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
                   and .spec.snapshots."tank/home@before-upgrade".hold == "disk-nix-retain"

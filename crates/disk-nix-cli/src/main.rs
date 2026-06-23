@@ -701,7 +701,9 @@ fn spec_schema() -> serde_json::Value {
                         "type": "object",
                         "additionalProperties": true
                     },
-                    "preserveData": { "type": "boolean", "default": true }
+                    "preserveData": { "type": "boolean", "default": true },
+                    "readOnly": { "type": "boolean" },
+                    "readonly": { "type": "boolean" }
                 }
             },
             "lifecycleMap": {
@@ -895,6 +897,8 @@ fn spec_schema() -> serde_json::Value {
                     "snapshot",
                     "clone",
                     "promote",
+                    "import",
+                    "export",
                     "rename",
                     "rebalance",
                     "rollback",

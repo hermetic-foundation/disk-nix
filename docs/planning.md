@@ -137,7 +137,9 @@ Examples:
   plans accept either a single `device` or an explicit `devices` vdev list.
   Preflight inspection targets path-like vdev entries, while topology keywords
   such as `mirror` stay in the rendered `zpool create` command. Import/export
-  is preferred when moving an existing pool. Pool device replacement is
+  is preferred when moving an existing pool. `operation = "import"` and
+  `operation = "export"` are offline-required, non-destructive pool lifecycle
+  operations; `readOnly = true` renders a reviewed read-only import. Pool device replacement is
   offline-required, and device removal remains potential-data-loss unless pool
   topology, free space, and evacuation support have been verified.
 - ZFS dataset creation is online, with declared `properties = { ... }`

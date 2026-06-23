@@ -78,6 +78,8 @@ let
       "set-property"
       "snapshot"
       "promote"
+      "import"
+      "export"
       "rename"
       "rebalance"
       "rollback"
@@ -154,6 +156,13 @@ let
           type = lib.types.bool;
           default = true;
           description = "Whether disk-nix must preserve data for this object.";
+        };
+
+        readOnly = lib.mkOption {
+          type = lib.types.nullOr lib.types.bool;
+          default = null;
+          description = "Request a read-only lifecycle action when the storage domain supports it, such as ZFS pool import.";
+          example = true;
         };
 
         desiredSize = lib.mkOption {
@@ -450,6 +459,7 @@ let
         properties
         destroy
         preserveData
+        readOnly
         desiredSize
         target
         path

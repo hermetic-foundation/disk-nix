@@ -49,6 +49,8 @@ pub enum Operation {
     Snapshot,
     Clone,
     Promote,
+    Import,
+    Export,
     Rename,
     Rebalance,
     Rollback,
@@ -872,6 +874,10 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         new_key_file: metadata_string_field(object, &["newKeyFile", "new-key-file"]),
         token_id: metadata_string_field(object, &["tokenId", "token-id", "token"]),
         token_file: metadata_string_field(object, &["tokenFile", "token-file", "jsonFile"]),
+        read_only: object
+            .get("readOnly")
+            .or_else(|| object.get("readonly"))
+            .and_then(Value::as_bool),
         property_assignments: property_assignments(object),
         ..ActionContext::default()
     }
@@ -2722,6 +2728,8 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "snapshot" => Some(Operation::Snapshot),
         "clone" => Some(Operation::Clone),
         "promote" => Some(Operation::Promote),
+        "import" => Some(Operation::Import),
+        "export" => Some(Operation::Export),
         "rename" => Some(Operation::Rename),
         "rebalance" => Some(Operation::Rebalance),
         "rollback" => Some(Operation::Rollback),
@@ -2747,6 +2755,8 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Snapshot => "snapshot",
         Operation::Clone => "clone",
         Operation::Promote => "promote",
+        Operation::Import => "import",
+        Operation::Export => "export",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
@@ -3176,6 +3186,31 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Import if collection == "pools" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "ZFS pool import makes an existing pool active on this host".to_string(),
+                alternatives: vec![
+                    "import read-only first when validating a moved or recovered pool".to_string(),
+                    "verify hostid, cachefile, mountpoints, and encryption keys before import"
+                        .to_string(),
+                    "prefer import over recreating a pool when preserving data".to_string(),
+                ],
+            }),
+        ),
+        Operation::Export if collection == "pools" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "ZFS pool export cleanly detaches a pool without deleting data".to_string(),
+                alternatives: vec![
+                    "export a pool instead of destroying it when moving hosts".to_string(),
+                    "stop mounts, shares, LUN exports, and services before export".to_string(),
+                    "verify all writes are complete and pool health is reviewed first".to_string(),
+                ],
+            }),
+        ),
         Operation::Rename => (
             RiskClass::OfflineRequired,
             false,
@@ -3500,6 +3535,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Import | Operation::Export => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} is currently only supported for ZFS pool lifecycle declarations",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "use pools.<name>.operation for ZFS pool import or export".to_string(),
+                    "use domain-specific attach, detach, mount, or unmount operations where available"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Shrink
         | Operation::Check
         | Operation::Repair
@@ -3741,6 +3791,8 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Snapshot => "snapshot",
         Operation::Clone => "clone",
         Operation::Promote => "promote",
+        Operation::Import => "import",
+        Operation::Export => "export",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
@@ -4228,6 +4280,30 @@ pub fn default_capabilities() -> Vec<Capability> {
             operation: Operation::AddDevice,
             risk: RiskClass::Online,
             advice: None,
+        },
+        Capability {
+            node_kind: NodeKind::ZfsPool,
+            operation: Operation::Import,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "ZFS pool import activates an existing pool on this host".to_string(),
+                alternatives: vec![
+                    "import read-only first when validating moved storage".to_string(),
+                    "verify hostid, cachefile, mountpoints, and encryption keys".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsPool,
+            operation: Operation::Export,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "ZFS pool export cleanly detaches a pool without deleting it".to_string(),
+                alternatives: vec![
+                    "export instead of destroying a pool that will be moved".to_string(),
+                    "stop services, shares, and LUN mappings before export".to_string(),
+                ],
+            }),
         },
         Capability {
             node_kind: NodeKind::ZfsPool,
@@ -7704,6 +7780,70 @@ mod tests {
             .find(|action| action.id == "pools:oldtank:destroy")
             .expect("pool destroy action exists");
         assert_eq!(destroy.risk, RiskClass::Destructive);
+    }
+
+    #[test]
+    fn plan_accepts_zfs_pool_import_export_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "pools": {
+                "tank": {
+                  "operation": "export"
+                },
+                "vault": {
+                  "operation": "import",
+                  "readOnly": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.destructive_count, 0);
+        let export = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "pools:tank:export")
+            .expect("pool export action exists");
+        assert_eq!(export.risk, RiskClass::OfflineRequired);
+        assert!(!export.destructive);
+        assert!(export.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("instead of destroying"))
+        }));
+        let import = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "pools:vault:import")
+            .expect("pool import action exists");
+        assert_eq!(import.risk, RiskClass::OfflineRequired);
+        assert_eq!(import.context.read_only, Some(true));
+        assert!(import.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("read-only"))
+        }));
+    }
+
+    #[test]
+    fn zfs_pool_import_export_capabilities_are_advertised() {
+        let capabilities = default_capabilities();
+
+        assert!(capabilities.iter().any(|capability| {
+            capability.node_kind == NodeKind::ZfsPool
+                && capability.operation == Operation::Import
+                && capability.risk == RiskClass::OfflineRequired
+        }));
+        assert!(capabilities.iter().any(|capability| {
+            capability.node_kind == NodeKind::ZfsPool
+                && capability.operation == Operation::Export
+                && capability.risk == RiskClass::OfflineRequired
+        }));
     }
 
     #[test]

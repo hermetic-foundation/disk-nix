@@ -150,7 +150,9 @@ NixOS `fileSystems` entry from the same declaration.
 Typed Btrfs subvolume declarations can request `operation = "rename"` with
 `renameTo` to stage a path move before final cleanup.
 For ZFS pools, typed declarations can request `operation = "scrub"` to render
-reviewed `zpool scrub` plans.
+reviewed `zpool scrub` plans, `operation = "import"` to import an existing
+pool, or `operation = "export"` to detach a pool without deleting data.
+`readOnly = true` on an import renders `zpool import -o readonly=on <pool>`.
 Typed ZFS dataset and zvol declarations can request `operation = "promote"` to
 render reviewed `zfs promote` plans for clones after snapshot-based validation.
 
