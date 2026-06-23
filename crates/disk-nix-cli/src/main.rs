@@ -1641,6 +1641,12 @@ fn usage_details(node: &Node) -> String {
         ("zfs.vdev-state", "vdev-state"),
         ("zfs.origin", "origin"),
         ("zfs.userrefs", "userrefs"),
+        ("zfs.compression", "compression"),
+        ("zfs.quota", "quota"),
+        ("zfs.reservation", "reservation"),
+        ("zfs.encryption", "encryption"),
+        ("zfs.keystatus", "keystatus"),
+        ("zfs.volsize", "volsize"),
     ];
 
     let details = DETAIL_KEYS
@@ -1873,6 +1879,15 @@ mod tests {
         )
         .with_property("zfs.userrefs", "2");
         assert_eq!(usage_details(&snapshot), "userrefs=2");
+
+        let dataset = Node::new("zfs-dataset:tank/home", NodeKind::ZfsDataset, "tank/home")
+            .with_property("zfs.compression", "zstd")
+            .with_property("zfs.encryption", "aes-256-gcm")
+            .with_property("zfs.keystatus", "available");
+        assert_eq!(
+            usage_details(&dataset),
+            "compression=zstd encryption=aes-256-gcm keystatus=available"
+        );
     }
 
     #[test]

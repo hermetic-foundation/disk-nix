@@ -41,6 +41,12 @@ struct ZfsRow {
     mountpoint: Option<String>,
     origin: Option<String>,
     userrefs: Option<String>,
+    compression: Option<String>,
+    quota: Option<String>,
+    reservation: Option<String>,
+    encryption: Option<String>,
+    keystatus: Option<String>,
+    volsize: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -219,6 +225,12 @@ fn parse_datasets(bytes: &[u8]) -> Result<Vec<ZfsRow>, ProbeError> {
             mountpoint: nonempty_dash(fields[5]),
             origin: nonempty_dash(fields[6]),
             userrefs: fields.get(7).and_then(|value| nonempty_dash(value)),
+            compression: fields.get(8).and_then(|value| nonempty_dash(value)),
+            quota: fields.get(9).and_then(|value| nonempty_dash(value)),
+            reservation: fields.get(10).and_then(|value| nonempty_dash(value)),
+            encryption: fields.get(11).and_then(|value| nonempty_dash(value)),
+            keystatus: fields.get(12).and_then(|value| nonempty_dash(value)),
+            volsize: fields.get(13).and_then(|value| nonempty_dash(value)),
         });
     }
 
@@ -344,6 +356,18 @@ fn add_dataset(graph: &mut StorageGraph, dataset: ZfsRow) {
     if let Some(userrefs) = dataset.userrefs {
         node = node.with_property("zfs.userrefs", userrefs);
     }
+    for (key, value) in [
+        ("zfs.compression", dataset.compression),
+        ("zfs.quota", dataset.quota),
+        ("zfs.reservation", dataset.reservation),
+        ("zfs.encryption", dataset.encryption),
+        ("zfs.keystatus", dataset.keystatus),
+        ("zfs.volsize", dataset.volsize),
+    ] {
+        if let Some(value) = value {
+            node = node.with_property(key, value);
+        }
+    }
 
     if let Some(pool) = dataset
         .name
@@ -404,10 +428,10 @@ mod tests {
     use super::*;
 
     const ZPOOL: &[u8] = b"tank\t1000\t400\t600\tONLINE\n";
-    const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\t-\n\
-tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\n\
-tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\n\
-tank/vm\tvolume\t50\t950\t50\t-\t-\t-\n";
+    const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\t-\tlz4\tnone\tnone\toff\t-\t-\n\
+tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\tzstd\t1073741824\t268435456\taes-256-gcm\tavailable\t-\n\
+tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\tzstd\t-\t-\taes-256-gcm\tavailable\t-\n\
+tank/vm\tvolume\t50\t950\t50\t-\t-\t-\tlz4\t-\t-\toff\t-\t85899345920\n";
     const ZPOOL_STATUS: &[u8] = br#"
   pool: tank
  state: ONLINE
@@ -458,6 +482,30 @@ errors: No known data errors
                 .properties
                 .iter()
                 .any(|property| property.key == "zfs.userrefs" && property.value == "2")
+        );
+        let dataset = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::ZfsDataset && node.name == "tank/home")
+            .expect("dataset node exists");
+        assert!(
+            dataset
+                .properties
+                .iter()
+                .any(|property| property.key == "zfs.compression" && property.value == "zstd")
+        );
+        assert!(dataset.properties.iter().any(|property| {
+            property.key == "zfs.encryption" && property.value == "aes-256-gcm"
+        }));
+        let zvol = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::Zvol && node.name == "tank/vm")
+            .expect("zvol node exists");
+        assert!(
+            zvol.properties
+                .iter()
+                .any(|property| property.key == "zfs.volsize" && property.value == "85899345920")
         );
         assert!(
             graph

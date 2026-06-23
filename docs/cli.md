@@ -160,7 +160,7 @@ Use these commands for:
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
   ZFS datasets/snapshots, and NFS exports
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
-  exports
+  exports, including ZFS zvol `volsize` when reported by `zfs list`
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
   pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
