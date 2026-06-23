@@ -1771,33 +1771,19 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Grow if collection == Some("volumes") || action.id.starts_with("volumes:") => {
-            let target = target.unwrap_or("<volume>");
+            let target = lvm_volume_target_path(target);
             let desired_size = action.context.desired_size.as_deref();
-            let grow_command = match desired_size {
-                Some(size) => command_vec(
-                    vec!["lvextend", "--resizefs", "--size", size, target],
-                    true,
-                    "grow the logical volume and filesystem to the desired size",
-                ),
-                None => command_with_readiness(
-                    ["lvextend", "--resizefs", "--size", "+<size>", target],
-                    true,
-                    CommandReadiness::NeedsDesiredSize,
-                    ["desired size delta"],
-                    "grow the logical volume and filesystem together",
-                ),
-            };
             let note = desired_size
                 .map(|size| format!("desired size from spec: {size}"))
                 .unwrap_or_else(|| "replace <size> after comparing desired state with probed capacity".to_string());
             (
                 vec![
-                    command(
-                        ["lvs", "--reportformat", "json", target],
-                        false,
+                    lvm_lvs_report_command(
+                        target,
+                        None,
                         "inspect current LVM logical volume state",
                     ),
-                    grow_command,
+                    lvm_logical_volume_extend_command(target, desired_size),
                 ],
                 vec![note],
                 true,
@@ -1824,20 +1810,13 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Grow if collection == Some("thinPools") => {
-            let target = target.unwrap_or("<thin-pool>");
+            let target = lvm_volume_target_path(target);
             let desired_size = action.context.desired_size.as_deref();
             (
                 vec![
-                    command(
-                        [
-                            "lvs",
-                            "--reportformat",
-                            "json",
-                            "-o",
-                            "lv_name,lv_size,data_percent,metadata_percent,seg_monitor",
-                            target,
-                        ],
-                        false,
+                    lvm_lvs_report_command(
+                        target,
+                        Some("lv_name,lv_size,data_percent,metadata_percent,seg_monitor"),
                         "inspect current thin pool data and metadata utilization",
                     ),
                     thin_pool_extend_command(target, desired_size),
@@ -3156,17 +3135,14 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Destroy if collection == Some("volumes") => {
-            let target = target.unwrap_or("<logical-volume>");
+            let target = lvm_volume_target_path(target);
             (
                 vec![
-                    command(
-                        ["lvs", "--reportformat", "json", target],
-                        false,
-                        "inspect logical volume before removal",
-                    ),
-                    command(
-                        ["lvremove", "--yes", target],
-                        true,
+                    lvm_lvs_report_command(target, None, "inspect logical volume before removal"),
+                    lvm_lvremove_command(
+                        target,
+                        "<logical-volume>",
+                        "target in volume-group/logical-volume form",
                         "remove the reviewed logical volume after backups and consumers are verified",
                     ),
                 ],
@@ -3179,24 +3155,18 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Destroy if collection == Some("thinPools") => {
-            let target = target.unwrap_or("<thin-pool>");
+            let target = lvm_volume_target_path(target);
             (
                 vec![
-                    command(
-                        [
-                            "lvs",
-                            "--reportformat",
-                            "json",
-                            "-o",
-                            "lv_name,lv_attr,data_percent,metadata_percent",
-                            target,
-                        ],
-                        false,
+                    lvm_lvs_report_command(
+                        target,
+                        Some("lv_name,lv_attr,data_percent,metadata_percent"),
                         "inspect thin pool before removal",
                     ),
-                    command(
-                        ["lvremove", "--yes", target],
-                        true,
+                    lvm_lvremove_command(
+                        target,
+                        "<thin-pool>",
+                        "target in volume-group/thin-pool form",
                         "remove the reviewed thin pool after thin volumes and consumers are migrated",
                     ),
                 ],
@@ -5236,23 +5206,6 @@ fn vdo_backing_inspect_command(device: Option<&str>) -> ExecutionCommand {
     }
 }
 
-fn thin_pool_extend_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
-    match desired_size {
-        Some(size) => command_vec(
-            vec!["lvextend", "--size", size, target],
-            true,
-            "extend the LVM thin pool data volume to the desired size",
-        ),
-        None => command_with_readiness(
-            ["lvextend", "--size", "+<size>", target],
-            true,
-            CommandReadiness::NeedsDesiredSize,
-            ["desired thin pool size or size delta"],
-            "extend the LVM thin pool after selecting the desired size",
-        ),
-    }
-}
-
 fn thin_pool_create_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
     let Some((volume_group, thin_pool)) = target.split_once('/') else {
         return command_vec_with_readiness(
@@ -5307,6 +5260,155 @@ fn thin_pool_create_command(target: &str, desired_size: Option<&str>) -> Executi
             CommandReadiness::NeedsDesiredSize,
             ["desired thin pool size"],
             "create an LVM thin pool after selecting the desired size",
+        ),
+    }
+}
+
+fn lvm_volume_target_path(target: Option<&str>) -> Option<&str> {
+    target.filter(|target| {
+        let Some((volume_group, volume)) = target.split_once('/') else {
+            return false;
+        };
+        !volume_group.is_empty() && !volume.is_empty()
+    })
+}
+
+fn lvm_lvs_report_command(
+    target: Option<&str>,
+    columns: Option<&str>,
+    description: &'static str,
+) -> ExecutionCommand {
+    match (target, columns) {
+        (Some(target), Some(columns)) => command(
+            ["lvs", "--reportformat", "json", "-o", columns, target],
+            false,
+            description,
+        ),
+        (Some(target), None) => command(
+            ["lvs", "--reportformat", "json", target],
+            false,
+            description,
+        ),
+        (None, Some(columns)) => command_with_readiness(
+            [
+                "lvs",
+                "--reportformat",
+                "json",
+                "-o",
+                columns,
+                "<logical-volume>",
+            ],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["target in volume-group/logical-volume form"],
+            description,
+        ),
+        (None, None) => command_with_readiness(
+            ["lvs", "--reportformat", "json", "<logical-volume>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["target in volume-group/logical-volume form"],
+            description,
+        ),
+    }
+}
+
+fn lvm_logical_volume_extend_command(
+    target: Option<&str>,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
+    match (target, desired_size) {
+        (Some(target), Some(size)) => command_vec(
+            vec!["lvextend", "--resizefs", "--size", size, target],
+            true,
+            "grow the logical volume and filesystem to the desired size",
+        ),
+        (Some(target), None) => command_with_readiness(
+            ["lvextend", "--resizefs", "--size", "+<size>", target],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired size delta"],
+            "grow the logical volume and filesystem together",
+        ),
+        (None, desired_size) => command_vec_with_readiness(
+            vec![
+                "lvextend".to_string(),
+                "--resizefs".to_string(),
+                "--size".to_string(),
+                desired_size.unwrap_or("+<size>").to_string(),
+                "<logical-volume>".to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_lvm_resize_inputs(
+                "target in volume-group/logical-volume form",
+                "desired size delta",
+                desired_size,
+            ),
+            "grow the logical volume and filesystem after resolving the target",
+        ),
+    }
+}
+
+fn thin_pool_extend_command(target: Option<&str>, desired_size: Option<&str>) -> ExecutionCommand {
+    match (target, desired_size) {
+        (Some(target), Some(size)) => command_vec(
+            vec!["lvextend", "--size", size, target],
+            true,
+            "extend the LVM thin pool data volume to the desired size",
+        ),
+        (Some(target), None) => command_with_readiness(
+            ["lvextend", "--size", "+<size>", target],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired thin pool size or size delta"],
+            "extend the LVM thin pool after selecting the desired size",
+        ),
+        (None, desired_size) => command_vec_with_readiness(
+            vec![
+                "lvextend".to_string(),
+                "--size".to_string(),
+                desired_size.unwrap_or("+<size>").to_string(),
+                "<thin-pool>".to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_lvm_resize_inputs(
+                "target in volume-group/thin-pool form",
+                "desired thin pool size or size delta",
+                desired_size,
+            ),
+            "extend the LVM thin pool after resolving the target",
+        ),
+    }
+}
+
+fn missing_lvm_resize_inputs(
+    target_input: &'static str,
+    size_input: &'static str,
+    desired_size: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = vec![target_input];
+    if desired_size.is_none() {
+        missing.push(size_input);
+    }
+    missing
+}
+
+fn lvm_lvremove_command(
+    target: Option<&str>,
+    placeholder: &'static str,
+    target_input: &'static str,
+    description: &'static str,
+) -> ExecutionCommand {
+    match target {
+        Some(target) => command(["lvremove", "--yes", target], true, description),
+        None => command_with_readiness(
+            ["lvremove", "--yes", placeholder],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            [target_input],
+            description,
         ),
     }
 }
@@ -7833,6 +7935,85 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["lvs", "--reportformat", "json", "vg0/scratch"])
+        }));
+    }
+
+    #[test]
+    fn lvm_volume_update_and_remove_require_canonical_targets_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "volumes": {
+                  "scratch": {
+                    "operation": "grow",
+                    "desiredSize": "20GiB"
+                  },
+                  "old": {
+                    "destroy": true
+                  }
+                },
+                "thinPools": {
+                  "pool": {
+                    "operation": "grow",
+                    "desiredSize": "200GiB"
+                  },
+                  "oldpool": {
+                    "destroy": true
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumes:scratch:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvextend",
+                            "--resizefs",
+                            "--size",
+                            "20GiB",
+                            "<logical-volume>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == ["target in volume-group/logical-volume form"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumes:old:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvremove", "--yes", "<logical-volume>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == ["target in volume-group/logical-volume form"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "thinpools:pool:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvextend", "--size", "200GiB", "<thin-pool>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["target in volume-group/thin-pool form"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "thinpools:oldpool:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvremove", "--yes", "<thin-pool>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["target in volume-group/thin-pool form"]
+                })
         }));
     }
 
