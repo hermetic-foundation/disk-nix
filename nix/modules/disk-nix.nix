@@ -72,6 +72,16 @@ let
           example = [ "/dev/disk/by-id/nvme-replacement" ];
         };
 
+        devices = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Explicit member or path devices for storage objects such as MD RAID arrays, ZFS pools, LUNs, and multipath maps.";
+          example = [
+            "/dev/disk/by-id/nvme-a"
+            "/dev/disk/by-id/nvme-b"
+          ];
+        };
+
         removeDevices = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [ ];
@@ -186,6 +196,20 @@ let
           example = "linux";
         };
 
+        level = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "RAID level for array lifecycle declarations.";
+          example = "1";
+        };
+
+        portal = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Network storage portal for lifecycle declarations such as iSCSI sessions.";
+          example = "192.0.2.10:3260";
+        };
+
         metadata = lib.mkOption {
           type = lib.types.attrsOf json.type;
           default = { };
@@ -246,46 +270,45 @@ let
   cleanSpecAttrs = lib.filterAttrs (_: value: value != null && value != [ ] && value != { });
   normalizeLifecycleSpec = lib.mapAttrs (
     _: object:
-    cleanSpecAttrs (
-      object.metadata
-      // {
-        inherit (object)
-          operation
-          addDevices
-          removeDevices
-          replaceDevices
-          properties
-          destroy
-          preserveData
-          desiredSize
-          target
-          path
-          mountpoint
-          device
-          client
-          options
-          start
-          end
-          partitionNumber
-          partitionType
-          ;
-      }
-    )
+    object.metadata
+    // cleanSpecAttrs {
+      inherit (object)
+        operation
+        addDevices
+        devices
+        removeDevices
+        replaceDevices
+        properties
+        destroy
+        preserveData
+        desiredSize
+        target
+        path
+        mountpoint
+        device
+        client
+        options
+        start
+        end
+        partitionNumber
+        partitionType
+        level
+        portal
+        ;
+    }
   );
   normalizeSnapshotSpec = lib.mapAttrs (
     _: snapshot:
-    cleanSpecAttrs (
-      snapshot.metadata
-      // {
-        inherit (snapshot)
-          target
-          destroy
-          rollback
-          readOnly
-          preserveData
-          ;
-      }
-    )
+    snapshot.metadata
+    // cleanSpecAttrs {
+      inherit (snapshot)
+        target
+        destroy
+        rollback
+        readOnly
+        preserveData
+        ;
+    }
   );
   typedFilesystemSpec = lib.mapAttrs (_: filesystem: {
     inherit (filesystem)

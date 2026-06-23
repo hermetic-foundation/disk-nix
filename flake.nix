@@ -142,9 +142,7 @@
                 sessions."iqn.2026-06.example:storage.root" = {
                   operation = "grow";
                   desiredSize = "2TiB";
-                  metadata = {
-                    portal = "192.0.2.10:3260";
-                  };
+                  portal = "192.0.2.10:3260";
                 };
               };
               pools.tank = {
@@ -204,6 +202,11 @@
               };
               mdRaids.root = {
                 target = "/dev/md/root";
+                level = "1";
+                devices = [
+                  "/dev/disk/by-id/nvme-md-a"
+                  "/dev/disk/by-id/nvme-md-b"
+                ];
                 addDevices = [ "/dev/disk/by-id/nvme-md-spare" ];
               };
               multipathMaps.mpatha = {
@@ -212,6 +215,10 @@
               };
               luns."iqn.2026-06.example:storage/root:0" = {
                 operation = "grow";
+                device = "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0";
+                devices = [
+                  "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                ];
                 metadata = {
                   target = "iqn.2026-06.example:storage/root";
                   lun = 0;
@@ -443,6 +450,8 @@
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
                   and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
+                  and .spec.luns."iqn.2026-06.example:storage/root:0".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                  and (.spec.luns."iqn.2026-06.example:storage/root:0".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0") != null)
                   and .spec.exports."/srv/share".operation == "create"
                   and .spec.exports."/srv/share".client == "192.0.2.0/24"
                   and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
@@ -471,6 +480,9 @@
                   and .spec.loopDevices."/dev/loop7".operation == "create"
                   and .spec.loopDevices."/dev/loop7".device == "/var/lib/images/root.img"
                   and .spec.mdRaids.root.target == "/dev/md/root"
+                  and .spec.mdRaids.root.level == "1"
+                  and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-a") != null)
+                  and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-b") != null)
                   and (.spec.mdRaids.root.addDevices | index("/dev/disk/by-id/nvme-md-spare") != null)
                   and .spec.multipathMaps.mpatha.target == "mpatha"
                   and (.spec.multipathMaps.mpatha.addDevices | index("/dev/sdb") != null)

@@ -139,6 +139,7 @@ Each lifecycle declaration includes:
 
 - `operation`
 - `addDevices`
+- `devices`
 - `removeDevices`
 - `replaceDevices`
 - `properties`
@@ -153,6 +154,8 @@ Each lifecycle declaration includes:
 - `end`
 - `partitionNumber`
 - `partitionType`
+- `level`
+- `portal`
 - `metadata`
 
 Typed snapshot declarations include:
