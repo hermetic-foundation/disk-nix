@@ -148,7 +148,13 @@ let
         target = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
-          description = "Explicit target identity when it differs from the attribute name.";
+          description = ''
+            Explicit target identity when it differs from the attribute name.
+            Some command domains require concrete targets for executable plans:
+            LVM logical volumes use vg/lv, LVM thin pools use vg/pool, MD RAID
+            arrays use /dev/md*, multipath maps use mpath* or /dev/mapper/*,
+            bcache uses /dev/bcache*, and loop devices use /dev/loop*.
+          '';
           example = "tank/home";
         };
 
@@ -922,19 +928,19 @@ in
     loopDevices = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed loop-device lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed loop-device lifecycle declarations emitted into the disk-nix planner spec. Refresh and detach command plans require a /dev/loop* target.";
     };
 
     mdRaids = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed MD RAID lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed MD RAID lifecycle declarations emitted into the disk-nix planner spec. Executable create, grow, and member-removal plans require an explicit /dev/md* array target.";
     };
 
     multipathMaps = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed multipath map lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed multipath map lifecycle declarations emitted into the disk-nix planner spec. Executable grow plans require a concrete mpath* or /dev/mapper/* map target.";
     };
 
     pools = lib.mkOption {
@@ -964,13 +970,13 @@ in
     exports = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed NFS export lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed NFS export lifecycle declarations emitted into the disk-nix planner spec. Executable exportfs plans require a local export path plus explicit client and options fields.";
     };
 
     caches = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed cache-layer lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed cache-layer lifecycle declarations emitted into the disk-nix planner spec. bcache command plans require a concrete /dev/bcache* target.";
     };
 
     snapshots = lib.mkOption {

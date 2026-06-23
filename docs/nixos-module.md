@@ -66,6 +66,17 @@ only when they are non-destroy declarations with explicit `client` and
 `options` fields. Destructive or under-specified export declarations remain in
 the disk-nix planner spec for review instead of being re-added to `/etc/exports`.
 
+Lifecycle declaration attribute names are usable object names only for domains
+whose native tools address objects by name, such as ZFS datasets, ZFS pools,
+VDO volumes, and iSCSI target IQNs. Domains addressed by kernel paths or
+compound LVM names need concrete targets before `apply --execute` can run:
+swap and NFS exports need local paths, loop devices need `/dev/loop*`, MD RAID
+arrays need `/dev/md*`, multipath maps need `mpath*` or `/dev/mapper/*`, bcache
+operations need `/dev/bcache*`, and LVM logical volumes and thin pools need
+canonical `vg/lv` or `vg/pool` targets. Declarations that omit these concrete
+addresses still produce reviewable plans, but their command plans stay
+non-ready instead of guessing from logical keys.
+
 Typed filesystem declarations include:
 
 - `device`
@@ -189,6 +200,19 @@ Typed snapshot declarations include:
 - `releaseHold`
 - `preserveData`
 - `metadata`
+
+Address fields have domain-specific meaning:
+
+- `target`: native object name or required concrete command target; use
+  `vg/lv` for logical volumes, `vg/pool` for thin pools, `/dev/md*` for MD
+  arrays, `/dev/bcache*` for bcache, and `mpath*` or `/dev/mapper/*` for
+  multipath maps
+- `path`: local filesystem path for Btrfs subvolumes, Btrfs qgroups, and NFS
+  exports
+- `device`: backing block device or image path used by formats, LUKS, swap,
+  filesystems, partitions, and loop-device setup
+- `portal`: iSCSI target portal; `metadata.portal` is accepted for
+  module-derived session declarations
 
 Example lifecycle planning through NixOS options:
 
