@@ -112,6 +112,16 @@
                 properties.label = "cryptroot";
                 properties."luks.subsystem" = "nixos";
               };
+              luks.devices.cryptTargetSize = {
+                device = "/dev/disk/by-id/target-size-luks";
+                operation = "grow";
+                targetSize = "90%";
+              };
+              luks.devices.cryptSize = {
+                device = "/dev/disk/by-id/size-luks";
+                operation = "grow";
+                size = "80%";
+              };
               luks.devices.cryptold = {
                 device = "/dev/disk/by-partuuid/old-luks";
                 destroy = true;
@@ -290,6 +300,16 @@
               swaps.inventory = {
                 device = "/dev/disk/by-label/swap-inventory";
                 operation = "rescan";
+              };
+              swaps.targetSizeAlias = {
+                device = "/dev/disk/by-label/swap-target-size";
+                operation = "grow";
+                targetSize = "12GiB";
+              };
+              swaps.sizeAlias = {
+                device = "/dev/disk/by-label/swap-size";
+                operation = "grow";
+                size = "10GiB";
               };
               swaps.old = {
                 device = "/dev/disk/by-label/old-swap";
@@ -1190,6 +1210,10 @@
                     and .spec.swaps.primary.properties."swap.uuid" == "01234567-89ab-cdef-0123-456789abcdef"
                     and .spec.swaps.inventory.operation == "rescan"
                     and .spec.swaps.inventory.device == "/dev/disk/by-label/swap-inventory"
+                    and .spec.swaps.targetSizeAlias.operation == "grow"
+                    and .spec.swaps.targetSizeAlias.targetSize == "12GiB"
+                    and .spec.swaps.sizeAlias.operation == "grow"
+                    and .spec.swaps.sizeAlias.size == "10GiB"
                     and .spec.swaps.old.operation == "destroy"
                     and .spec.swaps.actionOld.action == "destroy"
                     and .spec.swaps.destroyed.destroy == true
@@ -1202,6 +1226,10 @@
                     and .spec.luks.devices.cryptroot.desiredSize == "100%"
                     and .spec.luks.devices.cryptroot.properties.label == "cryptroot"
                     and .spec.luks.devices.cryptroot.properties."luks.subsystem" == "nixos"
+                    and .spec.luks.devices.cryptTargetSize.operation == "grow"
+                    and .spec.luks.devices.cryptTargetSize.targetSize == "90%"
+                    and .spec.luks.devices.cryptSize.operation == "grow"
+                    and .spec.luks.devices.cryptSize.size == "80%"
                     and .spec.luks.devices.cryptold.destroy == true
                     and .spec.luks.devices.cryptold.device == "/dev/disk/by-partuuid/old-luks"
                     and .spec.luks.devices.cryptarchive.operation == "open"
@@ -1435,9 +1463,11 @@
                   }
                   printf '%s\n' "$swapDevices" > swap-devices
                   jq -e '
-                    length == 2
+                    length == 4
                     and any(.[]; .device == "/dev/disk/by-label/swap")
                     and any(.[]; .device == "/dev/disk/by-label/swap-inventory")
+                    and any(.[]; .device == "/dev/disk/by-label/swap-target-size")
+                    and any(.[]; .device == "/dev/disk/by-label/swap-size")
                     and all(.[]; .device != "/dev/disk/by-label/action-old-swap")
                     and all(.[]; .device != "/dev/disk/by-label/destroyed-swap")
                   ' swap-devices
@@ -1454,6 +1484,10 @@
                   jq -e '
                     has("cryptroot")
                     and .cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
+                    and has("cryptTargetSize")
+                    and .cryptTargetSize.device == "/dev/disk/by-id/target-size-luks"
+                    and has("cryptSize")
+                    and .cryptSize.device == "/dev/disk/by-id/size-luks"
                     and has("cryptarchive")
                     and .cryptarchive.device == "/dev/disk/by-id/archive-luks"
                     and (has("cryptold") | not)

@@ -811,6 +811,8 @@ let
       action
       destroy
       desiredSize
+      targetSize
+      size
       priority
       randomEncryption
       preserveData
@@ -824,6 +826,8 @@ let
       operation
       action
       desiredSize
+      targetSize
+      size
       allowDiscards
       bypassWorkqueues
       preLVM
@@ -1205,6 +1209,20 @@ in
                 example = "16GiB";
               };
 
+              targetSize = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Alias accepted by disk-nix for the desired swap size.";
+                example = "16GiB";
+              };
+
+              size = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Short alias accepted by disk-nix for the desired swap size.";
+                example = "16GiB";
+              };
+
               randomEncryption = lib.mkOption {
                 type = lib.types.bool;
                 default = false;
@@ -1289,6 +1307,20 @@ in
                 type = lib.types.nullOr lib.types.str;
                 default = null;
                 description = "Desired opened mapper size for disk-nix lifecycle planning.";
+                example = "100%";
+              };
+
+              targetSize = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Alias accepted by disk-nix for the desired opened mapper size.";
+                example = "100%";
+              };
+
+              size = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Short alias accepted by disk-nix for the desired opened mapper size.";
                 example = "100%";
               };
 

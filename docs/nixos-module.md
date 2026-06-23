@@ -210,10 +210,15 @@ Typed swap declarations include:
 - `action`
 - `destroy`
 - `desiredSize`
+- `targetSize`
+- `size`
 - `priority`
 - `randomEncryption`
 - `preserveData`
 - `properties`
+
+`targetSize` and `size` are serialized as aliases accepted by the planner for
+the desired swap size.
 
 Typed LUKS declarations include:
 
@@ -222,12 +227,17 @@ Typed LUKS declarations include:
 - `operation`
 - `action`
 - `desiredSize`
+- `targetSize`
+- `size`
 - `allowDiscards`
 - `bypassWorkqueues`
 - `preLVM`
 - `preserveData`
 - `destroy`
 - `properties`
+
+`targetSize` and `size` are serialized as aliases accepted by the planner for
+the desired opened mapper size.
 
 Typed NFS client mount declarations include:
 
