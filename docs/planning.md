@@ -57,7 +57,9 @@ Examples:
 - `preserveData = false` is classified as destructive because it permits
   formatting or replacement.
 - `removeDevices = [ ... ]` is classified as potential data loss and recommends
-  replacement capacity, evacuation, and health verification.
+  replacement capacity, evacuation, and health verification. Btrfs filesystem
+  device removal also verifies allocation state with `btrfs filesystem usage`
+  before any future `btrfs device remove` workflow is reviewed.
 - `replaceDevices = { old = new; }` is classified as reversible because the
   original device can remain available until verification passes.
 - Cache `replace-device` is classified as offline-required because dirty or

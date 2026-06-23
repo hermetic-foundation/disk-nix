@@ -891,6 +891,8 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             }),
         });
     }
+
+    add_device_membership_actions(actions, "filesystems", name, filesystem);
 }
 
 fn add_swap_actions(actions: &mut Vec<PlannedAction>, name: &str, swap: &Value) {
@@ -2663,6 +2665,34 @@ mod tests {
         assert_eq!(plan.actions[0].risk, RiskClass::PotentialDataLoss);
         assert_eq!(plan.actions[0].context.fs_type.as_deref(), Some("ext4"));
         assert_eq!(plan.actions[0].context.mountpoint.as_deref(), Some("/home"));
+    }
+
+    #[test]
+    fn plan_warns_for_filesystem_device_removal() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "data": {
+                  "mountpoint": "/data",
+                  "fsType": "btrfs",
+                  "removeDevices": ["/dev/disk/by-id/old-btrfs-device"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.potential_data_loss_count, 1);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "filesystems:data:remove-device:/dev/disk/by-id/old-btrfs-device"
+                && action.operation == Operation::RemoveDevice
+                && action.risk == RiskClass::PotentialDataLoss
+                && action.context.collection.as_deref() == Some("filesystems")
+                && action.context.target.as_deref() == Some("/data")
+                && action.context.device.as_deref() == Some("/dev/disk/by-id/old-btrfs-device")
+                && action.advice.is_some()
+        }));
     }
 
     #[test]

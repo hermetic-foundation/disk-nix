@@ -163,6 +163,9 @@ dataset, and zvol updates, volume updates, network LUN growth, snapshots, and
 cache replacement.
 Cache apply plans include bcache-aware attach, cache-mode, dirty-data, and
 replacement review steps instead of a generic cache placeholder.
+Btrfs filesystem device-removal plans include allocation inspection and
+domain-specific `btrfs device remove` rendering for review, while remaining
+blocked by the current potential-data-loss policy gate.
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus

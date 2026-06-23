@@ -309,6 +309,9 @@ that concrete target and no longer report `needs-desired-size`.
 Cache-layer command plans include bcache sysfs operations for attaching an
 existing cache-set UUID, changing cache mode, checking dirty data, and staging
 replacement cache media without silently formatting unknown devices.
+Btrfs filesystem device-removal plans use Btrfs allocation inspection and
+domain-specific `btrfs device remove` rendering, but the mutating command stays
+blocked while potential-data-loss actions have no explicit apply override.
 Swapfile growth command plans render `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon`; block-device swap growth keeps the backing resize command
 non-ready until the partition, LV, LUN, or other backing layer is selected.

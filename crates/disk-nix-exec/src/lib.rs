@@ -788,7 +788,10 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
-        Operation::AddDevice | Operation::ReplaceDevice | Operation::Rebalance
+        Operation::AddDevice
+        | Operation::ReplaceDevice
+        | Operation::RemoveDevice
+        | Operation::Rebalance
             if collection == Some("filesystems") =>
         {
             (
@@ -2361,6 +2364,35 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::RemoveDevice if collection == Some("filesystems") => {
+            let target = target.unwrap_or("<btrfs-filesystem>");
+            let device = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| parts.last().copied())
+                .unwrap_or("<device>");
+            (
+                vec![
+                    command(
+                        ["btrfs", "filesystem", "usage", "-b", target],
+                        false,
+                        "inspect Btrfs allocation and free space before device removal",
+                    ),
+                    command(
+                        ["btrfs", "device", "remove", device, target],
+                        true,
+                        "remove the reviewed device from the Btrfs filesystem after data evacuation checks",
+                    ),
+                ],
+                vec![
+                    "remove a Btrfs device only when remaining data and metadata space are sufficient"
+                        .to_string(),
+                    "run or review balance progress until device evacuation completes".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::RemoveDevice if collection == Some("caches") => {
             let target = target.unwrap_or("<cache-device>");
             (
@@ -3300,7 +3332,7 @@ fn property_assignment(action: &PlannedAction) -> String {
 
 #[cfg(test)]
 mod tests {
-    use disk_nix_plan::plan_and_policy_from_json_bytes;
+    use disk_nix_plan::{ActionContext, plan_and_policy_from_json_bytes};
 
     use super::*;
 
@@ -3399,6 +3431,100 @@ mod tests {
                 .iter()
                 .any(|check| check.contains("750GiB") || check.contains("800GiB"))
         }));
+    }
+
+    #[test]
+    fn btrfs_filesystem_device_removal_stays_blocked_by_apply_policy() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "data": {
+                    "mountpoint": "/data",
+                    "fsType": "btrfs",
+                    "removeDevices": ["/dev/disk/by-id/old-btrfs-device"]
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::Blocked);
+        assert_eq!(report.command_summary.step_count, 1);
+        assert!(
+            !report.command_plan.iter().any(|step| {
+                step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "device",
+                            "remove",
+                            "/dev/disk/by-id/old-btrfs-device",
+                            "/data",
+                        ]
+                })
+            }),
+            "potential-data-loss Btrfs device removal remains blocked by apply policy"
+        );
+        assert!(report.verification_plan.iter().all(|step| {
+            step.action_id != "filesystems:data:remove-device:/dev/disk/by-id/old-btrfs-device"
+        }));
+    }
+
+    #[test]
+    fn btrfs_filesystem_device_removal_renderer_uses_btrfs_commands() {
+        let action = PlannedAction {
+            id: "filesystems:data:remove-device:/dev/disk/by-id/old-btrfs-device".to_string(),
+            description: "remove old Btrfs device".to_string(),
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                name: Some("data".to_string()),
+                target: Some("/data".to_string()),
+                device: Some("/dev/disk/by-id/old-btrfs-device".to_string()),
+                fs_type: Some("btrfs".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+
+        let (commands, notes, requires_manual_review) = commands_for_action(&action);
+        let (verification_commands, verification_checks) = verification_for_action(&action);
+
+        assert!(requires_manual_review);
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.contains("remaining data and metadata space are sufficient"))
+        );
+        assert!(commands.iter().any(|command| {
+            command.argv == ["btrfs", "filesystem", "usage", "-b", "/data"] && !command.mutates
+        }));
+        assert!(commands.iter().any(|command| {
+            command.argv
+                == [
+                    "btrfs",
+                    "device",
+                    "remove",
+                    "/dev/disk/by-id/old-btrfs-device",
+                    "/data",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(verification_commands.iter().any(|command| {
+            command.argv == ["btrfs", "filesystem", "usage", "-b", "/data"] && !command.mutates
+        }));
+        assert!(
+            verification_checks
+                .iter()
+                .any(|check| check.contains("Btrfs device list matches desired topology"))
+        );
     }
 
     #[test]
