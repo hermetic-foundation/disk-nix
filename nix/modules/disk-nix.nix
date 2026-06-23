@@ -741,6 +741,12 @@ in
       description = "Typed Btrfs subvolume lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    btrfsQgroups = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed Btrfs qgroup lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
     vdoVolumes = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -961,6 +967,7 @@ in
         disks = (cfg.spec.disks or { }) // normalizeLifecycleSpec cfg.disks;
         partitions = (cfg.spec.partitions or { }) // normalizeLifecycleSpec cfg.partitions;
         btrfsSubvolumes = (cfg.spec.btrfsSubvolumes or { }) // normalizeLifecycleSpec cfg.btrfsSubvolumes;
+        btrfsQgroups = (cfg.spec.btrfsQgroups or { }) // normalizeLifecycleSpec cfg.btrfsQgroups;
         vdoVolumes = (cfg.spec.vdoVolumes or { }) // normalizeLifecycleSpec cfg.vdoVolumes;
         volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;

@@ -993,6 +993,21 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             ],
             vec!["changed property equals the desired value".to_string()],
         ),
+        Operation::SetProperty if collection == Some("btrfsQgroups") => (
+            vec![
+                command(
+                    ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                    false,
+                    "verify Btrfs qgroup limits and usage after update",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled Btrfs qgroup properties after re-probe",
+                ),
+            ],
+            vec!["changed qgroup limit equals the desired value".to_string()],
+        ),
         Operation::SetProperty if collection == Some("exports") => (
             vec![
                 command(
@@ -1980,6 +1995,16 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .as_deref()
                 .unwrap_or("<key>");
             let property_assignment = property_assignment(action);
+            let property_command = if collection == Some("btrfsQgroups") {
+                btrfs_qgroup_property_command(
+                    target,
+                    action.context.name.as_deref().unwrap_or("<qgroupid>"),
+                    property,
+                    &property_assignment,
+                )
+            } else {
+                set_property_command(collection, target, property, &property_assignment)
+            };
             (
                 vec![
                     command(
@@ -1987,7 +2012,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect current properties before applying changes",
                     ),
-                    set_property_command(collection, target, property, &property_assignment),
+                    property_command,
                 ],
                 vec!["property values must come from the desired spec and target domain".to_string()],
                 true,
@@ -3219,6 +3244,76 @@ fn btrfs_subvolume_property_command(
         true,
         "set a Btrfs subvolume property",
     )
+}
+
+fn btrfs_qgroup_property_command(
+    target: &str,
+    qgroup_id: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            ["<btrfs-qgroup-tool>", target, qgroup_id],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["Btrfs qgroup limit value"],
+            "set a Btrfs qgroup limit after resolving the desired value",
+        );
+    };
+    if target == qgroup_id || target.starts_with("0/") {
+        return command_with_readiness(
+            ["btrfs", "qgroup", "limit", value, qgroup_id, "<path>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["mounted Btrfs filesystem path"],
+            "set a Btrfs qgroup limit after selecting the mounted filesystem path",
+        );
+    }
+    let limit_value = normalize_btrfs_qgroup_limit(value);
+    match property {
+        "limit" | "maxReferenced" | "max-referenced" | "referenced" | "btrfs.max-referenced" => {
+            command_vec(
+                vec![
+                    "btrfs".to_string(),
+                    "qgroup".to_string(),
+                    "limit".to_string(),
+                    limit_value,
+                    qgroup_id.to_string(),
+                    target.to_string(),
+                ],
+                true,
+                "set a Btrfs qgroup referenced-byte limit",
+            )
+        }
+        "maxExclusive" | "max-exclusive" | "exclusive" | "btrfs.max-exclusive" => command_vec(
+            vec![
+                "btrfs".to_string(),
+                "qgroup".to_string(),
+                "limit".to_string(),
+                "-e".to_string(),
+                limit_value,
+                qgroup_id.to_string(),
+                target.to_string(),
+            ],
+            true,
+            "set a Btrfs qgroup exclusive-byte limit",
+        ),
+        _ => command_with_readiness(
+            ["<btrfs-qgroup-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported Btrfs qgroup property"],
+            "set a Btrfs qgroup property after selecting a supported property mapping",
+        ),
+    }
+}
+
+fn normalize_btrfs_qgroup_limit(value: &str) -> String {
+    match value {
+        "null" | "none" | "None" | "NONE" | "unlimited" => "none".to_string(),
+        other => other.to_string(),
+    }
 }
 
 fn normalize_boolish_btrfs_property_value(value: &str) -> String {
@@ -4701,6 +4796,61 @@ mod tests {
                     .iter()
                     .any(|command| command.argv == ["disk-nix", "topology", "--json"])
         }));
+    }
+
+    #[test]
+    fn btrfs_qgroup_lifecycle_reports_limit_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "btrfsQgroups": {
+                  "0/257": {
+                    "target": "/mnt/persist",
+                    "properties": {
+                      "limit": "25GiB",
+                      "maxExclusive": "10GiB"
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsQgroups:0/257:set-property:limit"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "qgroup", "limit", "25GiB", "0/257", "/mnt/persist"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsQgroups:0/257:set-property:maxExclusive"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "qgroup",
+                            "limit",
+                            "-e",
+                            "10GiB",
+                            "0/257",
+                            "/mnt/persist",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "btrfsQgroups:0/257:set-property:limit"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "qgroup", "show", "--raw", "-reF", "/mnt/persist"]
+                })
+        }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
     }
 
     #[test]

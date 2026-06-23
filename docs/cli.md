@@ -349,6 +349,8 @@ lifecycle declarations.
 Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
 `btrfs subvolume delete`, and `btrfs property set -ts <path> ro true|false`
 for read-only property declarations.
+Btrfs qgroup command plans render `btrfs qgroup limit` for referenced and
+exclusive limit declarations in `btrfsQgroups`.
 Generic snapshot declarations render concrete `zfs snapshot` commands for
 `dataset@snapshot` names and Btrfs `subvolume snapshot` commands when both the
 source target and snapshot name are absolute paths. Destructive snapshot

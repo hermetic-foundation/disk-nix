@@ -122,6 +122,9 @@ Examples:
 - `properties = { ... }` is classified as safe property-update intent. Btrfs
   subvolume `readonly`, `readOnly`, or `ro` declarations render
   `btrfs property set -ts <path> ro true|false`.
+- Btrfs qgroup `properties.limit` or `properties.maxReferenced` render
+  `btrfs qgroup limit <size|none> <qgroupid> <path>`;
+  `properties.maxExclusive` renders the exclusive limit form with `-e`.
 - Cache attach and cache-mode updates are online or safe when they use an
   existing cache-set identity; cache replacement remains offline-required
   because dirty writeback data must be flushed or detached before media
@@ -162,6 +165,7 @@ Lifecycle collections currently accepted by the planner:
 - `swaps`
 - `luks.devices`
 - `btrfsSubvolumes`
+- `btrfsQgroups`
 - `vdoVolumes`
 - `volumes`
 - `volumeGroups`

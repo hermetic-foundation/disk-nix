@@ -89,6 +89,15 @@
       "path": "/mnt/persist/@home"
     }
   },
+  "btrfsQgroups": {
+    "0/257": {
+      "target": "/mnt/persist",
+      "properties": {
+        "limit": "25GiB",
+        "maxExclusive": "10GiB"
+      }
+    }
+  },
   "partitions": {
     "root": {
       "operation": "grow",

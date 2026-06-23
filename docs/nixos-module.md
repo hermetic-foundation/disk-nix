@@ -118,6 +118,7 @@ Typed lifecycle declarations are available for:
 - `disks`
 - `partitions`
 - `btrfsSubvolumes`
+- `btrfsQgroups`
 - `vdoVolumes`
 - `volumes`
 - `volumeGroups`
@@ -195,6 +196,10 @@ Example lifecycle planning through NixOS options:
     btrfsSubvolumes."/mnt/persist/@home" = {
       operation = "create";
       path = "/mnt/persist/@home";
+    };
+    btrfsQgroups."0/257" = {
+      target = "/mnt/persist";
+      properties.limit = "25GiB";
     };
     volumes."vg0/scratch" = {
       operation = "create";

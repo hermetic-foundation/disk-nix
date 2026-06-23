@@ -406,6 +406,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "disks",
         "partitions",
         "btrfsSubvolumes",
+        "btrfsQgroups",
         "vdoVolumes",
         "volumes",
         "volumeGroups",

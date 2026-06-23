@@ -167,6 +167,10 @@
                 operation = "create";
                 path = "/mnt/persist/@home";
               };
+              btrfsQgroups."0/257" = {
+                target = "/mnt/persist";
+                properties.limit = "25GiB";
+              };
               volumes."vg0/scratch" = {
                 operation = "create";
                 desiredSize = "10GiB";
@@ -277,6 +281,7 @@
               and .properties.luks["$ref"] == "#/$defs/luksSpec"
               and .properties.partitions["$ref"] == "#/$defs/lifecycleMap"
               and .properties.btrfsSubvolumes["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.btrfsQgroups["$ref"] == "#/$defs/lifecycleMap"
               and .properties.vdoVolumes["$ref"] == "#/$defs/lifecycleMap"
               and .properties.zvols["$ref"] == "#/$defs/lifecycleMap"
               and .properties.thinPools["$ref"] == "#/$defs/lifecycleMap"
@@ -289,6 +294,7 @@
               and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
               and (."$defs".specBody.properties.disks["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.btrfsSubvolumes["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.btrfsQgroups["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.vdoVolumes["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.zvols["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.thinPools["$ref"] == "#/$defs/lifecycleMap")
@@ -328,12 +334,14 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 28
+              .summary.actionCount == 30
               and .summary.offlineRequiredCount == 5
               and .summary.destructiveCount == 2
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@home:create" and .risk == "online"))
+              and (.actions | any(.id == "btrfsQgroups:0/257:set-property:limit" and .risk == "safe"))
+              and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
               and (.actions | any(.id == "volumes:vg0/scratch:create" and .risk == "online"))
               and (.actions | any(.id == "vdovolumes:archive:grow" and .risk == "online"))
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
@@ -444,6 +452,8 @@
                   and .spec.partitions.root.end == "100%"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".operation == "create"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".path == "/mnt/persist/@home"
+                  and .spec.btrfsQgroups."0/257".target == "/mnt/persist"
+                  and .spec.btrfsQgroups."0/257".properties.limit == "25GiB"
                   and .spec.volumes."vg0/scratch".operation == "create"
                   and .spec.volumes."vg0/scratch".desiredSize == "10GiB"
                   and .spec.datasets."tank/home".operation == "create"
