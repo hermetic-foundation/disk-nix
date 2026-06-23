@@ -332,10 +332,12 @@ plus unresolved inputs when applicable.
 When an action context includes `desiredSize`, supported resize commands use
 that concrete target and no longer report `needs-desired-size`.
 Cache-layer command plans include bcache sysfs operations for attaching or
-detaching an existing cache-set UUID, changing cache mode, checking dirty data,
-and staging replacement cache media without silently formatting unknown devices.
-bcache sysfs operations require a concrete `/dev/bcache*` target; logical cache
-names remain marked `needs-domain-implementation`.
+detaching an existing cache-set UUID, rescanning status, changing cache mode,
+checking dirty data, and staging replacement cache media without silently
+formatting unknown devices. bcache `operation = "rescan"` reads state,
+cache-mode, dirty-data, and modeled graph relationships without changing
+attachment. bcache sysfs operations require a concrete `/dev/bcache*` target;
+logical cache names remain marked `needs-domain-implementation`.
 Btrfs filesystem device-removal plans use Btrfs allocation inspection and
 domain-specific `btrfs device remove` rendering, but the mutating command is
 blocked by default until `allowPotentialDataLoss=true` is set.

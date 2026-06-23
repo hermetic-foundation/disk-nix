@@ -473,6 +473,7 @@ Example lifecycle planning through NixOS options:
       replaceDevices."/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
     };
     caches."/dev/bcache0" = {
+      operation = "rescan";
       addDevices = [ "cache-set-uuid" ];
       properties."bcache.cache-mode" = "writethrough";
     };

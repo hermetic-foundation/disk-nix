@@ -452,6 +452,7 @@
                 };
               };
               caches."/dev/bcache0" = {
+                operation = "rescan";
                 addDevices = [ "cache-set-uuid" ];
                 properties."bcache.cache-mode" = "writethrough";
               };
@@ -702,7 +703,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 81
+              .summary.actionCount == 82
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -770,6 +771,7 @@
               and (.actions | any(.id == "nfs.mounts:/srv/tuned:remount" and .risk == "online"))
               and (.actions | any(.id == "nfs.mounts:/srv/old:unmount" and .risk == "offline-required"))
               and (.actions | any(.id == "caches:/dev/bcache0:add-device:cache-set-uuid" and .risk == "online"))
+              and (.actions | any(.id == "caches:/dev/bcache0:rescan" and .risk == "online"))
               and (.actions | any(.id == "caches:/dev/bcache0:set-property:bcache.cache-mode" and .risk == "safe"))
               and (.actions | any(.id == "caches:tank/l2arc0:replace-device:/dev/disk/by-id/old-cache"))
             ' "$lifecyclePlan"
@@ -1019,6 +1021,7 @@
                   and .spec.multipathMaps.mpathb.operation == "rescan"
                   and .spec.multipathMaps.mpathb.target == "mpathb"
                   and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
+                  and .spec.caches."/dev/bcache0".operation == "rescan"
                   and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
                   and .spec.pools.vault.operation == "import"
                   and .spec.pools.vault.readOnly == true

@@ -1620,6 +1620,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::ReplaceDevice
         | Operation::RemoveDevice
         | Operation::SetProperty
+        | Operation::Rescan
             if collection == Some("caches") =>
         {
             (
@@ -5367,6 +5368,28 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "switch writeback caches to writethrough and wait for dirty data to drain before detach"
                         .to_string(),
                     "keep backing storage online and verify it remains readable after detach"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("caches") => {
+            let target = target.unwrap_or("<cache-device>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect modeled cache layer relationships after status refresh",
+                    ),
+                    bcache_sysfs_read_command(target, "state", "refresh bcache state"),
+                    bcache_sysfs_read_command(target, "cache_mode", "refresh bcache cache mode"),
+                    bcache_sysfs_read_command(target, "dirty_data", "refresh bcache dirty data"),
+                ],
+                vec![
+                    "use add-device or remove-device when cache-set attachment must change"
+                        .to_string(),
+                    "verify dirty data before detach, replacement, or cache-mode changes"
                         .to_string(),
                 ],
                 true,
@@ -16081,6 +16104,7 @@ mod tests {
               "spec": {
                 "caches": {
                   "/dev/bcache0": {
+                    "operation": "rescan",
                     "addDevices": ["cache-set-uuid"],
                     "removeDevices": ["cache-set-uuid"],
                     "replaceDevices": {
@@ -16116,6 +16140,39 @@ mod tests {
                         "cache-set-uuid",
                     ]
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:/dev/bcache0:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "/dev/bcache0"])
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "cat \"/sys/block/${1#/dev/}/bcache/$2\"",
+                            "disk-nix-bcache-read",
+                            "/dev/bcache0",
+                            "state",
+                        ]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "cat \"/sys/block/${1#/dev/}/bcache/$2\"",
+                            "disk-nix-bcache-read",
+                            "/dev/bcache0",
+                            "cache_mode",
+                        ]
+                })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
@@ -16170,6 +16227,23 @@ mod tests {
                         "dirty_data",
                     ]
             })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "caches:/dev/bcache0:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/bcache0", "--json"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "cat \"/sys/block/${1#/dev/}/bcache/$2\"",
+                            "disk-nix-bcache-read",
+                            "/dev/bcache0",
+                            "dirty_data",
+                        ]
+                })
         }));
     }
 

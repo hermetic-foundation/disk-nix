@@ -3306,6 +3306,21 @@ fn classify_operation(
                     "use start or stop only when intentionally changing activation state"
                         .to_string(),
                     "verify vdostats before growing filesystems or dependent volumes"
+                    .to_string(),
+                ],
+            }),
+        ),
+        Operation::Rescan if collection == "caches" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "bcache rescan refreshes cache state, dirty-data, and graph inventory"
+                    .to_string(),
+                alternatives: vec![
+                    "use add-device or remove-device only when cache-set attachment must change"
+                        .to_string(),
+                    "verify dirty data is zero before any later detach or replacement".to_string(),
+                    "use cache property updates when changing cache mode or writeback behavior"
                         .to_string(),
                 ],
             }),
@@ -4034,7 +4049,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG metadata, MD RAID metadata, and VDO status"
+                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4054,6 +4069,8 @@ fn classify_operation(
                     "use mdRaids.<name>.operation = \"rescan\" to refresh MD RAID metadata inventory"
                         .to_string(),
                     "use vdoVolumes.<name>.operation = \"rescan\" to refresh VDO status and utilization"
+                        .to_string(),
+                    "use caches.<device>.operation = \"rescan\" to refresh bcache state and dirty-data counters"
                         .to_string(),
                 ],
             }),
@@ -6296,6 +6313,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::CacheDevice,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "cache status refresh reads bcache sysfs state without changing attachment"
+                    .to_string(),
+                alternatives: vec![
+                    "check dirty data before later cache detach or replacement".to_string(),
+                    "use attach, detach, or property updates only when cache state must change"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::CacheDevice,
             operation: Operation::AddDevice,
             risk: RiskClass::Online,
             advice: Some(Advice {
@@ -6393,10 +6424,18 @@ mod tests {
                     && capability.operation == Operation::RemoveDevice
             })
             .expect("cache remove capability should exist");
+        let rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::CacheDevice
+                    && capability.operation == Operation::Rescan
+            })
+            .expect("cache rescan capability should exist");
 
         assert_eq!(add.risk, RiskClass::Online);
         assert_eq!(replace.risk, RiskClass::OfflineRequired);
         assert_eq!(remove.risk, RiskClass::PotentialDataLoss);
+        assert_eq!(rescan.risk, RiskClass::Online);
         assert!(replace.advice.as_ref().is_some_and(|advice| {
             advice
                 .alternatives
@@ -6935,6 +6974,7 @@ mod tests {
                 Operation::RemoveDevice,
                 RiskClass::PotentialDataLoss,
             ),
+            (NodeKind::CacheDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::VdoVolume, Operation::Rescan, RiskClass::Online),
             (NodeKind::MdRaid, Operation::Create, RiskClass::Destructive),
             (
@@ -9940,13 +9980,16 @@ mod tests {
                   "replaceDevices": {
                     "/dev/sdb": "/dev/sdc"
                   }
+                },
+                "/dev/bcache0": {
+                  "operation": "rescan"
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 4);
         assert_eq!(plan.summary.offline_required_count, 3);
         assert!(
             plan.actions
@@ -9975,6 +10018,19 @@ mod tests {
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("dirty data"))
+        }));
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "caches:/dev/bcache0:rescan")
+            .expect("cache rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
+        assert!(rescan.advice.as_ref().is_some_and(|advice| {
+            advice
+                .summary
+                .contains("bcache rescan refreshes cache state")
         }));
     }
 

@@ -193,11 +193,13 @@ loop-device mapping updates, MD RAID lifecycle/member updates, multipath map
 updates, NVMe namespace create/attach/rescan/detach/delete workflows, ZFS pool
 topology updates, dataset and zvol updates including zvol property changes,
 volume updates, network LUN growth, snapshots, and cache
-attach/detach/replacement workflows.
-Cache apply plans include bcache-aware attach, detach, cache-mode, dirty-data,
-and replacement review steps instead of a generic cache placeholder. bcache
-sysfs commands require a concrete `/dev/bcache*` target; logical cache names
-remain non-ready until the backing bcache device path is declared.
+attach/detach/rescan/replacement workflows.
+Cache apply plans include bcache-aware attach, detach, rescan, cache-mode,
+dirty-data, and replacement review steps instead of a generic cache
+placeholder. bcache rescan reads state, cache mode, dirty-data, and graph
+inventory without changing attachment. bcache sysfs commands require a concrete
+`/dev/bcache*` target; logical cache names remain non-ready until the backing
+bcache device path is declared.
 LVM cache apply plans use separate `lvmCaches` declarations and render
 `lvconvert --type cache`, `lvconvert --uncache`, and `lvchange --cachemode` or
 `--cachepolicy` commands when an origin `vg/lv` and cache-pool LV are declared.

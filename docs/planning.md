@@ -86,6 +86,9 @@ Examples:
 - Cache `remove-device` is classified as offline-required rather than
   destructive; reviewed plans require dirty-data inspection before bcache
   detach and keep the backing storage intact.
+- Cache `operation = "rescan"` is online and non-destructive; it reads bcache
+  state, cache mode, dirty-data, and graph relationships before any later
+  attach, detach, or replacement.
 - disk partition-table creation is classified as destructive because it can
   hide or replace existing storage metadata. When destructive policy permits
   it, apply plans render reviewed `parted mklabel` and table reread commands.
@@ -364,11 +367,11 @@ commands and checks for the relevant storage domain. Executed reports also
 include `executionResults` with command phase, argv, success, exit status,
 stdout, and stderr for each command that ran.
 Cache command plans include bcache-aware sysfs updates for existing cache-set
-attachment, cache-mode property changes, dirty-data checks, and replacement
-scaffolding that remains marked as needing domain implementation until the
-replacement cache device and new cache-set UUID are verified. bcache sysfs
-operations require a concrete `/dev/bcache*` target; logical cache declaration
-names stay non-ready.
+attachment, cache-mode property changes, read-only rescans, dirty-data checks,
+and replacement scaffolding that remains marked as needing domain
+implementation until the replacement cache device and new cache-set UUID are
+verified. bcache sysfs operations require a concrete `/dev/bcache*` target;
+logical cache declaration names stay non-ready.
 NFS export command plans use `exportfs -i -o <options> <client>:<path>` for
 reviewed `operation = "export"` and option-update operations and
 `exportfs -u <client>:<path>` for reviewed `operation = "unexport"`

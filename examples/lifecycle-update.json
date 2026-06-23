@@ -387,6 +387,7 @@
       }
     },
     "/dev/bcache0": {
+      "operation": "rescan",
       "addDevices": [
         "cache-set-uuid"
       ],
