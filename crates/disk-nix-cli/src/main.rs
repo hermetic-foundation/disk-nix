@@ -1315,7 +1315,11 @@ fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()>
 }
 
 fn print_network_storage(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
-    writeln!(output, "{:<22} {:<48} {:>12} PATH", "KIND", "NAME", "SIZE")?;
+    writeln!(
+        output,
+        "{:<22} {:<48} {:>12} {:<36} PATH",
+        "KIND", "NAME", "SIZE", "DETAILS"
+    )?;
     for node in graph
         .nodes
         .iter()
@@ -1323,10 +1327,11 @@ fn print_network_storage(output: &mut impl Write, graph: &StorageGraph) -> io::R
     {
         writeln!(
             output,
-            "{:<22} {:<48} {:>12} {}",
+            "{:<22} {:<48} {:>12} {:<36} {}",
             node.kind,
             node.name,
             human_bytes(node.size_bytes),
+            usage_details(node),
             node.path.as_deref().unwrap_or("-")
         )?;
     }
@@ -1878,9 +1883,17 @@ fn usage_details(node: &Node) -> String {
         ("md.state", "state"),
         ("md.raid-devices", "raid-devices"),
         ("md.total-devices", "total-devices"),
+        ("iscsi.portal", "portal"),
         ("iscsi.attached-disk", "attached-disk"),
         ("nfs.server", "server"),
         ("nfs.export", "export"),
+        ("nfs.vers", "vers"),
+        ("nfs.proto", "proto"),
+        ("nfs.sec", "sec"),
+        ("nfs.clientaddr", "clientaddr"),
+        ("nfs.addr", "addr"),
+        ("nfs.rsize", "rsize"),
+        ("nfs.wsize", "wsize"),
         ("exfat.volume-serial", "serial"),
         ("exfat.volume-length-sectors", "sectors"),
         ("exfat.cluster-count", "clusters"),
@@ -2045,8 +2058,8 @@ mod tests {
     use super::{
         confirmation_file_accepts, is_device_node, is_mapping_node, is_network_storage_node,
         is_partition_node, is_pool_node, is_snapshot_node, mount_details, print_filesystems,
-        print_mappings, print_mounts, print_pools, print_usage, print_volumes, snapshot_source,
-        usage_details, usage_percent,
+        print_mappings, print_mounts, print_network_storage, print_pools, print_usage,
+        print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2318,6 +2331,62 @@ mod tests {
         assert!(output.contains("level=raid1 state=clean raid-devices=2"));
         assert!(output.contains("attached-disk=sdb"));
         assert!(output.contains("server=storage.example export=/export/home"));
+    }
+
+    #[test]
+    fn network_storage_table_includes_domain_metadata_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("iscsi-session:1", NodeKind::IscsiSession, "iscsi-session:1")
+                .with_property("iscsi.portal", "10.0.0.10:3260,1"),
+        );
+        graph.add_node(Node::new(
+            "iscsi-target:iqn.2026-06.example:storage",
+            NodeKind::IscsiTarget,
+            "iqn.2026-06.example:storage",
+        ));
+        graph.add_node(
+            Node::new(
+                "iscsi-lun:iqn.2026-06.example:storage:0",
+                NodeKind::Lun,
+                "0",
+            )
+            .with_size_bytes(1_073_741_824)
+            .with_property("iscsi.attached-disk", "sdb"),
+        );
+        graph.add_node(
+            Node::new(
+                "nfs-export:storage.example:/export/home",
+                NodeKind::NfsExport,
+                "storage.example:/export/home",
+            )
+            .with_property("nfs.server", "storage.example")
+            .with_property("nfs.export", "/export/home"),
+        );
+        graph.add_node(
+            Node::new("mount:/home", NodeKind::NfsMount, "/home")
+                .with_property("nfs.server", "storage.example")
+                .with_property("nfs.vers", "4.2")
+                .with_property("nfs.proto", "tcp")
+                .with_property("nfs.sec", "sys")
+                .with_property("nfs.clientaddr", "10.0.0.20")
+                .with_property("nfs.addr", "10.0.0.10")
+                .with_property("nfs.rsize", "1048576")
+                .with_property("nfs.wsize", "1048576"),
+        );
+
+        let mut output = Vec::new();
+        print_network_storage(&mut output, &graph).expect("network storage table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DETAILS"));
+        assert!(output.contains("portal=10.0.0.10:3260,1"));
+        assert!(output.contains("attached-disk=sdb"));
+        assert!(output.contains("server=storage.example export=/export/home"));
+        assert!(output.contains(
+            "server=storage.example vers=4.2 proto=tcp sec=sys clientaddr=10.0.0.20 addr=10.0.0.10"
+        ));
+        assert!(output.contains("rsize=1048576 wsize=1048576"));
     }
 
     #[test]

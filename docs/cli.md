@@ -185,7 +185,9 @@ Use these commands for:
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them
 - `network-storage`: iSCSI sessions, iSCSI targets, LUNs, NFS exports, and NFS
-  mounts
+  mounts, including iSCSI portals and attached disks plus NFS server/export,
+  protocol, security, client/server address, and transfer-size details when
+  probes expose them
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
   metadata detail data, including bcache role/set/state, cache mode,
