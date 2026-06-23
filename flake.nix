@@ -272,6 +272,28 @@
             };
           }
         ];
+        nixosModuleBootModeTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              apply.mode = "boot";
+            };
+          }
+        ];
+        nixosModuleInstallModeTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              apply.mode = "install";
+            };
+          }
+        ];
       in
       {
         formatter = formatProgram;
@@ -605,6 +627,13 @@
                 grep -- '/run/disk-nix/execute-report.json' "$applyScript"
                 touch "$out"
               '';
+          nixosModuleReservedModes = pkgs.runCommand "disk-nix-nixos-module-reserved-modes-check" { } ''
+            bootWarnings=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleBootModeTest.config.warnings)}
+            installWarnings=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleInstallModeTest.config.warnings)}
+            printf '%s\n' "$bootWarnings" | grep -- 'apply.mode = \\"boot\\" is reserved'
+            printf '%s\n' "$installWarnings" | grep -- 'apply.mode = \\"install\\" is reserved'
+            touch "$out"
+          '';
         };
 
         devShells.default = pkgs.mkShell {

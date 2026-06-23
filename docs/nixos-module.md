@@ -317,8 +317,10 @@ Example lifecycle planning through NixOS options:
   without failing the unit. Set `execute = true` to run ready, policy-allowed
   commands with `disk-nix apply --execute` during activation; this requires
   `failOnBlocked = true`.
-- `boot`: reserved for boot-time lifecycle work
-- `install`: reserved for installer workflows
+- `boot`: reserved for boot-time lifecycle work; the module emits a warning and
+  does not wire imperative apply for this mode yet
+- `install`: reserved for installer workflows; the module emits a warning and
+  does not wire imperative apply for this mode yet
 
 ## Policy
 

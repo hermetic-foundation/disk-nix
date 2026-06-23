@@ -1104,6 +1104,13 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    warnings =
+      lib.optional (cfg.apply.mode == "boot")
+        "services.disk-nix.apply.mode = \"boot\" is reserved; disk-nix currently wires imperative apply only for mode = \"activation\"."
+      ++
+        lib.optional (cfg.apply.mode == "install")
+          "services.disk-nix.apply.mode = \"install\" is reserved; disk-nix currently wires imperative apply only for mode = \"activation\".";
+
     environment.systemPackages = [ cfg.package ] ++ cfg.toolPackages;
 
     environment.etc."disk-nix/spec.json".source = json.generate "disk-nix-spec.json" {
