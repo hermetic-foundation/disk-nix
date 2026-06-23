@@ -2227,19 +2227,14 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Grow if collection == Some("multipathMaps") => {
-            let target = target.unwrap_or("<multipath-map>");
+            let target = multipath_map_target(action);
             (
                 vec![
-                    command(
-                        ["multipath", "-ll", target],
-                        false,
+                    multipath_list_command(
+                        target,
                         "inspect multipath map paths and size before growth",
                     ),
-                    command(
-                        ["multipathd", "resize", "map", target],
-                        true,
-                        "resize the multipath map after every backing path sees the new LUN size",
-                    ),
+                    multipath_resize_command(target),
                     command(
                         ["multipath", "-r"],
                         true,
@@ -3342,7 +3337,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::RemoveDevice if collection == Some("multipathMaps") => {
-            let target = target.unwrap_or("<multipath-map>");
+            let target = multipath_map_target(action);
             let path = action
                 .context
                 .device
@@ -3350,11 +3345,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .or_else(|| action_id_suffix(&action.id, "remove-device"));
             (
                 vec![
-                    command(
-                        ["multipath", "-ll", target],
-                        false,
-                        "inspect live multipath paths before deletion",
-                    ),
+                    multipath_list_command(target, "inspect live multipath paths before deletion"),
                     multipath_delete_path_command(path),
                 ],
                 vec![
@@ -4082,6 +4073,55 @@ fn multipath_delete_path_command(path: Option<&str>) -> ExecutionCommand {
             CommandReadiness::NeedsDomainImplementation,
             ["multipath path to remove"],
             "delete the multipath path after selecting the reviewed path",
+        ),
+    }
+}
+
+fn multipath_map_target(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .target
+        .as_deref()
+        .filter(|target| is_multipath_map_target(target))
+        .or_else(|| {
+            action
+                .context
+                .name
+                .as_deref()
+                .filter(|name| is_multipath_map_target(name))
+        })
+}
+
+fn is_multipath_map_target(target: &str) -> bool {
+    target.starts_with("mpath") || target.starts_with("/dev/mapper/")
+}
+
+fn multipath_list_command(target: Option<&str>, note: &'static str) -> ExecutionCommand {
+    match target {
+        Some(target) => command(["multipath", "-ll", target], false, note),
+        None => command_with_readiness(
+            ["multipath", "-ll", "<multipath-map>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["multipath map target"],
+            note,
+        ),
+    }
+}
+
+fn multipath_resize_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["multipathd", "resize", "map", target],
+            true,
+            "resize the multipath map after every backing path sees the new LUN size",
+        ),
+        None => command_with_readiness(
+            ["multipathd", "resize", "map", "<multipath-map>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["multipath map target"],
+            "resize the multipath map after every backing path sees the new LUN size",
         ),
     }
 }
@@ -8007,6 +8047,60 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["multipath", "-ll", "mpatha"])
+        }));
+    }
+
+    #[test]
+    fn multipath_map_lifecycle_requires_explicit_map_target_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "multipathMaps": {
+                  "root-map": {
+                    "operation": "grow"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "multipathmaps:root-map:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["multipathd", "resize", "map", "<multipath-map>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["multipath map target"]
+                })
+        }));
+
+        let remove_action = PlannedAction {
+            id: "multipathMaps:root-map:remove-device:/dev/sde".to_string(),
+            description: "remove stale multipath path".to_string(),
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("multipathMaps".to_string()),
+                name: Some("root-map".to_string()),
+                target: Some("root-map".to_string()),
+                device: Some("/dev/sde".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let (commands, _, _) = commands_for_action(&remove_action);
+        assert!(commands.iter().any(|command| {
+            command.argv == ["multipath", "-ll", "<multipath-map>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["multipath map target"]
         }));
     }
 
