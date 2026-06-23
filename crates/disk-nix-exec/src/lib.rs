@@ -2753,7 +2753,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Create if collection == Some("disks") => {
-            let target = target.unwrap_or("<disk>");
+            let disk = disk_target_path(action);
             let label = action
                 .context
                 .partition_type
@@ -2761,20 +2761,16 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .unwrap_or("gpt");
             (
                 vec![
-                    command(
-                        ["disk-nix", "inspect", target],
-                        false,
+                    disk_nix_inspect_command(
+                        disk,
+                        "<disk>",
+                        "disk path",
                         "inspect disk identity, signatures, and existing consumers before initialization",
                     ),
-                    disk_create_label_command(target, label),
-                    command(
-                        ["partprobe", target],
-                        true,
-                        "ask the kernel to reread the initialized partition table",
-                    ),
-                    command(
-                        ["parted", "-lm", target],
-                        false,
+                    disk_create_label_command(disk, label),
+                    partition_probe_command(disk),
+                    disk_parted_machine_list_command(
+                        disk,
                         "verify the disk reports the reviewed partition table label",
                     ),
                 ],
@@ -4743,12 +4739,21 @@ fn is_btrfs_snapshot_pair(target: &str, snapshot: &str) -> bool {
     target.starts_with('/') && snapshot.starts_with('/')
 }
 
-fn disk_create_label_command(target: &str, label: &str) -> ExecutionCommand {
-    command_vec(
-        vec!["parted", "-s", target, "mklabel", label],
-        true,
-        "create the reviewed disk partition table label",
-    )
+fn disk_create_label_command(target: Option<&str>, label: &str) -> ExecutionCommand {
+    match target {
+        Some(target) => command_vec(
+            vec!["parted", "-s", target, "mklabel", label],
+            true,
+            "create the reviewed disk partition table label",
+        ),
+        None => command_vec_with_readiness(
+            vec!["parted", "-s", "<disk>", "mklabel", label],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["disk path"],
+            "create the reviewed disk partition table label after selecting the disk",
+        ),
+    }
 }
 
 fn disk_nix_inspect_command(
@@ -4782,6 +4787,10 @@ fn partition_target_path(action: &PlannedAction) -> Option<&str> {
                 .as_deref()
                 .filter(|name| name.starts_with('/'))
         })
+}
+
+fn disk_target_path(action: &PlannedAction) -> Option<&str> {
+    partition_target_path(action)
 }
 
 fn partition_create_command(
@@ -4983,6 +4992,22 @@ fn partition_table_reread_command(disk: Option<&str>) -> ExecutionCommand {
             CommandReadiness::NeedsDomainImplementation,
             ["disk path"],
             "force a partition table reread when supported by the block device",
+        ),
+    }
+}
+
+fn disk_parted_machine_list_command(
+    disk: Option<&str>,
+    description: &'static str,
+) -> ExecutionCommand {
+    match disk {
+        Some(disk) => command(["parted", "-lm", disk], false, description),
+        None => command_with_readiness(
+            ["parted", "-lm", "<disk>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["disk path"],
+            description,
         ),
     }
 }
@@ -6488,6 +6513,51 @@ mod tests {
         }));
         assert!(report.verification_plan[0].commands.iter().any(|command| {
             command.argv == ["parted", "-lm", "/dev/disk/by-id/nvme-root"] && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn disk_initialization_requires_stable_disk_path_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "disks": {
+                  "root": {
+                    "operation": "create",
+                    "partitionType": "gpt"
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "<disk>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["disk path"]
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["parted", "-s", "<disk>", "mklabel", "gpt"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["disk path"]
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["partprobe", "<disk>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["disk path"]
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["parted", "-lm", "<disk>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["disk path"]
         }));
     }
 
