@@ -1950,6 +1950,36 @@ mod tests {
     }
 
     #[test]
+    fn apply_policy_can_require_confirmation_file_for_offline_actions() {
+        let (plan, mut policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/root:0": {
+                  "operation": "grow"
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true,
+                "requireConfirmationFile": "/run/disk-nix/confirm"
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        let report = evaluate_apply_policy(&plan, policy.clone());
+        assert_eq!(report.blocked_count, 1);
+        assert_eq!(
+            report.blocked[0].reason,
+            "confirmation-file policy requires confirmation=true after checking the configured file"
+        );
+
+        policy.confirmation = true;
+        let report = evaluate_apply_policy(&plan, policy);
+        assert_eq!(report.blocked_count, 0);
+    }
+
+    #[test]
     fn apply_policy_can_disable_device_topology_changes_and_rebalance() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

@@ -156,8 +156,8 @@ shrink policy flags are enabled.
 actions. `allowRebalance=false` blocks rebalance actions. `requireBackup=true`
 requires `backupVerified=true` for destructive or potential-data-loss actions.
 `requireConfirmation=true` requires `confirmation=true` for high-risk or
-offline actions. `requireConfirmationFile` records the expected confirmation
-file path in policy; automation should set `confirmation=true` only after it
-has verified that file according to its local workflow.
+offline actions. `requireConfirmationFile` points at an operator-controlled
+file; the CLI treats it as confirmed only when the file contains a standalone
+line equal to `disk-nix confirm`, and otherwise leaves the action blocked.
 `--execute` is reserved for the future executor and is refused after policy
 validation so the command cannot pretend to have modified storage.

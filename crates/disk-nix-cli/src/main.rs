@@ -10,7 +10,7 @@ use clap::{Parser, Subcommand};
 use disk_nix_exec::{ExecutionMode, ExecutionReport, ExecutionStatus, prepare_execution};
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use disk_nix_plan::{
-    Plan, TopologyComparison, TopologyDiagnosticLevel, compare_plan_with_topology,
+    ApplyPolicy, Plan, TopologyComparison, TopologyDiagnosticLevel, compare_plan_with_topology,
     default_capabilities, plan_and_policy_from_json_bytes, plan_from_json_bytes,
 };
 use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeStatus};
@@ -305,11 +305,12 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             json,
         } => {
             let bytes = std::fs::read(&spec)?;
-            let (mut plan, policy) = plan_and_policy_from_json_bytes(&bytes)
+            let (mut plan, mut policy) = plan_and_policy_from_json_bytes(&bytes)
                 .map_err(|error| AppError::Message(format!("failed to parse {spec}: {error}")))?;
             if probe_current {
                 plan = compare_plan_with_topology(plan, &collect_graph()?);
             }
+            apply_confirmation_file(&mut policy)?;
             let mode = if execute {
                 ExecutionMode::Execute
             } else {
@@ -345,6 +346,28 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             Ok(())
         }
     }
+}
+
+fn apply_confirmation_file(policy: &mut ApplyPolicy) -> Result<(), AppError> {
+    let Some(path) = policy.require_confirmation_file.as_deref() else {
+        return Ok(());
+    };
+
+    match std::fs::read_to_string(path) {
+        Ok(content) if confirmation_file_accepts(&content) => {
+            policy.confirmation = true;
+            Ok(())
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(AppError::Io(error)),
+    }
+}
+
+fn confirmation_file_accepts(content: &str) -> bool {
+    content
+        .lines()
+        .any(|line| line.trim() == "disk-nix confirm")
 }
 
 fn write_execution_script(path: &str, report: &ExecutionReport) -> Result<(), AppError> {
@@ -1012,5 +1035,25 @@ fn human_bytes(value: Option<u64>) -> String {
         format!("{bytes} B")
     } else {
         format!("{size:.1} {unit}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::confirmation_file_accepts;
+
+    #[test]
+    fn confirmation_file_accepts_exact_token_line() {
+        assert!(confirmation_file_accepts("disk-nix confirm\n"));
+        assert!(confirmation_file_accepts("# reviewed\ndisk-nix confirm\n"));
+        assert!(confirmation_file_accepts("  disk-nix confirm  \n"));
+    }
+
+    #[test]
+    fn confirmation_file_rejects_partial_or_different_tokens() {
+        assert!(!confirmation_file_accepts(""));
+        assert!(!confirmation_file_accepts("disk-nix"));
+        assert!(!confirmation_file_accepts("disk-nix confirm now"));
+        assert!(!confirmation_file_accepts("prefix disk-nix confirm"));
     }
 }

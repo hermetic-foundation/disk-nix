@@ -206,5 +206,5 @@ Mutation policy should remain explicit:
 
 `requireBackup` and `requireConfirmation` are additional safety gates for
 high-risk actions. `requireConfirmationFile` stores the expected file path in
-the generated policy; local automation should only set `confirmation = true`
-after checking that file.
+the generated policy; `disk-nix apply` only treats it as confirmed when the file
+contains a standalone line equal to `disk-nix confirm`.

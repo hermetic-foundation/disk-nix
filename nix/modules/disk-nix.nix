@@ -703,7 +703,7 @@ in
       requireConfirmationFile = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
-        description = "Path to an operator-controlled confirmation file referenced by apply policy.";
+        description = "Path to an operator-controlled confirmation file. disk-nix apply confirms it only when the file contains a standalone 'disk-nix confirm' line.";
       };
 
       probeCurrent = lib.mkOption {
