@@ -3066,6 +3066,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::Lun,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "LUN attach discovers existing target-side storage on this host"
+                    .to_string(),
+                alternatives: vec![
+                    "verify target-side LUN identity before rescanning sessions".to_string(),
+                    "use stable by-path devices before provisioning downstream consumers"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Lun,
             operation: Operation::Grow,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
@@ -3074,6 +3088,35 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "grow the target LUN before resizing consumers".to_string(),
                     "rescan paths and verify multipath before filesystem growth".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Lun,
+            operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LUN detach removes selected host paths without deleting target-side data"
+                    .to_string(),
+                alternatives: vec![
+                    "unmount filesystems and deactivate mappings before deleting paths"
+                        .to_string(),
+                    "detach one redundant path at a time after alternate paths are healthy"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::IscsiSession,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "iSCSI login attaches remote targets and may expose new LUN paths"
+                    .to_string(),
+                alternatives: vec![
+                    "verify portal and target IQN before login".to_string(),
+                    "prefer stable by-path devices before layering filesystems or mappings"
+                        .to_string(),
                 ],
             }),
         },
@@ -3087,6 +3130,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "grow the target LUN before resizing consumers".to_string(),
                     "rescan the iSCSI session and verify every path before filesystem growth"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::IscsiSession,
+            operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "iSCSI logout detaches remote LUN paths from this host".to_string(),
+                alternatives: vec![
+                    "drain filesystems, multipath maps, and LVM consumers before logout"
+                        .to_string(),
+                    "disable automatic login only after dependent services are migrated"
                         .to_string(),
                 ],
             }),
@@ -3249,6 +3306,45 @@ mod tests {
         assert_eq!(update_limit.risk, RiskClass::Safe);
         assert_eq!(destroy.risk, RiskClass::Destructive);
         assert!(destroy.advice.is_some());
+    }
+
+    #[test]
+    fn iscsi_and_lun_capabilities_describe_host_lifecycle() {
+        let capabilities = default_capabilities();
+        let lun_create = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::Lun && capability.operation == Operation::Create
+            })
+            .expect("LUN create capability should exist");
+        let lun_destroy = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::Lun && capability.operation == Operation::Destroy
+            })
+            .expect("LUN destroy capability should exist");
+        let session_create = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::IscsiSession
+                    && capability.operation == Operation::Create
+            })
+            .expect("iSCSI session create capability should exist");
+        let session_destroy = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::IscsiSession
+                    && capability.operation == Operation::Destroy
+            })
+            .expect("iSCSI session destroy capability should exist");
+
+        assert_eq!(lun_create.risk, RiskClass::Online);
+        assert_eq!(lun_destroy.risk, RiskClass::OfflineRequired);
+        assert_eq!(session_create.risk, RiskClass::Online);
+        assert_eq!(session_destroy.risk, RiskClass::OfflineRequired);
+        assert!(lun_destroy.advice.as_ref().is_some_and(|advice| {
+            advice.summary.contains("without deleting target-side data")
+        }));
     }
 
     #[test]

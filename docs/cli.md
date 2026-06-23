@@ -385,6 +385,9 @@ devices before reloading multipath. Attach, grow, and destroy remain non-ready
 until stable `device` or `devices` paths are declared. Target-side array
 provisioning or deletion must be handled outside the host plan unless a future
 target adapter is added.
+The capability inventory advertises iSCSI login/logout and LUN attach/detach
+as host lifecycle operations, distinct from target-side LUN creation or
+deletion.
 LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`, and report
 missing target form and size separately when either is absent. LV grow and
