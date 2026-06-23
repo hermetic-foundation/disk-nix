@@ -86,6 +86,7 @@
                 mountpoint = "/";
                 neededForBoot = true;
                 resizePolicy = "grow-only";
+                desiredSize = "100%";
               };
               swaps.primary = {
                 device = "/dev/disk/by-label/swap";
@@ -110,6 +111,7 @@
                 };
                 sessions."iqn.2026-06.example:storage.root" = {
                   operation = "grow";
+                  desiredSize = "2TiB";
                   metadata = {
                     portal = "192.0.2.10:3260";
                   };
@@ -179,6 +181,7 @@
                 jq -e '
                   .spec.filesystems.root.device == "/dev/disk/by-label/nixos-root"
                   and .spec.filesystems.root.resizePolicy == "grow-only"
+                  and .spec.filesystems.root.desiredSize == "100%"
                   and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"
                   and .spec.filesystems."/srv/shared".fsType == "nfs4"
                   and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)
@@ -187,8 +190,10 @@
                   and .spec.iscsi.discoverPortal == "192.0.2.10:3260"
                   and .spec.iscsi.boot.target == "iqn.2026-06.example:storage.root"
                   and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".operation == "grow"
+                  and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".portal == "192.0.2.10:3260"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
+                  and .spec.iscsiSessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
                   and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false

@@ -5,6 +5,7 @@
       "mountpoint": "/",
       "type": "xfs",
       "resizePolicy": "grow-only",
+      "desiredSize": "100%",
       "preserveData": true
     }
   }

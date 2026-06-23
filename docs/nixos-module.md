@@ -35,6 +35,7 @@ The NixOS module is the primary declarative interface.
       mountpoint = "/";
       neededForBoot = true;
       resizePolicy = "grow-only";
+      desiredSize = "100%";
     };
     swaps.primary = {
       device = "/dev/disk/by-label/swap";
@@ -58,6 +59,7 @@ Typed filesystem declarations include:
 - `options`
 - `neededForBoot`
 - `resizePolicy`
+- `desiredSize`
 - `preserveData`
 
 Typed swap declarations include:
@@ -124,6 +126,7 @@ Each lifecycle declaration includes:
 - `properties`
 - `destroy`
 - `preserveData`
+- `desiredSize`
 - `metadata`
 
 Typed snapshot declarations include:
@@ -161,6 +164,7 @@ Example lifecycle planning through NixOS options:
       };
       sessions."iqn.2026-06.example:storage.root" = {
         operation = "grow";
+        desiredSize = "2TiB";
         metadata.portal = "192.0.2.10:3260";
       };
     };

@@ -278,6 +278,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         .unwrap_or("<target>");
     let mountpoint = action.context.mountpoint.as_deref();
     let fs_type = action.context.fs_type.as_deref();
+    let desired_size = action.context.desired_size.as_deref();
 
     match action.operation {
         Operation::Grow
@@ -311,7 +312,11 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             (
                 commands,
                 vec![
-                    "filesystem size is at least the desired size".to_string(),
+                    desired_size
+                        .map(|size| format!("filesystem size is at least {size}"))
+                        .unwrap_or_else(|| {
+                            "filesystem size is at least the desired size".to_string()
+                        }),
                     "mountpoint remains present and writable when it was mounted before apply"
                         .to_string(),
                     "free and used byte counters are internally consistent after re-probe"
@@ -333,7 +338,9 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ),
             ],
             vec![
-                "logical volume reports the desired size".to_string(),
+                desired_size
+                    .map(|size| format!("logical volume reports size {size}"))
+                    .unwrap_or_else(|| "logical volume reports the desired size".to_string()),
                 "dependent filesystem capacity reflects the grown backing volume".to_string(),
             ],
         ),
@@ -357,7 +364,11 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     ),
                 ],
                 vec![
-                    "every expected path reports the new capacity".to_string(),
+                    desired_size
+                        .map(|size| format!("every expected path reports capacity {size}"))
+                        .unwrap_or_else(|| {
+                            "every expected path reports the new capacity".to_string()
+                        }),
                     "multipath maps and dependent volumes no longer report stale sizes".to_string(),
                     "no consumer remains on a missing or failed path".to_string(),
                 ],
@@ -541,7 +552,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         Operation::Grow if collection == Some("filesystems") || action.id.starts_with("filesystem:") => {
             let target = target.unwrap_or("<filesystem>");
             let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
-            let grow_command = filesystem_grow_command(fs_type, target);
+            let desired_size = action.context.desired_size.as_deref();
+            let grow_command = filesystem_grow_command(fs_type, target, desired_size);
             (
                 vec![
                     command(
@@ -562,6 +574,24 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Grow if collection == Some("volumes") || action.id.starts_with("volumes:") => {
             let target = target.unwrap_or("<volume>");
+            let desired_size = action.context.desired_size.as_deref();
+            let grow_command = match desired_size {
+                Some(size) => command_vec(
+                    vec!["lvextend", "--resizefs", "--size", size, target],
+                    true,
+                    "grow the logical volume and filesystem to the desired size",
+                ),
+                None => command_with_readiness(
+                    ["lvextend", "--resizefs", "--size", "+<size>", target],
+                    true,
+                    CommandReadiness::NeedsDesiredSize,
+                    ["desired size delta"],
+                    "grow the logical volume and filesystem together",
+                ),
+            };
+            let note = desired_size
+                .map(|size| format!("desired size from spec: {size}"))
+                .unwrap_or_else(|| "replace <size> after comparing desired state with probed capacity".to_string());
             (
                 vec![
                     command(
@@ -569,15 +599,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect current LVM logical volume state",
                     ),
-                    command_with_readiness(
-                        ["lvextend", "--resizefs", "--size", "+<size>", target],
-                        true,
-                        CommandReadiness::NeedsDesiredSize,
-                        ["desired size delta"],
-                        "grow the logical volume and filesystem together",
-                    ),
+                    grow_command,
                 ],
-                vec!["replace <size> after comparing desired state with probed capacity".to_string()],
+                vec![note],
                 true,
             )
         }
@@ -770,6 +794,20 @@ fn command<const N: usize>(argv: [&str; N], mutates: bool, note: &str) -> Execut
     command_with_readiness(argv, mutates, CommandReadiness::Ready, [], note)
 }
 
+fn command_vec<I, S>(argv: I, mutates: bool, note: &str) -> ExecutionCommand
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
+    command_vec_with_readiness(
+        argv,
+        mutates,
+        CommandReadiness::Ready,
+        Vec::<&str>::new(),
+        note,
+    )
+}
+
 fn command_with_readiness<const N: usize, const M: usize>(
     argv: [&str; N],
     mutates: bool,
@@ -789,30 +827,81 @@ fn command_with_readiness<const N: usize, const M: usize>(
     }
 }
 
-fn filesystem_grow_command(fs_type: &str, target: &str) -> ExecutionCommand {
+fn command_vec_with_readiness<I, S, U, T>(
+    argv: I,
+    mutates: bool,
+    readiness: CommandReadiness,
+    unresolved_inputs: U,
+    note: &str,
+) -> ExecutionCommand
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+    U: IntoIterator<Item = T>,
+    T: Into<String>,
+{
+    ExecutionCommand {
+        argv: argv.into_iter().map(Into::into).collect(),
+        mutates,
+        readiness,
+        unresolved_inputs: unresolved_inputs.into_iter().map(Into::into).collect(),
+        note: note.to_string(),
+    }
+}
+
+fn filesystem_grow_command(
+    fs_type: &str,
+    target: &str,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
     match fs_type {
         "xfs" => command(
             ["xfs_growfs", target],
             true,
             "grow an already-mounted XFS filesystem",
         ),
-        "ext2" | "ext3" | "ext4" => command(
-            ["resize2fs", target],
+        "ext2" | "ext3" | "ext4" => match desired_size {
+            Some(size) => command_vec(
+                vec!["resize2fs", target, size],
+                true,
+                "grow an ext filesystem to the desired size after the backing block device has grown",
+            ),
+            None => command(
+                ["resize2fs", target],
+                true,
+                "grow an ext filesystem after the backing block device has grown",
+            ),
+        },
+        "btrfs" => command_vec(
+            vec![
+                "btrfs",
+                "filesystem",
+                "resize",
+                desired_size.unwrap_or("max"),
+                target,
+            ],
             true,
-            "grow an ext filesystem after the backing block device has grown",
+            "grow a Btrfs filesystem to the requested or maximum visible device size",
         ),
-        "btrfs" => command(
-            ["btrfs", "filesystem", "resize", "max", target],
-            true,
-            "grow a Btrfs filesystem to the maximum visible device size",
-        ),
-        "zfs" => command_with_readiness(
-            ["zfs", "set", "volsize=<size>", target],
-            true,
-            CommandReadiness::NeedsDesiredSize,
-            ["desired zvol size"],
-            "set the ZFS volume size after selecting the desired size",
-        ),
+        "zfs" => match desired_size {
+            Some(size) => command_vec(
+                vec![
+                    "zfs".to_string(),
+                    "set".to_string(),
+                    format!("volsize={size}"),
+                    target.to_string(),
+                ],
+                true,
+                "set the ZFS volume size to the desired size",
+            ),
+            None => command_with_readiness(
+                ["zfs", "set", "volsize=<size>", target],
+                true,
+                CommandReadiness::NeedsDesiredSize,
+                ["desired zvol size"],
+                "set the ZFS volume size after selecting the desired size",
+            ),
+        },
         _ => command_with_readiness(
             ["<filesystem-grow-tool>", target],
             true,
@@ -1011,6 +1100,57 @@ mod tests {
                 && command.argv.contains(&"vg/root".to_string())
                 && command.readiness == CommandReadiness::NeedsDesiredSize
                 && command.unresolved_inputs == ["desired size delta"]
+        }));
+    }
+
+    #[test]
+    fn desired_sizes_make_resize_commands_concrete() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "home": {
+                    "mountpoint": "/home",
+                    "fsType": "btrfs",
+                    "resizePolicy": "grow-only",
+                    "desiredSize": "750GiB"
+                  }
+                },
+                "volumes": {
+                  "vg/home": {
+                    "operation": "grow",
+                    "desiredSize": "800GiB"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_desired_size_count, 0);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["btrfs", "filesystem", "resize", "750GiB", "/home"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["lvextend", "--resizefs", "--size", "800GiB", "vg/home"]
+                    && command.readiness == CommandReadiness::Ready
+                    && command.unresolved_inputs.is_empty()
+            })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.checks
+                .iter()
+                .any(|check| check.contains("750GiB") || check.contains("800GiB"))
         }));
     }
 

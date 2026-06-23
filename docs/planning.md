@@ -16,6 +16,7 @@ The command accepts either a direct spec:
       "mountpoint": "/",
       "fsType": "xfs",
       "resizePolicy": "grow-only",
+      "desiredSize": "100%",
       "preserveData": true
     }
   }
@@ -42,6 +43,9 @@ instead of silently accepting unsafe mutation.
 Examples:
 
 - `resizePolicy = "grow-only"` is classified as online growth intent.
+- `desiredSize`, `targetSize`, or `size` is carried into action context so
+  command and verification plans can use concrete capacity targets when the
+  storage domain supports them.
 - `resizePolicy = "shrink-allowed"` is classified as potential data loss and
   recommends migration or backup-first alternatives.
 - XFS shrink intent is classified as unsupported because XFS does not support
@@ -88,14 +92,16 @@ Lifecycle objects may use:
 - `removeDevices`: list of devices to remove
 - `replaceDevices`: object mapping old device to replacement device
 - `properties`: object of properties to set
+- `desiredSize`, `targetSize`, or `size`: desired capacity for grow, shrink,
+  or create plans
 - `destroy`: boolean destructive intent
 - `preserveData`: boolean preservation policy
 
 Plan actions include typed `context` when a desired object provides useful
 executor inputs. Context fields can include collection, name, target, device,
-replacement, property, property value, filesystem type, and mountpoint. Apply
-reports use this context to build command plans without relying on action-id
-parsing.
+replacement, property, property value, filesystem type, mountpoint, and
+desired size. Apply reports use this context to build command plans without
+relying on action-id parsing.
 
 Future planners should compare desired state against the probed topology before
 emitting concrete executor actions.

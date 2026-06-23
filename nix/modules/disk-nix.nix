@@ -79,6 +79,13 @@ let
           description = "Whether disk-nix must preserve data for this object.";
         };
 
+        desiredSize = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Desired object size for grow, shrink, or provisioning plans.";
+          example = "100GiB";
+        };
+
         metadata = lib.mkOption {
           type = lib.types.attrsOf json.type;
           default = { };
@@ -143,6 +150,7 @@ let
           properties
           destroy
           preserveData
+          desiredSize
           ;
       }
     )
@@ -170,6 +178,7 @@ let
       neededForBoot
       resizePolicy
       preserveData
+      desiredSize
       ;
   }) cfg.filesystems;
   typedNfsMountSpec = lib.mapAttrs (_: mount: {
@@ -305,6 +314,13 @@ in
                 ];
                 default = "none";
                 description = "Lifecycle resize policy used by the disk-nix planner.";
+              };
+
+              desiredSize = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Desired filesystem size for planner and executor advisory commands.";
+                example = "100GiB";
               };
 
               preserveData = lib.mkOption {

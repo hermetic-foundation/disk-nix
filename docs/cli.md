@@ -229,6 +229,8 @@ whether each command would mutate system state, and notes that still require
 manual or future executor review. Each command also reports readiness:
 `ready`, `needs-desired-size`, `needs-domain-implementation`, or `manual-only`,
 plus unresolved inputs when applicable.
+When an action context includes `desiredSize`, supported resize commands use
+that concrete target and no longer report `needs-desired-size`.
 `verificationSummary` and `verificationPlan` record read-only commands and
 state checks that should run after a future mutating executor or manual apply
 finishes. These checks re-probe the relevant graph node and include

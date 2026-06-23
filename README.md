@@ -112,6 +112,6 @@ planner spec.
 No destructive operation should be implicit.
 
 `disk-nix apply` is currently a policy-gated dry run. It evaluates the planned
-actions against the `apply` policy in the spec and reports blocked operations.
-The `--execute` flag is intentionally refused until a real executor and
-post-apply verification layer exist.
+actions against the `apply` policy in the spec, reports blocked operations,
+and emits advisory command and verification plans. The `--execute` flag is
+intentionally refused until a real mutating executor exists.

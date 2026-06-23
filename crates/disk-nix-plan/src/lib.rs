@@ -106,6 +106,8 @@ pub struct ActionContext {
     pub fs_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mountpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub desired_size: Option<String>,
 }
 
 impl ActionContext {
@@ -120,6 +122,7 @@ impl ActionContext {
             && self.property_value.is_none()
             && self.fs_type.is_none()
             && self.mountpoint.is_none()
+            && self.desired_size.is_none()
     }
 }
 
@@ -348,24 +351,43 @@ fn blocked_action(action: &PlannedAction, policy: &ApplyPolicy) -> Option<Blocke
     })
 }
 
-fn filesystem_context(name: &str, mountpoint: &str, fs_type: &str) -> ActionContext {
+fn filesystem_context(
+    name: &str,
+    mountpoint: &str,
+    fs_type: &str,
+    desired_size: Option<String>,
+) -> ActionContext {
     ActionContext {
         collection: Some("filesystems".to_string()),
         name: Some(name.to_string()),
         target: Some(mountpoint.to_string()),
         fs_type: Some(fs_type.to_string()),
         mountpoint: Some(mountpoint.to_string()),
+        desired_size,
         ..ActionContext::default()
     }
 }
 
-fn lifecycle_context(collection: &str, name: &str) -> ActionContext {
+fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionContext {
     ActionContext {
         collection: Some(collection.to_string()),
         name: Some(name.to_string()),
         target: Some(name.to_string()),
+        desired_size: desired_size(object),
         ..ActionContext::default()
     }
+}
+
+fn desired_size(object: &Value) -> Option<String> {
+    object
+        .get("desiredSize")
+        .or_else(|| object.get("targetSize"))
+        .or_else(|| object.get("size"))
+        .and_then(|value| match value {
+            Value::String(size) => Some(size.clone()),
+            Value::Number(size) => Some(size.to_string()),
+            _ => None,
+        })
 }
 
 fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesystem: &Value) {
@@ -386,6 +408,7 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
         .get("preserveData")
         .and_then(Value::as_bool)
         .unwrap_or(true);
+    let desired_size = desired_size(filesystem);
 
     match resize_policy {
         "grow-only" => actions.push(PlannedAction {
@@ -396,17 +419,22 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             operation: Operation::Grow,
             risk: RiskClass::Online,
             destructive: false,
-            context: filesystem_context(name, mountpoint, fs_type),
+            context: filesystem_context(name, mountpoint, fs_type, desired_size.clone()),
             advice: None,
         }),
-        "shrink-allowed" => actions.push(filesystem_shrink_action(name, mountpoint, fs_type)),
+        "shrink-allowed" => actions.push(filesystem_shrink_action(
+            name,
+            mountpoint,
+            fs_type,
+            desired_size.clone(),
+        )),
         _ => actions.push(PlannedAction {
             id: format!("filesystem:{name}:inspect"),
             description: format!("inspect {fs_type} filesystem declaration at {mountpoint}"),
             operation: Operation::SetProperty,
             risk: RiskClass::Safe,
             destructive: false,
-            context: filesystem_context(name, mountpoint, fs_type),
+            context: filesystem_context(name, mountpoint, fs_type, desired_size.clone()),
             advice: None,
         }),
     }
@@ -420,7 +448,7 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             operation: Operation::Format,
             risk: RiskClass::Destructive,
             destructive: true,
-            context: filesystem_context(name, mountpoint, fs_type),
+            context: filesystem_context(name, mountpoint, fs_type, desired_size),
             advice: Some(Advice {
                 summary: "formatting or replacing a filesystem destroys existing data".to_string(),
                 alternatives: vec![
@@ -435,7 +463,12 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
     }
 }
 
-fn filesystem_shrink_action(name: &str, mountpoint: &str, fs_type: &str) -> PlannedAction {
+fn filesystem_shrink_action(
+    name: &str,
+    mountpoint: &str,
+    fs_type: &str,
+    desired_size: Option<String>,
+) -> PlannedAction {
     let (risk, advice) = match fs_type {
         "xfs" => (
             RiskClass::Unsupported,
@@ -495,7 +528,7 @@ fn filesystem_shrink_action(name: &str, mountpoint: &str, fs_type: &str) -> Plan
         operation: Operation::Shrink,
         risk,
         destructive: false,
-        context: filesystem_context(name, mountpoint, fs_type),
+        context: filesystem_context(name, mountpoint, fs_type, desired_size),
         advice: Some(advice),
     }
 }
@@ -536,7 +569,7 @@ fn add_requested_operation(
         operation,
         risk,
         destructive,
-        context: lifecycle_context(collection, name),
+        context: lifecycle_context(collection, name, object),
         advice,
     });
 }
@@ -557,7 +590,7 @@ fn add_device_membership_actions(
                 destructive: false,
                 context: ActionContext {
                     device: Some(device.to_string()),
-                    ..lifecycle_context(collection, name)
+                    ..lifecycle_context(collection, name, object)
                 },
                 advice: None,
             });
@@ -574,7 +607,7 @@ fn add_device_membership_actions(
                 destructive: false,
                 context: ActionContext {
                     device: Some(device.to_string()),
-                    ..lifecycle_context(collection, name)
+                    ..lifecycle_context(collection, name, object)
                 },
                 advice: Some(Advice {
                     summary: "device removal requires enough remaining data and metadata capacity"
@@ -604,7 +637,7 @@ fn add_device_membership_actions(
                 context: ActionContext {
                     device: Some(from.to_string()),
                     replacement: Some(to.to_string()),
-                    ..lifecycle_context(collection, name)
+                    ..lifecycle_context(collection, name, object)
                 },
                 advice: Some(advice),
             });
@@ -632,7 +665,7 @@ fn add_property_actions(
             context: ActionContext {
                 property: Some(property.to_string()),
                 property_value: Some(property_value(value)),
-                ..lifecycle_context(collection, name)
+                ..lifecycle_context(collection, name, object)
             },
             advice: None,
         });
@@ -668,7 +701,7 @@ fn add_destroy_guard(
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             destructive: true,
-            context: lifecycle_context(collection, name),
+            context: lifecycle_context(collection, name, object),
             advice: Some(Advice {
                 summary: "destroying or replacing storage removes live data".to_string(),
                 alternatives: vec![
@@ -1080,6 +1113,43 @@ mod tests {
         assert_eq!(plan.actions[0].risk, RiskClass::PotentialDataLoss);
         assert_eq!(plan.actions[0].context.fs_type.as_deref(), Some("ext4"));
         assert_eq!(plan.actions[0].context.mountpoint.as_deref(), Some("/home"));
+    }
+
+    #[test]
+    fn plan_carries_desired_size_context_for_resize_actions() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "home": {
+                  "mountpoint": "/home",
+                  "fsType": "btrfs",
+                  "resizePolicy": "grow-only",
+                  "desiredSize": "750GiB"
+                }
+              },
+              "volumes": {
+                "vg/home": {
+                  "operation": "grow",
+                  "size": "800GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let filesystem = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystem:home:grow")
+            .expect("filesystem grow action exists");
+        assert_eq!(filesystem.context.desired_size.as_deref(), Some("750GiB"));
+
+        let volume = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumes:vg/home:grow")
+            .expect("volume grow action exists");
+        assert_eq!(volume.context.desired_size.as_deref(), Some("800GiB"));
     }
 
     #[test]
