@@ -8,7 +8,7 @@ The long-term goal is a full disko replacement that understands modern Linux
 storage stacks:
 
 - block devices, partitions, filesystems, mounts, swap, loop devices
-- LUKS and device-mapper mappings
+- LUKS headers, keyslots, tokens, and device-mapper mappings
 - LVM PVs, VGs, LVs, thin pools, snapshots, cache, and VDO
 - Btrfs filesystems, devices, subvolumes, snapshots, qgroups, and usage
 - ZFS pools, vdevs, datasets, zvols, snapshots, properties, cache, log, and

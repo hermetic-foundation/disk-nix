@@ -14,6 +14,16 @@ struct CryptStatus {
     uuid: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LuksDump {
+    device_path: String,
+    uuid: Option<String>,
+    label: Option<String>,
+    keyslots: Vec<String>,
+    tokens: Vec<String>,
+    properties: Vec<(String, String)>,
+}
+
 pub fn normalize_cryptsetup_status(
     mapper_path: &str,
     bytes: &[u8],
@@ -21,6 +31,13 @@ pub fn normalize_cryptsetup_status(
     let status = parse_status(mapper_path, bytes)?;
     let mut graph = StorageGraph::empty();
     add_status(&mut graph, status);
+    Ok(graph)
+}
+
+pub fn normalize_luks_dump(device_path: &str, bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
+    let dump = parse_luks_dump(device_path, bytes)?;
+    let mut graph = StorageGraph::empty();
+    add_luks_dump(&mut graph, dump);
     Ok(graph)
 }
 
@@ -74,11 +91,168 @@ fn parse_status(mapper_path: &str, bytes: &[u8]) -> Result<CryptStatus, ProbeErr
     Ok(status)
 }
 
+fn parse_luks_dump(device_path: &str, bytes: &[u8]) -> Result<LuksDump, ProbeError> {
+    let text = std::str::from_utf8(bytes)
+        .map_err(|error| ProbeError::Adapter(format!("failed to read luksDump output: {error}")))?;
+    let mut dump = LuksDump {
+        device_path: device_path.to_string(),
+        uuid: None,
+        label: None,
+        keyslots: Vec::new(),
+        tokens: Vec::new(),
+        properties: Vec::new(),
+    };
+    let mut section: Option<&str> = None;
+    let mut current_keyslot: Option<String> = None;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed == "LUKS header information" {
+            continue;
+        }
+
+        if !line.starts_with(char::is_whitespace) && trimmed.ends_with(':') {
+            section = Some(trimmed.trim_end_matches(':'));
+            current_keyslot = None;
+            continue;
+        }
+
+        match section {
+            Some("Keyslots") => parse_keyslot_line(trimmed, &mut dump, &mut current_keyslot),
+            Some("Tokens") => parse_token_line(trimmed, &mut dump),
+            Some("Data segments") => parse_data_segment_line(trimmed, &mut dump),
+            _ => parse_luks_header_line(trimmed, &mut dump),
+        }
+    }
+
+    if !dump.keyslots.is_empty() {
+        dump.properties.push((
+            "cryptsetup.luks-keyslots".to_string(),
+            dump.keyslots.join(","),
+        ));
+        dump.properties.push((
+            "cryptsetup.luks-keyslot-count".to_string(),
+            dump.keyslots.len().to_string(),
+        ));
+    }
+    if !dump.tokens.is_empty() {
+        dump.properties
+            .push(("cryptsetup.luks-tokens".to_string(), dump.tokens.join(",")));
+        dump.properties.push((
+            "cryptsetup.luks-token-count".to_string(),
+            dump.tokens.len().to_string(),
+        ));
+    }
+
+    Ok(dump)
+}
+
 fn parse_header(line: &str, status: &mut CryptStatus) {
     if let Some((path, rest)) = line.split_once(" is ") {
         status.mapper_path = path.to_string();
         status.active = Some(rest.starts_with("active"));
         status.in_use = Some(rest.contains("in use"));
+    }
+}
+
+fn parse_luks_header_line(line: &str, dump: &mut LuksDump) {
+    let Some((key, value)) = split_luks_key_value(line) else {
+        return;
+    };
+    match key {
+        "UUID" => dump.uuid = Some(value.to_string()),
+        "Label" => dump.label = Some(value.to_string()),
+        "Version" => dump
+            .properties
+            .push(("cryptsetup.luks-version".to_string(), value.to_string())),
+        "Epoch" => dump
+            .properties
+            .push(("cryptsetup.luks-epoch".to_string(), value.to_string())),
+        "Metadata area" => dump.properties.push((
+            "cryptsetup.luks-metadata-area".to_string(),
+            value.to_string(),
+        )),
+        "Keyslots area" => dump.properties.push((
+            "cryptsetup.luks-keyslots-area".to_string(),
+            value.to_string(),
+        )),
+        "Subsystem" => dump
+            .properties
+            .push(("cryptsetup.luks-subsystem".to_string(), value.to_string())),
+        "Flags" => dump
+            .properties
+            .push(("cryptsetup.luks-flags".to_string(), value.to_string())),
+        _ => {}
+    }
+}
+
+fn parse_keyslot_line(line: &str, dump: &mut LuksDump, current_keyslot: &mut Option<String>) {
+    if let Some((slot, kind)) = numbered_section_item(line) {
+        dump.keyslots.push(slot.to_string());
+        dump.properties.push((
+            format!("cryptsetup.luks-keyslot-{slot}-type"),
+            kind.to_string(),
+        ));
+        *current_keyslot = Some(slot.to_string());
+        return;
+    }
+
+    let Some(slot) = current_keyslot.as_deref() else {
+        return;
+    };
+    let Some((key, value)) = split_luks_key_value(line) else {
+        return;
+    };
+    match key {
+        "Priority" | "Cipher" | "Cipher key" | "PBKDF" | "Time cost" | "Memory" | "Threads" => {
+            dump.properties.push((
+                format!("cryptsetup.luks-keyslot-{slot}-{}", normalize_key(key)),
+                value.to_string(),
+            ));
+        }
+        _ => {}
+    }
+}
+
+fn parse_token_line(line: &str, dump: &mut LuksDump) {
+    if let Some((token, kind)) = numbered_section_item(line) {
+        dump.tokens.push(token.to_string());
+        dump.properties.push((
+            format!("cryptsetup.luks-token-{token}-type"),
+            kind.to_string(),
+        ));
+    }
+}
+
+fn parse_data_segment_line(line: &str, dump: &mut LuksDump) {
+    let Some((key, value)) = split_luks_key_value(line) else {
+        return;
+    };
+    match key {
+        "offset" | "length" | "cipher" | "sector" => dump.properties.push((
+            format!("cryptsetup.luks-data-{}", normalize_key(key)),
+            value.to_string(),
+        )),
+        _ => {}
+    }
+}
+
+fn split_luks_key_value(line: &str) -> Option<(&str, &str)> {
+    let (key, value) = line.split_once(':')?;
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some((key.trim(), value))
+    }
+}
+
+fn numbered_section_item(line: &str) -> Option<(&str, &str)> {
+    let (number, value) = line.split_once(':')?;
+    if number.chars().all(|character| character.is_ascii_digit()) {
+        Some((number, value.trim()))
+    } else {
+        None
     }
 }
 
@@ -149,6 +323,32 @@ fn add_status(graph: &mut StorageGraph, status: CryptStatus) {
     }
 }
 
+fn add_luks_dump(graph: &mut StorageGraph, dump: LuksDump) {
+    let id = format!("block:{}", dump.device_path);
+    let name = dump
+        .device_path
+        .rsplit('/')
+        .next()
+        .unwrap_or(&dump.device_path)
+        .to_string();
+    let mut node = Node::new(id, NodeKind::LuksContainer, name).with_path(dump.device_path);
+
+    let identity = Identity {
+        uuid: dump.uuid,
+        label: dump.label,
+        ..Identity::default()
+    };
+    if !identity.is_empty() {
+        node = node.with_identity(identity);
+    }
+
+    for (key, value) in dump.properties {
+        node = node.with_property(key, value);
+    }
+
+    graph.add_node(node);
+}
+
 fn parse_leading_u64(value: &str) -> Option<u64> {
     value
         .split_whitespace()
@@ -190,6 +390,42 @@ mod tests {
   mode:    read/write
 "#;
 
+    const LUKS_DUMP: &[u8] = br#"
+LUKS header information
+Version:        2
+Epoch:          7
+Metadata area:  16384 [bytes]
+Keyslots area:  16744448 [bytes]
+UUID:           luks-uuid
+Label:          root-crypt
+Subsystem:      (no subsystem)
+Flags:          allow-discards
+
+Data segments:
+  0: crypt
+        offset: 32768 [bytes]
+        length: (whole device)
+        cipher: aes-xts-plain64
+        sector: 4096 [bytes]
+
+Keyslots:
+  0: luks2
+        Key:        512 bits
+        Priority:   normal
+        Cipher:     aes-xts-plain64
+        Cipher key: 512 bits
+        PBKDF:      argon2id
+        Time cost:  4
+        Memory:     1048576
+        Threads:    4
+  1: luks2
+        Priority:   ignored
+
+Tokens:
+  0: systemd-tpm2
+        Keyslot:    0
+"#;
+
     #[test]
     fn normalizes_cryptsetup_status() {
         let graph =
@@ -209,6 +445,34 @@ mod tests {
             edge.from.0 == "block:/dev/nvme0n1p2"
                 && edge.to.0 == "block:/dev/mapper/cryptroot"
                 && edge.relationship == Relationship::Backs
+        }));
+    }
+
+    #[test]
+    fn normalizes_luks_dump_header_metadata() {
+        let graph = normalize_luks_dump("/dev/nvme0n1p2", LUKS_DUMP).expect("dump parses");
+        let container = graph
+            .nodes
+            .iter()
+            .find(|node| {
+                node.kind == NodeKind::LuksContainer
+                    && node.path.as_deref() == Some("/dev/nvme0n1p2")
+            })
+            .expect("container node should exist");
+
+        assert_eq!(container.identity.uuid.as_deref(), Some("luks-uuid"));
+        assert_eq!(container.identity.label.as_deref(), Some("root-crypt"));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-version" && property.value == "2"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-keyslot-count" && property.value == "2"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-token-0-type" && property.value == "systemd-tpm2"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-data-sector" && property.value == "4096 [bytes]"
         }));
     }
 

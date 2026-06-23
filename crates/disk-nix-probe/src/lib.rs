@@ -368,12 +368,19 @@ fn collect_swaps(result: &mut ProbeResult) {
 }
 
 fn collect_cryptsetup(result: &mut ProbeResult) {
-    let containers: Vec<String> = result
+    let containers: Vec<(String, bool)> = result
         .graph
         .nodes
         .iter()
         .filter(|node| node.kind == disk_nix_model::NodeKind::LuksContainer)
-        .map(|node| node.path.clone().unwrap_or_else(|| node.name.clone()))
+        .map(|node| {
+            (
+                node.path.clone().unwrap_or_else(|| node.name.clone()),
+                node.properties.iter().any(|property| {
+                    property.key == "blkid.type" && property.value == "crypto_LUKS"
+                }),
+            )
+        })
         .collect();
 
     if containers.is_empty() {
@@ -390,7 +397,25 @@ fn collect_cryptsetup(result: &mut ProbeResult) {
     }
 
     let mut collected = 0usize;
-    for container in containers {
+    let mut partials = Vec::new();
+    for (container, is_luks_device) in containers {
+        if is_luks_device {
+            match run_report("cryptsetup", &["luksDump", &container]) {
+                Ok(output) => match cryptsetup::normalize_luks_dump(&container, &output) {
+                    Ok(graph) => {
+                        collected += graph.nodes.len();
+                        merge_graph(&mut result.graph, graph);
+                    }
+                    Err(error) => partials.push(error.to_string()),
+                },
+                Err(message) => partials.push(message),
+            }
+        }
+
+        if !container.starts_with("/dev/mapper/") {
+            continue;
+        }
+
         let status_arg = cryptsetup_status_arg(&container);
         match run_report("cryptsetup", &["status", &status_arg]) {
             Ok(output) => match cryptsetup::normalize_cryptsetup_status(&container, &output) {
@@ -398,36 +423,36 @@ fn collect_cryptsetup(result: &mut ProbeResult) {
                     collected += graph.nodes.len();
                     merge_graph(&mut result.graph, graph);
                 }
-                Err(error) => {
-                    result.reports.push(ProbeReport {
-                        adapter: "cryptsetup".to_string(),
-                        status: ProbeStatus::Failed,
-                        message: Some(error.to_string()),
-                    });
-                    return;
-                }
+                Err(error) => partials.push(error.to_string()),
             },
-            Err(message) => {
-                result.reports.push(ProbeReport {
-                    adapter: "cryptsetup".to_string(),
-                    status: if message.contains("not found") || message.contains("No such file") {
-                        ProbeStatus::Unavailable
-                    } else {
-                        ProbeStatus::Partial
-                    },
-                    message: Some(message),
-                });
-                return;
-            }
+            Err(message) => partials.push(message),
         }
     }
 
+    let status = if collected == 0
+        && partials
+            .iter()
+            .any(|message| message.contains("not found") || message.contains("No such file"))
+    {
+        ProbeStatus::Unavailable
+    } else if partials.is_empty() {
+        ProbeStatus::Available
+    } else {
+        ProbeStatus::Partial
+    };
+    let message = if partials.is_empty() {
+        format!("normalized {collected} graph nodes from cryptsetup status and luksDump")
+    } else {
+        format!(
+            "normalized {collected} graph nodes from cryptsetup status and luksDump; partial errors: {}",
+            partials.join("; ")
+        )
+    };
+
     result.reports.push(ProbeReport {
         adapter: "cryptsetup".to_string(),
-        status: ProbeStatus::Available,
-        message: Some(format!(
-            "normalized {collected} graph nodes from cryptsetup status"
-        )),
+        status,
+        message: Some(message),
     });
 }
 

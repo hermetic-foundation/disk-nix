@@ -162,7 +162,8 @@ Use these commands for:
   pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
   source relationships
-- `mappings`: encryption, device-mapper, LVM, VDO, RAID, multipath, and cache
+- `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
+  RAID, multipath, and cache
   layers
 - `mounts`: local mountpoints and NFS mounts
 - `network-storage`: iSCSI sessions, iSCSI targets, LUNs, NFS exports, and NFS
