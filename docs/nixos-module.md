@@ -24,6 +24,7 @@ The NixOS module is the primary declarative interface.
       allowGrow = true;
       allowShrink = false;
       allowDestructive = false;
+      probeCurrent = true;
     };
     luks.devices.cryptroot = {
       device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
@@ -177,7 +178,8 @@ Example lifecycle planning through NixOS options:
 
 - `manual`: only install the spec and CLI
 - `activation`: run apply-policy validation during activation; destructive and
-  potential-data-loss actions are refused by default
+  potential-data-loss actions are refused by default. Set `probeCurrent = true`
+  to include current topology comparison in that validation report.
 - `boot`: reserved for boot-time lifecycle work
 - `install`: reserved for installer workflows
 
@@ -191,6 +193,7 @@ Mutation policy should remain explicit:
 - `allowGrow`
 - `allowOffline`
 - `allowPropertyChanges`
+- `probeCurrent`
 
 Future policies should include:
 

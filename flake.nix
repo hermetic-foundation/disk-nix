@@ -76,6 +76,7 @@
             boot.initrd.systemd.enable = false;
             services.disk-nix = {
               enable = true;
+              apply.probeCurrent = true;
               luks.devices.cryptroot = {
                 device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
                 allowDiscards = true;
@@ -197,7 +198,9 @@
                   and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false
+                  and .apply.probeCurrent == true
                 ' "$spec"
+                printf '%s\n' '${nixosModuleTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}' | grep -- --probe-current
                 touch "$out"
               '';
         };

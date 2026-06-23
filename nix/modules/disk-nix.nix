@@ -8,6 +8,7 @@ self:
 let
   cfg = config.services.disk-nix;
   json = pkgs.formats.json { };
+  applyProbeFlag = lib.optionalString cfg.apply.probeCurrent " --probe-current";
   operationType = lib.types.nullOr (
     lib.types.enum [
       "create"
@@ -662,6 +663,12 @@ in
         default = true;
         description = "Allow non-destructive storage property changes.";
       };
+
+      probeCurrent = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Probe current topology during disk-nix apply-policy validation.";
+      };
     };
   };
 
@@ -762,7 +769,7 @@ in
       wantedBy = lib.mkIf (cfg.apply.mode == "activation") [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${lib.getExe cfg.package} apply --spec /etc/disk-nix/spec.json";
+        ExecStart = "${lib.getExe cfg.package} apply --spec /etc/disk-nix/spec.json${applyProbeFlag}";
       };
     };
 
