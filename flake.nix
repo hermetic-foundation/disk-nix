@@ -184,6 +184,10 @@
                 operation = "grow";
                 desiredSize = "500GiB";
               };
+              thinPools."vg0/newthin" = {
+                operation = "create";
+                desiredSize = "100GiB";
+              };
               lvmSnapshots."vg0/root-snap" = {
                 operation = "snapshot";
                 target = "vg0/root";
@@ -312,7 +316,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 27
+              .summary.actionCount == 28
               and .summary.offlineRequiredCount == 5
               and .summary.destructiveCount == 2
               and .summary.potentialDataLossCount == 2
@@ -322,6 +326,7 @@
               and (.actions | any(.id == "vdovolumes:archive:grow" and .risk == "online"))
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
+              and (.actions | any(.id == "thinpools:vg0/newthin:create" and .risk == "online"))
               and (.actions | any(.id == "lvmsnapshots:vg0/root-snap:snapshot" and .risk == "reversible"))
               and (.actions | any(.id == "loopdevices:/dev/loop7:create" and .risk == "online"))
               and (.actions | any(.id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-md-spare" and .risk == "online"))
@@ -435,6 +440,8 @@
                   and .spec.zvols."tank/vm/root".desiredSize == "80GiB"
                   and .spec.thinPools."vg0/thinpool".operation == "grow"
                   and .spec.thinPools."vg0/thinpool".desiredSize == "500GiB"
+                  and .spec.thinPools."vg0/newthin".operation == "create"
+                  and .spec.thinPools."vg0/newthin".desiredSize == "100GiB"
                   and .spec.lvmSnapshots."vg0/root-snap".operation == "snapshot"
                   and .spec.lvmSnapshots."vg0/root-snap".target == "vg0/root"
                   and .spec.lvmSnapshots."vg0/root-snap".desiredSize == "20GiB"

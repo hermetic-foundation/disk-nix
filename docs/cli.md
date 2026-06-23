@@ -315,6 +315,8 @@ NFS export command plans use explicit `client` and `options` lifecycle fields
 to render reviewed `exportfs` create and unexport commands.
 LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`.
+LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
+and policy-gated `lvremove` commands for `thinPools` lifecycle declarations.
 LVM volume group command plans render policy-gated `vgcreate` and `vgremove`
 commands for `volumeGroups` lifecycle declarations.
 ZFS dataset command plans render reviewed `zfs create` and policy-gated

@@ -535,6 +535,32 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent thin volumes remain active and monitored".to_string(),
             ],
         ),
+        Operation::Create if collection == Some("thinPools") => (
+            vec![
+                command(
+                    [
+                        "lvs",
+                        "--reportformat",
+                        "json",
+                        "-o",
+                        "lv_name,lv_size,data_percent,metadata_percent,seg_monitor",
+                        target,
+                    ],
+                    false,
+                    "verify thin pool exists after creation",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify thin pool graph node and volume group relationship after creation",
+                ),
+            ],
+            vec![
+                "thin pool reports expected size and monitored state".to_string(),
+                "data and metadata utilization are reviewed before thin volumes are created"
+                    .to_string(),
+            ],
+        ),
         Operation::Grow if collection == Some("swaps") => (
             vec![
                 command(
@@ -1021,6 +1047,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Destroy if collection == Some("thinPools") => (
+            vec![
+                command(
+                    ["lvs", "--reportformat", "json"],
+                    false,
+                    "verify thin pool no longer appears in LVM inventory",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "re-probe topology after thin pool removal",
+                ),
+            ],
+            vec![
+                "removed thin pool is absent from LVM reports".to_string(),
+                "dependent thin volumes, filesystems, mappings, and mounts are removed or migrated"
+                    .to_string(),
+            ],
+        ),
         Operation::Destroy if collection == Some("volumeGroups") => (
             vec![
                 command(
@@ -1251,6 +1296,27 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "extend metadata before it approaches exhaustion".to_string(),
                     "verify thin pool autoextend policy and monitoring before growth".to_string(),
                     "review thin volume overcommit before adding virtual capacity".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Create if collection == Some("thinPools") => {
+            let target = target.unwrap_or("<thin-pool>");
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    command(
+                        ["vgs", "--reportformat", "json"],
+                        false,
+                        "inspect volume group free space before creating the thin pool",
+                    ),
+                    thin_pool_create_command(target, desired_size),
+                ],
+                vec![
+                    "verify the target volume group has enough data and metadata capacity"
+                        .to_string(),
+                    "choose overcommit, monitoring, and autoextend policy before using the thin pool"
+                        .to_string(),
                 ],
                 true,
             )
@@ -2022,6 +2088,36 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "snapshot or migrate data before removing the logical volume".to_string(),
                     "unmount filesystems and deactivate dependent mappings before lvremove"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("thinPools") => {
+            let target = target.unwrap_or("<thin-pool>");
+            (
+                vec![
+                    command(
+                        [
+                            "lvs",
+                            "--reportformat",
+                            "json",
+                            "-o",
+                            "lv_name,lv_attr,data_percent,metadata_percent",
+                            target,
+                        ],
+                        false,
+                        "inspect thin pool before removal",
+                    ),
+                    command(
+                        ["lvremove", "--yes", target],
+                        true,
+                        "remove the reviewed thin pool after thin volumes and consumers are migrated",
+                    ),
+                ],
+                vec![
+                    "migrate or remove thin volumes before removing the thin pool".to_string(),
+                    "unmount filesystems and deactivate mappings that depend on thin volumes"
                         .to_string(),
                 ],
                 true,
@@ -2842,6 +2938,60 @@ fn thin_pool_extend_command(target: &str, desired_size: Option<&str>) -> Executi
     }
 }
 
+fn thin_pool_create_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    let Some((volume_group, thin_pool)) = target.split_once('/') else {
+        return command_vec_with_readiness(
+            vec![
+                "lvcreate".to_string(),
+                "--type".to_string(),
+                "thin-pool".to_string(),
+                "--size".to_string(),
+                desired_size.unwrap_or("<size>").to_string(),
+                "--name".to_string(),
+                "<thin-pool>".to_string(),
+                "<volume-group>".to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["target in volume-group/thin-pool form"],
+            "create an LVM thin pool after resolving volume group and pool name",
+        );
+    };
+
+    match desired_size {
+        Some(size) => command_vec(
+            vec![
+                "lvcreate".to_string(),
+                "--type".to_string(),
+                "thin-pool".to_string(),
+                "--size".to_string(),
+                size.to_string(),
+                "--name".to_string(),
+                thin_pool.to_string(),
+                volume_group.to_string(),
+            ],
+            true,
+            "create an LVM thin pool with the desired size",
+        ),
+        None => command_vec_with_readiness(
+            vec![
+                "lvcreate".to_string(),
+                "--type".to_string(),
+                "thin-pool".to_string(),
+                "--size".to_string(),
+                "<size>".to_string(),
+                "--name".to_string(),
+                thin_pool.to_string(),
+                volume_group.to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired thin pool size"],
+            "create an LVM thin pool after selecting the desired size",
+        ),
+    }
+}
+
 fn lvm_snapshot_create_command(
     origin: &str,
     snapshot: &str,
@@ -3657,19 +3807,27 @@ mod tests {
     }
 
     #[test]
-    fn thin_pool_growth_reports_lvm_pool_commands_and_verification() {
+    fn thin_pool_lifecycle_reports_lvm_pool_commands_and_verification() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
               "spec": {
                 "thinPools": {
+                  "vg0/newpool": {
+                    "operation": "create",
+                    "desiredSize": "100GiB"
+                  },
                   "vg0/pool": {
                     "operation": "grow",
                     "desiredSize": "500GiB"
+                  },
+                  "vg0/oldpool": {
+                    "destroy": true
                   }
                 }
               },
               "apply": {
-                "allowGrow": true
+                "allowGrow": true,
+                "allowDestructive": true
               }
             }"#,
         )
@@ -3680,9 +3838,44 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "lvcreate",
+                        "--type",
+                        "thin-pool",
+                        "--size",
+                        "100GiB",
+                        "--name",
+                        "newpool",
+                        "vg0",
+                    ]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
                 command.argv == ["lvextend", "--size", "500GiB", "vg0/pool"]
                     && command.readiness == CommandReadiness::Ready
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["lvremove", "--yes", "vg0/oldpool"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "thinpools:vg0/newpool:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvs",
+                            "--reportformat",
+                            "json",
+                            "-o",
+                            "lv_name,lv_size,data_percent,metadata_percent,seg_monitor",
+                            "vg0/newpool",
+                        ]
+                })
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
@@ -3696,6 +3889,13 @@ mod tests {
                         "vg0/pool",
                     ]
             })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "thinpools:vg0/oldpool:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
         }));
     }
 

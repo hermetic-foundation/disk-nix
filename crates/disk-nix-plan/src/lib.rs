@@ -1540,6 +1540,20 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "thinPools" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "thin pool creation allocates a new LVM thin-pool data volume inside an existing volume group"
+                    .to_string(),
+                alternatives: vec![
+                    "verify volume group free extents before creating the thin pool".to_string(),
+                    "choose explicit pool size and monitor metadata utilization from first use"
+                        .to_string(),
+                    "review thin-volume overcommit policy before exposing consumers".to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "volumeGroups" => (
             RiskClass::Destructive,
             true,
@@ -2067,6 +2081,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::LvmThinPool,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "thin pool creation consumes free extents in a volume group".to_string(),
+                alternatives: vec![
+                    "verify VG free extents before allocation".to_string(),
+                    "choose thin-pool size and overcommit policy before creating thin volumes"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmThinPool,
             operation: Operation::Grow,
             risk: RiskClass::Online,
             advice: Some(Advice {
@@ -2074,6 +2101,18 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "extend metadata before it approaches exhaustion".to_string(),
                     "verify autoextend policy and overcommit before growth".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmThinPool,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "removing a thin pool destroys all thin volumes stored in it".to_string(),
+                alternatives: vec![
+                    "migrate or snapshot thin volumes before removing the pool".to_string(),
+                    "deactivate dependent thin volumes and filesystems before lvremove".to_string(),
                 ],
             }),
         },
@@ -3100,22 +3139,41 @@ mod tests {
     }
 
     #[test]
-    fn plan_classifies_thin_pool_growth_with_metadata_advice() {
+    fn plan_classifies_thin_pool_lifecycle_with_metadata_advice() {
         let plan = plan_from_json_bytes(
             br#"{
               "thinPools": {
+                "vg0/newpool": {
+                  "operation": "create",
+                  "desiredSize": "100GiB"
+                },
                 "vg0/pool": {
                   "operation": "grow",
                   "desiredSize": "500GiB"
+                },
+                "vg0/oldpool": {
+                  "destroy": true
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.summary.action_count, 3);
         assert_eq!(plan.summary.offline_required_count, 0);
-        let grow = &plan.actions[0];
+        assert_eq!(plan.summary.destructive_count, 1);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "thinpools:vg0/newpool:create")
+            .expect("thin pool create action exists");
+        assert_eq!(create.risk, RiskClass::Online);
+        assert_eq!(create.context.desired_size.as_deref(), Some("100GiB"));
+        let grow = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "thinpools:vg0/pool:grow")
+            .expect("thin pool grow action exists");
         assert_eq!(grow.id, "thinpools:vg0/pool:grow");
         assert_eq!(grow.risk, RiskClass::Online);
         assert_eq!(grow.context.desired_size.as_deref(), Some("500GiB"));
@@ -3126,6 +3184,13 @@ mod tests {
                     .iter()
                     .any(|alternative| alternative.contains("overcommit"))
         }));
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "thinpools:vg0/oldpool:destroy")
+            .expect("thin pool destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::Destructive);
+        assert!(destroy.destructive);
     }
 
     #[test]

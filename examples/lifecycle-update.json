@@ -42,6 +42,10 @@
     "vg0/thinpool": {
       "operation": "grow",
       "desiredSize": "500GiB"
+    },
+    "vg0/newthin": {
+      "operation": "create",
+      "desiredSize": "100GiB"
     }
   },
   "lvmSnapshots": {
