@@ -133,9 +133,10 @@ The flake exposes a NixOS module:
 The module installs the CLI plus default storage tooling, writes a normalized
 storage spec to `/etc/disk-nix/spec.json`, derives typed NixOS `fileSystems`,
 `swapDevices`, initrd LUKS options, `boot.supportedFilesystems`, LVM support,
-swraid support, and multipath support, and keeps lifecycle domains available in
-the same planner spec. Override `toolPackages` to pin alternate tool builds or
-trim unused domains. Explicit non-destroy
+swraid support, multipath support, and `boot.zfs.extraPools` for typed active
+ZFS declarations, and keeps lifecycle domains available in the same planner
+spec. Override `toolPackages` to pin alternate tool builds or trim unused
+domains. Explicit non-destroy
 `exports` declarations with `client` and `options` also derive NixOS NFS server
 export lines. When
 typed `nfs.mounts` declarations are marked for destroy they stay in the

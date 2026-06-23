@@ -84,6 +84,7 @@
           self.nixosModules.default
           {
             system.stateVersion = "26.05";
+            networking.hostId = "8425e349";
             boot.loader.grub.enable = false;
             boot.initrd.systemd.enable = false;
             services.disk-nix = {
@@ -838,6 +839,7 @@
                   .xfs == true
                   and .btrfs == true
                   and .nfs4 == true
+                  and .zfs == true
                 ' supported-filesystems
                 nativeStorage=${
                   pkgs.lib.escapeShellArg (
@@ -848,6 +850,7 @@
                       swraid = nixosModuleTest.config.boot.swraid.enable;
                       mdadmConf = nixosModuleTest.config.boot.swraid.mdadmConf;
                       multipath = nixosModuleTest.config.services.multipath.enable;
+                      zfsExtraPools = nixosModuleTest.config.boot.zfs.extraPools;
                     }
                   )
                 }
@@ -859,6 +862,8 @@
                   and .swraid == true
                   and (.mdadmConf | test("^PROGRAM .*/bin/true$"))
                   and .multipath == true
+                  and (.zfsExtraPools | index("tank") != null)
+                  and (.zfsExtraPools | index("mnt") == null)
                 ' native-storage
                 printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
                 grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports

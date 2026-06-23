@@ -572,6 +572,10 @@ let
   activeLvmCaches = activeLifecycleAttrs cfg.lvmCaches;
   activeMdRaids = activeLifecycleAttrs cfg.mdRaids;
   activeMultipathMaps = activeLifecycleAttrs cfg.multipathMaps;
+  activePools = activeLifecycleAttrs cfg.pools;
+  activeDatasets = activeLifecycleAttrs cfg.datasets;
+  activeZvols = activeLifecycleAttrs cfg.zvols;
+  activeSnapshots = lib.filterAttrs (_: snapshot: !snapshot.destroy) cfg.snapshots;
   hasActiveAttrs = attrs: attrs != { };
   hasActiveLvm =
     hasActiveAttrs activePhysicalVolumes
@@ -583,6 +587,21 @@ let
   hasActiveLvmThinSupport = hasActiveAttrs activeThinPools || hasActiveAttrs activeLvmCaches;
   hasActiveMdRaids = hasActiveAttrs activeMdRaids;
   hasActiveMultipathMaps = hasActiveAttrs activeMultipathMaps;
+  zfsPoolNameFromIdentity =
+    identity: builtins.head (lib.splitString "/" (builtins.head (lib.splitString "@" identity)));
+  zfsLifecycleIdentities =
+    attrs:
+    lib.mapAttrsToList (name: object: if object.target != null then object.target else name) attrs;
+  zfsExtraPools = lib.unique (
+    lib.filter (pool: pool != "" && !(lib.hasPrefix "/" pool)) (
+      map zfsPoolNameFromIdentity (
+        zfsLifecycleIdentities activePools
+        ++ zfsLifecycleIdentities activeDatasets
+        ++ zfsLifecycleIdentities activeZvols
+        ++ (map (snapshot: snapshot.target) (lib.attrValues activeSnapshots))
+      )
+    )
+  );
   nfsExportLines =
     lib.mapAttrsToList
       (
@@ -607,6 +626,7 @@ let
   supportedFilesystemTypes = lib.unique (
     (map (filesystem: filesystem.fsType) (lib.attrValues cfg.filesystems))
     ++ (map (mount: mount.fsType) (lib.attrValues activeNfsMounts))
+    ++ lib.optional (zfsExtraPools != [ ]) "zfs"
   );
 in
 {
@@ -1443,6 +1463,8 @@ in
     };
 
     services.multipath.enable = lib.mkIf hasActiveMultipathMaps (lib.mkDefault true);
+
+    boot.zfs.extraPools = lib.mkIf (zfsExtraPools != [ ]) (lib.mkAfter zfsExtraPools);
 
     services.openiscsi = lib.mkIf (cfg.iscsi.initiatorName != null) {
       enable = true;

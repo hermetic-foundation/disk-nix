@@ -52,8 +52,8 @@ The module writes `/etc/disk-nix/spec.json`, installs the CLI and default
 storage tooling, and derives the matching NixOS `fileSystems`, `swapDevices`,
 `boot.initrd.luks.devices`, `boot.supportedFilesystems`, `services.lvm`,
 `boot.initrd.services.lvm`, `boot.swraid`, `services.multipath`,
-`services.openiscsi`, `boot.iscsi-initiator`, and selected
-`services.nfs.server.exports` entries.
+`boot.zfs.extraPools`, `services.openiscsi`, `boot.iscsi-initiator`, and
+selected `services.nfs.server.exports` entries.
 Raw `spec` remains available for storage domains whose typed NixOS options have
 not been implemented yet.
 
@@ -80,6 +80,11 @@ no-op `PROGRAM` line used by the installer profile unless the host overrides
 `boot.swraid.mdadmConf`. Typed active multipath map declarations enable
 `services.multipath` so stage-1 and stage-2 include the daemon and kernel
 support expected by `/dev/mapper/mpath*` consumers.
+Typed active ZFS pool, dataset, zvol, and ZFS snapshot declarations add their
+pool names to `boot.zfs.extraPools` and include `zfs` in
+`boot.supportedFilesystems`, so NixOS imports pools that disk-nix is asked to
+manage even when no legacy-mounted ZFS `fileSystems` entry references them.
+NixOS requires `networking.hostId` whenever ZFS support is enabled.
 
 Lifecycle declaration attribute names are usable object names only for domains
 whose native tools address objects by name, such as ZFS datasets, ZFS pools,
