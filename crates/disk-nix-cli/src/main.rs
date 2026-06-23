@@ -2,6 +2,7 @@ use std::{
     collections::BTreeSet,
     fmt,
     io::{self, Write},
+    os::unix::fs::PermissionsExt,
     process::ExitCode,
 };
 
@@ -122,6 +123,9 @@ enum Command {
         /// Attempt execution after policy validation.
         #[arg(long)]
         execute: bool,
+        /// Write a reviewable shell script for the allowed command and verification plan.
+        #[arg(long)]
+        script_out: Option<String>,
         /// Emit JSON apply report.
         #[arg(long)]
         json: bool,
@@ -297,6 +301,7 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             spec,
             probe_current,
             execute,
+            script_out,
             json,
         } => {
             let bytes = std::fs::read(&spec)?;
@@ -311,6 +316,9 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 ExecutionMode::DryRun
             };
             let report = prepare_execution(&plan, policy, mode);
+            if let Some(script_out) = script_out.as_deref() {
+                write_execution_script(script_out, &report)?;
+            }
 
             if json {
                 writeln!(
@@ -337,6 +345,19 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             Ok(())
         }
     }
+}
+
+fn write_execution_script(path: &str, report: &ExecutionReport) -> Result<(), AppError> {
+    let script = report.to_shell_script().ok_or_else(|| {
+        AppError::Message(
+            "script generation requires apply policy to allow every planned action".to_string(),
+        )
+    })?;
+    std::fs::write(path, script)?;
+    let mut permissions = std::fs::metadata(path)?.permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(path, permissions)?;
+    Ok(())
 }
 
 fn collect_graph() -> Result<StorageGraph, AppError> {

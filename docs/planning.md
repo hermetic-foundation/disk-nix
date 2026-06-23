@@ -126,6 +126,9 @@ notes. If `--probe-current` is set, the report also includes the same
 `verificationSummary` plus a `verificationPlan` with read-only post-apply
 commands and checks for the relevant storage domain. These plans are
 intentionally advisory until the executor can run mutating commands directly.
+`disk-nix apply --script-out <path>` writes those allowed command and
+verification plans as a reviewable bash script after policy validation passes.
+Commands with unresolved inputs remain commented as not ready.
 
 Policy fields currently supported:
 

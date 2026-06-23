@@ -69,6 +69,7 @@ disk-nix plan --spec ./examples/simple-root.json --probe-current --json
 disk-nix apply --spec ./examples/lifecycle-update.json
 disk-nix apply --spec ./examples/lifecycle-update.json --json
 disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
+disk-nix apply --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
 ```
 
 The canonical interface is intended to be stable JSON. Human tables and tree
@@ -115,5 +116,6 @@ No destructive operation should be implicit.
 
 `disk-nix apply` is currently a policy-gated dry run. It evaluates the planned
 actions against the `apply` policy in the spec, reports blocked operations,
-and emits advisory command and verification plans. The `--execute` flag is
-intentionally refused until a real mutating executor exists.
+emits advisory command and verification plans, and can write those plans to a
+reviewable shell script with `--script-out`. The `--execute` flag is
+intentionally refused until a direct mutating executor exists.

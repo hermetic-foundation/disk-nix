@@ -199,6 +199,7 @@ Apply is currently policy evaluation, not mutation:
 disk-nix apply --spec ./examples/lifecycle-update.json
 disk-nix apply --spec ./examples/lifecycle-update.json --json
 disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
+disk-nix apply --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
 ```
 
 The report includes:
@@ -245,3 +246,8 @@ finishes. These checks re-probe the relevant graph node and include
 domain-specific commands such as `findmnt`, `lvs`, `zpool status`,
 `zfs list`, `btrfs filesystem usage`, `lsblk`, or `exportfs` when the
 planned action has enough context.
+
+`--script-out <path>` writes an executable bash script after policy validation
+passes. The script contains the allowed command plan, manual-review notes,
+unresolved-input comments for non-ready commands, and post-apply verification
+commands. `disk-nix` still does not run mutating storage commands directly.
