@@ -166,7 +166,9 @@ Examples:
   snapshot declarations can set `readOnly = true` to render
   `btrfs subvolume snapshot -r`. Snapshot destruction remains destructive, and
   unambiguous ZFS snapshot names or Btrfs absolute snapshot paths render
-  reviewed `zfs destroy` or `btrfs subvolume delete` commands. ZFS rollback
+  reviewed `zfs destroy` or `btrfs subvolume delete` commands. ZFS snapshot
+  `hold` and `releaseHold` declarations are safe property actions that render
+  `zfs hold <tag> <snapshot>` and `zfs release <tag> <snapshot>`. ZFS rollback
   command rendering is available for review, but apply remains blocked until a
   safer explicit potential-data-loss policy exists.
 

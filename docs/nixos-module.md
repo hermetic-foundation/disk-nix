@@ -167,6 +167,9 @@ Typed snapshot declarations include:
 - `target`
 - `destroy`
 - `rollback`
+- `hold`
+- `holdTag`
+- `releaseHold`
 - `preserveData`
 - `metadata`
 

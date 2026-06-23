@@ -1096,6 +1096,20 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             ],
             vec!["exported path and options match the desired value".to_string()],
         ),
+        Operation::SetProperty if collection == Some("snapshots") => {
+            let snapshot = action.context.name.as_deref().unwrap_or(target);
+            (
+                vec![
+                    snapshot_hold_list_command(snapshot),
+                    command(
+                        ["disk-nix", "inspect", snapshot, "--json"],
+                        false,
+                        "verify modeled snapshot properties after re-probe",
+                    ),
+                ],
+                vec!["snapshot hold state matches the desired retention tag".to_string()],
+            )
+        }
         Operation::Create | Operation::Destroy if collection == Some("exports") => (
             vec![
                 command(
@@ -2147,13 +2161,24 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     property,
                     &property_assignment,
                 )
+            } else if collection == Some("snapshots") {
+                snapshot_property_command(
+                    action.context.name.as_deref().unwrap_or(target),
+                    property,
+                    action.context.property_value.as_deref(),
+                )
             } else {
                 set_property_command(collection, target, property, &property_assignment)
+            };
+            let inspect_target = if collection == Some("snapshots") {
+                action.context.name.as_deref().unwrap_or(target)
+            } else {
+                target
             };
             (
                 vec![
                     command(
-                        ["disk-nix", "inspect", target],
+                        ["disk-nix", "inspect", inspect_target],
                         false,
                         "inspect current properties before applying changes",
                     ),
@@ -3910,6 +3935,68 @@ fn nfs_export_destroy_command(target: &str, client: Option<&str>) -> ExecutionCo
     }
 }
 
+fn snapshot_property_command(
+    snapshot: &str,
+    property: &str,
+    tag: Option<&str>,
+) -> ExecutionCommand {
+    let Some(tag) = tag else {
+        return command_with_readiness(
+            ["zfs", "hold", "<tag>", snapshot],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["ZFS hold tag"],
+            "update a ZFS snapshot hold after selecting the hold tag",
+        );
+    };
+    if !is_zfs_snapshot_name(snapshot) {
+        return command_with_readiness(
+            ["<snapshot-property-tool>", snapshot, tag],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["ZFS snapshot name"],
+            "update snapshot retention with the target-specific snapshot property tool",
+        );
+    }
+    match property {
+        "zfs.hold" | "hold" | "holdTag" => command(
+            ["zfs", "hold", tag, snapshot],
+            true,
+            "add a ZFS snapshot hold with the reviewed retention tag",
+        ),
+        "zfs.releaseHold" | "releaseHold" | "release-hold" => command(
+            ["zfs", "release", tag, snapshot],
+            true,
+            "release a ZFS snapshot hold with the reviewed retention tag",
+        ),
+        _ => command_with_readiness(
+            ["<snapshot-property-tool>", snapshot, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported snapshot property"],
+            "update a snapshot property after selecting a supported domain mapping",
+        ),
+    }
+}
+
+fn snapshot_hold_list_command(snapshot: &str) -> ExecutionCommand {
+    if is_zfs_snapshot_name(snapshot) {
+        command(
+            ["zfs", "holds", snapshot],
+            false,
+            "verify ZFS snapshot hold tags",
+        )
+    } else {
+        command_with_readiness(
+            ["<snapshot-hold-list-tool>", snapshot],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["ZFS snapshot name"],
+            "verify snapshot hold state with the target-specific tool",
+        )
+    }
+}
+
 fn snapshot_command(
     collection: Option<&str>,
     target: &str,
@@ -5120,6 +5207,55 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::Blocked);
         assert!(report.command_plan.is_empty());
         assert_eq!(report.command_summary.step_count, 0);
+    }
+
+    #[test]
+    fn zfs_snapshot_holds_render_safe_property_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home",
+                  "hold": "disk-nix-retain"
+                },
+                "tank/home@old": {
+                  "target": "tank/home",
+                  "releaseHold": "old-retention"
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_plan.len(), 2);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:tank/home@before:hold:disk-nix-retain"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "hold", "disk-nix-retain", "tank/home@before"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:tank/home@old:release-hold:old-retention"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "release", "old-retention", "tank/home@old"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "snapshot:tank/home@before:hold:disk-nix-retain"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "holds", "tank/home@before"])
+        }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
     }
 
     #[test]

@@ -1464,6 +1464,8 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
         .get("target")
         .and_then(Value::as_str)
         .unwrap_or(name);
+    let hold = string_field(snapshot, &["hold", "holdTag"]);
+    let release_hold = string_field(snapshot, &["releaseHold", "release-hold"]);
     let destroy = snapshot
         .get("destroy")
         .and_then(Value::as_bool)
@@ -1476,6 +1478,19 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
         .get("readOnly")
         .or_else(|| snapshot.get("readonly"))
         .and_then(Value::as_bool);
+
+    if let Some(hold) = hold {
+        actions.push(snapshot_hold_action(name, target, &hold, read_only, false));
+    }
+    if let Some(release_hold) = release_hold {
+        actions.push(snapshot_hold_action(
+            name,
+            target,
+            &release_hold,
+            read_only,
+            true,
+        ));
+    }
 
     if destroy {
         actions.push(PlannedAction {
@@ -1521,7 +1536,10 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
                 ],
             }),
         });
-    } else {
+    } else if actions
+        .iter()
+        .all(|action| !action.id.starts_with(&format!("snapshot:{name}:")))
+    {
         actions.push(PlannedAction {
             id: format!("snapshot:{name}:create"),
             description: format!("create snapshot {name} for {target}"),
@@ -1537,6 +1555,58 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
             },
             advice: None,
         });
+    }
+}
+
+fn snapshot_hold_action(
+    name: &str,
+    target: &str,
+    tag: &str,
+    read_only: Option<bool>,
+    release: bool,
+) -> PlannedAction {
+    let (verb, property) = if release {
+        ("release hold on", "zfs.releaseHold")
+    } else {
+        ("hold", "zfs.hold")
+    };
+    PlannedAction {
+        id: format!(
+            "snapshot:{name}:{}:{tag}",
+            if release { "release-hold" } else { "hold" }
+        ),
+        description: format!("{verb} snapshot {name} for {target} with tag {tag}"),
+        operation: Operation::SetProperty,
+        risk: RiskClass::Safe,
+        destructive: false,
+        context: ActionContext {
+            collection: Some("snapshots".to_string()),
+            name: Some(name.to_string()),
+            target: Some(target.to_string()),
+            property: Some(property.to_string()),
+            property_value: Some(tag.to_string()),
+            read_only,
+            ..ActionContext::default()
+        },
+        advice: Some(Advice {
+            summary: if release {
+                "releasing a snapshot hold allows later pruning by the same tag".to_string()
+            } else {
+                "holding a snapshot prevents accidental ZFS snapshot destruction by tag".to_string()
+            },
+            alternatives: if release {
+                vec![
+                    "keep the hold until replacement backups or replication are verified"
+                        .to_string(),
+                    "list active holds before releasing retention protection".to_string(),
+                ]
+            } else {
+                vec![
+                    "use a stable tag name that identifies the retention policy".to_string(),
+                    "replicate or back up the snapshot before removing retention holds".to_string(),
+                ]
+            },
+        }),
     }
 }
 
@@ -3769,6 +3839,53 @@ mod tests {
         assert_eq!(plan.summary.action_count, 1);
         assert_eq!(plan.summary.potential_data_loss_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Rollback);
+    }
+
+    #[test]
+    fn plan_accepts_zfs_snapshot_holds_as_safe_property_actions() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before-upgrade": {
+                  "target": "tank/home",
+                  "hold": "disk-nix-retain"
+                },
+                "tank/home@old": {
+                  "target": "tank/home",
+                  "releaseHold": "old-retention"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.destructive_count, 0);
+        assert_eq!(plan.summary.potential_data_loss_count, 0);
+        let hold = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:tank/home@before-upgrade:hold:disk-nix-retain")
+            .expect("snapshot hold action exists");
+        assert_eq!(hold.operation, Operation::SetProperty);
+        assert_eq!(hold.risk, RiskClass::Safe);
+        assert_eq!(hold.context.property.as_deref(), Some("zfs.hold"));
+        assert_eq!(
+            hold.context.property_value.as_deref(),
+            Some("disk-nix-retain")
+        );
+        let release = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:tank/home@old:release-hold:old-retention")
+            .expect("snapshot hold release action exists");
+        assert_eq!(release.operation, Operation::SetProperty);
+        assert_eq!(release.risk, RiskClass::Safe);
+        assert_eq!(release.context.property.as_deref(), Some("zfs.releaseHold"));
+        assert_eq!(
+            release.context.property_value.as_deref(),
+            Some("old-retention")
+        );
     }
 
     #[test]

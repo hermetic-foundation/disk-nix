@@ -211,6 +211,9 @@ domain. Btrfs snapshot declarations with `readOnly = true` render
 Snapshot deletion plans render policy-gated `zfs destroy` and
 `btrfs subvolume delete` commands for unambiguous ZFS snapshot names and Btrfs
 absolute snapshot paths.
+ZFS snapshot hold plans render safe `zfs hold <tag> <snapshot>` and
+`zfs release <tag> <snapshot>` updates from `hold` and `releaseHold`
+declarations so retention can be changed without deleting recovery points.
 ZFS snapshot rollback plans render reviewed `zfs rollback` details while
 remaining blocked by the potential-data-loss policy gate.
 ZFS dataset apply plans render reviewed `zfs create` commands and

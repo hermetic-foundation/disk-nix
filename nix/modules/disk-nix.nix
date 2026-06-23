@@ -273,6 +273,27 @@ let
           description = "Request rollback of the target to this snapshot.";
         };
 
+        hold = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "ZFS hold tag to apply to this snapshot.";
+          example = "disk-nix-retain";
+        };
+
+        holdTag = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias for hold, copied into the planner spec.";
+          example = "disk-nix-retain";
+        };
+
+        releaseHold = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "ZFS hold tag to release from this snapshot.";
+          example = "old-retention-tag";
+        };
+
         readOnly = lib.mkOption {
           type = lib.types.nullOr lib.types.bool;
           default = null;
@@ -337,6 +358,9 @@ let
         target
         destroy
         rollback
+        hold
+        holdTag
+        releaseHold
         readOnly
         preserveData
         ;

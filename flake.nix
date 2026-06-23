@@ -241,6 +241,11 @@
               };
               snapshots."tank/home@before-upgrade" = {
                 target = "tank/home";
+                hold = "disk-nix-retain";
+              };
+              snapshots."tank/home@old" = {
+                target = "tank/home";
+                releaseHold = "old-retention";
               };
               snapshots."/mnt/persist/@home-before-upgrade" = {
                 target = "/mnt/persist/@home";
@@ -493,6 +498,8 @@
                   and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
                   and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
                   and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
+                  and .spec.snapshots."tank/home@before-upgrade".hold == "disk-nix-retain"
+                  and .spec.snapshots."tank/home@old".releaseHold == "old-retention"
                   and .spec.snapshots."/mnt/persist/@home-before-upgrade".target == "/mnt/persist/@home"
                   and .spec.snapshots."/mnt/persist/@home-before-upgrade".readOnly == true
                   and .apply.mode == "activation"

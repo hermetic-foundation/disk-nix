@@ -379,6 +379,8 @@ Generic snapshot declarations render concrete `zfs snapshot` commands for
 source target and snapshot name are absolute paths. Destructive snapshot
 declarations render policy-gated `zfs destroy` or `btrfs subvolume delete`
 commands for the same unambiguous domains.
+ZFS snapshot retention declarations render safe `zfs hold <tag> <snapshot>`
+and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
 ZFS snapshot rollback declarations render reviewed `zfs rollback` command
 details internally, but apply remains blocked as potential data loss.
 `verificationSummary` and `verificationPlan` record read-only commands and
