@@ -66,6 +66,21 @@ Unavailable or partial adapters are not fatal. They mean the graph is degraded
 for that storage domain. For example, a host without `zpool` can still report
 regular block devices, but it cannot report ZFS pool and dataset details.
 
+## Shell Completions
+
+The Nix package installs bash, zsh, and fish completion files under the usual
+share directories. The CLI can also emit completion scripts directly:
+
+```sh
+disk-nix completions bash
+disk-nix completions zsh
+disk-nix completions fish
+```
+
+Completion output is generated from the same Clap command definition used by
+the binary, so new subcommands and flags are reflected in both packaged and
+manual completions.
+
 ## Focused Views
 
 Focused commands filter the graph for common workflows:

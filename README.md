@@ -74,6 +74,7 @@ disk-nix apply --spec ./examples/lifecycle-update.json
 disk-nix apply --spec ./examples/lifecycle-update.json --json
 disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
 disk-nix apply --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
+disk-nix completions bash
 ```
 
 The canonical interface is intended to be stable JSON. Human tables and tree
@@ -84,6 +85,8 @@ subgraphs and preserve relationships between nodes included in the result.
 `inspect --json` returns matched nodes plus their direct neighbors and
 relationship edges. `capabilities --json` returns the modeled operation/risk
 matrix.
+The Nix package installs generated bash, zsh, and fish completions. The
+`completions` command can also emit a script directly for supported shells.
 
 See [docs/cli.md](docs/cli.md) for the command reference and JSON contracts.
 

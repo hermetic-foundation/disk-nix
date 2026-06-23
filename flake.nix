@@ -61,6 +61,14 @@
             "disk-nix-cli"
           ];
           cargoTestFlags = [ "--workspace" ];
+          postInstall = ''
+            install -Dm644 <("$out/bin/disk-nix" completions bash) \
+              "$out/share/bash-completion/completions/disk-nix"
+            install -Dm644 <("$out/bin/disk-nix" completions zsh) \
+              "$out/share/zsh/site-functions/_disk-nix"
+            install -Dm644 <("$out/bin/disk-nix" completions fish) \
+              "$out/share/fish/vendor_completions.d/disk-nix.fish"
+          '';
           meta = {
             description = "NixOS-native storage topology and lifecycle manager";
             homepage = "https://github.com/midischwarz12/disk-nix";

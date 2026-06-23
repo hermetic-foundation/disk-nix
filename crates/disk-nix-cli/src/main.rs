@@ -6,7 +6,8 @@ use std::{
     process::ExitCode,
 };
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{Shell, generate};
 use disk_nix_exec::{ExecutionMode, ExecutionReport, ExecutionStatus, prepare_execution};
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use disk_nix_plan::{
@@ -153,6 +154,11 @@ enum Command {
         /// Emit JSON apply report.
         #[arg(long)]
         json: bool,
+    },
+    /// Generate shell completions.
+    Completions {
+        /// Shell completion format to emit.
+        shell: Shell,
     },
 }
 
@@ -403,6 +409,11 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 return Err(AppError::Message(report.messages.join("; ")));
             }
 
+            Ok(())
+        }
+        Command::Completions { shell } => {
+            let mut command = Cli::command();
+            generate(shell, &mut command, "disk-nix", output);
             Ok(())
         }
     }
