@@ -103,9 +103,20 @@ name = "disk-nix-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "disk-nix-exec",
  "disk-nix-model",
  "disk-nix-plan",
  "disk-nix-probe",
+ "serde_json",
+]
+
+[[package]]
+name = "disk-nix-exec"
+version = "0.1.0"
+dependencies = [
+ "disk-nix-plan",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
