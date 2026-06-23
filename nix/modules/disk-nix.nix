@@ -201,6 +201,20 @@ let
           example = "100GiB";
         };
 
+        targetSize = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias accepted by disk-nix for the desired object size.";
+          example = "100GiB";
+        };
+
+        size = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Short alias accepted by disk-nix for the desired object size.";
+          example = "100GiB";
+        };
+
         target = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -573,6 +587,8 @@ let
         preserveData
         readOnly
         desiredSize
+        targetSize
+        size
         target
         path
         mountpoint

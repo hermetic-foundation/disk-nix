@@ -301,6 +301,8 @@ Each lifecycle declaration includes:
 - `destroy`
 - `preserveData`
 - `desiredSize`
+- `targetSize`
+- `size`
 - `target`
 - `path`
 - `mountpoint`

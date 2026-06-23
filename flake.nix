@@ -337,6 +337,11 @@
                   desiredSize = "2TiB";
                   portal = "192.0.2.10:3260";
                 };
+                sessions."iqn.2026-06.example:storage.alias" = {
+                  operation = "grow";
+                  targetSize = "3TiB";
+                  portal = "192.0.2.10:3260";
+                };
                 sessions."iqn.2026-06.example:storage.login" = {
                   operation = "login";
                   portal = "192.0.2.10:3260";
@@ -435,6 +440,10 @@
               volumes."vg0/scratch" = {
                 operation = "create";
                 desiredSize = "10GiB";
+              };
+              volumes."vg0/size-alias" = {
+                operation = "create";
+                size = "12GiB";
               };
               volumes."vg0/archive".operation = "deactivate";
               volumes."vg0/reporting".operation = "rescan";
@@ -1138,12 +1147,14 @@
                     and .spec.iscsi.boot.target == "iqn.2026-06.example:storage.root"
                     and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".operation == "grow"
                     and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
+                    and .spec.iscsi.sessions."iqn.2026-06.example:storage.alias".targetSize == "3TiB"
                     and .spec.iscsi.sessions."iqn.2026-06.example:storage.login".operation == "login"
                     and .spec.iscsi.sessions."iqn.2026-06.example:storage.logout".operation == "logout"
                     and .spec.iscsi.sessions."iqn.2026-06.example:storage.rescan".operation == "rescan"
                     and .spec.iscsiSessions."iqn.2026-06.example:storage.root".portal == "192.0.2.10:3260"
                     and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
                     and .spec.iscsiSessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
+                    and .spec.iscsiSessions."iqn.2026-06.example:storage.alias".targetSize == "3TiB"
                     and .spec.iscsiSessions."iqn.2026-06.example:storage.login".operation == "login"
                     and .spec.iscsiSessions."iqn.2026-06.example:storage.login".portal == "192.0.2.10:3260"
                     and .spec.iscsiSessions."iqn.2026-06.example:storage.logout".operation == "logout"
@@ -1186,6 +1197,7 @@
                     and .spec.btrfsQgroups."0/258".target == "/mnt/persist"
                     and .spec.volumes."vg0/scratch".operation == "create"
                     and .spec.volumes."vg0/scratch".desiredSize == "10GiB"
+                    and .spec.volumes."vg0/size-alias".size == "12GiB"
                     and .spec.volumes."vg0/reporting".operation == "rescan"
                     and .spec.datasets."tank/home".operation == "create"
                     and .spec.datasets."tank/inventory".operation == "rescan"
