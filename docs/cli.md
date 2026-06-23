@@ -171,7 +171,9 @@ Use these commands for:
   attached disks, NFS server/export details, and ZFS zvol `volsize` when
   reported by `zfs list`
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
-  pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays
+  pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays,
+  including ZFS health/vdev role/state, LVM extent and PV/LV counts, Btrfs
+  qgroup limits, and RAID level/state where probes expose them
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
   source relationships and ZFS user-reference counts for held snapshots
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,

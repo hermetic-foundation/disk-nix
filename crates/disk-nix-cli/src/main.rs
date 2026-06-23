@@ -1237,19 +1237,20 @@ fn print_volumes(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()
 fn print_pools(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<38} {:>12} {:>12} {:>12} {:>8}",
+        "{:<22} {:<38} {:>12} {:>12} {:>12} {:>8} DETAILS",
         "KIND", "NAME", "SIZE", "USED", "FREE", "BACKING"
     )?;
     for node in graph.nodes.iter().filter(|node| is_pool_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<38} {:>12} {:>12} {:>12} {:>8}",
+            "{:<22} {:<38} {:>12} {:>12} {:>12} {:>8} {}",
             node.kind,
             node.name,
             human_bytes(node.size_bytes),
             human_bytes(node.usage.as_ref().and_then(|usage| usage.used_bytes)),
             human_bytes(node.usage.as_ref().and_then(|usage| usage.free_bytes)),
-            backing_count(graph, node)
+            backing_count(graph, node),
+            usage_details(node)
         )?;
     }
     Ok(())
@@ -2015,7 +2016,8 @@ mod tests {
     use super::{
         confirmation_file_accepts, is_device_node, is_mapping_node, is_network_storage_node,
         is_partition_node, is_pool_node, is_snapshot_node, mount_details, print_filesystems,
-        print_mounts, print_usage, print_volumes, snapshot_source, usage_details, usage_percent,
+        print_mounts, print_pools, print_usage, print_volumes, snapshot_source, usage_details,
+        usage_percent,
     };
 
     #[test]
@@ -2274,6 +2276,52 @@ mod tests {
         assert!(output.contains("level=raid1 state=clean raid-devices=2"));
         assert!(output.contains("attached-disk=sdb"));
         assert!(output.contains("server=storage.example export=/export/home"));
+    }
+
+    #[test]
+    fn pools_table_includes_domain_metadata_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zpool:tank", NodeKind::ZfsPool, "tank")
+                .with_property("zfs.health", "ONLINE")
+                .with_property("zfs.state", "ONLINE"),
+        );
+        graph.add_node(
+            Node::new(
+                "zfs-vdev:tank:cache0",
+                NodeKind::ZfsVdev,
+                "/dev/disk/by-id/cache0",
+            )
+            .with_property("zfs.vdev-role", "cache")
+            .with_property("zfs.vdev-state", "ONLINE"),
+        );
+        graph.add_node(
+            Node::new("lvm-vg:vg0", NodeKind::LvmVolumeGroup, "vg0")
+                .with_property("lvm.extent-size", "4.00m")
+                .with_property("lvm.pv-count", "2")
+                .with_property("lvm.lv-count", "8"),
+        );
+        graph.add_node(
+            Node::new("btrfs-qgroup:0/257", NodeKind::BtrfsQgroup, "0/257")
+                .with_property("btrfs.qgroup-id", "0/257")
+                .with_property("btrfs.max-referenced", "25GiB"),
+        );
+        graph.add_node(
+            Node::new("md:/dev/md/root", NodeKind::MdRaid, "/dev/md/root")
+                .with_property("md.level", "raid1")
+                .with_property("md.state", "clean"),
+        );
+
+        let mut output = Vec::new();
+        print_pools(&mut output, &graph).expect("pools table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DETAILS"));
+        assert!(output.contains("health=ONLINE state=ONLINE"));
+        assert!(output.contains("vdev-role=cache vdev-state=ONLINE"));
+        assert!(output.contains("extent=4.00m pvs=2 lvs=8"));
+        assert!(output.contains("qgroup=0/257 max-rfer=25GiB"));
+        assert!(output.contains("level=raid1 state=clean"));
     }
 
     #[test]
