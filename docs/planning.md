@@ -259,6 +259,11 @@ missing.
 LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
 for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
 destructive policy gates allow removal.
+ZFS pool device removal renders reviewed `zpool remove <pool> <device>` steps
+when the pool layout supports evacuation. LVM volume group device removal
+renders reviewed `vgreduce <vg> <pv>` steps after `pvmove` or replacement
+capacity has evacuated allocated extents. These remain potential-data-loss
+intents unless a safer explicit workflow is selected.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.

@@ -209,9 +209,11 @@ LVM logical volume apply plans render reviewed `lvcreate` and gated
 LVM thin-pool apply plans render reviewed `lvcreate --type thin-pool`,
 `lvextend`, and gated `lvremove` steps.
 LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
-volume group lifecycle declarations.
+volume group lifecycle declarations, plus reviewed `vgreduce` steps for
+explicit physical-volume removal.
 ZFS pool apply plans render gated `zpool create` and `zpool destroy` commands,
-plus reviewed topology updates such as `zpool add` and `zpool replace`.
+plus reviewed topology updates such as `zpool add`, `zpool replace`, and
+`zpool remove`.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
 Use `--report-out` with either command to persist the JSON report for review

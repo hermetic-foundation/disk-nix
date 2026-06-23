@@ -2909,6 +2909,66 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 )
             }
         }
+        Operation::RemoveDevice if collection == Some("pools") => {
+            let target = target.unwrap_or("<zfs-pool>");
+            let device = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| parts.last().copied())
+                .unwrap_or("<device>");
+            (
+                vec![
+                    command(
+                        ["zpool", "status", "-P", target],
+                        false,
+                        "inspect ZFS pool layout and health before device removal",
+                    ),
+                    command(
+                        ["zpool", "remove", target, device],
+                        true,
+                        "remove the reviewed device from the ZFS pool when the layout supports evacuation",
+                    ),
+                ],
+                vec![
+                    "verify the pool supports device removal for the selected vdev class"
+                        .to_string(),
+                    "monitor evacuation and keep replacement capacity available until verification passes"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::RemoveDevice if collection == Some("volumeGroups") => {
+            let target = target.unwrap_or("<volume-group>");
+            let device = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| parts.last().copied())
+                .unwrap_or("<physical-volume>");
+            (
+                vec![
+                    command(
+                        ["pvs", "--reportformat", "json", device],
+                        false,
+                        "inspect physical volume allocation before vgreduce",
+                    ),
+                    command(
+                        ["vgreduce", target, device],
+                        true,
+                        "remove the reviewed physical volume from the LVM volume group after extents are evacuated",
+                    ),
+                ],
+                vec![
+                    "run pvmove or add replacement capacity before reducing a PV with allocated extents"
+                        .to_string(),
+                    "verify logical volumes and thin pools still have the intended redundancy and free space"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::RemoveDevice if collection == Some("mdRaids") => {
             let target = target.unwrap_or("<md-array>");
             let device = action
@@ -4400,6 +4460,74 @@ mod tests {
             verification_checks
                 .iter()
                 .any(|check| check.contains("Btrfs device list matches desired topology"))
+        );
+    }
+
+    #[test]
+    fn remove_device_renderer_uses_pool_and_lvm_commands() {
+        let pool_action = PlannedAction {
+            id: "pools:tank:remove-device:/dev/disk/by-id/old-vdev".to_string(),
+            description: "remove old pool device".to_string(),
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("pools".to_string()),
+                name: Some("tank".to_string()),
+                target: Some("tank".to_string()),
+                device: Some("/dev/disk/by-id/old-vdev".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let vg_action = PlannedAction {
+            id: "volumeGroups:vg0:remove-device:/dev/disk/by-id/old-pv".to_string(),
+            description: "remove old physical volume".to_string(),
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("volumeGroups".to_string()),
+                name: Some("vg0".to_string()),
+                target: Some("vg0".to_string()),
+                device: Some("/dev/disk/by-id/old-pv".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+
+        let (pool_commands, pool_notes, pool_manual_review) = commands_for_action(&pool_action);
+        let (vg_commands, vg_notes, vg_manual_review) = commands_for_action(&vg_action);
+
+        assert!(pool_manual_review);
+        assert!(pool_commands.iter().any(|command| {
+            command.argv == ["zpool", "status", "-P", "tank"] && !command.mutates
+        }));
+        assert!(pool_commands.iter().any(|command| {
+            command.argv == ["zpool", "remove", "tank", "/dev/disk/by-id/old-vdev"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(
+            pool_notes
+                .iter()
+                .any(|note| note.contains("supports device removal"))
+        );
+
+        assert!(vg_manual_review);
+        assert!(vg_commands.iter().any(|command| {
+            command.argv == ["pvs", "--reportformat", "json", "/dev/disk/by-id/old-pv"]
+                && !command.mutates
+        }));
+        assert!(vg_commands.iter().any(|command| {
+            command.argv == ["vgreduce", "vg0", "/dev/disk/by-id/old-pv"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(
+            vg_notes
+                .iter()
+                .any(|note| note.contains("pvmove or add replacement capacity"))
         );
     }
 
