@@ -448,6 +448,34 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent filesystem capacity reflects the grown backing volume".to_string(),
             ],
         ),
+        Operation::Grow if collection == Some("thinPools") => (
+            vec![
+                command(
+                    [
+                        "lvs",
+                        "--reportformat",
+                        "json",
+                        "-o",
+                        "lv_name,lv_size,data_percent,metadata_percent,seg_monitor",
+                        target,
+                    ],
+                    false,
+                    "verify thin pool size, data usage, metadata usage, and monitoring state",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify thin pool graph node and dependent thin volumes",
+                ),
+            ],
+            vec![
+                desired_size
+                    .map(|size| format!("thin pool reports size {size}"))
+                    .unwrap_or_else(|| "thin pool reports the desired size".to_string()),
+                "data and metadata percentages remain below operational thresholds".to_string(),
+                "dependent thin volumes remain active and monitored".to_string(),
+            ],
+        ),
         Operation::Grow if collection == Some("swaps") => (
             vec![
                 command(
@@ -937,6 +965,33 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     grow_command,
                 ],
                 vec![note],
+                true,
+            )
+        }
+        Operation::Grow if collection == Some("thinPools") => {
+            let target = target.unwrap_or("<thin-pool>");
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    command(
+                        [
+                            "lvs",
+                            "--reportformat",
+                            "json",
+                            "-o",
+                            "lv_name,lv_size,data_percent,metadata_percent,seg_monitor",
+                            target,
+                        ],
+                        false,
+                        "inspect current thin pool data and metadata utilization",
+                    ),
+                    thin_pool_extend_command(target, desired_size),
+                ],
+                vec![
+                    "extend metadata before it approaches exhaustion".to_string(),
+                    "verify thin pool autoextend policy and monitoring before growth".to_string(),
+                    "review thin volume overcommit before adding virtual capacity".to_string(),
+                ],
                 true,
             )
         }
@@ -1938,6 +1993,23 @@ fn vdo_grow_logical_command(target: &str, desired_size: Option<&str>) -> Executi
     }
 }
 
+fn thin_pool_extend_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    match desired_size {
+        Some(size) => command_vec(
+            vec!["lvextend", "--size", size, target],
+            true,
+            "extend the LVM thin pool data volume to the desired size",
+        ),
+        None => command_with_readiness(
+            ["lvextend", "--size", "+<size>", target],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired thin pool size or size delta"],
+            "extend the LVM thin pool after selecting the desired size",
+        ),
+    }
+}
+
 fn zvol_create_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
     match desired_size {
         Some(size) => command_vec(
@@ -2530,6 +2602,49 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["multipath", "-ll", "mpatha"])
+        }));
+    }
+
+    #[test]
+    fn thin_pool_growth_reports_lvm_pool_commands_and_verification() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "thinPools": {
+                  "vg0/pool": {
+                    "operation": "grow",
+                    "desiredSize": "500GiB"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["lvextend", "--size", "500GiB", "vg0/pool"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "lvs",
+                        "--reportformat",
+                        "json",
+                        "-o",
+                        "lv_name,lv_size,data_percent,metadata_percent,seg_monitor",
+                        "vg0/pool",
+                    ]
+            })
         }));
     }
 

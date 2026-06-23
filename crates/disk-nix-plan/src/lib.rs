@@ -388,6 +388,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "vdoVolumes",
         "volumes",
         "volumeGroups",
+        "thinPools",
         "mdRaids",
         "multipathMaps",
         "pools",
@@ -1515,6 +1516,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Grow if collection == "thinPools" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary:
+                    "LVM thin pool growth must account for both data and metadata usage"
+                        .to_string(),
+                alternatives: vec![
+                    "extend thin pool metadata before data exhaustion".to_string(),
+                    "verify autoextend thresholds and monitored status before growth".to_string(),
+                    "review thin volume overcommit before adding more virtual capacity"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Grow if collection == "zvols" => (
             RiskClass::Online,
             false,
@@ -1687,7 +1703,7 @@ fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
             alternatives
                 .push("rename the subvolume and validate consumers before removal".to_string());
         }
-        "volumes" | "volumeGroups" | "luns" | "mdRaids" | "multipathMaps" => {
+        "volumes" | "volumeGroups" | "thinPools" | "luns" | "mdRaids" | "multipathMaps" => {
             alternatives
                 .push("grow or attach replacement capacity instead of reformatting".to_string());
         }
@@ -1858,6 +1874,18 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "create a new smaller filesystem and migrate data".to_string(),
                     "grow consumers around the existing filesystem instead".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmThinPool,
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "thin pool growth must monitor data and metadata utilization".to_string(),
+                alternatives: vec![
+                    "extend metadata before it approaches exhaustion".to_string(),
+                    "verify autoextend policy and overcommit before growth".to_string(),
                 ],
             }),
         },
@@ -2501,6 +2529,35 @@ mod tests {
             .find(|action| action.id == "multipathMaps:mpatha:replace-device:/dev/sdc")
             .expect("multipath replace action exists");
         assert_eq!(replace.risk, RiskClass::OfflineRequired);
+    }
+
+    #[test]
+    fn plan_classifies_thin_pool_growth_with_metadata_advice() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "thinPools": {
+                "vg0/pool": {
+                  "operation": "grow",
+                  "desiredSize": "500GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        let grow = &plan.actions[0];
+        assert_eq!(grow.id, "thinpools:vg0/pool:grow");
+        assert_eq!(grow.risk, RiskClass::Online);
+        assert_eq!(grow.context.desired_size.as_deref(), Some("500GiB"));
+        assert!(grow.advice.as_ref().is_some_and(|advice| {
+            advice.summary.contains("metadata")
+                && advice
+                    .alternatives
+                    .iter()
+                    .any(|alternative| alternative.contains("overcommit"))
+        }));
     }
 
     #[test]

@@ -553,6 +553,9 @@ fn spec_schema() -> serde_json::Value {
             "volumeGroups": {
                 "$ref": "#/$defs/lifecycleMap"
             },
+            "thinPools": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
             "mdRaids": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -598,6 +601,7 @@ fn spec_schema() -> serde_json::Value {
                     "vdoVolumes": { "$ref": "#/$defs/lifecycleMap" },
                     "volumes": { "$ref": "#/$defs/lifecycleMap" },
                     "volumeGroups": { "$ref": "#/$defs/lifecycleMap" },
+                    "thinPools": { "$ref": "#/$defs/lifecycleMap" },
                     "mdRaids": { "$ref": "#/$defs/lifecycleMap" },
                     "multipathMaps": { "$ref": "#/$defs/lifecycleMap" },
                     "pools": { "$ref": "#/$defs/lifecycleMap" },

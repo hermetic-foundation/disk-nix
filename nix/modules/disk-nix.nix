@@ -721,6 +721,12 @@ in
       description = "Typed volume-group lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    thinPools = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed LVM thin-pool lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
     mdRaids = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -914,6 +920,7 @@ in
         vdoVolumes = (cfg.spec.vdoVolumes or { }) // normalizeLifecycleSpec cfg.vdoVolumes;
         volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
+        thinPools = (cfg.spec.thinPools or { }) // normalizeLifecycleSpec cfg.thinPools;
         mdRaids = (cfg.spec.mdRaids or { }) // normalizeLifecycleSpec cfg.mdRaids;
         multipathMaps = (cfg.spec.multipathMaps or { }) // normalizeLifecycleSpec cfg.multipathMaps;
         pools = (cfg.spec.pools or { }) // normalizeLifecycleSpec cfg.pools;

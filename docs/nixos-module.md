@@ -121,6 +121,7 @@ Typed lifecycle declarations are available for:
 - `vdoVolumes`
 - `volumes`
 - `volumeGroups`
+- `thinPools`
 - `mdRaids`
 - `multipathMaps`
 - `pools`
@@ -202,6 +203,10 @@ Example lifecycle planning through NixOS options:
     zvols."tank/vm/root" = {
       operation = "grow";
       desiredSize = "80GiB";
+    };
+    thinPools."vg0/thinpool" = {
+      operation = "grow";
+      desiredSize = "500GiB";
     };
     mdRaids.root = {
       target = "/dev/md/root";

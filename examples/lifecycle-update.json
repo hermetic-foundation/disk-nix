@@ -31,6 +31,12 @@
       "preserveData": true
     }
   },
+  "thinPools": {
+    "vg0/thinpool": {
+      "operation": "grow",
+      "desiredSize": "500GiB"
+    }
+  },
   "mdRaids": {
     "root": {
       "target": "/dev/md/root",
