@@ -103,7 +103,7 @@ repair command plans for `resize2fs` and `e2fsck`. If only `mountpoint` is
 declared, source-device maintenance commands remain non-ready until the backing
 block device is selected explicitly. XFS and Btrfs check/repair declarations
 also require a stable source device for `xfs_repair` or `btrfs check`.
-For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, device add/remove/replace operations, and filesystem property
+For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, `operation = "trim"`, device add/remove/replace operations, and filesystem property
 updates such as labels or balance filters while still deriving the regular
 NixOS `fileSystems` entry from the same declaration.
 For ZFS pools, typed declarations can request `operation = "scrub"` to render

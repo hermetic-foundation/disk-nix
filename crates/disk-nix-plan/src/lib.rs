@@ -41,6 +41,7 @@ pub enum Operation {
     Check,
     Repair,
     Scrub,
+    Trim,
     ReplaceDevice,
     AddDevice,
     RemoveDevice,
@@ -1040,8 +1041,11 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
     }
 
     if let Some(
-        operation
-        @ (Operation::Check | Operation::Repair | Operation::Scrub | Operation::Rebalance),
+        operation @ (Operation::Check
+        | Operation::Repair
+        | Operation::Scrub
+        | Operation::Trim
+        | Operation::Rebalance),
     ) = filesystem
         .get("operation")
         .or_else(|| filesystem.get("action"))
@@ -2043,6 +2047,7 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "check" => Some(Operation::Check),
         "repair" => Some(Operation::Repair),
         "scrub" => Some(Operation::Scrub),
+        "trim" => Some(Operation::Trim),
         "replace-device" | "replaceDevice" => Some(Operation::ReplaceDevice),
         "add-device" | "addDevice" => Some(Operation::AddDevice),
         "remove-device" | "removeDevice" => Some(Operation::RemoveDevice),
@@ -2064,6 +2069,7 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Check => "check",
         Operation::Repair => "repair",
         Operation::Scrub => "scrub",
+        Operation::Trim => "trim",
         Operation::ReplaceDevice => "replace-device",
         Operation::AddDevice => "add-device",
         Operation::RemoveDevice => "remove-device",
@@ -2153,6 +2159,21 @@ fn classify_operation(
                 )
             }
         }
+        Operation::Trim if collection == "filesystems" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "filesystem trim discards unused blocks on the mounted filesystem"
+                    .to_string(),
+                alternatives: vec![
+                    "verify discard passthrough on encrypted or virtual block layers first"
+                        .to_string(),
+                    "prefer scheduled fstrim for steady-state maintenance".to_string(),
+                    "run trim outside latency-sensitive windows on thin or remote storage"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "partitions" => (
             RiskClass::OfflineRequired,
             false,
@@ -2774,6 +2795,7 @@ fn classify_operation(
         | Operation::Check
         | Operation::Repair
         | Operation::Scrub
+        | Operation::Trim
         | Operation::RemoveDevice
         | Operation::Rollback => (
             RiskClass::PotentialDataLoss,
@@ -2987,6 +3009,7 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Check => "check",
         Operation::Repair => "repair",
         Operation::Scrub => "scrub",
+        Operation::Trim => "trim",
         Operation::ReplaceDevice => "replace device",
         Operation::AddDevice => "add device",
         Operation::RemoveDevice => "remove device",
@@ -3206,6 +3229,21 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "use filesystem check when metadata corruption is suspected".to_string(),
                     "monitor scrub status until completion".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Filesystem,
+            operation: Operation::Trim,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "filesystem trim returns unused blocks to lower storage layers"
+                    .to_string(),
+                alternatives: vec![
+                    "verify discard propagation through LUKS, LVM, thin, and virtual layers"
+                        .to_string(),
+                    "schedule regular fstrim instead of ad hoc discard on busy systems"
+                        .to_string(),
                 ],
             }),
         },
@@ -5043,6 +5081,39 @@ mod tests {
                 .advice
                 .as_ref()
                 .is_some_and(|advice| { advice.summary.contains("available for Btrfs") })
+        );
+    }
+
+    #[test]
+    fn plan_accepts_filesystem_trim_operation() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "scratch": {
+                  "mountpoint": "/scratch",
+                  "fsType": "xfs",
+                  "operation": "trim"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        assert_eq!(plan.summary.unsupported_count, 0);
+        let trim = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:scratch:trim")
+            .expect("filesystem trim action exists");
+        assert_eq!(trim.operation, Operation::Trim);
+        assert_eq!(trim.risk, RiskClass::Online);
+        assert_eq!(trim.context.target.as_deref(), Some("/scratch"));
+        assert!(
+            trim.advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("discards unused blocks") })
         );
     }
 

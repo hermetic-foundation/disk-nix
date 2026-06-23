@@ -1844,6 +1844,14 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             )],
             vec!["scrub completed or is running with reviewed health status".to_string()],
         ),
+        Operation::Trim => (
+            vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify target state after trim operation",
+            )],
+            vec!["filesystem remains mounted and reports consistent usage after trim".to_string()],
+        ),
     }
 }
 
@@ -2622,6 +2630,25 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     scrub_command(collection, target),
                 ],
                 vec!["monitor scrub progress and health until completion".to_string()],
+                true,
+            )
+        }
+        Operation::Trim => {
+            let target = target.unwrap_or("<filesystem>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect filesystem and backing discard support before trim",
+                    ),
+                    filesystem_trim_command(collection, target),
+                ],
+                vec![
+                    "verify discard is safe through LUKS, LVM, thin, VDO, and virtual layers"
+                        .to_string(),
+                    "prefer scheduled fstrim for routine maintenance".to_string(),
+                ],
                 true,
             )
         }
@@ -4811,6 +4838,23 @@ fn scrub_command(collection: Option<&str>, target: &str) -> ExecutionCommand {
             CommandReadiness::NeedsDomainImplementation,
             ["scrub tool"],
             "run the storage-domain scrub command",
+        ),
+    }
+}
+
+fn filesystem_trim_command(collection: Option<&str>, target: &str) -> ExecutionCommand {
+    match collection {
+        Some("filesystems") => command(
+            ["fstrim", "-v", target],
+            true,
+            "trim unused blocks from the mounted filesystem",
+        ),
+        _ => command_with_readiness(
+            ["<trim-tool>", target],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["trim tool"],
+            "run the storage-domain trim or discard command",
         ),
     }
 }
@@ -8153,6 +8197,44 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["disk-nix", "inspect", "tank", "--json"])
+        }));
+    }
+
+    #[test]
+    fn filesystem_trim_lifecycle_reports_fstrim_command() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "scratch": {
+                    "mountpoint": "/scratch",
+                    "fsType": "xfs",
+                    "operation": "trim"
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:trim"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["fstrim", "-v", "/scratch"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:trim"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "/scratch", "--json"])
         }));
     }
 

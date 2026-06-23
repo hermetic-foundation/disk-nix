@@ -147,6 +147,12 @@
                 mountpoint = "/scrub";
                 operation = "scrub";
               };
+              filesystems.trim = {
+                device = "/dev/disk/by-label/trim";
+                fsType = "xfs";
+                mountpoint = "/trim";
+                operation = "trim";
+              };
               swaps.primary = {
                 device = "/dev/disk/by-label/swap";
                 operation = "format";
@@ -423,6 +429,7 @@
               and (."$defs".operation.enum | index("check") != null)
               and (."$defs".operation.enum | index("repair") != null)
               and (."$defs".operation.enum | index("scrub") != null)
+              and (."$defs".operation.enum | index("trim") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
               and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
               and (."$defs".specBody.properties.nfs["$ref"] == "#/$defs/nfsSpec")
@@ -501,13 +508,14 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 40
+              .summary.actionCount == 42
               and .summary.offlineRequiredCount == 9
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
               and (.actions | any(.id == "filesystems:home-check:check" and .risk == "offline-required"))
               and (.actions | any(.id == "filesystems:data-scrub:scrub" and .risk == "online"))
+              and (.actions | any(.id == "filesystems:scratch-trim:trim" and .risk == "online"))
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@home:create" and .risk == "online"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:limit" and .risk == "safe"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
@@ -620,6 +628,8 @@
                   and .spec.filesystems.scrub.operation == "scrub"
                   and .spec.filesystems.scrub.device == "/dev/disk/by-label/scrub"
                   and .spec.filesystems.scrub.mountpoint == "/scrub"
+                  and .spec.filesystems.trim.operation == "trim"
+                  and .spec.filesystems.trim.device == "/dev/disk/by-label/trim"
                   and .spec.swaps.primary.device == "/dev/disk/by-label/swap"
                   and .spec.swaps.primary.operation == "format"
                   and .spec.swaps.primary.desiredSize == "8GiB"

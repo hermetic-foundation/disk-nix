@@ -11,6 +11,11 @@
       "mountpoint": "/data",
       "fsType": "btrfs",
       "operation": "scrub"
+    },
+    "scratch-trim": {
+      "mountpoint": "/scratch",
+      "fsType": "xfs",
+      "operation": "trim"
     }
   },
   "pools": {

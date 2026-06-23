@@ -367,6 +367,8 @@ Btrfs filesystem rebalance plans render `btrfs balance start`; declared
 scoped balances.
 Btrfs filesystem scrub plans render `btrfs scrub start -B <path>` and wait for
 completion. ZFS pool scrub plans render `zpool scrub <pool>`.
+Filesystem trim plans render `fstrim -v <mountpoint>` after inspecting discard
+support and lower storage layers.
 Btrfs filesystem label property updates render
 `btrfs filesystem label <path> <label>` as ready commands. Ext filesystem label
 updates render `e2label <device> <label>` when an explicit backing device is

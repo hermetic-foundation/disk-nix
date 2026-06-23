@@ -66,6 +66,7 @@ let
       "check"
       "repair"
       "scrub"
+      "trim"
       "replace-device"
       "add-device"
       "remove-device"
