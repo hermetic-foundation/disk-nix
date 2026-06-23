@@ -1951,6 +1951,8 @@ fn usage_details(node: &Node) -> String {
         ("md.total-devices", "total-devices"),
         ("md.member-state", "member-state"),
         ("iscsi.portal", "portal"),
+        ("iscsi.persistent-portal", "persistent-portal"),
+        ("iscsi.connection-state", "connection-state"),
         ("iscsi.attached-disk", "attached-disk"),
         ("nfs.server", "server"),
         ("nfs.export", "export"),
@@ -2626,7 +2628,9 @@ mod tests {
         let mut graph = StorageGraph::empty();
         graph.add_node(
             Node::new("iscsi-session:1", NodeKind::IscsiSession, "iscsi-session:1")
-                .with_property("iscsi.portal", "10.0.0.10:3260,1"),
+                .with_property("iscsi.portal", "10.0.0.10:3260,1")
+                .with_property("iscsi.persistent-portal", "10.0.0.11:3260,1")
+                .with_property("iscsi.connection-state", "LOGGED IN"),
         );
         graph.add_node(Node::new(
             "iscsi-target:iqn.2026-06.example:storage",
@@ -2669,6 +2673,8 @@ mod tests {
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains("portal=10.0.0.10:3260,1"));
+        assert!(output.contains("persistent-portal=10.0.0.11:3260,1"));
+        assert!(output.contains("connection-state=LOGGED IN"));
         assert!(output.contains("attached-disk=sdb"));
         assert!(output.contains("server=storage.example export=/export/home"));
         assert!(output.contains(

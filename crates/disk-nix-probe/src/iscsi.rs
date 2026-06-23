@@ -7,6 +7,8 @@ struct IscsiSession {
     id: String,
     target: Option<String>,
     portal: Option<String>,
+    persistent_portal: Option<String>,
+    connection_state: Option<String>,
     luns: Vec<IscsiLun>,
 }
 
@@ -45,15 +47,25 @@ fn parse_sessions(bytes: &[u8]) -> Result<Vec<IscsiSession>, ProbeError> {
                 id: format!("iscsi-session:{}", sessions.len() + 1),
                 target: value_after_colon(trimmed),
                 portal: None,
+                persistent_portal: None,
+                connection_state: None,
                 luns: Vec::new(),
             });
         } else if lower.starts_with("current portal:") || lower.starts_with("portal:") {
             if let Some(session) = &mut current {
                 session.portal = value_after_colon(trimmed);
             }
+        } else if lower.starts_with("persistent portal:") {
+            if let Some(session) = &mut current {
+                session.persistent_portal = value_after_colon(trimmed);
+            }
         } else if lower.starts_with("sid:") {
             if let (Some(session), Some(sid)) = (&mut current, value_after_colon(trimmed)) {
                 session.id = format!("iscsi-session:{sid}");
+            }
+        } else if lower.starts_with("iscsi connection state:") {
+            if let Some(session) = &mut current {
+                session.connection_state = value_after_colon(trimmed);
             }
         } else if lower.starts_with("lun:") {
             flush_lun(&mut current, &mut pending_lun);
@@ -82,6 +94,12 @@ fn add_session(graph: &mut StorageGraph, session: IscsiSession) {
     );
     if let Some(portal) = &session.portal {
         session_node = session_node.with_property("iscsi.portal", portal.clone());
+    }
+    if let Some(portal) = &session.persistent_portal {
+        session_node = session_node.with_property("iscsi.persistent-portal", portal.clone());
+    }
+    if let Some(state) = &session.connection_state {
+        session_node = session_node.with_property("iscsi.connection-state", state.clone());
     }
     graph.add_node(session_node);
 
@@ -207,6 +225,17 @@ Target: iqn.2026-06.example:storage.disk1
                 .any(|node| node.kind == NodeKind::IscsiTarget)
         );
         assert!(graph.nodes.iter().any(|node| node.kind == NodeKind::Lun));
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::IscsiSession
+                && node.name == "iscsi-session:12"
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.persistent-portal"
+                        && property.value == "10.0.0.10:3260,1"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.connection-state" && property.value == "LOGGED IN"
+                })
+        }));
         assert!(
             graph
                 .edges
