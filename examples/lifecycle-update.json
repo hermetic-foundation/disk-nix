@@ -130,6 +130,14 @@
       ]
     }
   },
+  "nvmeNamespaces": {
+    "/dev/nvme0": {
+      "operation": "create",
+      "desiredSize": "100G",
+      "namespaceId": "4",
+      "controllers": "0x1"
+    }
+  },
   "exports": {
     "/srv/share": {
       "operation": "create",

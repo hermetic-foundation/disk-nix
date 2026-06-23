@@ -174,6 +174,7 @@ Typed lifecycle declarations are available for:
 - `datasets`
 - `zvols`
 - `luns`
+- `nvmeNamespaces`
 - `iscsi.sessions`
 - `exports`
 - `caches`
@@ -203,6 +204,8 @@ Each lifecycle declaration includes:
 - `level`
 - `raidLevel`
 - `portal`
+- `namespaceId`
+- `controllers`
 - `metadata`
 
 Typed snapshot declarations include:

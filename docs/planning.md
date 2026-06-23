@@ -138,6 +138,10 @@ Examples:
 - Multipath map growth and path add are online; path replacement is
   offline-required and path removal is potential-data-loss because at least one
   healthy path must remain active while paths are added and deleted.
+- NVMe namespace creation and deletion are destructive because they allocate
+  or remove controller-managed namespace capacity. Namespace growth is
+  offline-required because disk-nix models it as a host rescan after
+  controller-side namespace resize or replacement.
 - LVM thin pool growth is online, with advice to monitor data and metadata
   utilization, autoextend policy, and thin-volume overcommit.
 - LVM snapshot creation is reversible; snapshot merge rollback is potential
@@ -220,6 +224,7 @@ Lifecycle collections currently accepted by the planner:
 - `datasets`
 - `zvols`
 - `luns`
+- `nvmeNamespaces`
 - `iscsiSessions`
 - `exports`
 - `caches`
@@ -310,6 +315,13 @@ volume device is declared, and mark the command unresolved when it is missing.
 Generic add-device, replace-device, and remove-device lifecycle operations
 remain unresolved until the device to add, the source device, the replacement
 device, or the device to remove is declared explicitly.
+NVMe namespace command plans use `nvme create-ns`, `nvme attach-ns`,
+`nvme ns-rescan`, `nvme detach-ns`, and `nvme delete-ns`. Create and delete
+are destructive controller namespace-management operations. Grow is
+offline-required and means host namespace rescan after controller-side resize
+or replacement. Executable create plans require a `/dev/nvme*` controller
+target and `desiredSize`; attach and delete flows require `namespaceId` plus
+`controllers` when attachment state is changed.
 Swap grow and format command plans require a path-shaped swap target. MD RAID
 create, grow, and member-removal command plans require an explicit array path
 such as `/dev/md/root`. Loop-device refresh and detach command plans require

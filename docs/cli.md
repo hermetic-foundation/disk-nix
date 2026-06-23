@@ -107,10 +107,10 @@ filesystem fields, including filesystem `operation`, `device`, mount
 `options`, `properties`, and Btrfs device-membership update fields. It also
 includes disk and partition lifecycle collections, swap, LUKS, NFS mount
 wrappers, iSCSI discovery/session/boot wrappers, Btrfs subvolume, VDO, LVM thin
-pool, LVM snapshot, loop-device, MD RAID, multipath, and zvol lifecycle
-declarations, higher-layer lifecycle collections, snapshot declarations
-including Btrfs `readOnly` snapshot intent, supported operation names, apply
-policy fields, and NixOS activation helper fields such as
+pool, LVM snapshot, loop-device, MD RAID, multipath, NVMe namespace, and zvol
+lifecycle declarations, higher-layer lifecycle collections, snapshot
+declarations including Btrfs `readOnly` snapshot intent, supported operation
+names, apply policy fields, and NixOS activation helper fields such as
 `probeCurrent`, `failOnBlocked`, `scriptOut`,
 and `reportOut`.
 Planner-compatible aliases such as `number`, `startOffset`, `endOffset`, and
@@ -213,7 +213,7 @@ disk-nix capabilities --json
 The matrix includes local block layers, complex filesystems, cache layers, NFS
 exports and client mounts, iSCSI sessions, LUNs, safe property updates,
 ZFS/Btrfs/LVM snapshots, and topology updates for ZFS pools, LVM volume
-groups, MD RAID, multipath, Btrfs, and cache devices.
+groups, MD RAID, multipath, Btrfs, NVMe namespaces, and cache devices.
 
 The JSON records include:
 
@@ -391,6 +391,12 @@ target adapter is added.
 The capability inventory advertises iSCSI login/logout and LUN attach/detach
 as host lifecycle operations, distinct from target-side LUN creation or
 deletion.
+NVMe namespace command plans render `nvme create-ns`, `nvme attach-ns`,
+`nvme ns-rescan`, `nvme detach-ns`, and `nvme delete-ns`. Executable create
+plans require a `/dev/nvme*` controller target and `desiredSize`; attach and
+delete flows also require `namespaceId` plus `controllers` where detach or
+attach is involved. Namespace growth is modeled as a host rescan after a
+controller-side namespace size change.
 LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`, and report
 missing target form and size separately when either is absent. LV grow and

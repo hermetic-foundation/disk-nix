@@ -592,6 +592,9 @@ fn spec_schema() -> serde_json::Value {
             "luns": {
                 "$ref": "#/$defs/lifecycleMap"
             },
+            "nvmeNamespaces": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
             "iscsiSessions": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -631,6 +634,7 @@ fn spec_schema() -> serde_json::Value {
                     "datasets": { "$ref": "#/$defs/lifecycleMap" },
                     "zvols": { "$ref": "#/$defs/lifecycleMap" },
                     "luns": { "$ref": "#/$defs/lifecycleMap" },
+                    "nvmeNamespaces": { "$ref": "#/$defs/lifecycleMap" },
                     "iscsiSessions": { "$ref": "#/$defs/lifecycleMap" },
                     "exports": { "$ref": "#/$defs/lifecycleMap" },
                     "caches": { "$ref": "#/$defs/lifecycleMap" },
@@ -787,6 +791,11 @@ fn spec_schema() -> serde_json::Value {
                     "disk": { "type": "string" },
                     "client": { "type": "string" },
                     "portal": { "type": "string" },
+                    "namespaceId": { "type": ["string", "number"] },
+                    "nsid": { "type": ["string", "number"] },
+                    "controllers": { "type": "string" },
+                    "controllerId": { "type": ["string", "number"] },
+                    "controller": { "type": ["string", "number"] },
                     "options": { "type": "string" },
                     "priority": { "type": "integer" },
                     "randomEncryption": { "type": "boolean" },

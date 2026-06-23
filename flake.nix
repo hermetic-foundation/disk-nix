@@ -251,6 +251,12 @@
                   lun = 0;
                 };
               };
+              nvmeNamespaces."/dev/nvme0" = {
+                operation = "create";
+                desiredSize = "100G";
+                namespaceId = "4";
+                controllers = "0x1";
+              };
               exports."/srv/share" = {
                 operation = "create";
                 client = "192.0.2.0/24";
@@ -376,6 +382,7 @@
               and .properties.loopDevices["$ref"] == "#/$defs/lifecycleMap"
               and .properties.mdRaids["$ref"] == "#/$defs/lifecycleMap"
               and .properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.nvmeNamespaces["$ref"] == "#/$defs/lifecycleMap"
               and (."$defs".operation.enum | index("grow") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
               and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
@@ -391,6 +398,7 @@
               and (."$defs".specBody.properties.loopDevices["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.mdRaids["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.nvmeNamespaces["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
               and ."$defs".snapshot.properties.readOnly.type == "boolean"
               and ."$defs".snapshot.properties.readonly.type == "boolean"
@@ -422,6 +430,8 @@
               and ."$defs".lifecycleObject.properties.path.type == "string"
               and ."$defs".lifecycleObject.properties.client.type == "string"
               and ."$defs".lifecycleObject.properties.portal.type == "string"
+              and (."$defs".lifecycleObject.properties.namespaceId.type | index("string") != null)
+              and ."$defs".lifecycleObject.properties.controllers.type == "string"
               and ."$defs".lifecycleObject.properties.options.type == "string"
               and ."$defs".applyPolicy.properties.failOnBlocked.default == true
               and (."$defs".applyPolicy.properties.reportOut.type | index("string") != null)
@@ -442,9 +452,9 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 30
+              .summary.actionCount == 31
               and .summary.offlineRequiredCount == 5
-              and .summary.destructiveCount == 2
+              and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@home:create" and .risk == "online"))
@@ -462,6 +472,7 @@
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
+              and (.actions | any(.id == "nvmenamespaces:/dev/nvme0:create" and .risk == "destructive"))
               and (.actions | any(.id == "datasets:tank/home:create" and .risk == "online"))
               and (.actions | any(.id == "datasets:tank/archive:destroy"))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
@@ -499,22 +510,22 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 9
+              and .apply.blockedCount == 10
               and .apply.blockedSummary.offlineRequiredCount == 5
-              and .apply.blockedSummary.destructiveCount == 2
+              and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 9
+              and .apply.blockedCount == 10
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 9
-              and .messages[0] == "apply policy blocked 9 action(s)"
+              and .apply.blockedCount == 10
+              and .messages[0] == "apply policy blocked 10 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -578,6 +589,10 @@
                   and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
                   and .spec.luns."iqn.2026-06.example:storage/root:0".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
                   and (.spec.luns."iqn.2026-06.example:storage/root:0".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0") != null)
+                  and .spec.nvmeNamespaces."/dev/nvme0".operation == "create"
+                  and .spec.nvmeNamespaces."/dev/nvme0".desiredSize == "100G"
+                  and .spec.nvmeNamespaces."/dev/nvme0".namespaceId == "4"
+                  and .spec.nvmeNamespaces."/dev/nvme0".controllers == "0x1"
                   and .spec.exports."/srv/share".operation == "create"
                   and .spec.exports."/srv/share".client == "192.0.2.0/24"
                   and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"

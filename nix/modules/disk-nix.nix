@@ -263,6 +263,20 @@ let
           example = "192.0.2.10:3260";
         };
 
+        namespaceId = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "NVMe namespace id used by namespace attach, detach, and delete lifecycle declarations.";
+          example = "4";
+        };
+
+        controllers = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Comma-separated NVMe controller id list used by namespace attach and detach operations.";
+          example = "0x1";
+        };
+
         metadata = lib.mkOption {
           type = lib.types.attrsOf json.type;
           default = { };
@@ -372,6 +386,8 @@ let
         level
         raidLevel
         portal
+        namespaceId
+        controllers
         ;
     }
   );
@@ -1040,6 +1056,12 @@ in
       description = "Typed LUN lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    nvmeNamespaces = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed NVMe namespace lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a /dev/nvme* controller target and namespace metadata for attach or delete operations.";
+    };
+
     exports = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -1220,6 +1242,7 @@ in
         datasets = (cfg.spec.datasets or { }) // normalizeLifecycleSpec cfg.datasets;
         zvols = (cfg.spec.zvols or { }) // normalizeLifecycleSpec cfg.zvols;
         luns = (cfg.spec.luns or { }) // normalizeLifecycleSpec cfg.luns;
+        nvmeNamespaces = (cfg.spec.nvmeNamespaces or { }) // normalizeLifecycleSpec cfg.nvmeNamespaces;
         exports = (cfg.spec.exports or { }) // normalizeLifecycleSpec cfg.exports;
         caches = (cfg.spec.caches or { }) // normalizeLifecycleSpec cfg.caches;
         snapshots = (cfg.spec.snapshots or { }) // normalizeSnapshotSpec cfg.snapshots;

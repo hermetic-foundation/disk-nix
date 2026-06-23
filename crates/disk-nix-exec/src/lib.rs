@@ -1187,6 +1187,30 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Create | Operation::Grow | Operation::Destroy
+            if collection == Some("nvmeNamespaces") =>
+        {
+            (
+                vec![
+                    command(
+                        ["nvme", "list", "--output-format=json"],
+                        false,
+                        "verify NVMe controller and namespace inventory",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify NVMe namespace graph relationships after lifecycle change",
+                    ),
+                ],
+                vec![
+                    "namespace id, attachment state, and capacity match the desired lifecycle outcome"
+                        .to_string(),
+                    "dependent partitions, volumes, or filesystems see the expected namespace state"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::AddDevice
         | Operation::ReplaceDevice
         | Operation::RemoveDevice
@@ -2249,6 +2273,22 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Grow if collection == Some("nvmeNamespaces") => {
+            let controller = nvme_controller_target(action);
+            (
+                vec![
+                    nvme_list_namespaces_command(controller, "inspect NVMe namespaces before rescan"),
+                    nvme_namespace_rescan_command(controller),
+                    nvme_list_namespaces_command(controller, "verify NVMe namespaces after rescan"),
+                ],
+                vec![
+                    "perform controller-side namespace resize before host rescan".to_string(),
+                    "grow dependent partitions, volumes, or filesystems only after the namespace reports the new size"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Grow if collection == Some("partitions") => {
             let partition_target = partition_target_path(action);
             let disk = action.context.device.as_deref();
@@ -2528,6 +2568,29 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "verify qgroup quota accounting is enabled on the filesystem".to_string(),
                     "select the qgroup id intentionally to avoid hierarchy collisions".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Create if collection == Some("nvmeNamespaces") => {
+            let controller = nvme_controller_target(action);
+            let desired_size = action.context.desired_size.as_deref();
+            let namespace_id = action.context.namespace_id.as_deref();
+            let controllers = action.context.controllers.as_deref();
+            (
+                vec![
+                    nvme_list_namespaces_command(
+                        controller,
+                        "inspect NVMe namespace inventory before creation",
+                    ),
+                    nvme_create_namespace_command(controller, desired_size),
+                    nvme_attach_namespace_command(controller, namespace_id, controllers),
+                    nvme_namespace_rescan_command(controller),
+                ],
+                vec![
+                    "nvme create-ns returns the namespace id; declare namespaceId before attach can be executable"
+                        .to_string(),
+                    "verify controller and namespace capacity before exposing consumers".to_string(),
                 ],
                 true,
             )
@@ -3207,6 +3270,28 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "migrate data away from the VDO device before removal".to_string(),
                     "unmount filesystems and deactivate mappings that reference the VDO device"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("nvmeNamespaces") => {
+            let controller = nvme_controller_target(action);
+            let namespace_id = action.context.namespace_id.as_deref();
+            let controllers = action.context.controllers.as_deref();
+            (
+                vec![
+                    nvme_list_namespaces_command(
+                        controller,
+                        "inspect NVMe namespace inventory before deletion",
+                    ),
+                    nvme_detach_namespace_command(controller, namespace_id, controllers),
+                    nvme_delete_namespace_command(controller, namespace_id),
+                    nvme_namespace_rescan_command(controller),
+                ],
+                vec![
+                    "detach namespace consumers and migrate data before delete-ns".to_string(),
+                    "prefer detach without delete when target-side namespace data must remain"
                         .to_string(),
                 ],
                 true,
@@ -6019,6 +6104,240 @@ fn zvol_set_volsize_command(target: &str, desired_size: Option<&str>) -> Executi
             "grow the zvol after selecting the desired volume size",
         ),
     }
+}
+
+fn nvme_controller_target(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .device
+        .as_deref()
+        .or(action.context.target.as_deref())
+        .or(action.context.name.as_deref())
+        .filter(|target| is_nvme_controller_path(target))
+}
+
+fn is_nvme_controller_path(target: &str) -> bool {
+    target
+        .strip_prefix("/dev/nvme")
+        .is_some_and(|suffix| !suffix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_digit()))
+}
+
+fn nvme_list_namespaces_command(
+    controller: Option<&str>,
+    description: &'static str,
+) -> ExecutionCommand {
+    match controller {
+        Some(controller) => command(
+            [
+                "nvme",
+                "list-ns",
+                controller,
+                "--all",
+                "--output-format=json",
+            ],
+            false,
+            description,
+        ),
+        None => command_with_readiness(
+            [
+                "nvme",
+                "list-ns",
+                "<nvme-controller>",
+                "--all",
+                "--output-format=json",
+            ],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["NVMe controller path such as /dev/nvme0"],
+            description,
+        ),
+    }
+}
+
+fn nvme_create_namespace_command(
+    controller: Option<&str>,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
+    let controller_arg = controller.unwrap_or("<nvme-controller>");
+    let size_arg = desired_size.unwrap_or("<size>");
+    let argv = vec![
+        "nvme",
+        "create-ns",
+        controller_arg,
+        "--nsze-si",
+        size_arg,
+        "--ncap-si",
+        size_arg,
+    ];
+    match (controller, desired_size) {
+        (Some(_), Some(_)) => command_vec(
+            argv,
+            true,
+            "create an NVMe namespace with the reviewed size and capacity",
+        ),
+        (Some(_), None) => command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired namespace size"],
+            "create an NVMe namespace after selecting size and capacity",
+        ),
+        (None, desired_size) => command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_nvme_namespace_inputs(true, false, false, desired_size.is_none()),
+            "create an NVMe namespace after selecting the controller and size",
+        ),
+    }
+}
+
+fn nvme_attach_namespace_command(
+    controller: Option<&str>,
+    namespace_id: Option<&str>,
+    controllers: Option<&str>,
+) -> ExecutionCommand {
+    let controller_arg = controller.unwrap_or("<nvme-controller>");
+    let namespace_arg = namespace_id.unwrap_or("<namespace-id>");
+    let controllers_arg = controllers.unwrap_or("<controller-id-list>");
+    let argv = vec![
+        "nvme",
+        "attach-ns",
+        controller_arg,
+        "--namespace-id",
+        namespace_arg,
+        "--controllers",
+        controllers_arg,
+    ];
+    if controller.is_some() && namespace_id.is_some() && controllers.is_some() {
+        command_vec(
+            argv,
+            true,
+            "attach the reviewed NVMe namespace to controllers",
+        )
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_nvme_namespace_inputs(
+                controller.is_none(),
+                namespace_id.is_none(),
+                controllers.is_none(),
+                false,
+            ),
+            "attach the NVMe namespace after selecting namespace id and controllers",
+        )
+    }
+}
+
+fn nvme_detach_namespace_command(
+    controller: Option<&str>,
+    namespace_id: Option<&str>,
+    controllers: Option<&str>,
+) -> ExecutionCommand {
+    let controller_arg = controller.unwrap_or("<nvme-controller>");
+    let namespace_arg = namespace_id.unwrap_or("<namespace-id>");
+    let controllers_arg = controllers.unwrap_or("<controller-id-list>");
+    let argv = vec![
+        "nvme",
+        "detach-ns",
+        controller_arg,
+        "--namespace-id",
+        namespace_arg,
+        "--controllers",
+        controllers_arg,
+    ];
+    if controller.is_some() && namespace_id.is_some() && controllers.is_some() {
+        command_vec(
+            argv,
+            true,
+            "detach the reviewed NVMe namespace from controllers before deletion",
+        )
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_nvme_namespace_inputs(
+                controller.is_none(),
+                namespace_id.is_none(),
+                controllers.is_none(),
+                false,
+            ),
+            "detach the NVMe namespace after selecting namespace id and controllers",
+        )
+    }
+}
+
+fn nvme_delete_namespace_command(
+    controller: Option<&str>,
+    namespace_id: Option<&str>,
+) -> ExecutionCommand {
+    let controller_arg = controller.unwrap_or("<nvme-controller>");
+    let namespace_arg = namespace_id.unwrap_or("<namespace-id>");
+    let argv = vec![
+        "nvme",
+        "delete-ns",
+        controller_arg,
+        "--namespace-id",
+        namespace_arg,
+    ];
+    if controller.is_some() && namespace_id.is_some() {
+        command_vec(argv, true, "delete the reviewed NVMe namespace")
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_nvme_namespace_inputs(
+                controller.is_none(),
+                namespace_id.is_none(),
+                false,
+                false,
+            ),
+            "delete the NVMe namespace after selecting namespace id",
+        )
+    }
+}
+
+fn nvme_namespace_rescan_command(controller: Option<&str>) -> ExecutionCommand {
+    match controller {
+        Some(controller) => command(
+            ["nvme", "ns-rescan", controller],
+            true,
+            "rescan NVMe namespaces after controller-side changes",
+        ),
+        None => command_with_readiness(
+            ["nvme", "ns-rescan", "<nvme-controller>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["NVMe controller path such as /dev/nvme0"],
+            "rescan NVMe namespaces after selecting the controller",
+        ),
+    }
+}
+
+fn missing_nvme_namespace_inputs(
+    missing_controller: bool,
+    missing_namespace: bool,
+    missing_controllers: bool,
+    missing_size: bool,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if missing_controller {
+        missing.push("NVMe controller path such as /dev/nvme0");
+    }
+    if missing_namespace {
+        missing.push("namespace id");
+    }
+    if missing_controllers {
+        missing.push("controller id list");
+    }
+    if missing_size {
+        missing.push("desired namespace size");
+    }
+    missing
 }
 
 fn md_raid_create_command(
@@ -9155,6 +9474,160 @@ mod tests {
                         ]
                         && !command.mutates
                 })
+        }));
+    }
+
+    #[test]
+    fn nvme_namespace_lifecycle_reports_nvme_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "nvmeNamespaces": {
+                "/dev/nvme0": {
+                  "operation": "create",
+                  "desiredSize": "100G",
+                  "namespaceId": "4",
+                  "controllers": "0x1"
+                },
+                "/dev/nvme1": {
+                  "operation": "grow"
+                },
+                "/dev/nvme2": {
+                  "destroy": true,
+                  "namespaceId": "7",
+                  "controllers": "0x2"
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:/dev/nvme0:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "nvme",
+                            "create-ns",
+                            "/dev/nvme0",
+                            "--nsze-si",
+                            "100G",
+                            "--ncap-si",
+                            "100G",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "nvme",
+                            "attach-ns",
+                            "/dev/nvme0",
+                            "--namespace-id",
+                            "4",
+                            "--controllers",
+                            "0x1",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:/dev/nvme1:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "ns-rescan", "/dev/nvme1"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:/dev/nvme2:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "nvme",
+                            "detach-ns",
+                            "/dev/nvme2",
+                            "--namespace-id",
+                            "7",
+                            "--controllers",
+                            "0x2",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "delete-ns", "/dev/nvme2", "--namespace-id", "7"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:/dev/nvme0:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "list", "--output-format=json"] && !command.mutates
+                })
+        }));
+    }
+
+    #[test]
+    fn nvme_namespace_lifecycle_requires_explicit_namespace_inputs() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "nvmeNamespaces": {
+                "logical-ns": {
+                  "operation": "create"
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        let step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "nvmenamespaces:logical-ns:create")
+            .expect("NVMe namespace create command plan exists");
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "nvme",
+                    "create-ns",
+                    "<nvme-controller>",
+                    "--nsze-si",
+                    "<size>",
+                    "--ncap-si",
+                    "<size>",
+                ]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command
+                    .unresolved_inputs
+                    .contains(&"NVMe controller path such as /dev/nvme0".to_string())
+                && command
+                    .unresolved_inputs
+                    .contains(&"desired namespace size".to_string())
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "nvme",
+                    "attach-ns",
+                    "<nvme-controller>",
+                    "--namespace-id",
+                    "<namespace-id>",
+                    "--controllers",
+                    "<controller-id-list>",
+                ]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
         }));
     }
 

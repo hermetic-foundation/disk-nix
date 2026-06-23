@@ -193,6 +193,10 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub namespace_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub controllers: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
 }
 
@@ -219,6 +223,8 @@ impl ActionContext {
             && self.client.is_none()
             && self.portal.is_none()
             && self.options.is_none()
+            && self.namespace_id.is_none()
+            && self.controllers.is_none()
             && self.read_only.is_none()
     }
 }
@@ -431,6 +437,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "datasets",
         "zvols",
         "luns",
+        "nvmeNamespaces",
         "iscsiSessions",
         "exports",
         "caches",
@@ -823,6 +830,8 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         client: string_field(object, &["client"]),
         portal: lifecycle_portal(object),
         options: lifecycle_options(object),
+        namespace_id: metadata_string_field(object, &["namespaceId", "nsid"]),
+        controllers: metadata_string_field(object, &["controllers", "controllerId", "controller"]),
         property_assignments: property_assignments(object),
         ..ActionContext::default()
     }
@@ -900,6 +909,14 @@ fn lifecycle_portal(object: &Value) -> Option<String> {
         object
             .get("metadata")
             .and_then(|metadata| string_field(metadata, &["portal"]))
+    })
+}
+
+fn metadata_string_field(object: &Value, keys: &[&str]) -> Option<String> {
+    string_field(object, keys).or_else(|| {
+        object
+            .get("metadata")
+            .and_then(|metadata| string_field(metadata, keys))
     })
 }
 
@@ -2113,6 +2130,20 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "nvmeNamespaces" => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: "NVMe namespace creation allocates controller-managed namespace capacity"
+                    .to_string(),
+                alternatives: vec![
+                    "attach an existing namespace when preserving data is required".to_string(),
+                    "verify controller namespace inventory before create-ns".to_string(),
+                    "declare namespaceId and controllers before attaching the created namespace"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
         Operation::Grow if collection == "mdRaids" => (
             RiskClass::OfflineRequired,
@@ -2229,6 +2260,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Grow if collection == "nvmeNamespaces" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "NVMe namespace growth is represented as host rescan after controller-side changes"
+                    .to_string(),
+                alternatives: vec![
+                    "resize or recreate the namespace on the controller before host rescan"
+                        .to_string(),
+                    "rescan the controller and verify namespace capacity before growing consumers"
+                        .to_string(),
+                    "prefer replacement namespace migration when controller resize is unsupported"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Grow | Operation::AddDevice | Operation::Rebalance => {
             (RiskClass::Online, false, None)
         }
@@ -2300,6 +2347,20 @@ fn classify_operation(
                     "remove a single path only after redundancy or alternate paths are healthy"
                         .to_string(),
                     "disable automatic session login only after dependent services no longer need the LUN"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Destroy if collection == "nvmeNamespaces" => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: "NVMe namespace deletion removes the namespace from the controller"
+                    .to_string(),
+                alternatives: vec![
+                    "detach the namespace from selected controllers before deletion".to_string(),
+                    "migrate or snapshot data before deleting the namespace".to_string(),
+                    "use host detach or rescan workflows when target-side data should remain"
                         .to_string(),
                 ],
             }),
@@ -3478,6 +3539,45 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::NvmeNamespace,
+            operation: Operation::Create,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "NVMe namespace creation allocates capacity on the controller"
+                    .to_string(),
+                alternatives: vec![
+                    "attach an existing namespace when data must be preserved".to_string(),
+                    "review nvme list-ns output before creating a namespace".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NvmeNamespace,
+            operation: Operation::Grow,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "NVMe namespace growth requires controller-side change and host rescan"
+                    .to_string(),
+                alternatives: vec![
+                    "perform controller-side resize before running host namespace rescan"
+                        .to_string(),
+                    "migrate to a replacement namespace when resize is unsupported".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NvmeNamespace,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "NVMe namespace deletion removes controller-managed storage".to_string(),
+                alternatives: vec![
+                    "detach the namespace without deleting it when preserving data".to_string(),
+                    "migrate consumers before delete-ns".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::IscsiSession,
             operation: Operation::Create,
             risk: RiskClass::Online,
@@ -3737,6 +3837,37 @@ mod tests {
         assert!(lun_destroy.advice.as_ref().is_some_and(|advice| {
             advice.summary.contains("without deleting target-side data")
         }));
+    }
+
+    #[test]
+    fn nvme_namespace_capabilities_describe_controller_lifecycle() {
+        let capabilities = default_capabilities();
+        let create = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NvmeNamespace
+                    && capability.operation == Operation::Create
+            })
+            .expect("NVMe namespace create capability should exist");
+        let grow = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NvmeNamespace
+                    && capability.operation == Operation::Grow
+            })
+            .expect("NVMe namespace grow capability should exist");
+        let destroy = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NvmeNamespace
+                    && capability.operation == Operation::Destroy
+            })
+            .expect("NVMe namespace destroy capability should exist");
+
+        assert_eq!(create.risk, RiskClass::Destructive);
+        assert_eq!(grow.risk, RiskClass::OfflineRequired);
+        assert_eq!(destroy.risk, RiskClass::Destructive);
+        assert!(create.advice.is_some());
     }
 
     #[test]
@@ -5245,6 +5376,61 @@ mod tests {
                 .iter()
                 .any(|alternative| alternative.contains("deactivate"))
         }));
+    }
+
+    #[test]
+    fn plan_classifies_nvme_namespace_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "nvmeNamespaces": {
+                "/dev/nvme0": {
+                  "operation": "create",
+                  "desiredSize": "100G",
+                  "namespaceId": "4",
+                  "controllers": "0x1"
+                },
+                "/dev/nvme1": {
+                  "operation": "grow"
+                },
+                "/dev/nvme2": {
+                  "destroy": true,
+                  "namespaceId": "7",
+                  "controllers": "0x2"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.destructive_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 1);
+
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "nvmenamespaces:/dev/nvme0:create")
+            .expect("NVMe namespace create action exists");
+        assert_eq!(create.operation, Operation::Create);
+        assert_eq!(create.risk, RiskClass::Destructive);
+        assert_eq!(create.context.namespace_id.as_deref(), Some("4"));
+        assert_eq!(create.context.controllers.as_deref(), Some("0x1"));
+
+        let grow = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "nvmenamespaces:/dev/nvme1:grow")
+            .expect("NVMe namespace grow action exists");
+        assert_eq!(grow.operation, Operation::Grow);
+        assert_eq!(grow.risk, RiskClass::OfflineRequired);
+
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "nvmenamespaces:/dev/nvme2:destroy")
+            .expect("NVMe namespace destroy action exists");
+        assert_eq!(destroy.operation, Operation::Destroy);
+        assert_eq!(destroy.risk, RiskClass::Destructive);
     }
 
     #[test]
