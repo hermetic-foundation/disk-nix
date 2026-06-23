@@ -154,8 +154,8 @@
               partitions.root = {
                 operation = "grow";
                 device = "/dev/disk/by-id/nvme-root";
-                partitionNumber = "2";
-                end = "100%";
+                number = "2";
+                endOffset = "100%";
               };
               vdoVolumes.archive = {
                 operation = "grow";
@@ -202,7 +202,7 @@
               };
               mdRaids.root = {
                 target = "/dev/md/root";
-                level = "1";
+                raidLevel = "1";
                 devices = [
                   "/dev/disk/by-id/nvme-md-a"
                   "/dev/disk/by-id/nvme-md-b"
@@ -461,8 +461,8 @@
                   and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
                   and .spec.partitions.root.operation == "grow"
                   and .spec.partitions.root.device == "/dev/disk/by-id/nvme-root"
-                  and .spec.partitions.root.partitionNumber == "2"
-                  and .spec.partitions.root.end == "100%"
+                  and .spec.partitions.root.number == "2"
+                  and .spec.partitions.root.endOffset == "100%"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".operation == "create"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".path == "/mnt/persist/@home"
                   and .spec.btrfsQgroups."0/257".target == "/mnt/persist"
@@ -484,7 +484,7 @@
                   and .spec.loopDevices."/dev/loop7".operation == "create"
                   and .spec.loopDevices."/dev/loop7".device == "/var/lib/images/root.img"
                   and .spec.mdRaids.root.target == "/dev/md/root"
-                  and .spec.mdRaids.root.level == "1"
+                  and .spec.mdRaids.root.raidLevel == "1"
                   and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-a") != null)
                   and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-b") != null)
                   and (.spec.mdRaids.root.addDevices | index("/dev/disk/by-id/nvme-md-spare") != null)

@@ -175,6 +175,13 @@ let
           example = "1MiB";
         };
 
+        startOffset = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias for start, accepted by the planner for partition lifecycle declarations.";
+          example = "1MiB";
+        };
+
         end = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -182,10 +189,24 @@ let
           example = "100%";
         };
 
+        endOffset = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias for end, accepted by the planner for partition lifecycle declarations.";
+          example = "100%";
+        };
+
         partitionNumber = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
           description = "Partition number used by partition resize lifecycle declarations.";
+          example = "1";
+        };
+
+        number = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias for partitionNumber, accepted by the planner for partition lifecycle declarations.";
           example = "1";
         };
 
@@ -200,6 +221,13 @@ let
           type = lib.types.nullOr lib.types.str;
           default = null;
           description = "RAID level for array lifecycle declarations.";
+          example = "1";
+        };
+
+        raidLevel = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias for level, accepted by the planner for RAID lifecycle declarations.";
           example = "1";
         };
 
@@ -289,10 +317,14 @@ let
         client
         options
         start
+        startOffset
         end
+        endOffset
         partitionNumber
+        number
         partitionType
         level
+        raidLevel
         portal
         ;
     }

@@ -151,10 +151,14 @@ Each lifecycle declaration includes:
 - `mountpoint`
 - `device`
 - `start`
+- `startOffset`
 - `end`
+- `endOffset`
 - `partitionNumber`
+- `number`
 - `partitionType`
 - `level`
+- `raidLevel`
 - `portal`
 - `metadata`
 
