@@ -331,6 +331,11 @@ and `blockdev --rereadpt` commands when `device`, `partitionType`, `start`, and
 Partition grow command plans render concrete `parted resizepart`, `partprobe`,
 and `blockdev --rereadpt` commands when `device`, `partitionNumber`, and `end`
 or `desiredSize` are declared.
+Filesystem shrink command plans render Btrfs allocation checks and
+`btrfs filesystem resize <size> <path>` for declared target sizes. Ext shrink
+plans render `findmnt`, `umount`, `e2fsck`, and `resize2fs` review steps, with
+source-device commands marked unresolved when the filesystem declaration only
+names a mountpoint. XFS shrink renders manual-only migration guidance.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit `level` and `devices` fields, with exact unresolved-input markers
 when either field is missing and `/proc/mdstat` verification.

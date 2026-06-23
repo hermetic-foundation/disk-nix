@@ -50,10 +50,13 @@ Examples:
   command and verification plans can use concrete capacity targets when the
   storage domain supports them.
 - `resizePolicy = "shrink-allowed"` is classified as potential data loss and
-  recommends migration or backup-first alternatives.
+  recommends migration or backup-first alternatives. Command plans render
+  reviewed Btrfs shrink commands when a target size is declared, and ext
+  offline shrink steps with unresolved source-device inputs when only a
+  mountpoint is known.
 - XFS shrink intent is classified as unsupported because XFS does not support
-  shrinking in place; the planner recommends creating a smaller filesystem and
-  migrating data.
+  shrinking in place; the planner and command renderer recommend creating a
+  smaller filesystem and migrating data.
 - `preserveData = false` is classified as destructive because it permits
   formatting or replacement.
 - `removeDevices = [ ... ]` is classified as potential data loss and recommends

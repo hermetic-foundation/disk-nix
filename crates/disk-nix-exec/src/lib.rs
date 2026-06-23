@@ -428,6 +428,34 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Shrink
+            if collection == Some("filesystems") || action.id.starts_with("filesystem:") =>
+        {
+            let mut commands = vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify filesystem graph state after the reviewed shrink",
+            )];
+            if fs_type == Some("btrfs") {
+                commands.push(command(
+                    ["btrfs", "filesystem", "usage", "-b", target],
+                    false,
+                    "verify Btrfs allocation and free space after shrink",
+                ));
+            }
+            (
+                commands,
+                vec![
+                    desired_size
+                        .map(|size| format!("filesystem size reports no more than {size}"))
+                        .unwrap_or_else(|| "filesystem size matches the reviewed shrink target".to_string()),
+                    "used data, metadata, and free-space counters remain internally consistent after re-probe"
+                        .to_string(),
+                    "mounts and dependent services are restored only after filesystem checks pass"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Grow if collection == Some("volumes") || action.id.starts_with("volumes:") => (
             vec![
                 command(
@@ -1487,6 +1515,24 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         "select the {fs_type} grow command: xfs_growfs, resize2fs, btrfs filesystem resize, zfs set volsize, or equivalent"
                     ),
                     "verify available backing capacity before running the grow command".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Shrink
+            if collection == Some("filesystems") || action.id.starts_with("filesystem:") =>
+        {
+            let target = target.unwrap_or("<filesystem>");
+            let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                filesystem_shrink_commands(fs_type, target, desired_size),
+                vec![
+                    "shrink only after backups or snapshots are verified".to_string(),
+                    "prefer migrate-to-smaller-filesystem workflows when online shrink support is absent"
+                        .to_string(),
+                    "restore dependent mounts and services only after post-shrink checks pass"
+                        .to_string(),
                 ],
                 true,
             )
@@ -3271,6 +3317,132 @@ fn filesystem_grow_command(
     }
 }
 
+fn filesystem_shrink_commands(
+    fs_type: &str,
+    target: &str,
+    desired_size: Option<&str>,
+) -> Vec<ExecutionCommand> {
+    let mut commands = vec![command(
+        ["disk-nix", "inspect", target],
+        false,
+        "inspect filesystem usage, mount state, and consumers before shrinking",
+    )];
+    match fs_type {
+        "btrfs" => {
+            commands.push(command(
+                ["btrfs", "filesystem", "usage", "-b", target],
+                false,
+                "inspect Btrfs allocation slack before shrinking",
+            ));
+            commands.push(btrfs_filesystem_shrink_command(target, desired_size));
+        }
+        "ext2" | "ext3" | "ext4" => {
+            commands.push(command(
+                [
+                    "findmnt",
+                    "--noheadings",
+                    "--output",
+                    "SOURCE,FSTYPE,SIZE,USED,AVAIL",
+                    "--target",
+                    target,
+                ],
+                false,
+                "resolve the ext filesystem source device and capacity before offline shrink",
+            ));
+            commands.push(command(
+                ["umount", target],
+                true,
+                "unmount the ext filesystem before fsck and shrink",
+            ));
+            commands.push(ext_filesystem_check_command(target));
+            commands.push(ext_filesystem_shrink_command(target, desired_size));
+        }
+        "xfs" => {
+            commands.push(command_with_readiness(
+                ["<migrate-to-smaller-filesystem>", target],
+                true,
+                CommandReadiness::ManualOnly,
+                ["replacement filesystem", "migration plan"],
+                "XFS cannot shrink in place; create a smaller filesystem and migrate data",
+            ));
+        }
+        _ => commands.push(command_with_readiness(
+            ["<filesystem-shrink-tool>", target],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem shrink tool", "filesystem source device"],
+            "shrink with the filesystem-specific offline or migration workflow",
+        )),
+    }
+    commands
+}
+
+fn btrfs_filesystem_shrink_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    match desired_size {
+        Some(size) => command_vec(
+            vec!["btrfs", "filesystem", "resize", size, target],
+            true,
+            "shrink the Btrfs filesystem to the reviewed size",
+        ),
+        None => command_with_readiness(
+            ["btrfs", "filesystem", "resize", "<size>", target],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired filesystem size"],
+            "shrink the Btrfs filesystem after selecting the target size",
+        ),
+    }
+}
+
+fn ext_filesystem_check_command(target: &str) -> ExecutionCommand {
+    if target.starts_with("/dev/") {
+        command(
+            ["e2fsck", "-f", target],
+            true,
+            "run a forced ext filesystem check before shrinking",
+        )
+    } else {
+        command_with_readiness(
+            ["e2fsck", "-f", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "run a forced ext filesystem check after resolving the source device",
+        )
+    }
+}
+
+fn ext_filesystem_shrink_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    match (target.starts_with("/dev/"), desired_size) {
+        (true, Some(size)) => command(
+            ["resize2fs", target, size],
+            true,
+            "shrink the ext filesystem to the reviewed size",
+        ),
+        (true, None) => command_with_readiness(
+            ["resize2fs", target, "<size>"],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired filesystem size"],
+            "shrink the ext filesystem after selecting the target size",
+        ),
+        (false, Some(size)) => command_vec_with_readiness(
+            vec!["resize2fs", "<filesystem-device>", size],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "shrink the ext filesystem after resolving the source device",
+        ),
+        (false, None) => command_with_readiness(
+            ["resize2fs", "<filesystem-device>", "<size>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device", "desired filesystem size"],
+            "shrink the ext filesystem after resolving source device and target size",
+        ),
+    }
+}
+
 fn add_device_command(collection: Option<&str>, target: &str, device: &str) -> ExecutionCommand {
     match collection {
         Some("pools") => command(
@@ -4601,6 +4773,114 @@ mod tests {
             step.checks
                 .iter()
                 .any(|check| check.contains("750GiB") || check.contains("800GiB"))
+        }));
+    }
+
+    #[test]
+    fn filesystem_shrink_renderer_uses_domain_commands() {
+        let btrfs_action = PlannedAction {
+            id: "filesystem:data:shrink".to_string(),
+            description: "shrink btrfs data".to_string(),
+            operation: Operation::Shrink,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                name: Some("data".to_string()),
+                target: Some("/data".to_string()),
+                fs_type: Some("btrfs".to_string()),
+                desired_size: Some("750GiB".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let ext_action = PlannedAction {
+            id: "filesystem:home:shrink".to_string(),
+            description: "shrink ext home".to_string(),
+            operation: Operation::Shrink,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                name: Some("home".to_string()),
+                target: Some("/home".to_string()),
+                fs_type: Some("ext4".to_string()),
+                desired_size: Some("100G".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let xfs_action = PlannedAction {
+            id: "filesystem:scratch:shrink".to_string(),
+            description: "shrink xfs scratch".to_string(),
+            operation: Operation::Shrink,
+            risk: RiskClass::Unsupported,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                name: Some("scratch".to_string()),
+                target: Some("/scratch".to_string()),
+                fs_type: Some("xfs".to_string()),
+                desired_size: Some("500G".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+
+        let (btrfs_commands, btrfs_notes, btrfs_manual_review) = commands_for_action(&btrfs_action);
+        let (ext_commands, ext_notes, ext_manual_review) = commands_for_action(&ext_action);
+        let (xfs_commands, _, xfs_manual_review) = commands_for_action(&xfs_action);
+
+        assert!(btrfs_manual_review);
+        assert!(btrfs_commands.iter().any(|command| {
+            command.argv == ["btrfs", "filesystem", "usage", "-b", "/data"] && !command.mutates
+        }));
+        assert!(btrfs_commands.iter().any(|command| {
+            command.argv == ["btrfs", "filesystem", "resize", "750GiB", "/data"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(
+            btrfs_notes
+                .iter()
+                .any(|note| note.contains("backups or snapshots"))
+        );
+
+        assert!(ext_manual_review);
+        assert!(ext_commands.iter().any(|command| {
+            command.argv
+                == [
+                    "findmnt",
+                    "--noheadings",
+                    "--output",
+                    "SOURCE,FSTYPE,SIZE,USED,AVAIL",
+                    "--target",
+                    "/home",
+                ]
+                && !command.mutates
+        }));
+        assert!(ext_commands.iter().any(|command| {
+            command.argv == ["umount", "/home"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(ext_commands.iter().any(|command| {
+            command.argv == ["resize2fs", "<filesystem-device>", "100G"]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["filesystem source device"]
+        }));
+        assert!(
+            ext_notes
+                .iter()
+                .any(|note| note.contains("migrate-to-smaller-filesystem"))
+        );
+
+        assert!(xfs_manual_review);
+        assert!(xfs_commands.iter().any(|command| {
+            command.argv == ["<migrate-to-smaller-filesystem>", "/scratch"]
+                && command.readiness == CommandReadiness::ManualOnly
+                && command.unresolved_inputs == ["replacement filesystem", "migration plan"]
         }));
     }
 

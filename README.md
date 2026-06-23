@@ -167,6 +167,11 @@ and replacement review steps instead of a generic cache placeholder.
 Btrfs filesystem device-removal plans include allocation inspection and
 domain-specific `btrfs device remove` rendering for review, while remaining
 blocked by the current potential-data-loss policy gate.
+Filesystem shrink plans render Btrfs usage checks and `btrfs filesystem resize`
+commands when a desired size is declared. Ext shrink plans render source
+resolution, unmount, `e2fsck`, and `resize2fs` steps, but leave source-device
+commands unresolved when only a mountpoint is declared. XFS shrink remains
+manual-only migration guidance.
 Btrfs subvolume property updates render read-only toggles with
 `btrfs property set -ts <path> ro true|false`; unsupported Btrfs subvolume
 properties stay explicit as domain-specific review items.
