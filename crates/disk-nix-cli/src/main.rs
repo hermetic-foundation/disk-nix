@@ -136,6 +136,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered MD RAID arrays and member metadata.
+    Raid {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -414,6 +420,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_nvme_node)?;
             } else {
                 print_nvme(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Raid { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_raid_node)?;
+            } else {
+                print_raid(output, &graph)?;
             }
             Ok(())
         }
@@ -1527,6 +1542,30 @@ fn print_nvme(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     Ok(())
 }
 
+fn print_raid(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<32} {:>12} {:<10} {:<14} {:>7} DETAILS",
+        "KIND", "NAME", "SIZE", "LEVEL", "STATE", "MEMBERS"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_raid_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<32} {:>12} {:<10} {:<14} {:>7} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            property_value(node, "md.level").unwrap_or("-"),
+            property_value(node, "md.state")
+                .or_else(|| property_value(node, "md.member-state"))
+                .unwrap_or("-"),
+            member_count(graph, node),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2101,6 +2140,14 @@ fn is_nvme_node(node: &Node) -> bool {
             .any(|property| property.key.starts_with("nvme."))
 }
 
+fn is_raid_node(node: &Node) -> bool {
+    node.kind == NodeKind::MdRaid
+        || node
+            .properties
+            .iter()
+            .any(|property| property.key.starts_with("md."))
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
@@ -2470,6 +2517,16 @@ fn backing_count(graph: &StorageGraph, node: &Node) -> usize {
         .count()
 }
 
+fn member_count(graph: &StorageGraph, node: &Node) -> usize {
+    graph
+        .edges
+        .iter()
+        .filter(|edge| {
+            edge.to == node.id && edge.relationship == disk_nix_model::Relationship::MemberOf
+        })
+        .count()
+}
+
 fn snapshot_source<'a>(graph: &'a StorageGraph, node: &Node) -> Option<&'a str> {
     graph
         .edges
@@ -2539,11 +2596,11 @@ mod tests {
     use super::{
         confirmation_file_accepts, is_cache_node, is_device_node, is_encryption_node,
         is_filesystem_node, is_mapping_node, is_multipath_node, is_network_storage_node,
-        is_nvme_node, is_partition_node, is_pool_node, is_snapshot_node, is_vdo_node,
+        is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node, is_vdo_node,
         is_volume_node, mount_details, print_cache, print_devices, print_encryption,
         print_filesystems, print_mappings, print_mounts, print_multipath, print_network_storage,
-        print_nvme, print_partitions, print_pools, print_snapshots, print_usage, print_vdo,
-        print_volumes, snapshot_source, usage_details, usage_percent,
+        print_nvme, print_partitions, print_pools, print_raid, print_snapshots, print_usage,
+        print_vdo, print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2672,6 +2729,15 @@ mod tests {
         assert!(is_nvme_node(
             &Node::new("block:/dev/nvme1n1", NodeKind::PhysicalDisk, "/dev/nvme1n1")
                 .with_property("nvme.model", "Example NVMe")
+        ));
+        assert!(is_raid_node(&Node::new(
+            "md:/dev/md0",
+            NodeKind::MdRaid,
+            "/dev/md0"
+        )));
+        assert!(is_raid_node(
+            &Node::new("block:/dev/sda1", NodeKind::Partition, "/dev/sda1")
+                .with_property("md.member-state", "active sync")
         ));
     }
 
@@ -3658,6 +3724,72 @@ mod tests {
         assert!(output.contains("40.0%"));
         assert!(output.contains("nvme-model=Example NVMe firmware=1.0"));
         assert!(output.contains("ns-index=0 max-lba=1953125 sector-size=512"));
+    }
+
+    #[test]
+    fn raid_table_includes_array_and_member_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("md:/dev/md0", NodeKind::MdRaid, "/dev/md0")
+                .with_path("/dev/md0")
+                .with_size_bytes(1_071_644_672)
+                .with_identity(Identity {
+                    uuid: Some("aaaa:bbbb:cccc:dddd".to_string()),
+                    ..Identity::default()
+                })
+                .with_property("md.version", "1.2")
+                .with_property("md.level", "raid1")
+                .with_property("md.state", "clean")
+                .with_property("md.raid-devices", "2")
+                .with_property("md.total-devices", "2")
+                .with_property("md.name", "host:0")
+                .with_property("md.creation-time", "Tue Jun 23 10:15:00 2026")
+                .with_property("md.update-time", "Tue Jun 23 10:16:00 2026")
+                .with_property("md.events", "17")
+                .with_property("md.chunk-size", "512K")
+                .with_property("md.layout", "near=2"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/sda1", NodeKind::Partition, "/dev/sda1")
+                .with_path("/dev/sda1")
+                .with_property("md.member-state", "active sync"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/sdb1", NodeKind::Partition, "/dev/sdb1")
+                .with_path("/dev/sdb1")
+                .with_property("md.member-state", "active sync"),
+        );
+        graph.add_edge(Edge::new(
+            "block:/dev/sda1",
+            "md:/dev/md0",
+            Relationship::MemberOf,
+        ));
+        graph.add_edge(Edge::new(
+            "block:/dev/sdb1",
+            "md:/dev/md0",
+            Relationship::MemberOf,
+        ));
+
+        let mut output = Vec::new();
+        print_raid(&mut output, &graph).expect("raid table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("LEVEL"));
+        assert!(output.contains("STATE"));
+        assert!(output.contains("MEMBERS"));
+        assert!(output.contains("/dev/md0"));
+        assert!(output.contains("raid1"));
+        assert!(output.contains("clean"));
+        assert!(output.contains("md-version=1.2 level=raid1 state=clean"));
+        assert!(output.contains("raid-devices=2 total-devices=2 md-name=host:0"));
+        assert!(output.contains("created=Tue Jun 23 10:15:00 2026"));
+        assert!(output.contains("updated=Tue Jun 23 10:16:00 2026"));
+        assert!(output.contains("events=17"));
+        assert!(output.contains("chunk=512K layout=near=2"));
+        assert!(output.contains("/dev/sda1"));
+        assert!(output.contains("active sync"));
+        assert!(output.contains("member-state=active sync"));
+        assert!(output.contains("/dev/sdb1"));
     }
 
     #[test]

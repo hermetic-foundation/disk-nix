@@ -146,6 +146,7 @@ disk-nix cache
 disk-nix vdo
 disk-nix multipath
 disk-nix nvme
+disk-nix raid
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -167,6 +168,7 @@ disk-nix cache --json
 disk-nix vdo --json
 disk-nix multipath --json
 disk-nix nvme --json
+disk-nix raid --json
 disk-nix mounts --json
 disk-nix network-storage --json
 disk-nix ids --json
@@ -238,6 +240,10 @@ Use these commands for:
 - `nvme`: NVMe namespaces, including path, serial, model, firmware, namespace
   index, maximum LBA, sector size, physical size, used bytes, free bytes, and
   utilization when `nvme list -o json` exposes them
+- `raid`: MD RAID arrays and member devices, including array UUID, metadata
+  version, level, state, size, raid and total device counts, event counters,
+  chunk/layout details, timestamps, and per-member state when `mdadm --detail`
+  exposes them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them
