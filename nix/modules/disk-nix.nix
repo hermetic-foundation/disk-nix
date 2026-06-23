@@ -733,6 +733,12 @@ in
       description = "Typed dataset lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    zvols = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed ZFS zvol lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
     luns = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -898,6 +904,7 @@ in
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
         pools = (cfg.spec.pools or { }) // normalizeLifecycleSpec cfg.pools;
         datasets = (cfg.spec.datasets or { }) // normalizeLifecycleSpec cfg.datasets;
+        zvols = (cfg.spec.zvols or { }) // normalizeLifecycleSpec cfg.zvols;
         luns = (cfg.spec.luns or { }) // normalizeLifecycleSpec cfg.luns;
         exports = (cfg.spec.exports or { }) // normalizeLifecycleSpec cfg.exports;
         caches = (cfg.spec.caches or { }) // normalizeLifecycleSpec cfg.caches;

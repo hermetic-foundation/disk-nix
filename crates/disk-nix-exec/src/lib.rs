@@ -510,6 +510,27 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent filesystems or mappings see the intended capacity".to_string(),
             ],
         ),
+        Operation::Grow if collection == Some("zvols") => (
+            vec![
+                command(
+                    ["zfs", "list", "-H", "-p", "-t", "volume", target],
+                    false,
+                    "verify zvol volsize after growth",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify zvol graph node and dependent block consumers",
+                ),
+            ],
+            vec![
+                desired_size
+                    .map(|size| format!("zvol volsize reports {size}"))
+                    .unwrap_or_else(|| "zvol volsize reports the desired capacity".to_string()),
+                "dependent LUNs, guests, partitions, or filesystems see the intended capacity"
+                    .to_string(),
+            ],
+        ),
         Operation::Create | Operation::Grow if collection == Some("partitions") => (
             vec![
                 command(
@@ -708,6 +729,18 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             )],
             vec![
                 "created object identity, size, and relationships match desired state".to_string(),
+            ],
+        ),
+        Operation::Destroy if collection == Some("zvols") => (
+            vec![command(
+                ["zfs", "list", "-H", "-p", "-t", "volume"],
+                false,
+                "verify zvol inventory after destruction",
+            )],
+            vec![
+                "destroyed zvol no longer appears in ZFS volume listings".to_string(),
+                "downstream LUN, guest, or filesystem consumers are detached or updated"
+                    .to_string(),
             ],
         ),
         Operation::Format if collection == Some("swaps") => (
@@ -988,6 +1021,26 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Grow if collection == Some("zvols") => {
+            let target = target.unwrap_or("<zvol>");
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    command(
+                        ["zfs", "get", "-H", "-p", "volsize", target],
+                        false,
+                        "inspect current zvol size before growth",
+                    ),
+                    zvol_set_volsize_command(target, desired_size),
+                ],
+                vec![
+                    "verify pool free space and reservation policy before increasing volsize"
+                        .to_string(),
+                    "rescan dependent block consumers after zvol growth".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Grow if collection == Some("partitions") => {
             let target = target.unwrap_or("<partition>");
             let desired_size = action.context.desired_size.as_deref();
@@ -1166,6 +1219,25 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("zvols") => {
+            let target = target.unwrap_or("<zvol>");
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    command(
+                        ["zpool", "list", "-H", "-p"],
+                        false,
+                        "inspect ZFS pool free space before creating the zvol",
+                    ),
+                    zvol_create_command(target, desired_size),
+                ],
+                vec![
+                    "decide sparse versus reserved allocation before creation".to_string(),
+                    "expose the zvol to guests or LUN exports only after verification".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create if collection == Some("partitions") => {
             let target = target.unwrap_or("<partition>");
             let disk = action.context.device.as_deref().unwrap_or("<disk>");
@@ -1290,6 +1362,29 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "take a read-only snapshot before deletion when data may be needed".to_string(),
                     "unmount or redirect consumers before deleting the subvolume".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("zvols") => {
+            let target = target.unwrap_or("<zvol>");
+            (
+                vec![
+                    command(
+                        ["zfs", "list", "-H", "-p", "-t", "volume", target],
+                        false,
+                        "inspect zvol metadata before destruction",
+                    ),
+                    command(
+                        ["zfs", "destroy", target],
+                        true,
+                        "destroy the reviewed zvol after consumers are detached",
+                    ),
+                ],
+                vec![
+                    "take a snapshot or clone before destruction when rollback is required"
+                        .to_string(),
+                    "detach LUN, VM, or filesystem consumers before destroying the zvol".to_string(),
                 ],
                 true,
             )
@@ -1643,6 +1738,40 @@ fn vdo_grow_logical_command(target: &str, desired_size: Option<&str>) -> Executi
     }
 }
 
+fn zvol_create_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    match desired_size {
+        Some(size) => command_vec(
+            vec!["zfs", "create", "-V", size, target],
+            true,
+            "create a zvol with the desired volume size",
+        ),
+        None => command_with_readiness(
+            ["zfs", "create", "-V", "<size>", target],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired zvol size"],
+            "create a zvol after selecting the desired volume size",
+        ),
+    }
+}
+
+fn zvol_set_volsize_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    match desired_size {
+        Some(size) => command_vec(
+            vec!["zfs", "set", &format!("volsize={size}"), target],
+            true,
+            "grow the zvol by setting volsize",
+        ),
+        None => command_with_readiness(
+            ["zfs", "set", "volsize=<size>", target],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired zvol size"],
+            "grow the zvol after selecting the desired volume size",
+        ),
+    }
+}
+
 fn property_assignment(action: &PlannedAction) -> String {
     let key = action.context.property.as_deref().unwrap_or("<key>");
     let value = action
@@ -1988,6 +2117,60 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["disk-nix", "topology", "--json"])
+        }));
+    }
+
+    #[test]
+    fn zvol_lifecycle_reports_zfs_volume_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "zvols": {
+                  "tank/vm/root": {
+                    "operation": "grow",
+                    "desiredSize": "80GiB"
+                  },
+                  "tank/vm/tmp": {
+                    "operation": "create",
+                    "desiredSize": "20GiB"
+                  },
+                  "tank/vm/old": {
+                    "destroy": true
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["zfs", "set", "volsize=80GiB", "tank/vm/root"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["zfs", "create", "-V", "20GiB", "tank/vm/tmp"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["zfs", "destroy", "tank/vm/old"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["zfs", "list", "-H", "-p", "-t", "volume", "tank/vm/root"]
+            })
         }));
     }
 

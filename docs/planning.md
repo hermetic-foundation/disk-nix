@@ -37,9 +37,9 @@ or the NixOS module wrapper written to `/etc/disk-nix/spec.json`:
 Current planning is intentionally conservative. It classifies filesystem
 resize policy, preservation intent, and lifecycle operations for disks,
 partitions, swap, LUKS containers, Btrfs subvolumes, VDO volumes, volumes,
-pools, datasets, LUNs, iSCSI sessions, exports, cache layers, and snapshots. It
-reports destructive or potentially destructive behavior with alternatives
-instead of silently accepting unsafe mutation.
+pools, datasets, zvols, LUNs, iSCSI sessions, exports, cache layers, and
+snapshots. It reports destructive or potentially destructive behavior with
+alternatives instead of silently accepting unsafe mutation.
 
 Examples:
 
@@ -73,6 +73,8 @@ Examples:
   suggests read-only snapshots or rename-first validation.
 - VDO growth is classified as online, with advice to distinguish logical
   growth from physical backing growth and verify `vdostats`.
+- zvol creation and growth are online operations, with advice to verify pool
+  capacity, reservation policy, and downstream block consumers.
 - `properties = { ... }` is classified as safe property-update intent.
 - LUN `operation = "grow"` is classified as offline-required because the
   storage target, host rescan, multipath, and consumers must be coordinated.
@@ -104,6 +106,7 @@ Lifecycle collections currently accepted by the planner:
 - `volumeGroups`
 - `pools`
 - `datasets`
+- `zvols`
 - `luns`
 - `iscsiSessions`
 - `exports`

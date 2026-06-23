@@ -559,6 +559,9 @@ fn spec_schema() -> serde_json::Value {
             "datasets": {
                 "$ref": "#/$defs/lifecycleMap"
             },
+            "zvols": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
             "luns": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -591,6 +594,7 @@ fn spec_schema() -> serde_json::Value {
                     "volumeGroups": { "$ref": "#/$defs/lifecycleMap" },
                     "pools": { "$ref": "#/$defs/lifecycleMap" },
                     "datasets": { "$ref": "#/$defs/lifecycleMap" },
+                    "zvols": { "$ref": "#/$defs/lifecycleMap" },
                     "luns": { "$ref": "#/$defs/lifecycleMap" },
                     "iscsiSessions": { "$ref": "#/$defs/lifecycleMap" },
                     "exports": { "$ref": "#/$defs/lifecycleMap" },

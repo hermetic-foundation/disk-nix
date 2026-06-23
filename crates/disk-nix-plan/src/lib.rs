@@ -390,6 +390,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "volumeGroups",
         "pools",
         "datasets",
+        "zvols",
         "luns",
         "iscsiSessions",
         "exports",
@@ -1454,7 +1455,35 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "zvols" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "zvol creation allocates a block volume inside an existing ZFS pool"
+                    .to_string(),
+                alternatives: vec![
+                    "verify pool free space and refreservation policy before creation".to_string(),
+                    "use sparse volumes only when overcommit is intentional".to_string(),
+                    "create consumers only after the zvol appears by stable /dev/zvol path"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
+        Operation::Grow if collection == "zvols" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "zvol growth updates volsize and requires consumer capacity verification"
+                    .to_string(),
+                alternatives: vec![
+                    "verify pool free space before increasing volsize".to_string(),
+                    "rescan dependent guests, LUNs, or filesystems after growth".to_string(),
+                    "grow dependent partitions and filesystems only after the zvol reports the new size"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Grow if collection == "luns" || collection == "iscsiSessions" => (
             RiskClass::OfflineRequired,
             false,
@@ -1573,7 +1602,7 @@ fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
     ];
 
     match collection {
-        "pools" | "datasets" => {
+        "pools" | "datasets" | "zvols" => {
             alternatives.push("take a recursive snapshot before destroy or rollback".to_string());
             alternatives
                 .push("rename or unmount the dataset while validating consumers".to_string());
@@ -1799,6 +1828,43 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "take a read-only snapshot before deletion".to_string(),
                     "rename the subvolume before final removal".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Zvol,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "zvol creation consumes ZFS pool capacity".to_string(),
+                alternatives: vec![
+                    "verify free pool capacity before creation".to_string(),
+                    "decide sparse versus reserved allocation before exposing the block device"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Zvol,
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "zvol growth changes volsize for downstream block consumers".to_string(),
+                alternatives: vec![
+                    "verify pool free space before changing volsize".to_string(),
+                    "rescan dependent block consumers after growth".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Zvol,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "destroying a zvol removes the block volume and its data".to_string(),
+                alternatives: vec![
+                    "snapshot or clone the zvol before destruction".to_string(),
+                    "detach downstream LUN, VM, or filesystem consumers first".to_string(),
                 ],
             }),
         },
@@ -2152,6 +2218,47 @@ mod tests {
                 .iter()
                 .any(|alternative| alternative.contains("read-only snapshot"))
         }));
+    }
+
+    #[test]
+    fn plan_accepts_zvol_lifecycle_with_zfs_advice() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "zvols": {
+                "tank/vm/root": {
+                  "operation": "grow",
+                  "desiredSize": "80GiB"
+                },
+                "tank/vm/tmp": {
+                  "operation": "create",
+                  "desiredSize": "20GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        let grow = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "zvols:tank/vm/root:grow")
+            .expect("zvol grow action exists");
+        assert_eq!(grow.risk, RiskClass::Online);
+        assert_eq!(grow.context.desired_size.as_deref(), Some("80GiB"));
+        assert!(grow.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("rescan dependent"))
+        }));
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "zvols:tank/vm/tmp:create")
+            .expect("zvol create action exists");
+        assert_eq!(create.risk, RiskClass::Online);
     }
 
     #[test]

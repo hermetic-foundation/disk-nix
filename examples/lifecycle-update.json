@@ -19,6 +19,12 @@
       "destroy": true
     }
   },
+  "zvols": {
+    "tank/vm/root": {
+      "operation": "grow",
+      "desiredSize": "80GiB"
+    }
+  },
   "volumes": {
     "vg0/home": {
       "operation": "grow",

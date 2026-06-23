@@ -123,6 +123,7 @@ Typed lifecycle declarations are available for:
 - `volumeGroups`
 - `pools`
 - `datasets`
+- `zvols`
 - `luns`
 - `iscsi.sessions`
 - `exports`
@@ -196,6 +197,10 @@ Example lifecycle planning through NixOS options:
       properties.autotrim = "on";
     };
     datasets."tank/archive".destroy = true;
+    zvols."tank/vm/root" = {
+      operation = "grow";
+      desiredSize = "80GiB";
+    };
     nfs.mounts."/srv/shared" = {
       source = "nas.example.com:/srv/shared";
       fsType = "nfs4";
