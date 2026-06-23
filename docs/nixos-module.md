@@ -227,6 +227,11 @@ Example lifecycle planning through NixOS options:
       target = "mpatha";
       addDevices = [ "/dev/sdb" ];
     };
+    exports."/srv/share" = {
+      operation = "create";
+      client = "192.0.2.0/24";
+      options = "rw,sync,no_subtree_check";
+    };
     caches."tank/l2arc0" = {
       replaceDevices."/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
     };

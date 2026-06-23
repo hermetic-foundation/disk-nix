@@ -105,6 +105,13 @@
       "operation": "grow"
     }
   },
+  "exports": {
+    "/srv/share": {
+      "operation": "create",
+      "client": "192.0.2.0/24",
+      "options": "rw,sync,no_subtree_check"
+    }
+  },
   "snapshots": {
     "tank/home@before-upgrade": {
       "target": "tank/home"

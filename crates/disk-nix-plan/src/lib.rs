@@ -178,6 +178,10 @@ pub struct ActionContext {
     pub end: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub partition_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<String>,
 }
 
 impl ActionContext {
@@ -196,6 +200,8 @@ impl ActionContext {
             && self.start.is_none()
             && self.end.is_none()
             && self.partition_type.is_none()
+            && self.client.is_none()
+            && self.options.is_none()
     }
 }
 
@@ -778,6 +784,8 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         start: string_field(object, &["start", "startOffset"]),
         end: string_field(object, &["end", "endOffset"]),
         partition_type: string_field(object, &["partitionType", "type"]),
+        client: string_field(object, &["client"]),
+        options: lifecycle_options(object),
         ..ActionContext::default()
     }
 }
@@ -802,6 +810,14 @@ fn desired_size(object: &Value) -> Option<String> {
             Value::Number(size) => Some(size.to_string()),
             _ => None,
         })
+}
+
+fn lifecycle_options(object: &Value) -> Option<String> {
+    string_field(object, &["options"]).or_else(|| {
+        object
+            .get("properties")
+            .and_then(|properties| string_field(properties, &["options"]))
+    })
 }
 
 fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesystem: &Value) {
@@ -1308,6 +1324,27 @@ fn add_destroy_guard(
         .unwrap_or(true);
 
     if destroy || !preserve_data {
+        if collection == "exports" {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:destroy").to_ascii_lowercase(),
+                description: format!("unexport NFS path {name}"),
+                operation: Operation::Destroy,
+                risk: RiskClass::OfflineRequired,
+                destructive: false,
+                context: lifecycle_context(collection, name, object),
+                advice: Some(Advice {
+                    summary: "unexporting NFS paths can interrupt active remote clients"
+                        .to_string(),
+                    alternatives: vec![
+                        "remove or migrate clients before unexporting the path".to_string(),
+                        "switch export options to read-only before final removal".to_string(),
+                        "verify no active mounts depend on the export before reload".to_string(),
+                    ],
+                }),
+            });
+            return;
+        }
+
         let mut alternatives = destructive_alternatives(collection, object);
         alternatives.push("rename, detach, or unmount first when supported".to_string());
         actions.push(PlannedAction {
@@ -1502,6 +1539,19 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "exports" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "NFS export creation publishes an existing path to selected clients"
+                    .to_string(),
+                alternatives: vec![
+                    "export read-only first when client behavior is unknown".to_string(),
+                    "restrict clients and options before enabling write access".to_string(),
+                    "verify the source path and ownership before reloading exports".to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
         Operation::Grow if collection == "mdRaids" => (
             RiskClass::OfflineRequired,
@@ -1636,6 +1686,18 @@ fn classify_operation(
                     "unmount filesystems and deactivate mappings before detach".to_string(),
                     "keep the backing file intact and recreate the loop mapping after validation"
                         .to_string(),
+                ],
+            }),
+        ),
+        Operation::Destroy if collection == "exports" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "unexporting NFS paths can interrupt active remote clients".to_string(),
+                alternatives: vec![
+                    "remove or migrate clients before unexporting the path".to_string(),
+                    "switch export options to read-only before final removal".to_string(),
+                    "verify no active mounts depend on the export before reload".to_string(),
                 ],
             }),
         ),
@@ -3037,6 +3099,48 @@ mod tests {
         assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Grow);
         assert_eq!(plan.actions[0].risk, RiskClass::OfflineRequired);
+    }
+
+    #[test]
+    fn plan_classifies_nfs_export_lifecycle_without_data_destruction() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "exports": {
+                "/srv/share": {
+                  "operation": "create",
+                  "client": "192.0.2.0/24",
+                  "options": "rw,sync,no_subtree_check"
+                },
+                "/srv/old": {
+                  "destroy": true,
+                  "client": "192.0.2.55"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.destructive_count, 0);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "exports:/srv/share:create")
+            .expect("export create exists");
+        assert_eq!(create.risk, RiskClass::Online);
+        assert_eq!(create.context.client.as_deref(), Some("192.0.2.0/24"));
+        assert_eq!(
+            create.context.options.as_deref(),
+            Some("rw,sync,no_subtree_check")
+        );
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "exports:/srv/old:destroy")
+            .expect("export destroy exists");
+        assert_eq!(destroy.risk, RiskClass::OfflineRequired);
+        assert!(!destroy.destructive);
     }
 
     #[test]

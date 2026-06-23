@@ -96,6 +96,9 @@ Examples:
   existing cache-set identity; cache replacement remains offline-required
   because dirty writeback data must be flushed or detached before media
   changes.
+- NFS export creation is online when it publishes an existing path to explicit
+  clients and options; unexporting is offline-required because remote clients
+  may need to be drained, but it is not treated as data destruction.
 - LUN `operation = "grow"` is classified as offline-required because the
   storage target, host rescan, multipath, and consumers must be coordinated.
 - iSCSI session `operation = "grow"` is classified as offline-required because
@@ -152,6 +155,8 @@ Lifecycle objects may use:
 - `target`, `path`, or `mountpoint`: explicit target path or object identity
   when it differs from the attribute name
 - `device` or `disk`: backing device path for disk and partition operations
+- `client`: NFS export client or network selector
+- `options`: NFS export options used for reviewed `exportfs` create commands
 - `start` and `end`: partition geometry for partition creation or resizing
 - `partitionType` or `type`: partition type/name metadata for partition
   lifecycle plans
@@ -191,6 +196,10 @@ Cache command plans include bcache-aware sysfs updates for existing cache-set
 attachment, cache-mode property changes, dirty-data checks, and replacement
 scaffolding that remains marked as needing domain implementation until the
 replacement cache device and new cache-set UUID are verified.
+NFS export command plans use `exportfs -i -o <options> <client>:<path>` for
+reviewed create operations and `exportfs -u <client>:<path>` for reviewed
+unexport operations, with unresolved-input markers when clients or options are
+missing.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.

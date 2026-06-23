@@ -201,6 +201,11 @@
                   lun = 0;
                 };
               };
+              exports."/srv/share" = {
+                operation = "create";
+                client = "192.0.2.0/24";
+                options = "rw,sync,no_subtree_check";
+              };
               caches."tank/l2arc0" = {
                 operation = "replace-device";
                 replaceDevices = {
@@ -279,6 +284,8 @@
               and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
               and ."$defs".lifecycleObject.properties.path.type == "string"
+              and ."$defs".lifecycleObject.properties.client.type == "string"
+              and ."$defs".lifecycleObject.properties.options.type == "string"
               and ."$defs".applyPolicy.properties.failOnBlocked.default == true
               and (."$defs".applyPolicy.properties.reportOut.type | index("string") != null)
             ' "$schema"
@@ -298,7 +305,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 24
+              .summary.actionCount == 25
               and .summary.offlineRequiredCount == 5
               and .summary.destructiveCount == 2
               and .summary.potentialDataLossCount == 2
@@ -316,6 +323,7 @@
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/archive:destroy"))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
+              and (.actions | any(.id == "exports:/srv/share:create" and .risk == "online"))
               and (.actions | any(.id == "caches:/dev/bcache0:add-device:cache-set-uuid" and .risk == "online"))
               and (.actions | any(.id == "caches:/dev/bcache0:set-property:bcache.cache-mode" and .risk == "safe"))
               and (.actions | any(.id == "caches:tank/l2arc0:replace-device:/dev/disk/by-id/old-cache"))
@@ -401,6 +409,9 @@
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
                   and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
+                  and .spec.exports."/srv/share".operation == "create"
+                  and .spec.exports."/srv/share".client == "192.0.2.0/24"
+                  and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
                   and .spec.partitions.root.operation == "grow"
                   and .spec.partitions.root.device == "/dev/disk/by-id/nvme-root-part2"
                   and .spec.partitions.root.desiredSize == "100%"

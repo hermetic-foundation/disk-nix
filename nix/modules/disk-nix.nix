@@ -144,6 +144,20 @@ let
           example = "/dev/disk/by-id/nvme-root";
         };
 
+        client = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Client or network selector for NFS export lifecycle declarations.";
+          example = "192.0.2.0/24";
+        };
+
+        options = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Option string for NFS export lifecycle declarations.";
+          example = "rw,sync,no_subtree_check";
+        };
+
         start = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -234,6 +248,8 @@ let
           path
           mountpoint
           device
+          client
+          options
           start
           end
           partitionType
