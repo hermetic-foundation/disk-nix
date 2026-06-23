@@ -163,8 +163,8 @@ Use these commands for:
 - `devices`: disks, partitions, dm devices, LVM objects, VDO, RAID, zvols,
   cache devices, multipath devices, NVMe namespaces, loop devices, and swap,
   including model/vendor, transport, rotational, partition table/number,
-  filesystem type, active swap state/type/priority, and udev link details when
-  probes expose them
+  filesystem type, loop backing/offset/autoclear metadata, active swap
+  state/type/priority, and udev link details when probes expose them
 - `partitions`: partition nodes with size, PARTUUID, path, filesystem type,
   partition number, start/end geometry, type/name, and flags when probes expose
   them
@@ -185,8 +185,8 @@ Use these commands for:
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
   counts, dm open/segment counters, multipath WWID/path state, VDO mode and
-  data-reduction settings, and bcache role/state/cache mode when probes expose
-  them
+  data-reduction settings, loop backing/offset/read-only/direct-I/O settings,
+  and bcache role/state/cache mode when probes expose them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them
@@ -197,8 +197,8 @@ Use these commands for:
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
   metadata detail data, including bcache role/set/state, cache mode,
-  replacement policy, dirty data, writeback percentage, and active swap
-  state/type/priority when probed
+  replacement policy, dirty data, writeback percentage, loop mapping details,
+  and active swap state/type/priority when probed
 
 ## Inspect
 

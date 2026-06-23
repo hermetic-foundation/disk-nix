@@ -1864,6 +1864,15 @@ fn usage_details(node: &Node) -> String {
         ("swap.active", "swap-active"),
         ("swap.type", "swap-type"),
         ("swap.priority", "swap-priority"),
+        ("loop.backing", "loop-backing"),
+        ("loop.back-file", "back-file"),
+        ("loop.major-minor", "major-minor"),
+        ("loop.offset", "offset"),
+        ("loop.sizelimit", "sizelimit"),
+        ("loop.logical-sector-size", "logical-sector"),
+        ("loop.autoclear", "autoclear"),
+        ("loop.read-only", "ro"),
+        ("loop.direct-io", "dio"),
         ("udev.symlink", "udev-link"),
         ("udev.devpath", "udev-devpath"),
         ("udev.id-fs-type", "udev-fstype"),
@@ -2211,7 +2220,11 @@ mod tests {
         graph.add_node(
             Node::new("block:/dev/loop0", NodeKind::LoopDevice, "/dev/loop0")
                 .with_path("/dev/loop0")
-                .with_property("lsblk.type", "loop"),
+                .with_property("lsblk.type", "loop")
+                .with_property("loop.back-file", "/var/lib/images/root.img")
+                .with_property("loop.offset", "1048576")
+                .with_property("loop.autoclear", "true")
+                .with_property("loop.direct-io", "true"),
         );
         graph.add_node(
             Node::new(
@@ -2219,7 +2232,8 @@ mod tests {
                 NodeKind::BackingFile,
                 "/var/lib/images/root.img",
             )
-            .with_path("/var/lib/images/root.img"),
+            .with_path("/var/lib/images/root.img")
+            .with_property("loop.backing", "true"),
         );
         graph.add_node(
             Node::new("swap:/dev/zram0", NodeKind::Swap, "/dev/zram0")
@@ -2240,7 +2254,10 @@ mod tests {
         );
         assert!(output.contains("udev-link=disk/by-id/nvme-Acme_FastDisk"));
         assert!(output.contains("lsblk-type=part fstype=vfat partno=1 udev-fstype=vfat"));
-        assert!(output.contains("lsblk-type=loop"));
+        assert!(output.contains(
+            "lsblk-type=loop back-file=/var/lib/images/root.img offset=1048576 autoclear=true dio=true"
+        ));
+        assert!(output.contains("loop-backing=true"));
         assert!(output.contains("swap-active=true swap-type=partition swap-priority=100"));
         assert!(output.contains("/var/lib/images/root.img"));
     }
@@ -2384,6 +2401,20 @@ mod tests {
         assert_eq!(
             usage_details(&swap),
             "swap-active=true swap-type=partition swap-priority=100"
+        );
+
+        let loop_device = Node::new("block:/dev/loop0", NodeKind::LoopDevice, "/dev/loop0")
+            .with_property("loop.back-file", "/var/lib/images/root.img")
+            .with_property("loop.major-minor", "7:0")
+            .with_property("loop.offset", "1048576")
+            .with_property("loop.sizelimit", "1073741824")
+            .with_property("loop.logical-sector-size", "512")
+            .with_property("loop.autoclear", "true")
+            .with_property("loop.read-only", "false")
+            .with_property("loop.direct-io", "true");
+        assert_eq!(
+            usage_details(&loop_device),
+            "back-file=/var/lib/images/root.img major-minor=7:0 offset=1048576 sizelimit=1073741824 logical-sector=512 autoclear=true ro=false dio=true"
         );
     }
 
