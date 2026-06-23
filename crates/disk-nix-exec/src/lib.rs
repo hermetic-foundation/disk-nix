@@ -1133,6 +1133,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent LUN paths and multipath maps are present only when expected".to_string(),
             ],
         ),
+        Operation::Create | Operation::Mount if collection == Some("nfs.mounts") => {
+            let mountpoint = nfs_mount_target_path(action);
+            (
+                vec![
+                    nfs_mount_findmnt_command(mountpoint),
+                    command(
+                        ["disk-nix", "inspect", mountpoint.unwrap_or(target), "--json"],
+                        false,
+                        "verify NFS mount graph state after mount",
+                    ),
+                ],
+                vec![
+                    "findmnt reports the mountpoint with the reviewed NFS source and options"
+                        .to_string(),
+                    "local services see the expected mounted NFS source".to_string(),
+                ],
+            )
+        }
         Operation::Remount if collection == Some("nfs.mounts") => {
             let mountpoint = nfs_mount_target_path(action);
             (
@@ -1147,6 +1165,28 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 vec![
                     "findmnt reports the mountpoint with the reviewed NFS options".to_string(),
                     "local services continue to see the expected mount source and filesystem type"
+                        .to_string(),
+                ],
+            )
+        }
+        Operation::Destroy | Operation::Unmount if collection == Some("nfs.mounts") => {
+            let mountpoint = nfs_mount_target_path(action);
+            (
+                vec![
+                    command(
+                        ["findmnt", "--json", mountpoint.unwrap_or("<mountpoint>")],
+                        false,
+                        "verify NFS mountpoint is no longer mounted",
+                    ),
+                    command(
+                        ["disk-nix", "topology", "--json"],
+                        false,
+                        "re-probe topology after NFS client unmount",
+                    ),
+                ],
+                vec![
+                    "findmnt no longer reports the NFS mountpoint as mounted".to_string(),
+                    "local filesystems and services no longer depend on the unmounted path"
                         .to_string(),
                 ],
             )
@@ -2081,6 +2121,8 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Logout
         | Operation::Open
         | Operation::Close
+        | Operation::Mount
+        | Operation::Unmount
         | Operation::Remount
         | Operation::Rename
         | Operation::RemoveDevice
@@ -3558,7 +3600,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Create if collection == Some("nfs.mounts") => {
+        Operation::Create | Operation::Mount if collection == Some("nfs.mounts") => {
             let mountpoint = nfs_mount_target_path(action);
             (
                 vec![nfs_mount_create_command(
@@ -4879,7 +4921,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Destroy if collection == Some("nfs.mounts") => {
+        Operation::Destroy | Operation::Unmount if collection == Some("nfs.mounts") => {
             let mountpoint = nfs_mount_target_path(action);
             (
                 vec![
@@ -4954,6 +4996,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Logout
         | Operation::Open
         | Operation::Close
+        | Operation::Mount
+        | Operation::Unmount
         | Operation::Remount
         | Operation::Rename
         | Operation::RemoveDevice
@@ -15590,7 +15634,7 @@ mod tests {
                 "nfs": {
                   "mounts": {
                     "/srv/shared": {
-                      "operation": "create",
+                      "operation": "mount",
                       "source": "nas.example.com:/srv/shared",
                       "fsType": "nfs4",
                       "options": ["_netdev", "vers=4.2"]
@@ -15601,7 +15645,7 @@ mod tests {
                       "options": ["_netdev", "ro", "vers=4.2"]
                     },
                     "/srv/old": {
-                      "destroy": true,
+                      "operation": "unmount",
                       "source": "nas.example.com:/srv/old"
                     }
                   }
@@ -15619,7 +15663,7 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(report.command_summary.all_commands_ready());
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "nfs.mounts:/srv/shared:create"
+            step.action_id == "nfs.mounts:/srv/shared:mount"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
@@ -15640,7 +15684,7 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "nfs.mounts:/srv/old:destroy"
+            step.action_id == "nfs.mounts:/srv/old:unmount"
                 && step
                     .commands
                     .iter()
@@ -15656,7 +15700,7 @@ mod tests {
                 "nfs": {
                   "mounts": {
                     "shared": {
-                      "operation": "create",
+                      "operation": "mount",
                       "source": "nas.example.com:/srv/shared"
                     },
                     "tuned": {
@@ -15665,7 +15709,7 @@ mod tests {
                       "options": ["ro"]
                     },
                     "old": {
-                      "destroy": true,
+                      "operation": "unmount",
                       "source": "nas.example.com:/srv/old"
                     }
                   }
@@ -15683,7 +15727,7 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(!report.command_summary.all_commands_ready());
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "nfs.mounts:shared:create"
+            step.action_id == "nfs.mounts:shared:mount"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
@@ -15706,7 +15750,7 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "nfs.mounts:old:destroy"
+            step.action_id == "nfs.mounts:old:unmount"
                 && step.commands.iter().any(|command| {
                     command.argv == ["umount", "<mountpoint>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation

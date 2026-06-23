@@ -60,6 +60,8 @@ pub enum Operation {
     Logout,
     Open,
     Close,
+    Mount,
+    Unmount,
     Remount,
     Rename,
     Rebalance,
@@ -2790,6 +2792,8 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "logout" | "log-out" | "logOut" => Some(Operation::Logout),
         "open" => Some(Operation::Open),
         "close" => Some(Operation::Close),
+        "mount" => Some(Operation::Mount),
+        "unmount" | "un-mount" | "umount" => Some(Operation::Unmount),
         "remount" => Some(Operation::Remount),
         "rename" => Some(Operation::Rename),
         "rebalance" => Some(Operation::Rebalance),
@@ -2827,6 +2831,8 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Logout => "logout",
         Operation::Open => "open",
         Operation::Close => "close",
+        Operation::Mount => "mount",
+        Operation::Unmount => "unmount",
         Operation::Remount => "remount",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
@@ -3248,7 +3254,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Create if collection == "nfs.mounts" => (
+        Operation::Create | Operation::Mount if collection == "nfs.mounts" => (
             RiskClass::Online,
             false,
             Some(Advice {
@@ -3632,7 +3638,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Destroy if collection == "nfs.mounts" => (
+        Operation::Destroy | Operation::Unmount if collection == "nfs.mounts" => (
             RiskClass::OfflineRequired,
             false,
             Some(Advice {
@@ -3816,6 +3822,22 @@ fn classify_operation(
                     "use operation = \"login\" or \"logout\" on iscsiSessions declarations for iSCSI session lifecycle"
                         .to_string(),
                     "use create/destroy only where a storage domain has not yet gained explicit lifecycle verbs"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Mount | Operation::Unmount => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} operations are currently only supported for nfs.mounts",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "use operation = \"mount\" or \"unmount\" on nfs.mounts declarations for NFS client mount lifecycle"
+                        .to_string(),
+                    "use filesystem, service, or automount-specific workflows for non-NFS mounts"
                         .to_string(),
                 ],
             }),
@@ -4104,6 +4126,8 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Logout => "logout",
         Operation::Open => "open",
         Operation::Close => "close",
+        Operation::Mount => "mount",
+        Operation::Unmount => "unmount",
         Operation::Remount => "remount",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
@@ -5517,6 +5541,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::NfsMount,
+            operation: Operation::Mount,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "mounting an NFS source changes local namespace state".to_string(),
+                alternatives: vec![
+                    "use x-systemd.automount or nofail for unreliable networks".to_string(),
+                    "verify server reachability and export permissions before mounting"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsMount,
             operation: Operation::Remount,
             risk: RiskClass::Online,
             advice: Some(Advice {
@@ -5531,6 +5568,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         Capability {
             node_kind: NodeKind::NfsMount,
             operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "unmounting an NFS client path can interrupt local services".to_string(),
+                alternatives: vec![
+                    "stop services and automount units before unmounting".to_string(),
+                    "verify no open files or bind mounts still depend on the mountpoint"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsMount,
+            operation: Operation::Unmount,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
                 summary: "unmounting an NFS client path can interrupt local services".to_string(),
@@ -5927,6 +5977,13 @@ mod tests {
                     && capability.operation == Operation::Create
             })
             .expect("NFS mount create capability should exist");
+        let mount = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NfsMount
+                    && capability.operation == Operation::Mount
+            })
+            .expect("NFS mount capability should exist");
         let mount_destroy = capabilities
             .iter()
             .find(|capability| {
@@ -5934,12 +5991,22 @@ mod tests {
                     && capability.operation == Operation::Destroy
             })
             .expect("NFS mount destroy capability should exist");
+        let unmount = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NfsMount
+                    && capability.operation == Operation::Unmount
+            })
+            .expect("NFS unmount capability should exist");
 
         assert_eq!(export_create.risk, RiskClass::Online);
         assert_eq!(export_destroy.risk, RiskClass::OfflineRequired);
         assert_eq!(mount_create.risk, RiskClass::Online);
+        assert_eq!(mount.risk, RiskClass::Online);
         assert_eq!(mount_destroy.risk, RiskClass::OfflineRequired);
+        assert_eq!(unmount.risk, RiskClass::OfflineRequired);
         assert!(mount_destroy.advice.is_some());
+        assert!(unmount.advice.is_some());
     }
 
     #[test]
@@ -9063,13 +9130,13 @@ mod tests {
               "nfs": {
                 "mounts": {
                   "/srv/shared": {
-                    "operation": "create",
+                    "operation": "mount",
                     "source": "nas.example.com:/srv/shared",
                     "fsType": "nfs4",
                     "options": ["_netdev", "vers=4.2"]
                   },
                   "/srv/old": {
-                    "destroy": true,
+                    "operation": "unmount",
                     "source": "nas.example.com:/srv/old"
                   },
                   "/srv/tuned": {
@@ -9089,8 +9156,9 @@ mod tests {
         let create = plan
             .actions
             .iter()
-            .find(|action| action.id == "nfs.mounts:/srv/shared:create")
-            .expect("NFS mount create exists");
+            .find(|action| action.id == "nfs.mounts:/srv/shared:mount")
+            .expect("NFS mount action exists");
+        assert_eq!(create.operation, Operation::Mount);
         assert_eq!(create.risk, RiskClass::Online);
         assert_eq!(
             create.context.device.as_deref(),
@@ -9103,8 +9171,9 @@ mod tests {
         let destroy = plan
             .actions
             .iter()
-            .find(|action| action.id == "nfs.mounts:/srv/old:destroy")
-            .expect("NFS mount destroy exists");
+            .find(|action| action.id == "nfs.mounts:/srv/old:unmount")
+            .expect("NFS unmount action exists");
+        assert_eq!(destroy.operation, Operation::Unmount);
         assert_eq!(destroy.risk, RiskClass::OfflineRequired);
         assert!(!destroy.destructive);
         assert_eq!(destroy.context.mountpoint.as_deref(), Some("/srv/old"));

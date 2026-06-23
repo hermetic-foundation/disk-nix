@@ -192,6 +192,7 @@
               nfs.mounts."/srv/shared" = {
                 source = "nas.example.com:/srv/shared";
                 fsType = "nfs4";
+                operation = "mount";
                 options = [
                   "_netdev"
                   "x-systemd.automount"
@@ -210,7 +211,7 @@
               };
               nfs.mounts."/srv/old" = {
                 source = "nas.example.com:/srv/old";
-                operation = "destroy";
+                operation = "unmount";
               };
               iscsi = {
                 initiatorName = "iqn.2026-06.example:host";
@@ -573,6 +574,8 @@
               and (."$defs".operation.enum | index("logout") != null)
               and (."$defs".operation.enum | index("open") != null)
               and (."$defs".operation.enum | index("close") != null)
+              and (."$defs".operation.enum | index("mount") != null)
+              and (."$defs".operation.enum | index("unmount") != null)
               and (."$defs".operation.enum | index("remount") != null)
               and ."$defs".filesystem.properties.device.type == "string"
               and ."$defs".filesystem.properties.operation["$ref"] == "#/$defs/operation"
@@ -631,8 +634,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 63
-              and .summary.offlineRequiredCount == 25
+              .summary.actionCount == 65
+              and .summary.offlineRequiredCount == 26
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -684,7 +687,9 @@
               and (.actions | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained" and .risk == "offline-required"))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
               and (.actions | any(.id == "exports:/srv/share:create" and .risk == "online"))
+              and (.actions | any(.id == "nfs.mounts:/srv/shared:mount" and .risk == "online"))
               and (.actions | any(.id == "nfs.mounts:/srv/tuned:remount" and .risk == "online"))
+              and (.actions | any(.id == "nfs.mounts:/srv/old:unmount" and .risk == "offline-required"))
               and (.actions | any(.id == "caches:/dev/bcache0:add-device:cache-set-uuid" and .risk == "online"))
               and (.actions | any(.id == "caches:/dev/bcache0:set-property:bcache.cache-mode" and .risk == "safe"))
               and (.actions | any(.id == "caches:tank/l2arc0:replace-device:/dev/disk/by-id/old-cache"))
@@ -718,8 +723,8 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 30
-              and .apply.blockedSummary.offlineRequiredCount == 25
+              and .apply.blockedCount == 31
+              and .apply.blockedSummary.offlineRequiredCount == 26
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
@@ -731,6 +736,7 @@
               and (.apply.blocked | any(.id == "volumegroups:exportvg:export"))
               and (.apply.blocked | any(.id == "volumegroups:activevg:activate"))
               and (.apply.blocked | any(.id == "iscsisessions:iqn.2026-06.example:storage.logout:logout"))
+              and (.apply.blocked | any(.id == "nfs.mounts:/srv/old:unmount"))
               and (.apply.blocked | any(.id == "volumes:vg0/archive:deactivate"))
               and (.apply.blocked | any(.id == "vdovolumes:warmarchive:start"))
               and (.apply.blocked | any(.id == "vdovolumes:coldarchive:stop"))
@@ -742,14 +748,14 @@
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 30
+              and .apply.blockedCount == 31
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 30
-              and .messages[0] == "apply policy blocked 30 action(s)"
+              and .apply.blockedCount == 31
+              and .messages[0] == "apply policy blocked 31 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -815,10 +821,11 @@
                   and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)
                   and (.spec.filesystems | has("/srv/old") | not)
                   and .spec.nfs.mounts."/srv/shared".source == "nas.example.com:/srv/shared"
+                  and .spec.nfs.mounts."/srv/shared".operation == "mount"
                   and .spec.nfs.mounts."/srv/tuned".operation == "remount"
                   and (.spec.nfs.mounts."/srv/tuned".options | index("ro") != null)
                   and .spec.nfs.mounts."/srv/old".source == "nas.example.com:/srv/old"
-                  and .spec.nfs.mounts."/srv/old".operation == "destroy"
+                  and .spec.nfs.mounts."/srv/old".operation == "unmount"
                   and .spec.iscsi.initiatorName == "iqn.2026-06.example:host"
                   and (.spec.iscsi | has("discoverPortal") | not)
                   and (.spec.iscsi.boot | has("discoverPortal") | not)

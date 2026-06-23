@@ -288,9 +288,10 @@ property values are classified as unsupported before execution.
 NFS export apply plans render reviewed `exportfs` create, option update, and
 unexport commands from explicit client and option declarations. Export
 mutations require a path-shaped local export target such as `/srv/share`.
-NFS client mount apply plans render reviewed `mount` create commands and
-`umount` destroy commands from `nfs.mounts`; missing sources or concrete
-mountpoints remain non-ready.
+NFS client mount apply plans render reviewed `operation = "mount"` commands,
+`operation = "remount"` option updates, and `operation = "unmount"` commands
+from `nfs.mounts`; legacy NFS mount `create` and `destroy` still map to the
+same command plans. Missing sources or concrete mountpoints remain non-ready.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
 and rescan commands from explicit target IQN and portal declarations. Prefer
 `operation = "login"` and `operation = "logout"` for session lifecycle;

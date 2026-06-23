@@ -908,6 +908,8 @@ fn spec_schema() -> serde_json::Value {
                     "logout",
                     "open",
                     "close",
+                    "mount",
+                    "unmount",
                     "remount",
                     "rename",
                     "rebalance",

@@ -75,11 +75,11 @@ in the generated disk-nix spec, but they are not re-added to NixOS
 `swapDevices` or `boot.initrd.luks.devices`. LUKS `operation = "close"` is
 treated the same way: it remains a reviewed disk-nix mapper teardown without
 re-declaring the mapper for initrd unlock.
-Typed NFS client mounts also keep destroy operations in the generated disk-nix
-spec while filtering them out of the derived NixOS `fileSystems` entries.
-`operation = "remount"` stays in both places: NixOS owns the steady-state
-mount declaration, and disk-nix can render a reviewed non-destructive remount
-to apply option changes.
+Typed NFS client mounts also keep `unmount` and legacy destroy operations in
+the generated disk-nix spec while filtering them out of the derived NixOS
+`fileSystems` entries. `operation = "mount"` and `operation = "remount"` stay
+in both places: NixOS owns the steady-state mount declaration, and disk-nix can
+render reviewed mount or non-destructive remount commands to apply changes.
 Typed active LVM declarations enable NixOS LVM support and initrd LVM support by
 default, and typed thin-pool or LVM-cache declarations also enable NixOS thin
 support. Typed active MD RAID declarations enable `boot.swraid` and add the same
@@ -458,6 +458,7 @@ Example lifecycle planning through NixOS options:
     nfs.mounts."/srv/shared" = {
       source = "nas.example.com:/srv/shared";
       fsType = "nfs4";
+      operation = "mount";
       options = [ "_netdev" "x-systemd.automount" "vers=4.2" ];
     };
     nfs.mounts."/srv/tuned" = {
@@ -467,7 +468,7 @@ Example lifecycle planning through NixOS options:
     };
     nfs.mounts."/srv/old" = {
       source = "nas.example.com:/srv/old";
-      operation = "destroy";
+      operation = "unmount";
     };
     iscsi = {
       initiatorName = "iqn.2026-06.example:host";

@@ -293,8 +293,9 @@ Lifecycle objects may use:
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
   `repair`, `scrub`, `trim`, `replace-device`, `add-device`, `remove-device`,
   `set-property`, `snapshot`, `promote`, `import`, `export`, `activate`,
-  `deactivate`, `assemble`, `stop`, `open`, `close`, `remount`, `rename`, `rebalance`,
-  `rollback`, or `destroy`
+  `deactivate`, `assemble`, `start`, `stop`, `login`, `logout`, `open`,
+  `close`, `mount`, `unmount`, `remount`, `rename`, `rebalance`, `rollback`,
+  or `destroy`
 - `addDevices`: list of devices to attach
 - `devices`: member devices for arrays, pools, or explicit LUN paths that
   should receive per-path host rescans
@@ -363,10 +364,13 @@ NFS export command plans use `exportfs -i -o <options> <client>:<path>` for
 reviewed create and option-update operations and `exportfs -u <client>:<path>`
 for reviewed unexport operations, with unresolved-input markers when clients,
 options, or the local export path are missing.
-NFS client mount command plans use `mount -t <nfs|nfs4> -o <options> <source> <mountpoint>` for reviewed create operations,
-`mount -o remount,<options> <mountpoint>` for reviewed option updates, and
-`umount <mountpoint>` for reviewed destroy operations. Missing sources or
-concrete mountpoint paths keep the command plan non-ready.
+NFS client mount command plans use
+`mount -t <nfs|nfs4> -o <options> <source> <mountpoint>` for reviewed
+`operation = "mount"` actions, `mount -o remount,<options> <mountpoint>` for
+reviewed option updates, and `umount <mountpoint>` for reviewed
+`operation = "unmount"` actions. Legacy NFS mount `create` and `destroy` map
+to the same mount/unmount command plans. Missing sources or concrete
+mountpoint paths keep the command plan non-ready.
 LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
 for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
 destructive policy gates allow removal. LV grow and remove commands require

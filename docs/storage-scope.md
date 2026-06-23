@@ -34,8 +34,7 @@ Creation is only one lifecycle operation. The planner should also support:
 - activate and deactivate LVM volumes, thin pools, snapshots, and volume groups
 - open and close LUKS mappings without formatting encrypted containers
 - assemble and stop existing MD RAID arrays without removing member metadata
-- remount NFS client mounts to apply reviewed option updates without deleting
-  remote data
+- mount, remount, and unmount NFS client mounts without deleting remote data
 - create and prune snapshots
 - rebalance data
 - convert or attach cache layers

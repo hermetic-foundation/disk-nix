@@ -89,6 +89,8 @@ let
       "logout"
       "open"
       "close"
+      "mount"
+      "unmount"
       "remount"
       "rename"
       "rebalance"
@@ -621,6 +623,7 @@ let
       "destroy"
       "close"
       "logout"
+      "unmount"
     ];
   activeLifecycleAttrs = attrs: lib.filterAttrs (_: object: !isDestroyLifecycle object) attrs;
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;

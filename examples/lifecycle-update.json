@@ -270,6 +270,15 @@
   },
   "nfs": {
     "mounts": {
+      "/srv/shared": {
+        "operation": "mount",
+        "source": "nas.example.com:/srv/shared",
+        "fsType": "nfs4",
+        "options": [
+          "_netdev",
+          "vers=4.2"
+        ]
+      },
       "/srv/tuned": {
         "operation": "remount",
         "source": "nas.example.com:/srv/tuned",
@@ -279,6 +288,10 @@
           "ro",
           "vers=4.2"
         ]
+      },
+      "/srv/old": {
+        "operation": "unmount",
+        "source": "nas.example.com:/srv/old"
       }
     }
   },
