@@ -322,12 +322,16 @@ that concrete target and no longer report `needs-desired-size`.
 Cache-layer command plans include bcache sysfs operations for attaching or
 detaching an existing cache-set UUID, changing cache mode, checking dirty data,
 and staging replacement cache media without silently formatting unknown devices.
+bcache sysfs operations require a concrete `/dev/bcache*` target; logical cache
+names remain marked `needs-domain-implementation`.
 Btrfs filesystem device-removal plans use Btrfs allocation inspection and
 domain-specific `btrfs device remove` rendering, but the mutating command stays
 blocked while potential-data-loss actions have no explicit apply override.
 Swapfile growth command plans render `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon`; block-device swap growth keeps the backing resize command
 non-ready until the partition, LV, LUN, or other backing layer is selected.
+Swap grow and format commands require a path-shaped target such as `/swapfile`
+or `/dev/disk/by-*`.
 LUKS open command plans render `cryptsetup open` for preserved existing
 containers, while close plans render offline-policy-gated `cryptsetup close`
 steps and keep the backing LUKS container intact for later reopen.
@@ -357,12 +361,15 @@ declared; missing devices and unsupported filesystem property keys remain
 marked `needs-domain-implementation`.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit `level` and `devices` fields, with exact unresolved-input markers
-when either field is missing and `/proc/mdstat` verification.
+when either field is missing and `/proc/mdstat` verification. MD create, grow,
+and member-removal commands require an explicit array path such as
+`/dev/md/root`.
 VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
 plus online `vdo growLogical` and `vdo growPhysical` growth steps. Create
 preflight remains non-ready until a backing device is declared.
 NFS export command plans use explicit `client` and `options` lifecycle fields
 to render reviewed `exportfs` create, option update, and unexport commands.
+They also require a path-shaped local export target such as `/srv/share`.
 iSCSI session command plans use `target` or the lifecycle key as the target IQN
 and `portal` or `metadata.portal` for reviewed discovery, login, and logout
 commands. LUN command plans model host-side attach, growth rescan, and detach:
@@ -374,10 +381,12 @@ provisioning or deletion must be handled outside the host plan unless a future
 target adapter is added.
 LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`, and report
-missing target form and size separately when either is absent.
+missing target form and size separately when either is absent. LV grow and
+remove commands also require the canonical `vg/lv` target form.
 LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
 and policy-gated `lvremove` commands for `thinPools` lifecycle declarations,
-with separate unresolved-input markers for target form and size.
+with separate unresolved-input markers for target form and size. Thin-pool grow
+and remove commands require the canonical `vg/pool` target form.
 LVM volume group command plans render policy-gated `vgcreate` and `vgremove`
 commands for `volumeGroups` lifecycle declarations, reviewed `vgextend`
 commands for grow operations with an explicit physical volume, and reviewed
@@ -385,6 +394,9 @@ commands for grow operations with an explicit physical volume, and reviewed
 Generic add-device, replace-device, and remove-device operations stay non-ready
 until the device to add, source device, replacement device, or device to remove
 is declared explicitly.
+Loop-device refresh and detach commands require `/dev/loop*` targets. Multipath
+map growth requires a concrete map target such as `mpatha` or
+`/dev/mapper/mpatha`; arbitrary logical map names remain non-ready.
 ZFS pool command plans render policy-gated `zpool create` from a single
 `device` or explicit `devices` vdev list, policy-gated `zpool destroy`, plus
 online topology commands such as `zpool add`, `zpool replace`, `zpool remove`,

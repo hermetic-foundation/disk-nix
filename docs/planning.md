@@ -283,19 +283,29 @@ stdout, and stderr for each command that ran.
 Cache command plans include bcache-aware sysfs updates for existing cache-set
 attachment, cache-mode property changes, dirty-data checks, and replacement
 scaffolding that remains marked as needing domain implementation until the
-replacement cache device and new cache-set UUID are verified.
+replacement cache device and new cache-set UUID are verified. bcache sysfs
+operations require a concrete `/dev/bcache*` target; logical cache declaration
+names stay non-ready.
 NFS export command plans use `exportfs -i -o <options> <client>:<path>` for
 reviewed create and option-update operations and `exportfs -u <client>:<path>`
-for reviewed unexport operations, with unresolved-input markers when clients or
-options are missing.
+for reviewed unexport operations, with unresolved-input markers when clients,
+options, or the local export path are missing.
 LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
 for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
-destructive policy gates allow removal.
+destructive policy gates allow removal. LV grow and remove commands require
+canonical `vg/lv` targets.
+LVM thin-pool command plans require canonical `vg/pool` targets for grow and
+remove operations.
 LVM volume group grow command plans use `vgextend <vg> <pv>` when a physical
 volume device is declared, and mark the command unresolved when it is missing.
 Generic add-device, replace-device, and remove-device lifecycle operations
 remain unresolved until the device to add, the source device, the replacement
 device, or the device to remove is declared explicitly.
+Swap grow and format command plans require a path-shaped swap target. MD RAID
+create, grow, and member-removal command plans require an explicit array path
+such as `/dev/md/root`. Loop-device refresh and detach command plans require
+`/dev/loop*` targets. Multipath map growth requires a concrete map target such
+as `mpatha` or `/dev/mapper/mpatha`.
 ZFS pool device removal renders reviewed `zpool remove <pool> <device>` steps
 when the pool layout supports evacuation. LVM volume group device removal
 renders reviewed `pvmove <pv>` then `vgreduce <vg> <pv>` steps so allocated

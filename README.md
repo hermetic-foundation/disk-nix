@@ -173,7 +173,9 @@ mapping updates, MD RAID member updates, multipath map updates, ZFS pool,
 dataset, and zvol updates including zvol property changes, volume updates,
 network LUN growth, snapshots, and cache attach/detach/replacement workflows.
 Cache apply plans include bcache-aware attach, detach, cache-mode, dirty-data,
-and replacement review steps instead of a generic cache placeholder.
+and replacement review steps instead of a generic cache placeholder. bcache
+sysfs commands require a concrete `/dev/bcache*` target; logical cache names
+remain non-ready until the backing bcache device path is declared.
 Btrfs filesystem device-removal plans include allocation inspection and
 domain-specific `btrfs device remove` rendering for review, while remaining
 blocked by the current potential-data-loss policy gate.
@@ -199,7 +201,9 @@ Btrfs qgroup lifecycle plans render `btrfs qgroup create`, policy-gated
 exclusive byte limits from `btrfsQgroups` declarations. Executable qgroup
 create, destroy, and limit plans require a mounted filesystem `target` path.
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
-and `swapon` steps while keeping block-device backing growth explicit.
+and `swapon` steps while keeping block-device backing growth explicit. Swap
+grow and format commands require a path-shaped swap target such as `/swapfile`
+or `/dev/disk/by-*`.
 LUKS open plans render reviewed `cryptsetup open` commands for preserved
 existing containers; close plans render offline-policy-gated `cryptsetup close`
 commands and verify the topology without erasing the backing LUKS header or
@@ -214,12 +218,15 @@ table rereads when `device`, `partitionNumber`, and `end` or `desiredSize` are
 declared.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit member devices and RAID level declarations, with exact
-unresolved-input markers when either field is missing.
+unresolved-input markers when either field is missing. MD create, grow, and
+member-removal command plans require an explicit array path such as
+`/dev/md/root`; logical array names remain non-ready.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
 online `vdo growLogical` and physical growth review steps. Create preflight is
 marked unresolved until a backing device is declared.
 NFS export apply plans render reviewed `exportfs` create, option update, and
-unexport commands from explicit client and option declarations.
+unexport commands from explicit client and option declarations. Export
+mutations require a path-shaped local export target such as `/srv/share`.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
 and rescan commands from explicit target IQN and portal declarations. LUN apply
 plans model host-side attach, growth rescan, and detach: attach and grow rescan
@@ -243,10 +250,12 @@ properties as create-time `-o key=value` options, plus policy-gated
 `zfs destroy` commands.
 LVM logical volume apply plans render reviewed `lvcreate` and gated
 `lvremove` steps for volume lifecycle declarations, with unresolved markers for
-missing `vg/lv` targets or sizes.
+missing `vg/lv` targets or sizes. Grow and remove commands also require that
+canonical `vg/lv` target form before they are executable.
 LVM thin-pool apply plans render reviewed `lvcreate --type thin-pool`,
 `lvextend`, and gated `lvremove` steps, with unresolved markers for missing
-`vg/pool` targets or sizes.
+`vg/pool` targets or sizes. Thin-pool grow and remove commands likewise
+require the canonical `vg/pool` target form.
 LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
 volume group lifecycle declarations, reviewed `vgextend` steps for grow
 operations with an explicit physical volume, and reviewed `pvmove` then
@@ -254,6 +263,9 @@ operations with an explicit physical volume, and reviewed `pvmove` then
 Generic add-device, replace-device, and remove-device operations stay non-ready
 until the device to add, source device, replacement device, or device to remove
 is declared explicitly.
+Loop-device refresh and detach commands require `/dev/loop*` targets. Multipath
+map growth requires a concrete map target such as `mpatha` or
+`/dev/mapper/mpatha`; arbitrary logical map names remain non-ready.
 ZFS pool apply plans render gated `zpool create` commands from a single
 `device` or an explicit `devices` vdev list, gated `zpool destroy` commands,
 and reviewed topology updates such as `zpool add`, `zpool replace`, and
