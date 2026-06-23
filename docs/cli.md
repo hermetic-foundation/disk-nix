@@ -168,6 +168,7 @@ Plan desired changes from a JSON spec:
 disk-nix plan --spec ./examples/simple-root.json
 disk-nix plan --spec ./examples/lifecycle-update.json
 disk-nix plan --spec ./examples/simple-root.json --json
+disk-nix plan --spec ./examples/simple-root.json --probe-current --json
 ```
 
 The planner accepts either a direct storage spec or the NixOS module wrapper
@@ -180,10 +181,15 @@ Plan JSON includes:
 - `summary.destructiveCount`
 - `summary.potentialDataLossCount`
 - `summary.unsupportedCount`
+- `topologyComparison` when `--probe-current` is set
 - `actions`
 
 Each action includes the target id, operation, risk class, destructive flag,
 typed context, and optional advice with non-destructive alternatives.
+With `--probe-current`, the CLI also probes the current host and adds
+`topologyComparison`, including matched target counts, missing target counts,
+size diagnostics, filesystem type conflicts, and already-satisfied property or
+size checks. The comparison is advisory and does not mutate storage.
 
 ## Apply Evaluation
 
@@ -192,6 +198,7 @@ Apply is currently policy evaluation, not mutation:
 ```sh
 disk-nix apply --spec ./examples/lifecycle-update.json
 disk-nix apply --spec ./examples/lifecycle-update.json --json
+disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
 ```
 
 The report includes:
@@ -202,6 +209,7 @@ The report includes:
 - `apply.blockedCount`
 - `apply.blockedSummary`
 - `apply.blocked`
+- `topologyComparison` when `--probe-current` is set
 - `commandSummary`
 - `commandPlan`
 - `verificationSummary`

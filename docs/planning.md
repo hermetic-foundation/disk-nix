@@ -103,8 +103,12 @@ replacement, property, property value, filesystem type, mountpoint, and
 desired size. Apply reports use this context to build command plans without
 relying on action-id parsing.
 
-Future planners should compare desired state against the probed topology before
-emitting concrete executor actions.
+`disk-nix plan --probe-current --spec <path>` probes the current host and adds
+a `topologyComparison` section to the plan. The comparison matches action
+targets against the storage graph and reports missing targets, current size
+state versus `desiredSize`, filesystem type conflicts, and already-satisfied
+property updates where the current graph has enough data. It is advisory and
+does not remove actions from the plan.
 
 ## Apply policy
 
@@ -117,10 +121,11 @@ destructive, potential-data-loss, and unsupported blocked actions in addition
 to the detailed blocked action list. When policy allows an action, the report
 also includes a `commandSummary` plus a `commandPlan` with non-executed command
 argv, mutation markers, manual-review flags, readiness, unresolved inputs, and
-notes. It also includes a `verificationSummary` plus a `verificationPlan` with
-read-only post-apply commands and checks for the relevant storage domain. These
-plans are intentionally advisory until the executor can compare desired state
-with the live probed graph and run mutating commands directly.
+notes. If `--probe-current` is set, the report also includes the same
+`topologyComparison` emitted by `plan`. It also includes a
+`verificationSummary` plus a `verificationPlan` with read-only post-apply
+commands and checks for the relevant storage domain. These plans are
+intentionally advisory until the executor can run mutating commands directly.
 
 Policy fields currently supported:
 

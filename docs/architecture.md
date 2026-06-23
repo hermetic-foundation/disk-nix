@@ -86,4 +86,4 @@ of only failing.
 
 The execution boundary must remain policy-gated. Until a real command runner
 exists, `disk-nix-exec` only emits dry-run, blocked, or executor-unavailable
-reports with advisory command and verification plans.
+reports with advisory topology comparison, command, and verification plans.

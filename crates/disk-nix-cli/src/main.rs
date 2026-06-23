@@ -9,7 +9,8 @@ use clap::{Parser, Subcommand};
 use disk_nix_exec::{ExecutionMode, ExecutionReport, ExecutionStatus, prepare_execution};
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use disk_nix_plan::{
-    Plan, default_capabilities, plan_and_policy_from_json_bytes, plan_from_json_bytes,
+    Plan, TopologyComparison, TopologyDiagnosticLevel, compare_plan_with_topology,
+    default_capabilities, plan_and_policy_from_json_bytes, plan_from_json_bytes,
 };
 use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeStatus};
 
@@ -103,6 +104,9 @@ enum Command {
         /// Desired storage specification path.
         #[arg(long)]
         spec: String,
+        /// Probe current topology and compare planned actions against it.
+        #[arg(long)]
+        probe_current: bool,
         /// Emit JSON plan output.
         #[arg(long)]
         json: bool,
@@ -112,6 +116,9 @@ enum Command {
         /// Desired storage specification path.
         #[arg(long)]
         spec: String,
+        /// Probe current topology and compare planned actions against it.
+        #[arg(long)]
+        probe_current: bool,
         /// Attempt execution after policy validation.
         #[arg(long)]
         execute: bool,
@@ -263,10 +270,17 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             }
             Ok(())
         }
-        Command::Plan { spec, json } => {
+        Command::Plan {
+            spec,
+            probe_current,
+            json,
+        } => {
             let bytes = std::fs::read(&spec)?;
-            let plan = plan_from_json_bytes(&bytes)
+            let mut plan = plan_from_json_bytes(&bytes)
                 .map_err(|error| AppError::Message(format!("failed to parse {spec}: {error}")))?;
+            if probe_current {
+                plan = compare_plan_with_topology(plan, &collect_graph()?);
+            }
             if json {
                 writeln!(
                     output,
@@ -281,12 +295,16 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
         }
         Command::Apply {
             spec,
+            probe_current,
             execute,
             json,
         } => {
             let bytes = std::fs::read(&spec)?;
-            let (plan, policy) = plan_and_policy_from_json_bytes(&bytes)
+            let (mut plan, policy) = plan_and_policy_from_json_bytes(&bytes)
                 .map_err(|error| AppError::Message(format!("failed to parse {spec}: {error}")))?;
+            if probe_current {
+                plan = compare_plan_with_topology(plan, &collect_graph()?);
+            }
             let mode = if execute {
                 ExecutionMode::Execute
             } else {
@@ -699,6 +717,40 @@ fn print_plan(output: &mut impl Write, plan: &Plan) -> io::Result<()> {
         }
     }
 
+    if let Some(comparison) = &plan.topology_comparison {
+        print_topology_comparison(output, comparison)?;
+    }
+
+    Ok(())
+}
+
+fn print_topology_comparison(
+    output: &mut impl Write,
+    comparison: &TopologyComparison,
+) -> io::Result<()> {
+    writeln!(
+        output,
+        "Topology comparison: {} actions, {} matched, {} missing, {} size notes, {} type conflicts, {} already satisfied",
+        comparison.summary.action_count,
+        comparison.summary.matched_count,
+        comparison.summary.missing_count,
+        comparison.summary.size_diagnostic_count,
+        comparison.summary.type_conflict_count,
+        comparison.summary.already_satisfied_count
+    )?;
+
+    for diagnostic in &comparison.diagnostics {
+        let level = match diagnostic.level {
+            TopologyDiagnosticLevel::Info => "info",
+            TopologyDiagnosticLevel::Warning => "warning",
+        };
+        writeln!(
+            output,
+            "  {level}: {:?} {}: {}",
+            diagnostic.kind, diagnostic.action_id, diagnostic.message
+        )?;
+    }
+
     Ok(())
 }
 
@@ -715,6 +767,9 @@ fn print_execution_report(
     writeln!(output, "mode: {:?}", report.apply.policy.mode)?;
     writeln!(output, "status: {:?}", report.status)?;
     writeln!(output, "execute requested: {execute}")?;
+    if let Some(comparison) = &report.topology_comparison {
+        print_topology_comparison(output, comparison)?;
+    }
 
     if report.apply.blocked.is_empty() {
         writeln!(output, "No policy blocks detected.")?;

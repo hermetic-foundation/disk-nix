@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
 use disk_nix_plan::{
-    ApplyPolicy, ApplyReport, Operation, Plan, PlannedAction, RiskClass, evaluate_apply_policy,
+    ApplyPolicy, ApplyReport, Operation, Plan, PlannedAction, RiskClass, TopologyComparison,
+    evaluate_apply_policy,
 };
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +26,8 @@ pub enum ExecutionStatus {
 pub struct ExecutionReport {
     pub apply: ApplyReport,
     pub status: ExecutionStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topology_comparison: Option<TopologyComparison>,
     pub command_summary: CommandPlanSummary,
     pub command_plan: Vec<ExecutionStep>,
     pub verification_summary: VerificationPlanSummary,
@@ -116,6 +119,7 @@ impl CommandPlanSummary {
 #[must_use]
 pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) -> ExecutionReport {
     let apply = evaluate_apply_policy(plan, policy);
+    let topology_comparison = plan.topology_comparison.clone();
     let command_plan = command_plan(plan, &apply);
     let command_summary = summarize_command_plan(&command_plan);
     let verification_plan = verification_plan(plan, &apply);
@@ -125,6 +129,7 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
         return ExecutionReport {
             apply,
             status: ExecutionStatus::Blocked,
+            topology_comparison,
             command_summary,
             command_plan,
             verification_summary,
@@ -137,6 +142,7 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
         ExecutionMode::DryRun => ExecutionReport {
             apply,
             status: ExecutionStatus::DryRun,
+            topology_comparison,
             command_summary,
             verification_summary,
             messages: vec![format!(
@@ -150,6 +156,7 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
         ExecutionMode::Execute => ExecutionReport {
             apply,
             status: ExecutionStatus::ExecutorUnavailable,
+            topology_comparison,
             command_summary,
             command_plan,
             verification_summary,

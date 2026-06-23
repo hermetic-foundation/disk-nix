@@ -1,4 +1,4 @@
-use disk_nix_model::NodeKind;
+use disk_nix_model::{Node, NodeKind, StorageGraph};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -53,6 +53,8 @@ pub enum Operation {
 pub struct Plan {
     pub summary: PlanSummary,
     pub actions: Vec<PlannedAction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topology_comparison: Option<TopologyComparison>,
 }
 
 impl Plan {
@@ -69,6 +71,68 @@ pub struct PlanSummary {
     pub destructive_count: usize,
     pub potential_data_loss_count: usize,
     pub unsupported_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopologyComparison {
+    pub summary: TopologyComparisonSummary,
+    pub diagnostics: Vec<TopologyDiagnostic>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopologyComparisonSummary {
+    pub action_count: usize,
+    pub matched_count: usize,
+    pub missing_count: usize,
+    pub size_diagnostic_count: usize,
+    pub type_conflict_count: usize,
+    pub already_satisfied_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopologyDiagnostic {
+    pub action_id: String,
+    pub level: TopologyDiagnosticLevel,
+    pub kind: TopologyDiagnosticKind,
+    pub query: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<CurrentNodeSummary>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TopologyDiagnosticLevel {
+    Info,
+    Warning,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TopologyDiagnosticKind {
+    Matched,
+    Missing,
+    SizeBelowDesired,
+    SizeAlreadySatisfied,
+    SizeConflict,
+    FilesystemTypeConflict,
+    PropertyAlreadySatisfied,
+    PropertyDiffers,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentNodeSummary {
+    pub id: String,
+    pub kind: NodeKind,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -314,7 +378,252 @@ pub fn plan_from_value(value: &Value) -> Plan {
             .count(),
     };
 
-    Plan { summary, actions }
+    Plan {
+        summary,
+        actions,
+        topology_comparison: None,
+    }
+}
+
+#[must_use]
+pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan {
+    let diagnostics: Vec<TopologyDiagnostic> = plan
+        .actions
+        .iter()
+        .flat_map(|action| topology_diagnostics_for_action(action, graph))
+        .collect();
+
+    let summary = TopologyComparisonSummary {
+        action_count: plan.actions.len(),
+        matched_count: diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.kind == TopologyDiagnosticKind::Matched)
+            .count(),
+        missing_count: diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.kind == TopologyDiagnosticKind::Missing)
+            .count(),
+        size_diagnostic_count: diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                matches!(
+                    diagnostic.kind,
+                    TopologyDiagnosticKind::SizeConflict
+                        | TopologyDiagnosticKind::SizeBelowDesired
+                        | TopologyDiagnosticKind::SizeAlreadySatisfied
+                )
+            })
+            .count(),
+        type_conflict_count: diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.kind == TopologyDiagnosticKind::FilesystemTypeConflict)
+            .count(),
+        already_satisfied_count: diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                matches!(
+                    diagnostic.kind,
+                    TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::PropertyAlreadySatisfied
+                )
+            })
+            .count(),
+    };
+
+    plan.topology_comparison = Some(TopologyComparison {
+        summary,
+        diagnostics,
+    });
+    plan
+}
+
+fn topology_diagnostics_for_action(
+    action: &PlannedAction,
+    graph: &StorageGraph,
+) -> Vec<TopologyDiagnostic> {
+    let Some(query) = topology_query(action) else {
+        return Vec::new();
+    };
+
+    let matches = graph.find_nodes(&query);
+    if matches.is_empty() {
+        return vec![TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::Missing,
+            query,
+            message: "no current topology node matched this planned action target".to_string(),
+            current: None,
+        }];
+    }
+
+    let node = matches[0];
+    let mut diagnostics = vec![TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::Matched,
+        query: query.clone(),
+        message: format!("matched current {} node {}", node.kind, node.name),
+        current: Some(current_node_summary(node)),
+    }];
+
+    diagnostics.extend(size_diagnostic(action, node, &query));
+    diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
+    diagnostics.extend(property_diagnostic(action, node, &query));
+    diagnostics
+}
+
+fn topology_query(action: &PlannedAction) -> Option<String> {
+    action
+        .context
+        .target
+        .clone()
+        .or_else(|| action.context.name.clone())
+        .or_else(|| action.context.device.clone())
+}
+
+fn current_node_summary(node: &Node) -> CurrentNodeSummary {
+    CurrentNodeSummary {
+        id: node.id.0.clone(),
+        kind: node.kind,
+        name: node.name.clone(),
+        path: node.path.clone(),
+        size_bytes: node.size_bytes,
+    }
+}
+
+fn size_diagnostic(action: &PlannedAction, node: &Node, query: &str) -> Option<TopologyDiagnostic> {
+    let desired = action.context.desired_size.as_deref()?;
+    let desired_bytes = parse_size_bytes(desired)?;
+    let current_bytes = node.size_bytes?;
+
+    let (level, kind, message) = match action.operation {
+        Operation::Grow if current_bytes >= desired_bytes => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::SizeAlreadySatisfied,
+            format!("current size {current_bytes} bytes already satisfies desired size {desired}"),
+        ),
+        Operation::Grow => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::SizeBelowDesired,
+            format!("current size {current_bytes} bytes is below desired size {desired}"),
+        ),
+        Operation::Shrink if current_bytes <= desired_bytes => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::SizeAlreadySatisfied,
+            format!(
+                "current size {current_bytes} bytes is already at or below desired size {desired}"
+            ),
+        ),
+        Operation::Shrink => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::SizeConflict,
+            format!("current size {current_bytes} bytes is above desired shrink target {desired}"),
+        ),
+        _ => return None,
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn filesystem_type_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    let desired = action.context.fs_type.as_deref()?;
+    let current = property_value_from_node(node, "filesystem.type")?;
+    if current == desired {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::FilesystemTypeConflict,
+        query: query.to_string(),
+        message: format!("desired filesystem type {desired} differs from current {current}"),
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn property_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::SetProperty {
+        return None;
+    }
+    let property = action.context.property.as_deref()?;
+    let desired = action.context.property_value.as_deref()?;
+    let current = property_value_from_node(node, property)?;
+    let (level, kind, message) = if current == desired {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::PropertyAlreadySatisfied,
+            format!("property {property} already has desired value {desired}"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::PropertyDiffers,
+            format!("property {property} is {current}, desired {desired}"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn property_value_from_node<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
+    node.properties
+        .iter()
+        .find(|property| property.key == key)
+        .map(|property| property.value.as_str())
+}
+
+fn parse_size_bytes(value: &str) -> Option<u64> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.ends_with('%') {
+        return None;
+    }
+
+    let number_end = trimmed
+        .find(|character: char| !(character.is_ascii_digit() || character == '.'))
+        .unwrap_or(trimmed.len());
+    let number = trimmed[..number_end].parse::<f64>().ok()?;
+    let unit = trimmed[number_end..].trim().to_ascii_lowercase();
+    let multiplier = match unit.as_str() {
+        "" | "b" => 1_f64,
+        "k" | "kb" => 1_000_f64,
+        "m" | "mb" => 1_000_000_f64,
+        "g" | "gb" => 1_000_000_000_f64,
+        "t" | "tb" => 1_000_000_000_000_f64,
+        "p" | "pb" => 1_000_000_000_000_000_f64,
+        "ki" | "kib" => 1024_f64,
+        "mi" | "mib" => 1024_f64.powi(2),
+        "gi" | "gib" => 1024_f64.powi(3),
+        "ti" | "tib" => 1024_f64.powi(4),
+        "pi" | "pib" => 1024_f64.powi(5),
+        _ => return None,
+    };
+
+    let bytes = number * multiplier;
+    bytes.is_finite().then_some(bytes.round() as u64)
 }
 
 fn blocked_action(action: &PlannedAction, policy: &ApplyPolicy) -> Option<BlockedAction> {
@@ -1150,6 +1459,93 @@ mod tests {
             .find(|action| action.id == "volumes:vg/home:grow")
             .expect("volume grow action exists");
         assert_eq!(volume.context.desired_size.as_deref(), Some("800GiB"));
+    }
+
+    #[test]
+    fn topology_comparison_reports_current_state_diagnostics() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "home": {
+                  "mountpoint": "/home",
+                  "fsType": "btrfs",
+                  "resizePolicy": "grow-only",
+                  "desiredSize": "750GiB"
+                }
+              },
+              "datasets": {
+                "tank/home": {
+                  "properties": {
+                    "compression": "zstd"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("filesystem:/home", NodeKind::Filesystem, "/home")
+                .with_path("/home")
+                .with_size_bytes(500 * 1024 * 1024 * 1024)
+                .with_property("filesystem.type", "ext4"),
+        );
+        graph.add_node(
+            Node::new("zfs:dataset:tank/home", NodeKind::ZfsDataset, "tank/home")
+                .with_property("compression", "zstd"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.matched_count, 2);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(comparison.summary.type_conflict_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.kind == TopologyDiagnosticKind::SizeBelowDesired
+                && diagnostic.action_id == "filesystem:home:grow"
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.kind == TopologyDiagnosticKind::FilesystemTypeConflict
+                && diagnostic.action_id == "filesystem:home:grow"
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+                && diagnostic.action_id == "datasets:tank/home:set-property:compression"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reports_missing_targets() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg/missing": {
+                  "operation": "grow",
+                  "desiredSize": "50GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let plan = compare_plan_with_topology(plan, &StorageGraph::empty());
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(
+            comparison.diagnostics[0].kind,
+            TopologyDiagnosticKind::Missing
+        );
     }
 
     #[test]

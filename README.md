@@ -65,8 +65,10 @@ disk-nix inspect / --json
 disk-nix plan --spec ./examples/simple-root.json
 disk-nix plan --spec ./examples/lifecycle-update.json
 disk-nix plan --spec ./examples/simple-root.json --json
+disk-nix plan --spec ./examples/simple-root.json --probe-current --json
 disk-nix apply --spec ./examples/lifecycle-update.json
 disk-nix apply --spec ./examples/lifecycle-update.json --json
+disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
 ```
 
 The canonical interface is intended to be stable JSON. Human tables and tree
