@@ -263,6 +263,7 @@
               volumeGroups.importvg.operation = "import";
               volumeGroups.exportvg.operation = "export";
               volumeGroups.activevg.operation = "activate";
+              volumeGroups.refreshvg.operation = "rescan";
               partitions.root = {
                 operation = "grow";
                 device = "/dev/disk/by-id/nvme-root";
@@ -286,6 +287,9 @@
               vdoVolumes.coldArchive.operation = "stop";
               physicalVolumes."/dev/disk/by-id/nvme-pv-grow" = {
                 operation = "grow";
+              };
+              physicalVolumes."/dev/disk/by-id/nvme-pv-refresh" = {
+                operation = "rescan";
               };
               luksKeyslots."cryptroot:1" = {
                 operation = "add-key";
@@ -696,7 +700,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 77
+              .summary.actionCount == 79
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -964,6 +968,7 @@
                   and .spec.vdoVolumes.warmArchive.operation == "start"
                   and .spec.vdoVolumes.coldArchive.operation == "stop"
                   and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
+                  and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-refresh".operation == "rescan"
                   and .spec.luksKeyslots."cryptroot:1".operation == "add-key"
                   and .spec.luksKeyslots."cryptroot:1".device == "/dev/disk/by-id/root-luks"
                   and .spec.luksKeyslots."cryptroot:1".keySlot == "1"
@@ -1017,6 +1022,7 @@
                   and .spec.volumeGroups.importvg.operation == "import"
                   and .spec.volumeGroups.exportvg.operation == "export"
                   and .spec.volumeGroups.activevg.operation == "activate"
+                  and .spec.volumeGroups.refreshvg.operation == "rescan"
                   and .spec.datasets."tank/home-review".operation == "promote"
                   and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
                   and .spec.snapshots."tank/home@before-upgrade".hold == "disk-nix-retain"

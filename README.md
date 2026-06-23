@@ -186,7 +186,7 @@ Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS
 format/resize/open/close/keyslot/token workflows, Btrfs subvolume
 creation/deletion, VDO create/grow/remove, LVM
-physical-volume create/grow/remove, logical-volume growth/removal,
+physical-volume create/grow/rescan/remove, logical-volume growth/removal,
 LVM volume-group extension/device removal, LVM thin-pool create/grow/remove,
 LVM snapshot create/merge/remove, LVM cache attach/detach/property updates,
 loop-device mapping updates, MD RAID lifecycle/member updates, multipath map
@@ -346,6 +346,9 @@ volume group lifecycle declarations, reviewed `vgextend` steps for grow or
 add-device operations with an explicit physical volume, reviewed replacement
 workflows with `vgextend`, `pvmove <old-pv> <new-pv>`, and `vgreduce`, and
 reviewed `pvmove` then `vgreduce` steps for explicit physical-volume removal.
+LVM rescan plans render `pvscan --cache`, `vgscan`, and
+`vgchange --refresh <vg>` for explicit PV/VG metadata refresh without
+recreating storage.
 Generic device topology operations stay non-ready until the device to add,
 source device, replacement device, or device to remove is declared explicitly.
 Loop-device refresh and detach commands require `/dev/loop*` targets. Multipath

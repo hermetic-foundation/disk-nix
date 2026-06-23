@@ -730,6 +730,58 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Rescan if collection == Some("physicalVolumes") => (
+            vec![
+                command(
+                    ["pvs", "--reportformat", "json"],
+                    false,
+                    "verify LVM physical volume inventory after metadata rescan",
+                ),
+                command(
+                    ["vgs", "--reportformat", "json"],
+                    false,
+                    "verify volume group metadata after PV cache refresh",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "re-probe topology after LVM physical volume rescan",
+                ),
+            ],
+            vec![
+                "PV metadata, size, and VG membership reflect current block-device state"
+                    .to_string(),
+                "dependent VGs no longer report stale or missing physical volumes".to_string(),
+            ],
+        ),
+        Operation::Rescan if collection == Some("volumeGroups") => (
+            vec![
+                command(
+                    ["vgs", "--reportformat", "json", target],
+                    false,
+                    "verify LVM volume group metadata after rescan",
+                ),
+                command(
+                    ["pvs", "--reportformat", "json"],
+                    false,
+                    "verify physical volume membership after VG metadata refresh",
+                ),
+                command(
+                    ["lvs", "--reportformat", "json", target],
+                    false,
+                    "verify contained logical volumes after VG metadata refresh",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled VG graph relationships after metadata rescan",
+                ),
+            ],
+            vec![
+                "volume group metadata and free extents match refreshed PV state".to_string(),
+                "logical volumes remain active only where expected after refresh".to_string(),
+            ],
+        ),
         Operation::Activate | Operation::Deactivate if collection == Some("volumeGroups") => (
             vec![
                 command(
@@ -2433,6 +2485,68 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "grow the backing partition, LUN, or disk before pvresize".to_string(),
                     "verify volume group free extents before extending logical volumes".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("physicalVolumes") => {
+            let target = lvm_physical_volume_target(action);
+            let inspect = match target {
+                Some(target) => command(
+                    ["pvs", "--reportformat", "json", target],
+                    false,
+                    "inspect physical volume metadata before cache refresh",
+                ),
+                None => command(
+                    ["pvs", "--reportformat", "json"],
+                    false,
+                    "inspect current LVM physical volume inventory before cache refresh",
+                ),
+            };
+            let mut commands = vec![inspect, lvm_physical_volume_rescan_command(target)];
+            commands.push(command(
+                ["pvs", "--reportformat", "json"],
+                false,
+                "inspect refreshed LVM physical volume inventory",
+            ));
+            (
+                commands,
+                vec![
+                    "rescan backing block paths first when device visibility changed".to_string(),
+                    "use grow when pvresize is needed after capacity changes".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("volumeGroups") => {
+            let target = target.unwrap_or("<volume-group>");
+            (
+                vec![
+                    command(
+                        ["vgs", "--reportformat", "json", target],
+                        false,
+                        "inspect volume group before metadata refresh",
+                    ),
+                    command(
+                        ["pvscan", "--cache"],
+                        true,
+                        "refresh the LVM physical volume device cache",
+                    ),
+                    command(
+                        ["vgscan"],
+                        true,
+                        "scan available LVM volume groups without creating metadata",
+                    ),
+                    command(
+                        ["vgchange", "--refresh", target],
+                        true,
+                        "reactivate the reviewed volume group with refreshed metadata",
+                    ),
+                ],
+                vec![
+                    "run host path rescans before VG refresh when devices were added or resized"
+                        .to_string(),
+                    "verify LV activation state and VG free extents after refresh".to_string(),
                 ],
                 true,
             )
@@ -9351,6 +9465,21 @@ fn lvm_physical_volume_resize_command(target: Option<&str>) -> ExecutionCommand 
     }
 }
 
+fn lvm_physical_volume_rescan_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["pvscan", "--cache", target],
+            true,
+            "refresh LVM physical volume metadata cache for the reviewed device",
+        ),
+        None => command(
+            ["pvscan", "--cache"],
+            true,
+            "refresh the LVM physical volume metadata cache",
+        ),
+    }
+}
+
 fn lvm_physical_volume_remove_command(target: Option<&str>) -> ExecutionCommand {
     match target {
         Some(target) => command(
@@ -14337,6 +14466,9 @@ mod tests {
                     "operation": "grow",
                     "device": "/dev/disk/by-id/nvme-data-pv"
                   },
+                  "vgrefresh": {
+                    "operation": "rescan"
+                  },
                   "vgmissing": {
                     "operation": "grow"
                   },
@@ -14385,6 +14517,17 @@ mod tests {
             step.action_id == "volumegroups:vgdata:grow"
                 && step.commands.iter().any(|command| {
                     command.argv == ["vgextend", "vgdata", "/dev/disk/by-id/nvme-data-pv"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumegroups:vgrefresh:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["pvscan", "--cache"])
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vgchange", "--refresh", "vgrefresh"]
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
@@ -14478,6 +14621,13 @@ mod tests {
                     .any(|command| command.argv == ["pvs", "--reportformat", "json"])
         }));
         assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "volumegroups:vgrefresh:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["lvs", "--reportformat", "json", "vgrefresh"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "volumegroups:oldvg:destroy"
                 && step
                     .commands
@@ -14519,6 +14669,9 @@ mod tests {
                   "/dev/disk/by-id/nvme-pv-grow": {
                     "operation": "grow"
                   },
+                  "/dev/disk/by-id/nvme-pv-refresh": {
+                    "operation": "rescan"
+                  },
                   "/dev/disk/by-id/nvme-pv-old": {
                     "destroy": true
                   }
@@ -14550,6 +14703,13 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:/dev/disk/by-id/nvme-pv-refresh:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["pvscan", "--cache", "/dev/disk/by-id/nvme-pv-refresh"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.action_id == "physicalvolumes:/dev/disk/by-id/nvme-pv-old:destroy"
                 && step.commands.iter().any(|command| {
                     command.argv == ["pvremove", "--yes", "/dev/disk/by-id/nvme-pv-old"]
@@ -14563,6 +14723,13 @@ mod tests {
                     .iter()
                     .any(|command| command.argv == ["pvs", "--reportformat", "json"])
         }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:/dev/disk/by-id/nvme-pv-refresh:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
+        }));
     }
 
     #[test]
@@ -14573,6 +14740,9 @@ mod tests {
                 "physicalVolumes": {
                   "logical-pv": {
                     "operation": "create"
+                  },
+                  "refresh-all": {
+                    "operation": "rescan"
                   }
                 }
               },
@@ -14593,6 +14763,17 @@ mod tests {
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["physical volume device"]
                 })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:refresh-all:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .all(|command| command.readiness == CommandReadiness::Ready)
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["pvscan", "--cache"])
         }));
     }
 

@@ -465,9 +465,12 @@ LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`, and report
 missing target form and size separately when either is absent. LV grow and
 remove commands also require the canonical `vg/lv` target form.
-LVM physical volume command plans render `pvcreate`, `pvresize`, and
-policy-gated `pvremove` for `physicalVolumes` lifecycle declarations.
-Executable plans require a concrete block-device path such as `/dev/disk/by-id/*`.
+LVM physical volume command plans render `pvcreate`, `pvresize`, explicit
+`operation = "rescan"` plans through `pvscan --cache`, and policy-gated
+`pvremove` for `physicalVolumes` lifecycle declarations. Create, grow, and
+remove plans require a concrete block-device path such as `/dev/disk/by-id/*`;
+rescan can refresh all visible PV metadata when no path-shaped target is
+declared.
 LUKS keyslot and token command plans render explicit `operation = "add-key"`,
 `operation = "remove-key"`, `operation = "import-token"`, and
 `operation = "remove-token"` declarations as `cryptsetup luksAddKey`,
@@ -494,6 +497,9 @@ physical-volume removal. Volume group import/export declarations render
 reviewed `vgimport <vg>` and `vgexport <vg>` commands. LVM logical volume,
 thin-pool, snapshot, and volume-group activation declarations render reviewed
 `lvchange --activate y|n <vg/lv>` or `vgchange --activate y|n <vg>` commands.
+Volume group `operation = "rescan"` renders `pvscan --cache`, `vgscan`, and
+`vgchange --refresh <vg>` so LVM metadata and active LV tables can be refreshed
+after lower-layer path changes without recreating the VG.
 Device topology operations stay non-ready until the device to add, source
 device, replacement device, or device to remove is declared explicitly.
 Loop-device refresh and detach commands require `/dev/loop*` targets. Multipath

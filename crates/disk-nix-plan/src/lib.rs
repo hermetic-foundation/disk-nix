@@ -3606,6 +3606,23 @@ fn classify_operation(
                 }),
             )
         }
+        Operation::Rescan if collection == "physicalVolumes" || collection == "volumeGroups" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary:
+                    "LVM rescan refreshes PV cache and VG metadata without deleting data"
+                        .to_string(),
+                alternatives: vec![
+                    "use grow when backing device capacity changed and PV or LV sizes must be updated"
+                        .to_string(),
+                    "rescan block paths before refreshing LVM metadata on newly visible devices"
+                        .to_string(),
+                    "verify VG free extents and LV activation state after the metadata refresh"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Grow if collection == "luns" || collection == "iscsiSessions" => (
             RiskClass::OfflineRequired,
             false,
@@ -3985,7 +4002,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, and multipath maps"
+                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, and LVM PV/VG metadata"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -3999,6 +4016,8 @@ fn classify_operation(
                     "use nvmeNamespaces.<controller>.operation = \"rescan\" to refresh namespace inventory"
                         .to_string(),
                     "use multipathMaps.<name>.operation = \"rescan\" to reload reviewed path maps"
+                        .to_string(),
+                    "use physicalVolumes or volumeGroups operation = \"rescan\" to refresh LVM metadata"
                         .to_string(),
                 ],
             }),
@@ -5390,6 +5409,18 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::LvmPhysicalVolume,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "physical volume rescan refreshes the LVM device cache".to_string(),
+                alternatives: vec![
+                    "rescan the underlying block path before refreshing LVM metadata".to_string(),
+                    "use grow when pvresize is required after backing capacity changes".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmPhysicalVolume,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             advice: Some(Advice {
@@ -5501,6 +5532,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "inspect the candidate PV before vgextend".to_string(),
                     "extend the existing VG instead of recreating it".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmVolumeGroup,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "volume group rescan refreshes LVM metadata and active LV tables"
+                    .to_string(),
+                alternatives: vec![
+                    "run block and PV rescans first when storage paths changed".to_string(),
+                    "verify LV activation state and VG free extents after refresh".to_string(),
                 ],
             }),
         },
@@ -6457,6 +6501,13 @@ mod tests {
                     && capability.operation == Operation::Grow
             })
             .expect("LVM physical volume grow capability should exist");
+        let rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LvmPhysicalVolume
+                    && capability.operation == Operation::Rescan
+            })
+            .expect("LVM physical volume rescan capability should exist");
         let destroy = capabilities
             .iter()
             .find(|capability| {
@@ -6467,6 +6518,7 @@ mod tests {
 
         assert_eq!(create.risk, RiskClass::Destructive);
         assert_eq!(grow.risk, RiskClass::Online);
+        assert_eq!(rescan.risk, RiskClass::Online);
         assert_eq!(destroy.risk, RiskClass::Destructive);
         assert!(destroy.advice.is_some());
     }
@@ -6811,6 +6863,11 @@ mod tests {
                 RiskClass::Online,
             ),
             (NodeKind::LvmVolumeGroup, Operation::Grow, RiskClass::Online),
+            (
+                NodeKind::LvmVolumeGroup,
+                Operation::Rescan,
+                RiskClass::Online,
+            ),
             (
                 NodeKind::LvmVolumeGroup,
                 Operation::RemoveDevice,
@@ -9609,12 +9666,22 @@ mod tests {
                 "/dev/nvme0": {
                   "operation": "rescan"
                 }
+              },
+              "physicalVolumes": {
+                "/dev/disk/by-id/nvme-pv-refresh": {
+                  "operation": "rescan"
+                }
+              },
+              "volumeGroups": {
+                "vgrefresh": {
+                  "operation": "rescan"
+                }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 5);
         assert_eq!(plan.summary.offline_required_count, 0);
         assert!(plan.actions.iter().all(|action| {
             action.operation == Operation::Rescan && action.risk == RiskClass::Online

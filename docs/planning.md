@@ -401,10 +401,15 @@ when a physical volume device is declared. Replacement plans render
 `vgreduce <vg> <old-pv>` when both PVs are explicit. Device topology operations
 remain unresolved until the device to add, the source device, the replacement
 device, or the device to remove is declared explicitly.
-LVM physical volume command plans use `pvcreate`, `pvresize`, and `pvremove`
-for `physicalVolumes` lifecycle declarations. Executable plans require a
-concrete path-shaped target or `device`, and PV removal advice recommends
-`pvmove` plus `vgreduce` before `pvremove`.
+Volume group `operation = "rescan"` refreshes LVM metadata with
+`pvscan --cache`, `vgscan`, and `vgchange --refresh <vg>` without recreating
+the VG.
+LVM physical volume command plans use `pvcreate`, `pvresize`,
+`pvscan --cache`, and `pvremove` for `physicalVolumes` lifecycle declarations.
+Create, grow, and remove plans require a concrete path-shaped target or
+`device`; rescan can refresh all visible PV metadata when no path-shaped target
+is declared. PV removal advice recommends `pvmove` plus `vgreduce` before
+`pvremove`.
 LUKS keyslot and token command plans use explicit `add-key`, `remove-key`,
 `import-token`, and `remove-token` lifecycle declarations for
 `cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and
