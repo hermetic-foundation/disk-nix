@@ -68,6 +68,81 @@
             mainProgram = "disk-nix";
           };
         };
+        nixosModuleTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            boot.initrd.systemd.enable = false;
+            services.disk-nix = {
+              enable = true;
+              luks.devices.cryptroot = {
+                device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
+                allowDiscards = true;
+              };
+              filesystems.root = {
+                device = "/dev/disk/by-label/nixos-root";
+                fsType = "xfs";
+                mountpoint = "/";
+                neededForBoot = true;
+                resizePolicy = "grow-only";
+              };
+              swaps.primary = {
+                device = "/dev/disk/by-label/swap";
+                priority = 5;
+              };
+              nfs.mounts."/srv/shared" = {
+                source = "nas.example.com:/srv/shared";
+                fsType = "nfs4";
+                options = [
+                  "_netdev"
+                  "x-systemd.automount"
+                  "vers=4.2"
+                ];
+              };
+              iscsi = {
+                initiatorName = "iqn.2026-06.example:host";
+                discoverPortal = "192.0.2.10:3260";
+                enableAutoLoginOut = true;
+                boot = {
+                  enable = true;
+                  target = "iqn.2026-06.example:storage.root";
+                };
+                sessions."iqn.2026-06.example:storage.root" = {
+                  operation = "grow";
+                  metadata = {
+                    portal = "192.0.2.10:3260";
+                  };
+                };
+              };
+              pools.tank = {
+                operation = "rebalance";
+                addDevices = [ "/dev/disk/by-id/nvme-replacement" ];
+                removeDevices = [ "/dev/disk/by-id/old-disk" ];
+                properties.autotrim = "on";
+              };
+              datasets."tank/archive" = {
+                destroy = true;
+              };
+              luns."iqn.2026-06.example:storage/root:0" = {
+                operation = "grow";
+                metadata = {
+                  target = "iqn.2026-06.example:storage/root";
+                  lun = 0;
+                };
+              };
+              caches."tank/l2arc0" = {
+                operation = "replace-device";
+                replaceDevices = {
+                  "/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
+                };
+              };
+              snapshots."tank/home@before-upgrade" = {
+                target = "tank/home";
+              };
+            };
+          }
+        ];
       in
       {
         formatter = formatProgram;
@@ -96,82 +171,30 @@
             done < <(${formatFiles})
             touch "$out"
           '';
-          nixosModule =
-            (pkgs.nixos [
-              self.nixosModules.default
-              {
-                system.stateVersion = "26.05";
-                boot.loader.grub.enable = false;
-                boot.initrd.systemd.enable = false;
-                services.disk-nix = {
-                  enable = true;
-                  luks.devices.cryptroot = {
-                    device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
-                    allowDiscards = true;
-                  };
-                  filesystems.root = {
-                    device = "/dev/disk/by-label/nixos-root";
-                    fsType = "xfs";
-                    mountpoint = "/";
-                    neededForBoot = true;
-                    resizePolicy = "grow-only";
-                  };
-                  swaps.primary = {
-                    device = "/dev/disk/by-label/swap";
-                    priority = 5;
-                  };
-                  nfs.mounts."/srv/shared" = {
-                    source = "nas.example.com:/srv/shared";
-                    fsType = "nfs4";
-                    options = [
-                      "_netdev"
-                      "x-systemd.automount"
-                      "vers=4.2"
-                    ];
-                  };
-                  iscsi = {
-                    initiatorName = "iqn.2026-06.example:host";
-                    discoverPortal = "192.0.2.10:3260";
-                    enableAutoLoginOut = true;
-                    boot = {
-                      enable = true;
-                      target = "iqn.2026-06.example:storage.root";
-                    };
-                    sessions."iqn.2026-06.example:storage.root" = {
-                      operation = "grow";
-                      metadata = {
-                        portal = "192.0.2.10:3260";
-                      };
-                    };
-                  };
-                  pools.tank = {
-                    operation = "rebalance";
-                    addDevices = [ "/dev/disk/by-id/nvme-replacement" ];
-                    removeDevices = [ "/dev/disk/by-id/old-disk" ];
-                    properties.autotrim = "on";
-                  };
-                  datasets."tank/archive" = {
-                    destroy = true;
-                  };
-                  luns."iqn.2026-06.example:storage/root:0" = {
-                    operation = "grow";
-                    metadata = {
-                      target = "iqn.2026-06.example:storage/root";
-                      lun = 0;
-                    };
-                  };
-                  caches."tank/l2arc0" = {
-                    operation = "replace-device";
-                    replaceDevices = {
-                      "/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
-                    };
-                  };
-                  snapshots."tank/home@before-upgrade" = {
-                    target = "tank/home";
-                  };
-                };
-              }
-            ]).config.system.build.toplevel;
+          nixosModule = nixosModuleTest.config.system.build.toplevel;
+          nixosModuleSpec =
+            pkgs.runCommand "disk-nix-nixos-module-spec-check" { nativeBuildInputs = [ pkgs.jq ]; }
+              ''
+                spec=${nixosModuleTest.config.environment.etc."disk-nix/spec.json".source}
+                jq -e '
+                  .spec.filesystems.root.device == "/dev/disk/by-label/nixos-root"
+                  and .spec.filesystems.root.resizePolicy == "grow-only"
+                  and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"
+                  and .spec.filesystems."/srv/shared".fsType == "nfs4"
+                  and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)
+                  and .spec.nfs.mounts."/srv/shared".source == "nas.example.com:/srv/shared"
+                  and .spec.iscsi.initiatorName == "iqn.2026-06.example:host"
+                  and .spec.iscsi.discoverPortal == "192.0.2.10:3260"
+                  and .spec.iscsi.boot.target == "iqn.2026-06.example:storage.root"
+                  and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".operation == "grow"
+                  and .spec.iscsiSessions."iqn.2026-06.example:storage.root".portal == "192.0.2.10:3260"
+                  and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
+                  and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
+                  and .apply.allowGrow == true
+                  and .apply.allowOffline == false
+                ' "$spec"
+                touch "$out"
+              '';
         };
 
         devShells.default = pkgs.mkShell {
