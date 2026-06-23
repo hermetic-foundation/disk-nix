@@ -71,10 +71,10 @@ only when they are active declarations with explicit `client` and `options`
 fields. `operation = "unexport"`, destructive, or under-specified export
 declarations remain in the disk-nix planner spec for review instead of being
 re-added to `/etc/exports`.
-Typed swap and LUKS declarations follow the same split: destroy operations stay
-in the generated disk-nix spec, but they are not re-added to NixOS
-`swapDevices` or `boot.initrd.luks.devices`. LUKS `operation = "close"` is
-treated the same way: it remains a reviewed disk-nix mapper teardown without
+Typed swap and LUKS declarations follow the same split: `operation = "destroy"`
+or `destroy = true` stays in the generated disk-nix spec, but is not re-added
+to NixOS `swapDevices` or `boot.initrd.luks.devices`. LUKS `operation = "close"`
+is treated the same way: it remains a reviewed disk-nix mapper teardown without
 re-declaring the mapper for initrd unlock.
 Typed NFS client mounts also keep `unmount` and legacy destroy operations in
 the generated disk-nix spec while filtering them out of the derived NixOS
@@ -87,9 +87,10 @@ while keeping the persistent source, type, mountpoint, and options in the same
 NixOS `fileSystems` entry. `operation = "unmount"` remains in the generated
 disk-nix spec for imperative review, but is filtered out of derived NixOS
 `fileSystems` so NixOS does not immediately re-establish a mount that disk-nix
-was asked to tear down. Teardown-only filesystem declarations are also filtered
-out of `boot.supportedFilesystems`; only active steady-state filesystems drive
-NixOS filesystem support.
+was asked to tear down. `destroy = true` follows the same planner-only path for
+local filesystems. Teardown-only filesystem declarations are also filtered out
+of `boot.supportedFilesystems`; only active steady-state filesystems drive NixOS
+filesystem support.
 The same `filesystems` option is also the typed path for non-block mounted
 filesystems that NixOS represents through `fileSystems`, including tmpfs,
 bind mounts, and overlayfs. Declare `device = "tmpfs"; fsType = "tmpfs"` for
@@ -153,6 +154,7 @@ Typed filesystem declarations include:
 - `neededForBoot`
 - `operation`
 - `action`
+- `destroy`
 - `addDevices`
 - `removeDevices`
 - `replaceDevices`
@@ -206,6 +208,7 @@ Typed swap declarations include:
 - `device`
 - `operation`
 - `action`
+- `destroy`
 - `desiredSize`
 - `priority`
 - `randomEncryption`

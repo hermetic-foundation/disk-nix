@@ -768,6 +768,7 @@ let
       neededForBoot
       operation
       action
+      destroy
       addDevices
       removeDevices
       replaceDevices
@@ -808,6 +809,7 @@ let
       device
       operation
       action
+      destroy
       desiredSize
       priority
       randomEncryption
@@ -1074,6 +1076,12 @@ in
                 example = "rebalance";
               };
 
+              destroy = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Request filesystem teardown or destruction in disk-nix planning without adding the mount to NixOS fileSystems.";
+              };
+
               addDevices = lib.mkOption {
                 type = lib.types.listOf lib.types.str;
                 default = [ ];
@@ -1182,6 +1190,12 @@ in
                 default = null;
                 description = "Alias for operation accepted by the planner.";
                 example = "grow";
+              };
+
+              destroy = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Request swap teardown or signature removal in disk-nix planning without adding the device to NixOS swapDevices.";
               };
 
               desiredSize = lib.mkOption {

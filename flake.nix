@@ -216,6 +216,12 @@
                 mountpoint = "/mnt/teardown-only";
                 operation = "unmount";
               };
+              filesystems.destroyed = {
+                device = "/dev/disk/by-label/destroyed";
+                fsType = "ext4";
+                mountpoint = "/mnt/destroyed";
+                destroy = true;
+              };
               filesystems.targetSizeAlias = {
                 device = "/dev/disk/by-label/target-size";
                 fsType = "xfs";
@@ -292,6 +298,10 @@
               swaps.actionOld = {
                 device = "/dev/disk/by-label/action-old-swap";
                 action = "destroy";
+              };
+              swaps.destroyed = {
+                device = "/dev/disk/by-label/destroyed-swap";
+                destroy = true;
               };
               luks.devices.cryptaction = {
                 device = "/dev/disk/by-id/action-luks";
@@ -1152,6 +1162,8 @@
                     and .spec.filesystems.localRescan.mountpoint == "/mnt/local-rescan"
                     and .spec.filesystems.actionRescan.action == "rescan"
                     and .spec.filesystems.actionUnmount.action == "unmount"
+                    and .spec.filesystems.destroyed.destroy == true
+                    and .spec.filesystems.destroyed.device == "/dev/disk/by-label/destroyed"
                     and .spec.filesystems.targetSizeAlias.operation == "rescan"
                     and .spec.filesystems.targetSizeAlias.targetSize == "200GiB"
                     and .spec.filesystems.sizeAlias.operation == "rescan"
@@ -1180,6 +1192,8 @@
                     and .spec.swaps.inventory.device == "/dev/disk/by-label/swap-inventory"
                     and .spec.swaps.old.operation == "destroy"
                     and .spec.swaps.actionOld.action == "destroy"
+                    and .spec.swaps.destroyed.destroy == true
+                    and .spec.swaps.destroyed.device == "/dev/disk/by-label/destroyed-swap"
                     and .spec.luks.devices.cryptaction.action == "open"
                     and .spec.swaps.old.device == "/dev/disk/by-label/old-swap"
                     and .spec.luks.devices.cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
@@ -1425,6 +1439,7 @@
                     and any(.[]; .device == "/dev/disk/by-label/swap")
                     and any(.[]; .device == "/dev/disk/by-label/swap-inventory")
                     and all(.[]; .device != "/dev/disk/by-label/action-old-swap")
+                    and all(.[]; .device != "/dev/disk/by-label/destroyed-swap")
                   ' swap-devices
                   luksDevices=${
                     pkgs.lib.escapeShellArg (
@@ -1472,6 +1487,7 @@
                     and ."/mnt/action-rescan".fsType == "xfs"
                     and (has("/mnt/action-unmount") | not)
                     and (has("/mnt/teardown-only") | not)
+                    and (has("/mnt/destroyed") | not)
                     and has("/srv/action")
                     and ."/srv/action".device == "nas.example.com:/srv/action"
                     and ."/srv/action".fsType == "nfs4"
