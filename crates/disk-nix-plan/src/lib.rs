@@ -1147,6 +1147,28 @@ fn classify_filesystem_property_change(
         );
     }
 
+    if is_ntfs_filesystem_uuid_property(fs_type, property)
+        && !is_valid_ntfs_volume_serial(&property_value(value))
+    {
+        return (
+            RiskClass::Unsupported,
+            Some(Advice {
+                summary: format!(
+                    "{fs_type} filesystem volume serial {} is not a valid NTFS serial",
+                    property_value(value)
+                ),
+                alternatives: vec![
+                    "use a 16-hex-digit NTFS volume serial such as 01234567-89ABCDEF or 0123456789ABCDEF"
+                        .to_string(),
+                    "update NixOS fileSystems and dependent mount references instead of changing the NTFS serial when possible"
+                        .to_string(),
+                    "leave the NTFS serial unchanged unless consumers explicitly depend on it"
+                        .to_string(),
+                ],
+            }),
+        );
+    }
+
     if is_filesystem_uuid_property_supported(fs_type, property) {
         return (
             RiskClass::OfflineRequired,
@@ -1175,9 +1197,9 @@ fn classify_filesystem_property_change(
                 "{fs_type} filesystem property {property} is not mapped to a safe command"
             ),
             alternatives: vec![
-                "use label, filesystem.label, btrfs.label, ext.label, fat.label, vfat.label, or xfs.label when changing filesystem labels"
+                "use label, filesystem.label, btrfs.label, ext.label, fat.label, ntfs.label, vfat.label, or xfs.label when changing filesystem labels"
                     .to_string(),
-                "use uuid, filesystem.uuid, btrfs.uuid, ext.uuid, fat.uuid, vfat.uuid, or xfs.uuid when changing supported filesystem UUIDs"
+                "use uuid, filesystem.uuid, btrfs.uuid, ext.uuid, fat.uuid, ntfs.uuid, vfat.uuid, or xfs.uuid when changing supported filesystem UUIDs"
                     .to_string(),
                 "use ZFS dataset declarations for arbitrary zfs set property updates".to_string(),
                 "apply unsupported filesystem property changes manually after reviewing filesystem-specific tooling"
@@ -1224,6 +1246,20 @@ fn is_filesystem_property_supported(fs_type: &str, property: &str) -> bool {
                 | "fat.volume-id"
                 | "vfat.volume-id"
         ),
+        "ntfs" | "ntfs3" => matches!(
+            property,
+            "label"
+                | "ntfs.label"
+                | "filesystem.label"
+                | "uuid"
+                | "ntfs.uuid"
+                | "filesystem.uuid"
+                | "serial"
+                | "volumeSerial"
+                | "volume-serial"
+                | "ntfs.serial"
+                | "ntfs.volume-serial"
+        ),
         "xfs" => matches!(
             property,
             "label" | "xfs.label" | "filesystem.label" | "uuid" | "xfs.uuid" | "filesystem.uuid"
@@ -1251,6 +1287,17 @@ fn is_filesystem_uuid_property_supported(fs_type: &str, property: &str) -> bool 
                     | "volume-id"
                     | "fat.volume-id"
                     | "vfat.volume-id"
+            )
+            | (
+                "ntfs" | "ntfs3",
+                "uuid"
+                    | "ntfs.uuid"
+                    | "filesystem.uuid"
+                    | "serial"
+                    | "volumeSerial"
+                    | "volume-serial"
+                    | "ntfs.serial"
+                    | "ntfs.volume-serial"
             )
             | ("xfs", "uuid" | "xfs.uuid" | "filesystem.uuid")
     )
@@ -1284,6 +1331,44 @@ fn fat_volume_id(value: &str) -> Option<String> {
         .filter(|character| *character != '-')
         .collect();
     if normalized.len() == 8
+        && normalized
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        Some(normalized.to_ascii_uppercase())
+    } else {
+        None
+    }
+}
+
+fn is_ntfs_filesystem_uuid_property(fs_type: &str, property: &str) -> bool {
+    matches!(
+        (fs_type, property),
+        (
+            "ntfs" | "ntfs3",
+            "uuid"
+                | "ntfs.uuid"
+                | "filesystem.uuid"
+                | "serial"
+                | "volumeSerial"
+                | "volume-serial"
+                | "ntfs.serial"
+                | "ntfs.volume-serial"
+        )
+    )
+}
+
+fn is_valid_ntfs_volume_serial(value: &str) -> bool {
+    ntfs_volume_serial(value).is_some()
+}
+
+fn ntfs_volume_serial(value: &str) -> Option<String> {
+    let normalized: String = value
+        .trim()
+        .chars()
+        .filter(|character| *character != '-')
+        .collect();
+    if normalized.len() == 16
         && normalized
             .chars()
             .all(|character| character.is_ascii_hexdigit())
@@ -5276,6 +5361,68 @@ mod tests {
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("8-hex-digit FAT volume ID"))
+        }));
+    }
+
+    #[test]
+    fn plan_accepts_ntfs_label_and_volume_serial_properties() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "windows": {
+                  "mountpoint": "/mnt/windows",
+                  "device": "/dev/disk/by-label/Windows",
+                  "fsType": "ntfs",
+                  "properties": {
+                    "ntfs.label": "Windows",
+                    "ntfs.uuid": "01234567-89abcdef",
+                    "ntfs.volume-serial": "not-a-serial"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.unsupported_count, 1);
+
+        let label = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:windows:set-property:ntfs.label")
+            .expect("NTFS label property action should exist");
+        assert_eq!(label.operation, Operation::SetProperty);
+        assert_eq!(label.risk, RiskClass::Safe);
+        assert_eq!(label.context.fs_type.as_deref(), Some("ntfs"));
+        assert_eq!(label.context.property_value.as_deref(), Some("Windows"));
+
+        let serial = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:windows:set-property:ntfs.uuid")
+            .expect("NTFS serial property action should exist");
+        assert_eq!(serial.risk, RiskClass::OfflineRequired);
+        assert!(serial.advice.as_ref().is_some_and(|advice| {
+            advice.summary.contains("UUID")
+                && advice
+                    .alternatives
+                    .iter()
+                    .any(|alternative| alternative.contains("NixOS fileSystems"))
+        }));
+
+        let invalid_serial = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:windows:set-property:ntfs.volume-serial")
+            .expect("invalid NTFS serial property action should exist");
+        assert_eq!(invalid_serial.risk, RiskClass::Unsupported);
+        assert!(invalid_serial.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("16-hex-digit NTFS volume serial"))
         }));
     }
 

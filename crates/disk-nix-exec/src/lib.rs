@@ -5062,6 +5062,9 @@ fn filesystem_property_command(
         Some("fat" | "fat12" | "fat16" | "fat32" | "msdos" | "vfat") => {
             fat_filesystem_property_command(device, target, property, assignment)
         }
+        Some("ntfs" | "ntfs3") => {
+            ntfs_filesystem_property_command(device, target, property, assignment)
+        }
         Some("xfs") => xfs_filesystem_property_command(device, target, property, assignment),
         Some("zfs") => command(
             ["zfs", "set", assignment, target],
@@ -5163,6 +5166,110 @@ fn fat_volume_id(value: &str) -> Option<String> {
         .filter(|character| *character != '-')
         .collect();
     if normalized.len() == 8
+        && normalized
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        Some(normalized.to_ascii_uppercase())
+    } else {
+        None
+    }
+}
+
+fn ntfs_filesystem_property_command(
+    device: Option<&str>,
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            ["<ntfs-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["NTFS filesystem property value"],
+            "set an NTFS filesystem property after resolving the desired value",
+        );
+    };
+    match (property, device) {
+        ("label" | "ntfs.label" | "filesystem.label", Some(device)) => command(
+            ["ntfslabel", device, value],
+            true,
+            "set the NTFS filesystem label on the reviewed backing device",
+        ),
+        ("label" | "ntfs.label" | "filesystem.label", None) => command_with_readiness(
+            ["ntfslabel", "<filesystem-device>", value],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "set the NTFS filesystem label after resolving the backing device",
+        ),
+        (
+            "uuid" | "ntfs.uuid" | "filesystem.uuid" | "serial" | "volumeSerial" | "volume-serial"
+            | "ntfs.serial" | "ntfs.volume-serial",
+            Some(device),
+        ) => match ntfs_volume_serial(value) {
+            Some(serial) => command_vec(
+                vec![
+                    "ntfslabel".to_string(),
+                    format!("--new-serial={serial}"),
+                    device.to_string(),
+                ],
+                true,
+                "set the NTFS filesystem volume serial on the reviewed unmounted backing device",
+            ),
+            None => command_with_readiness(
+                ["<ntfs-filesystem-property-tool>", target, property],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["16-hex-digit NTFS volume serial"],
+                "set an NTFS filesystem volume serial after resolving a valid value",
+            ),
+        },
+        (
+            "uuid" | "ntfs.uuid" | "filesystem.uuid" | "serial" | "volumeSerial" | "volume-serial"
+            | "ntfs.serial" | "ntfs.volume-serial",
+            None,
+        ) => match ntfs_volume_serial(value) {
+            Some(serial) => command_vec_with_readiness(
+                vec![
+                    "ntfslabel".to_string(),
+                    format!("--new-serial={serial}"),
+                    "<filesystem-device>".to_string(),
+                ],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["filesystem source device"],
+                "set the NTFS filesystem volume serial after resolving the backing device",
+            ),
+            None => command_with_readiness(
+                ["<ntfs-filesystem-property-tool>", target, property],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                [
+                    "filesystem source device",
+                    "16-hex-digit NTFS volume serial",
+                ],
+                "set an NTFS filesystem volume serial after resolving device and value",
+            ),
+        },
+        _ => command_with_readiness(
+            ["<ntfs-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported NTFS filesystem property"],
+            "set an NTFS filesystem property after selecting a supported property mapping",
+        ),
+    }
+}
+
+fn ntfs_volume_serial(value: &str) -> Option<String> {
+    let normalized: String = value
+        .trim()
+        .chars()
+        .filter(|character| *character != '-')
+        .collect();
+    if normalized.len() == 16
         && normalized
             .chars()
             .all(|character| character.is_ascii_hexdigit())
@@ -8506,6 +8613,74 @@ mod tests {
             step.action_id == "filesystems:missing-device:set-property:volume-id"
                 && step.commands.iter().any(|command| {
                     command.argv == ["fatlabel", "-i", "<filesystem-device>", "DEADBEEF"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+    }
+
+    #[test]
+    fn ntfs_filesystem_properties_use_ntfslabel() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "windows": {
+                    "mountpoint": "/mnt/windows",
+                    "device": "/dev/disk/by-label/Windows",
+                    "fsType": "ntfs",
+                    "properties": {
+                      "label": "Windows",
+                      "ntfs.uuid": "01234567-89abcdef"
+                    }
+                  },
+                  "missing-device": {
+                    "mountpoint": "/mnt/media",
+                    "fsType": "ntfs",
+                    "properties": {
+                      "volume-serial": "fedcba98-76543210"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:windows:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["ntfslabel", "/dev/disk/by-label/Windows", "Windows"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:windows:set-property:ntfs.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "ntfslabel",
+                            "--new-serial=0123456789ABCDEF",
+                            "/dev/disk/by-label/Windows",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:missing-device:set-property:volume-serial"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "ntfslabel",
+                            "--new-serial=FEDCBA9876543210",
+                            "<filesystem-device>",
+                        ]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["filesystem source device"]
                 })

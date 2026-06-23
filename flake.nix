@@ -754,6 +754,7 @@
                 grep -- 'btrfs-progs-' service-paths
                 grep -- 'dosfstools-' service-paths
                 grep -- 'lvm2-' service-paths
+                grep -- 'ntfs3g-' service-paths
                 grep -- 'open-iscsi-' service-paths
                 grep -- 'zfs-user-' service-paths
                 swapDevices=${

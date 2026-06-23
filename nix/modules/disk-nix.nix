@@ -26,6 +26,7 @@ let
     mdadm
     multipath-tools
     nfs-utils
+    ntfs3g
     nvme-cli
     openiscsi
     parted
@@ -605,6 +606,7 @@ in
           mdadm
           multipath-tools
           nfs-utils
+          ntfs3g
           nvme-cli
           openiscsi
           parted
