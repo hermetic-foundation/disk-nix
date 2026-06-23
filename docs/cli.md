@@ -50,7 +50,10 @@ GUID, serial, sector, cluster, size, and free-space metadata beyond generic
 name/state/version, serial, sector/cluster sizing, index block size, MFT record
 size, and allocated size. F2FS probing uses `dump.f2fs` when available to add
 volume name, UUID, block counts, segment counts, overprovisioning, and computed
-usage.
+usage. bcachefs probing uses `bcachefs show-super` and `bcachefs fs usage`
+when available to add external/internal UUIDs, labels, member-device indexes,
+mounted capacity, data-type byte accounting, and per-device free/capacity
+metadata.
 
 ## Probe Status
 
@@ -179,9 +182,10 @@ Use these commands for:
   ZFS datasets/snapshots, and NFS exports, with selected filesystem metadata
   details such as `blkid` version/block-size/usage, exFAT GUID/serial/cluster
   geometry, NTFS volume identity, version, cluster sizing, and MFT record
-  sizing, F2FS block/segment/overprovisioning metadata, Btrfs
-  Data/Metadata/System allocation profiles and byte counts, and ext
-  state/features/block and inode counts when probes expose them
+  sizing, F2FS block/segment/overprovisioning metadata, bcachefs
+  external/internal UUID, member-device, mounted usage, and data-type byte
+  accounting, Btrfs Data/Metadata/System allocation profiles and byte counts,
+  and ext state/features/block and inode counts when probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
   exports, including LVM origin/pool/data metadata, activation state, role,
   layout, health, tags, thin-pool fullness behavior, metadata size, and cache
@@ -219,9 +223,10 @@ Use these commands for:
   replacement policy, dirty data, writeback percentage, `blkid` signature
   details, ext superblock details, LVM layout, health, thin/cache/writecache
   status, NTFS volume geometry and MFT record sizing, F2FS block/segment usage,
-  Btrfs allocation class profiles and byte counts, VDO backing and
-  logical/physical size details, NVMe namespace details, loop mapping details,
-  and active swap state/type/priority when probed
+  bcachefs filesystem and per-device capacity accounting, Btrfs allocation
+  class profiles and byte counts, VDO backing and logical/physical size
+  details, NVMe namespace details, loop mapping details, and active swap
+  state/type/priority when probed
 
 ## Inspect
 

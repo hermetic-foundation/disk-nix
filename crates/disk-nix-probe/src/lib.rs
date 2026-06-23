@@ -5,6 +5,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 mod bcache;
+mod bcachefs;
 mod blkid;
 mod btrfs;
 mod cryptsetup;
@@ -101,6 +102,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_exfat(&mut result);
         collect_ntfs(&mut result);
         collect_f2fs(&mut result);
+        collect_bcachefs(&mut result);
         collect_xfs(&mut result);
         collect_swaps(&mut result);
         collect_loopdev(&mut result);
@@ -521,6 +523,89 @@ fn collect_f2fs(result: &mut ProbeResult) {
             adapter: "f2fs".to_string(),
             status: ProbeStatus::Available,
             message: Some(format!("normalized {collected} graph nodes from dump.f2fs")),
+        }),
+    }
+}
+
+fn collect_bcachefs(result: &mut ProbeResult) {
+    let device_targets = filesystem_targets(&result.graph, |filesystem_type| {
+        filesystem_type == "bcachefs"
+    });
+    let mount_targets = run_findmnt_targets("bcachefs");
+
+    if device_targets.is_empty() && matches!(&mount_targets, Ok(targets) if targets.is_empty()) {
+        result.reports.push(ProbeReport {
+            adapter: "bcachefs".to_string(),
+            status: if command_exists("bcachefs") {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Unavailable
+            },
+            message: Some("no bcachefs filesystems discovered".to_string()),
+        });
+        return;
+    }
+
+    let mut collected = 0usize;
+    let mut failures = Vec::new();
+    for target in device_targets {
+        match run_report("bcachefs", &["show-super", &target]) {
+            Ok(output) => match bcachefs::normalize_show_super(&target, &output) {
+                Ok(graph) => {
+                    collected += graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                }
+                Err(error) => failures.push(format!("{target} show-super: {error}")),
+            },
+            Err(message) => failures.push(format!("{target} show-super: {message}")),
+        }
+    }
+
+    match mount_targets {
+        Ok(targets) => {
+            for target in targets {
+                match run_report("bcachefs", &["fs", "usage", &target]) {
+                    Ok(output) => match bcachefs::normalize_fs_usage(&target, &output) {
+                        Ok(graph) => {
+                            collected += graph.nodes.len();
+                            merge_graph(&mut result.graph, graph);
+                        }
+                        Err(error) => failures.push(format!("{target} fs usage: {error}")),
+                    },
+                    Err(message) => failures.push(format!("{target} fs usage: {message}")),
+                }
+            }
+        }
+        Err(message) => failures.push(format!("findmnt bcachefs targets: {message}")),
+    }
+
+    match (collected, failures.is_empty()) {
+        (0, false) => result.reports.push(ProbeReport {
+            adapter: "bcachefs".to_string(),
+            status: if failures
+                .iter()
+                .any(|message| message.contains("not found") || message.contains("No such file"))
+            {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(failures.join("; ")),
+        }),
+        (_, false) => result.reports.push(ProbeReport {
+            adapter: "bcachefs".to_string(),
+            status: ProbeStatus::Partial,
+            message: Some(format!(
+                "normalized {collected} graph nodes from bcachefs tools; failed targets: {}",
+                failures.join("; ")
+            )),
+        }),
+        _ => result.reports.push(ProbeReport {
+            adapter: "bcachefs".to_string(),
+            status: ProbeStatus::Available,
+            message: Some(format!(
+                "normalized {collected} graph nodes from bcachefs tools"
+            )),
         }),
     }
 }

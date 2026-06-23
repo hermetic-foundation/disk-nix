@@ -2073,6 +2073,25 @@ fn usage_details(node: &Node) -> String {
         ("f2fs.overprov-segment-count", "f2fs-overprov"),
         ("f2fs.segs-per-sec", "f2fs-segs-per-sec"),
         ("f2fs.secs-per-zone", "f2fs-secs-per-zone"),
+        ("bcachefs.external-uuid", "bcachefs-uuid"),
+        ("bcachefs.internal-uuid", "bcachefs-internal"),
+        ("bcachefs.member-device", "bcachefs-member"),
+        ("bcachefs.mount-target", "bcachefs-mount"),
+        ("bcachefs.device-index", "bcachefs-device"),
+        ("bcachefs.version", "bcachefs-version"),
+        ("bcachefs.online-reserved", "bcachefs-reserved"),
+        ("bcachefs.device-count", "bcachefs-devices"),
+        ("bcachefs.data-btree", "bcachefs-btree"),
+        ("bcachefs.data-user", "bcachefs-user"),
+        ("bcachefs.data-cached", "bcachefs-cached"),
+        ("bcachefs.data-parity", "bcachefs-parity"),
+        ("bcachefs.device-label", "bcachefs-label"),
+        ("bcachefs.device-state", "bcachefs-state"),
+        ("bcachefs.device-free", "bcachefs-device-free"),
+        ("bcachefs.device-capacity", "bcachefs-device-capacity"),
+        ("bcachefs.device-data-btree", "bcachefs-device-btree"),
+        ("bcachefs.device-data-user", "bcachefs-device-user"),
+        ("bcachefs.device-data-cached", "bcachefs-device-cached"),
         ("bcache.role", "role"),
         ("bcache.kind", "kind"),
         ("bcache.set-uuid", "set-uuid"),
@@ -2614,6 +2633,48 @@ mod tests {
             "f2fs-uuid=01234567-89ab-cdef-0123-456789abcdef f2fs-name=mobile f2fs-block-size=4096 f2fs-blocks=262144 f2fs-valid-blocks=65536 f2fs-segments=2048 f2fs-overprov=64"
         );
 
+        let bcachefs = Node::new(
+            "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
+            NodeKind::Filesystem,
+            "archive",
+        )
+        .with_property(
+            "bcachefs.external-uuid",
+            "a2d6fc04-efd0-4e36-aece-2475941d09a3",
+        )
+        .with_property(
+            "bcachefs.internal-uuid",
+            "55083d1e-27cf-4929-ada4-3fe6e45cf02c",
+        )
+        .with_property("bcachefs.member-device", "/dev/sdc")
+        .with_property("bcachefs.mount-target", "/mnt/archive")
+        .with_property("bcachefs.device-index", "6")
+        .with_property("bcachefs.version", "1.20: (unknown version)")
+        .with_property("bcachefs.online-reserved", "507957248")
+        .with_property("bcachefs.device-count", "2")
+        .with_property("bcachefs.data-btree", "1048576")
+        .with_property("bcachefs.data-user", "2147483648");
+        assert_eq!(
+            usage_details(&bcachefs),
+            "bcachefs-uuid=a2d6fc04-efd0-4e36-aece-2475941d09a3 bcachefs-internal=55083d1e-27cf-4929-ada4-3fe6e45cf02c bcachefs-member=/dev/sdc bcachefs-mount=/mnt/archive bcachefs-device=6 bcachefs-version=1.20: (unknown version) bcachefs-reserved=507957248 bcachefs-devices=2 bcachefs-btree=1048576 bcachefs-user=2147483648"
+        );
+
+        let bcachefs_device = Node::new(
+            "bcachefs-device:a2d6fc04-efd0-4e36-aece-2475941d09a3:6",
+            NodeKind::PhysicalDisk,
+            "sdc",
+        )
+        .with_property("bcachefs.device-label", "hdd.archive")
+        .with_property("bcachefs.device-state", "rw")
+        .with_property("bcachefs.device-free", "1649975230464")
+        .with_property("bcachefs.device-capacity", "16000900661248")
+        .with_property("bcachefs.device-data-btree", "890241024")
+        .with_property("bcachefs.device-data-user", "0");
+        assert_eq!(
+            usage_details(&bcachefs_device),
+            "bcachefs-label=hdd.archive bcachefs-state=rw bcachefs-device-free=1649975230464 bcachefs-device-capacity=16000900661248 bcachefs-device-btree=890241024 bcachefs-device-user=0"
+        );
+
         let bcache = Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
             .with_property("bcache.role", "backing")
             .with_property("bcache.kind", "cache-set")
@@ -2741,6 +2802,21 @@ mod tests {
                 .with_property("f2fs.block-count", "262144")
                 .with_property("f2fs.segment-count", "2048"),
         );
+        graph.add_node(
+            Node::new(
+                "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
+                NodeKind::Filesystem,
+                "archive",
+            )
+            .with_property(
+                "bcachefs.external-uuid",
+                "a2d6fc04-efd0-4e36-aece-2475941d09a3",
+            )
+            .with_property("bcachefs.member-device", "/dev/sdc")
+            .with_property("bcachefs.mount-target", "/mnt/archive")
+            .with_property("bcachefs.device-index", "6")
+            .with_property("bcachefs.data-user", "2147483648"),
+        );
 
         let mut output = Vec::new();
         print_filesystems(&mut output, &graph).expect("filesystems table renders");
@@ -2761,6 +2837,9 @@ mod tests {
         );
         assert!(output.contains(
             "f2fs-name=mobile f2fs-block-size=4096 f2fs-blocks=262144 f2fs-segments=2048"
+        ));
+        assert!(output.contains(
+            "bcachefs-uuid=a2d6fc04-efd0-4e36-aece-2475941d09a3 bcachefs-member=/dev/sdc bcachefs-mount=/mnt/archive bcachefs-device=6 bcachefs-user=2147483648"
         ));
     }
 
