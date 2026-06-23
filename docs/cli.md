@@ -199,8 +199,10 @@ Use these commands for:
   including model/vendor, transport, rotational, NVMe model/firmware/namespace
   geometry, partition table/number, filesystem type, loop
   backing/offset/autoclear metadata, multipath path host/major-minor/state
-  details, MD RAID member state, active swap state/type/priority, and udev link
-  details when probes expose them
+  details, MD RAID member state, active swap state/type/priority, and udev
+  by-id/by-path links, encoded labels, filesystem UUID sub-identifiers,
+  partition table metadata, major/minor numbers, and device-mapper flags when
+  probes expose them
 - `partitions`: partition nodes with size, PARTUUID, path, filesystem type,
   `blkid` signature details, partition number, start/end geometry, type/name,
   and flags when probes expose them

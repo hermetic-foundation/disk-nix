@@ -133,6 +133,8 @@ fn should_keep_property(key: &str) -> bool {
             | "DEVTYPE"
             | "DM_LV_NAME"
             | "DM_NAME"
+            | "DM_SUBSYSTEM_UDEV_FLAG0"
+            | "DM_SUBSYSTEM_UDEV_FLAG1"
             | "DM_UDEV_DISABLE_OTHER_RULES_FLAG"
             | "DM_UDEV_PRIMARY_SOURCE_FLAG"
             | "DM_UDEV_RULES_VSN"
@@ -140,13 +142,18 @@ fn should_keep_property(key: &str) -> bool {
             | "DM_VG_NAME"
             | "ID_BUS"
             | "ID_FS_LABEL"
+            | "ID_FS_LABEL_ENC"
+            | "ID_FS_LABEL_SAFE"
             | "ID_FS_TYPE"
             | "ID_FS_USAGE"
             | "ID_FS_UUID"
+            | "ID_FS_UUID_ENC"
+            | "ID_FS_UUID_SUB"
             | "ID_FS_VERSION"
             | "ID_MODEL"
             | "ID_MODEL_ID"
             | "ID_PART_ENTRY_DISK"
+            | "ID_PART_ENTRY_FLAGS"
             | "ID_PART_ENTRY_NAME"
             | "ID_PART_ENTRY_NUMBER"
             | "ID_PART_ENTRY_OFFSET"
@@ -220,9 +227,33 @@ E: ID_SERIAL_SHORT=SERIAL
 E: ID_WWN=0x5002538d00000000
 E: ID_FS_TYPE=vfat
 E: ID_FS_UUID=AAAA-BBBB
+E: ID_FS_UUID_ENC=AAAA-BBBB
+E: ID_FS_UUID_SUB=CCCC-DDDD
 E: ID_FS_LABEL=BOOT
+E: ID_FS_LABEL_ENC=BOOT
+E: ID_FS_LABEL_SAFE=BOOT
+E: ID_FS_VERSION=FAT32
+E: ID_FS_USAGE=filesystem
+E: ID_PART_ENTRY_DISK=8:0
+E: ID_PART_ENTRY_NUMBER=1
+E: ID_PART_ENTRY_OFFSET=2048
+E: ID_PART_ENTRY_SIZE=1048576
+E: ID_PART_ENTRY_SCHEME=gpt
 E: ID_PART_ENTRY_UUID=part-uuid
 E: ID_PART_ENTRY_TYPE=uefi
+E: ID_PART_ENTRY_NAME=EFI System Partition
+E: ID_PART_ENTRY_FLAGS=0x1
+E: ID_PART_TABLE_TYPE=gpt
+E: ID_PART_TABLE_UUID=table-uuid
+E: ID_PATH=pci-0000:00:17.0-ata-1
+E: ID_PATH_TAG=pci-0000_00_17_0-ata-1
+E: ID_REVISION=1B6Q
+E: ID_TYPE=disk
+E: ID_VENDOR=Samsung
+E: ID_VENDOR_ID=144d
+E: ID_MODEL_ID=a808
+E: MAJOR=8
+E: MINOR=1
 
 P: /devices/virtual/block/dm-0
 N: dm-0
@@ -231,6 +262,12 @@ E: DEVTYPE=disk
 E: SUBSYSTEM=block
 E: DM_NAME=cryptroot
 E: DM_UUID=CRYPT-LUKS2-luks-uuid-cryptroot
+E: DM_VG_NAME=vg0
+E: DM_LV_NAME=root
+E: DM_UDEV_RULES_VSN=3
+E: DM_UDEV_PRIMARY_SOURCE_FLAG=1
+E: DM_UDEV_DISABLE_OTHER_RULES_FLAG=0
+E: DM_SUBSYSTEM_UDEV_FLAG0=1
 "#;
 
     #[test]
@@ -262,6 +299,21 @@ E: DM_UUID=CRYPT-LUKS2-luks-uuid-cryptroot
                 .iter()
                 .any(|property| { property.key == "udev.id-fs-type" && property.value == "vfat" })
         );
+        assert!(partition.properties.iter().any(|property| {
+            property.key == "udev.id-fs-uuid-sub" && property.value == "CCCC-DDDD"
+        }));
+        assert!(partition.properties.iter().any(|property| {
+            property.key == "udev.id-part-entry-flags" && property.value == "0x1"
+        }));
+        assert!(partition.properties.iter().any(|property| {
+            property.key == "udev.id-path" && property.value == "pci-0000:00:17.0-ata-1"
+        }));
+        assert!(
+            partition
+                .properties
+                .iter()
+                .any(|property| { property.key == "udev.major" && property.value == "8" })
+        );
     }
 
     #[test]
@@ -279,5 +331,14 @@ E: DM_UUID=CRYPT-LUKS2-luks-uuid-cryptroot
                 property.key == "udev.dm-name" && property.value == "cryptroot"
             })
         );
+        assert!(
+            mapper
+                .properties
+                .iter()
+                .any(|property| { property.key == "udev.dm-vg-name" && property.value == "vg0" })
+        );
+        assert!(mapper.properties.iter().any(|property| {
+            property.key == "udev.dm-subsystem-udev-flag0" && property.value == "1"
+        }));
     }
 }

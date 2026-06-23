@@ -2589,8 +2589,55 @@ fn usage_details(node: &Node) -> String {
         ("loop.direct-io", "dio"),
         ("udev.symlink", "udev-link"),
         ("udev.devpath", "udev-devpath"),
+        ("udev.devname", "udev-devname"),
+        ("udev.devtype", "udev-devtype"),
         ("udev.id-fs-type", "udev-fstype"),
+        ("udev.id-fs-version", "udev-fs-version"),
+        ("udev.id-fs-usage", "udev-fs-usage"),
+        ("udev.id-fs-uuid", "udev-fs-uuid"),
+        ("udev.id-fs-uuid-enc", "udev-fs-uuid-enc"),
+        ("udev.id-fs-uuid-sub", "udev-fs-uuid-sub"),
+        ("udev.id-fs-label", "udev-label"),
+        ("udev.id-fs-label-enc", "udev-label-enc"),
+        ("udev.id-fs-label-safe", "udev-label-safe"),
         ("udev.id-bus", "udev-bus"),
+        ("udev.id-type", "udev-type"),
+        ("udev.id-model", "udev-model"),
+        ("udev.id-model-id", "udev-model-id"),
+        ("udev.id-vendor", "udev-vendor"),
+        ("udev.id-vendor-id", "udev-vendor-id"),
+        ("udev.id-revision", "udev-revision"),
+        ("udev.id-serial", "udev-serial"),
+        ("udev.id-serial-short", "udev-serial-short"),
+        ("udev.id-wwn", "udev-wwn"),
+        ("udev.id-path", "udev-path"),
+        ("udev.id-path-tag", "udev-path-tag"),
+        ("udev.id-part-entry-disk", "udev-part-disk"),
+        ("udev.id-part-entry-number", "udev-part-number"),
+        ("udev.id-part-entry-offset", "udev-part-offset"),
+        ("udev.id-part-entry-size", "udev-part-size"),
+        ("udev.id-part-entry-scheme", "udev-part-scheme"),
+        ("udev.id-part-entry-type", "udev-part-type"),
+        ("udev.id-part-entry-name", "udev-part-name"),
+        ("udev.id-part-entry-uuid", "udev-part-uuid"),
+        ("udev.id-part-entry-flags", "udev-part-flags"),
+        ("udev.id-part-table-type", "udev-table-type"),
+        ("udev.id-part-table-uuid", "udev-table-uuid"),
+        ("udev.dm-name", "dm-name"),
+        ("udev.dm-uuid", "dm-uuid"),
+        ("udev.dm-vg-name", "dm-vg"),
+        ("udev.dm-lv-name", "dm-lv"),
+        ("udev.dm-udev-rules-vsn", "dm-rules"),
+        ("udev.dm-udev-primary-source-flag", "dm-primary-source"),
+        (
+            "udev.dm-udev-disable-other-rules-flag",
+            "dm-disable-other-rules",
+        ),
+        ("udev.dm-subsystem-udev-flag0", "dm-subsystem-flag0"),
+        ("udev.dm-subsystem-udev-flag1", "dm-subsystem-flag1"),
+        ("udev.major", "major"),
+        ("udev.minor", "minor"),
+        ("udev.subsystem", "subsystem"),
         ("lvm.data-percent", "data"),
         ("lvm.metadata-percent", "metadata"),
         ("lvm.snap-percent", "snap"),
@@ -3348,7 +3395,23 @@ mod tests {
                 .with_property("nvme.maximum-lba", "1953125")
                 .with_property("nvme.sector-size", "512")
                 .with_property("partition.table", "gpt")
-                .with_property("udev.symlink", "disk/by-id/nvme-Acme_FastDisk"),
+                .with_property("udev.symlink", "disk/by-id/nvme-Acme_FastDisk")
+                .with_property("udev.devname", "/dev/nvme0n1")
+                .with_property("udev.devtype", "disk")
+                .with_property("udev.id-bus", "nvme")
+                .with_property("udev.id-model", "FastDisk")
+                .with_property("udev.id-model-id", "a808")
+                .with_property("udev.id-vendor", "Acme")
+                .with_property("udev.id-vendor-id", "144d")
+                .with_property("udev.id-revision", "1.0")
+                .with_property("udev.id-serial", "Acme_FastDisk_SERIAL")
+                .with_property("udev.id-serial-short", "SERIAL")
+                .with_property("udev.id-wwn", "eui.1234")
+                .with_property("udev.id-path", "pci-0000:01:00.0-nvme-1")
+                .with_property("udev.id-path-tag", "pci-0000_01_00_0-nvme-1")
+                .with_property("udev.major", "259")
+                .with_property("udev.minor", "0")
+                .with_property("udev.subsystem", "block"),
         );
         graph.add_node(
             Node::new(
@@ -3360,7 +3423,26 @@ mod tests {
             .with_property("lsblk.type", "part")
             .with_property("filesystem.type", "vfat")
             .with_property("partition.number", "1")
-            .with_property("udev.id-fs-type", "vfat"),
+            .with_property("udev.id-fs-type", "vfat")
+            .with_property("udev.id-fs-version", "FAT32")
+            .with_property("udev.id-fs-usage", "filesystem")
+            .with_property("udev.id-fs-uuid", "AAAA-BBBB")
+            .with_property("udev.id-fs-uuid-enc", "AAAA-BBBB")
+            .with_property("udev.id-fs-uuid-sub", "CCCC-DDDD")
+            .with_property("udev.id-fs-label", "EFI")
+            .with_property("udev.id-fs-label-enc", "EFI")
+            .with_property("udev.id-fs-label-safe", "EFI")
+            .with_property("udev.id-part-entry-disk", "259:0")
+            .with_property("udev.id-part-entry-number", "1")
+            .with_property("udev.id-part-entry-offset", "2048")
+            .with_property("udev.id-part-entry-size", "1048576")
+            .with_property("udev.id-part-entry-scheme", "gpt")
+            .with_property("udev.id-part-entry-type", "uefi")
+            .with_property("udev.id-part-entry-name", "EFI System Partition")
+            .with_property("udev.id-part-entry-uuid", "part-uuid")
+            .with_property("udev.id-part-entry-flags", "0x1")
+            .with_property("udev.id-part-table-type", "gpt")
+            .with_property("udev.id-part-table-uuid", "table-uuid"),
         );
         graph.add_node(
             Node::new("block:/dev/loop0", NodeKind::LoopDevice, "/dev/loop0")
@@ -3370,6 +3452,19 @@ mod tests {
                 .with_property("loop.offset", "1048576")
                 .with_property("loop.autoclear", "true")
                 .with_property("loop.direct-io", "true"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/dm-0", NodeKind::DeviceMapper, "/dev/dm-0")
+                .with_path("/dev/dm-0")
+                .with_property("udev.dm-name", "cryptroot")
+                .with_property("udev.dm-uuid", "CRYPT-LUKS2-luks-uuid-cryptroot")
+                .with_property("udev.dm-vg-name", "vg0")
+                .with_property("udev.dm-lv-name", "root")
+                .with_property("udev.dm-udev-rules-vsn", "3")
+                .with_property("udev.dm-udev-primary-source-flag", "1")
+                .with_property("udev.dm-udev-disable-other-rules-flag", "0")
+                .with_property("udev.dm-subsystem-udev-flag0", "1")
+                .with_property("udev.dm-subsystem-udev-flag1", "0"),
         );
         graph.add_node(
             Node::new(
@@ -3410,7 +3505,28 @@ mod tests {
         assert!(output.contains("ns-index=0 namespace=1 subsystem=nvme-subsys0 controller=nvme0"));
         assert!(output.contains("max-lba=1953125 sector-size=512 ptable=gpt"));
         assert!(output.contains("udev-link=disk/by-id/nvme-Acme_FastDisk"));
+        assert!(output.contains("udev-devname=/dev/nvme0n1 udev-devtype=disk"));
+        assert!(output.contains("udev-bus=nvme udev-model=FastDisk udev-model-id=a808"));
+        assert!(output.contains("udev-vendor=Acme udev-vendor-id=144d udev-revision=1.0"));
+        assert!(output.contains("udev-serial=Acme_FastDisk_SERIAL udev-serial-short=SERIAL"));
+        assert!(output.contains("udev-wwn=eui.1234 udev-path=pci-0000:01:00.0-nvme-1"));
+        assert!(output.contains("udev-path-tag=pci-0000_01_00_0-nvme-1"));
+        assert!(output.contains("major=259 minor=0 subsystem=block"));
         assert!(output.contains("lsblk-type=part fstype=vfat partno=1 udev-fstype=vfat"));
+        assert!(output.contains("udev-fs-version=FAT32 udev-fs-usage=filesystem"));
+        assert!(output.contains("udev-fs-uuid=AAAA-BBBB udev-fs-uuid-enc=AAAA-BBBB"));
+        assert!(output.contains("udev-fs-uuid-sub=CCCC-DDDD"));
+        assert!(output.contains("udev-label=EFI udev-label-enc=EFI udev-label-safe=EFI"));
+        assert!(output.contains("udev-part-disk=259:0 udev-part-number=1"));
+        assert!(output.contains("udev-part-offset=2048 udev-part-size=1048576"));
+        assert!(output.contains("udev-part-scheme=gpt udev-part-type=uefi"));
+        assert!(output.contains("udev-part-name=EFI System Partition udev-part-uuid=part-uuid"));
+        assert!(output.contains("udev-part-flags=0x1 udev-table-type=gpt"));
+        assert!(output.contains("udev-table-uuid=table-uuid"));
+        assert!(output.contains("dm-name=cryptroot dm-uuid=CRYPT-LUKS2-luks-uuid-cryptroot"));
+        assert!(output.contains("dm-vg=vg0 dm-lv=root dm-rules=3"));
+        assert!(output.contains("dm-primary-source=1 dm-disable-other-rules=0"));
+        assert!(output.contains("dm-subsystem-flag0=1 dm-subsystem-flag1=0"));
         assert!(output.contains(
             "lsblk-type=loop back-file=/var/lib/images/root.img offset=1048576 autoclear=true dio=true"
         ));
