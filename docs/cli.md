@@ -152,6 +152,7 @@ disk-nix raid
 disk-nix loop
 disk-nix swap
 disk-nix iscsi
+disk-nix nfs
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -179,6 +180,7 @@ disk-nix raid --json
 disk-nix loop --json
 disk-nix swap --json
 disk-nix iscsi --json
+disk-nix nfs --json
 disk-nix mounts --json
 disk-nix network-storage --json
 disk-nix ids --json
@@ -275,6 +277,10 @@ Use these commands for:
   portals, connection state, target IQNs, LUN sizes, attached disks, session to
   target imports, target-contained LUN counts, and LUN-to-block-device backing
   relationships when `iscsiadm --mode session -P 3` exposes them
+- `nfs`: NFS exports and client mounts, including source, server/export split,
+  NFS protocol version, transport protocol, security flavor, client/server
+  addresses, read/write transfer sizes, and export-to-client mount relationships
+  when `findmnt` or NFS mount probes expose them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them

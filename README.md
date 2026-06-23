@@ -76,6 +76,7 @@ disk-nix raid
 disk-nix loop
 disk-nix swap
 disk-nix iscsi
+disk-nix nfs
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -106,8 +107,8 @@ as `devices --json`, `partitions --json`, `complex-filesystems --json`,
 `pools --json`, `snapshots --json`, `mappings --json`,
 `encryption --json`, `cache --json`, `lvm --json`, `vdo --json`,
 `multipath --json`, `nvme --json`, `raid --json`, `loop --json`,
-`swap --json`, `iscsi --json`, `network-storage --json`, `ids --json`, and
-`usage --json` return subgraphs and preserve relationships between nodes
+`swap --json`, `iscsi --json`, `nfs --json`, `network-storage --json`,
+`ids --json`, and `usage --json` return subgraphs and preserve relationships between nodes
 included in the result. `usage`
 summarizes size, used, free, allocated, utilization, and selected metadata
 details across graph nodes that expose capacity data.

@@ -172,6 +172,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered NFS exports and client mounts.
+    Nfs {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -504,6 +510,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_iscsi_node)?;
             } else {
                 print_iscsi(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Nfs { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_nfs_node)?;
+            } else {
+                print_nfs(output, &graph)?;
             }
             Ok(())
         }
@@ -1763,6 +1778,28 @@ fn print_iscsi(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> 
     Ok(())
 }
 
+fn print_nfs(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<40} {:<34} {:<20} {:<22} {:>6} DETAILS",
+        "KIND", "NAME", "SOURCE", "SERVER", "EXPORT", "MOUNTS"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_nfs_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<40} {:<34} {:<20} {:<22} {:>6} {}",
+            node.kind,
+            node.name,
+            property_value(node, "nfs.source").unwrap_or("-"),
+            property_value(node, "nfs.server").unwrap_or("-"),
+            property_value(node, "nfs.export").unwrap_or("-"),
+            nfs_mount_count(graph, node),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2408,6 +2445,14 @@ fn is_iscsi_node(node: &Node) -> bool {
         .any(|property| property.key.starts_with("iscsi."))
 }
 
+fn is_nfs_node(node: &Node) -> bool {
+    matches!(node.kind, NodeKind::NfsExport | NodeKind::NfsMount)
+        || node
+            .properties
+            .iter()
+            .any(|property| property.key.starts_with("nfs."))
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
@@ -2842,6 +2887,24 @@ fn iscsi_lun_count(graph: &StorageGraph, node: &Node) -> usize {
     }
 }
 
+fn nfs_mount_count(graph: &StorageGraph, node: &Node) -> usize {
+    if node.kind != NodeKind::NfsExport {
+        return 0;
+    }
+
+    graph
+        .edges
+        .iter()
+        .filter(|edge| {
+            edge.from == node.id
+                && edge.relationship == disk_nix_model::Relationship::MountedAt
+                && graph.nodes.iter().any(|candidate| {
+                    candidate.id == edge.to && candidate.kind == NodeKind::NfsMount
+                })
+        })
+        .count()
+}
+
 fn snapshot_source<'a>(graph: &'a StorageGraph, node: &Node) -> Option<&'a str> {
     graph
         .edges
@@ -2911,13 +2974,14 @@ mod tests {
     use super::{
         confirmation_file_accepts, is_cache_node, is_complex_filesystem_node, is_device_node,
         is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node, is_lvm_node,
-        is_mapping_node, is_multipath_node, is_network_storage_node, is_nvme_node,
+        is_mapping_node, is_multipath_node, is_network_storage_node, is_nfs_node, is_nvme_node,
         is_partition_node, is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node,
-        is_volume_node, iscsi_lun_count, mount_details, print_cache, print_complex_filesystems,
-        print_devices, print_encryption, print_filesystems, print_iscsi, print_loop, print_lvm,
-        print_mappings, print_mounts, print_multipath, print_network_storage, print_nvme,
-        print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
-        print_vdo, print_volumes, snapshot_source, usage_details, usage_percent,
+        is_volume_node, iscsi_lun_count, mount_details, nfs_mount_count, print_cache,
+        print_complex_filesystems, print_devices, print_encryption, print_filesystems, print_iscsi,
+        print_loop, print_lvm, print_mappings, print_mounts, print_multipath,
+        print_network_storage, print_nfs, print_nvme, print_partitions, print_pools, print_raid,
+        print_snapshots, print_swap, print_usage, print_vdo, print_volumes, snapshot_source,
+        usage_details, usage_percent,
     };
 
     #[test]
@@ -3017,6 +3081,15 @@ mod tests {
             NodeKind::NfsExport,
             "server:/export"
         )));
+        assert!(is_nfs_node(&Node::new(
+            "nfs:server:/export",
+            NodeKind::NfsExport,
+            "server:/export"
+        )));
+        assert!(is_nfs_node(
+            &Node::new("mount:/home", NodeKind::Mountpoint, "/home")
+                .with_property("nfs.source", "server:/export")
+        ));
         assert!(is_device_node(&Node::new(
             "file:/var/lib/images/root.img",
             NodeKind::BackingFile,
@@ -3942,6 +4015,74 @@ mod tests {
         assert!(output.contains("iqn.2026-06.example:storage"));
         assert!(output.contains("1.0 GiB"));
         assert!(output.contains("attached-disk=sdb"));
+    }
+
+    #[test]
+    fn nfs_table_includes_exports_mounts_and_transport_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "nfs-export:storage.example:/export/home",
+                NodeKind::NfsExport,
+                "storage.example:/export/home",
+            )
+            .with_property("nfs.server", "storage.example")
+            .with_property("nfs.export", "/export/home"),
+        );
+        graph.add_node(
+            Node::new("mount:/home", NodeKind::NfsMount, "/home")
+                .with_size_bytes(1_099_511_627_776)
+                .with_usage(Usage {
+                    used_bytes: Some(274_877_906_944),
+                    free_bytes: Some(824_633_720_832),
+                    allocated_bytes: None,
+                })
+                .with_property("nfs.source", "storage.example:/export/home")
+                .with_property("nfs.server", "storage.example")
+                .with_property("nfs.export", "/export/home")
+                .with_property("nfs.vers", "4.2")
+                .with_property("nfs.proto", "tcp")
+                .with_property("nfs.sec", "sys")
+                .with_property("nfs.clientaddr", "10.0.0.20")
+                .with_property("nfs.addr", "10.0.0.10")
+                .with_property("nfs.rsize", "1048576")
+                .with_property("nfs.wsize", "1048576"),
+        );
+        graph.add_edge(Edge::new(
+            "nfs-export:storage.example:/export/home",
+            "mount:/home",
+            Relationship::MountedAt,
+        ));
+
+        let export = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::NfsExport)
+            .expect("export fixture exists");
+        let mount = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::NfsMount)
+            .expect("mount fixture exists");
+        assert_eq!(nfs_mount_count(&graph, export), 1);
+        assert_eq!(nfs_mount_count(&graph, mount), 0);
+
+        let mut output = Vec::new();
+        print_nfs(&mut output, &graph).expect("nfs table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("SOURCE"));
+        assert!(output.contains("SERVER"));
+        assert!(output.contains("EXPORT"));
+        assert!(output.contains("MOUNTS"));
+        assert!(output.contains("storage.example:/export/home"));
+        assert!(output.contains("storage.example"));
+        assert!(output.contains("/export/home"));
+        assert!(output.contains("/home"));
+        assert!(output.contains("source=storage.example:/export/home"));
+        assert!(output.contains("vers=4.2 proto=tcp sec=sys"));
+        assert!(output.contains("clientaddr=10.0.0.20 addr=10.0.0.10"));
+        assert!(output.contains("rsize=1048576 wsize=1048576"));
     }
 
     #[test]
