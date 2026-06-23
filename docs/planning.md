@@ -133,6 +133,10 @@ intentionally advisory until the executor can run mutating commands directly.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.
+`disk-nix validate --spec <path>` emits the same dry-run report but treats
+blocked policy as a successful command result, making it the better fit for
+CI, preflight checks, and NixOS validation paths that need to inspect blocked
+details.
 
 Policy fields currently supported:
 

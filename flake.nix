@@ -189,6 +189,7 @@
             lifecyclePlan=$(mktemp)
             simpleApply=$(mktemp)
             lifecycleApply=$(mktemp)
+            lifecycleValidate=$(mktemp)
             scriptOut=$(mktemp)
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/simple-root.json} --json > "$simplePlan"
@@ -240,6 +241,13 @@
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
             ' "$lifecycleApply"
+
+            ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --json > "$lifecycleValidate"
+            jq -e '
+              .status == "blocked"
+              and .apply.blockedCount == 6
+              and .messages[0] == "apply policy blocked 6 action(s)"
+            ' "$lifecycleValidate"
 
             touch "$out"
           '';

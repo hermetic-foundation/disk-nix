@@ -160,6 +160,21 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Validate a desired storage spec and policy without treating policy blocks as command failure.
+    Validate {
+        /// Desired storage specification path.
+        #[arg(long)]
+        spec: String,
+        /// Probe current topology and compare planned actions against it.
+        #[arg(long)]
+        probe_current: bool,
+        /// Write a reviewable shell script when every planned action is policy-allowed.
+        #[arg(long)]
+        script_out: Option<String>,
+        /// Emit JSON validation report.
+        #[arg(long)]
+        json: bool,
+    },
     /// Generate shell completions.
     Completions {
         /// Shell completion format to emit.
@@ -377,19 +392,12 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             script_out,
             json,
         } => {
-            let bytes = std::fs::read(&spec)?;
-            let (mut plan, mut policy) = plan_and_policy_from_json_bytes(&bytes)
-                .map_err(|error| AppError::Message(format!("failed to parse {spec}: {error}")))?;
-            if probe_current {
-                plan = compare_plan_with_topology(plan, &collect_graph()?);
-            }
-            apply_confirmation_file(&mut policy)?;
             let mode = if execute {
                 ExecutionMode::Execute
             } else {
                 ExecutionMode::DryRun
             };
-            let report = prepare_execution(&plan, policy, mode);
+            let report = prepare_apply_report(&spec, probe_current, mode)?;
             if let Some(script_out) = script_out.as_deref() {
                 write_execution_script(script_out, &report)?;
             }
@@ -418,6 +426,31 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
 
             Ok(())
         }
+        Command::Validate {
+            spec,
+            probe_current,
+            script_out,
+            json,
+        } => {
+            let report = prepare_apply_report(&spec, probe_current, ExecutionMode::DryRun)?;
+            if let Some(script_out) = script_out.as_deref() {
+                write_execution_script(script_out, &report)?;
+            }
+
+            if json {
+                writeln!(
+                    output,
+                    "{}",
+                    report
+                        .to_json()
+                        .map_err(|error| AppError::Message(error.to_string()))?
+                )?;
+            } else {
+                print_execution_report(output, &report, false)?;
+            }
+
+            Ok(())
+        }
         Command::Completions { shell } => {
             let mut command = Cli::command();
             generate(shell, &mut command, "disk-nix", output);
@@ -429,6 +462,21 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             Ok(())
         }
     }
+}
+
+fn prepare_apply_report(
+    spec: &str,
+    probe_current: bool,
+    mode: ExecutionMode,
+) -> Result<ExecutionReport, AppError> {
+    let bytes = std::fs::read(spec)?;
+    let (mut plan, mut policy) = plan_and_policy_from_json_bytes(&bytes)
+        .map_err(|error| AppError::Message(format!("failed to parse {spec}: {error}")))?;
+    if probe_current {
+        plan = compare_plan_with_topology(plan, &collect_graph()?);
+    }
+    apply_confirmation_file(&mut policy)?;
+    Ok(prepare_execution(&plan, policy, mode))
 }
 
 fn apply_confirmation_file(policy: &mut ApplyPolicy) -> Result<(), AppError> {

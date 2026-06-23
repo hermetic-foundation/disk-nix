@@ -78,6 +78,7 @@ disk-nix apply --spec ./examples/lifecycle-update.json
 disk-nix apply --spec ./examples/lifecycle-update.json --json
 disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
 disk-nix apply --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
+disk-nix validate --spec ./examples/lifecycle-update.json --json
 disk-nix completions bash
 disk-nix manpage
 ```
@@ -139,3 +140,5 @@ actions against the `apply` policy in the spec, reports blocked operations,
 emits advisory command and verification plans, and can write those plans to a
 reviewable shell script with `--script-out`. The `--execute` flag is
 intentionally refused until a direct mutating executor exists.
+`disk-nix validate` emits the same dry-run report but exits successfully when
+policy blocks actions, which makes it suitable for CI and NixOS config checks.

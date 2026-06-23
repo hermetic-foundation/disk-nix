@@ -242,6 +242,7 @@ disk-nix apply --spec ./examples/lifecycle-update.json
 disk-nix apply --spec ./examples/lifecycle-update.json --json
 disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
 disk-nix apply --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
+disk-nix validate --spec ./examples/lifecycle-update.json --json
 ```
 
 The report includes:
@@ -293,3 +294,19 @@ planned action has enough context.
 passes. The script contains the allowed command plan, manual-review notes,
 unresolved-input comments for non-ready commands, and post-apply verification
 commands. `disk-nix` still does not run mutating storage commands directly.
+
+## Validation
+
+`validate` emits the same dry-run report as `apply`, including command and
+verification plans, but blocked policy is not a CLI failure:
+
+```sh
+disk-nix validate --spec ./examples/lifecycle-update.json
+disk-nix validate --spec ./examples/lifecycle-update.json --json
+disk-nix validate --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
+```
+
+Use `validate` for CI, NixOS activation-style checks, and review workflows that
+need structured blocked-action details without failing before the report can be
+consumed. `--script-out` still requires every planned action to be policy
+allowed, because blocked reports do not have a runnable review script.
