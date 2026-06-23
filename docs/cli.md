@@ -441,6 +441,11 @@ target adapter is added.
 The capability inventory advertises iSCSI login/logout and LUN attach/detach
 as host lifecycle operations, distinct from target-side LUN creation or
 deletion.
+Multipath map command plans render reviewed path add, remove, replacement,
+growth, and `operation = "rescan"` lifecycle actions. Rescan inspects the
+reviewed map with `multipath -ll`, reloads maps with `multipath -r`, and
+verifies the map again; missing stable map targets keep map-specific commands
+non-ready.
 NVMe namespace command plans render `nvme create-ns`, `nvme attach-ns`,
 explicit `operation = "rescan"` plans through `nvme ns-rescan`,
 `nvme detach-ns`, and `nvme delete-ns`. Executable create plans require a

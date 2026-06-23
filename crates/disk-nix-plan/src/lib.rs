@@ -3553,7 +3553,8 @@ fn classify_operation(
         Operation::Rescan
             if collection == "luns"
                 || collection == "iscsiSessions"
-                || collection == "nvmeNamespaces" =>
+                || collection == "nvmeNamespaces"
+                || collection == "multipathMaps" =>
         {
             (
                 RiskClass::Online,
@@ -3951,7 +3952,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for LUNs, iSCSI sessions, and NVMe namespaces"
+                summary: "rescan operations are currently supported for LUNs, iSCSI sessions, NVMe namespaces, and multipath maps"
                     .to_string(),
                 alternatives: vec![
                     "use luns.<name>.operation = \"rescan\" to refresh reviewed SCSI paths"
@@ -3959,6 +3960,8 @@ fn classify_operation(
                     "use iscsiSessions.<target>.operation = \"rescan\" to refresh existing target sessions"
                         .to_string(),
                     "use nvmeNamespaces.<controller>.operation = \"rescan\" to refresh namespace inventory"
+                        .to_string(),
+                    "use multipathMaps.<name>.operation = \"rescan\" to reload reviewed path maps"
                         .to_string(),
                 ],
             }),
@@ -5645,6 +5648,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "rescan all backing paths before resizing the map".to_string(),
                     "verify every active path reports the new size".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MultipathDevice,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "multipath map rescan reloads existing path maps without deleting data"
+                    .to_string(),
+                alternatives: vec![
+                    "rescan backing SCSI or iSCSI paths before reloading the map".to_string(),
+                    "verify map WWID, path state, and dependent consumers after reload".to_string(),
                 ],
             }),
         },
@@ -8633,13 +8649,17 @@ mod tests {
                   "replaceDevices": {
                     "/dev/sdc": "/dev/sdd"
                   }
+                },
+                "mpathb": {
+                  "target": "mpathb",
+                  "operation": "rescan"
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 4);
         assert_eq!(plan.summary.offline_required_count, 1);
         let grow = plan
             .actions
@@ -8665,6 +8685,17 @@ mod tests {
             .find(|action| action.id == "multipathMaps:mpatha:replace-device:/dev/sdc")
             .expect("multipath replace action exists");
         assert_eq!(replace.risk, RiskClass::OfflineRequired);
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "multipathmaps:mpathb:rescan")
+            .expect("multipath rescan action exists");
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(rescan.advice.as_ref().is_some_and(|advice| {
+            advice
+                .summary
+                .contains("refreshes existing storage paths without deleting target data")
+        }));
     }
 
     #[test]

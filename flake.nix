@@ -377,6 +377,10 @@
                   "/dev/sdc" = "/dev/sdd";
                 };
               };
+              multipathMaps.mpathb = {
+                target = "mpathb";
+                operation = "rescan";
+              };
               luns."iqn.2026-06.example:storage/root:0" = {
                 operation = "grow";
                 device = "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0";
@@ -677,7 +681,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 73
+              .summary.actionCount == 74
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -718,6 +722,7 @@
               and (.actions | any(.id == "mdraids:oldroot:stop" and .risk == "offline-required"))
               and (.actions | any(.id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-md-spare" and .risk == "online"))
               and (.actions | any(.id == "multipathMaps:mpatha:add-device:/dev/sdb" and .risk == "online"))
+              and (.actions | any(.id == "multipathmaps:mpathb:rescan" and .risk == "online"))
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
@@ -980,6 +985,8 @@
                   and .spec.multipathMaps.mpatha.target == "mpatha"
                   and (.spec.multipathMaps.mpatha.addDevices | index("/dev/sdb") != null)
                   and .spec.multipathMaps.mpatha.replaceDevices."/dev/sdc" == "/dev/sdd"
+                  and .spec.multipathMaps.mpathb.operation == "rescan"
+                  and .spec.multipathMaps.mpathb.target == "mpathb"
                   and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
                   and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
                   and .spec.pools.vault.operation == "import"

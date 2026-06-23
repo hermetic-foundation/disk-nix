@@ -1324,6 +1324,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::ReplaceDevice
         | Operation::RemoveDevice
         | Operation::Grow
+        | Operation::Rescan
             if collection == Some("multipathMaps") =>
         {
             (
@@ -1341,7 +1342,11 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
                 vec![
                     "all expected paths are active or intentionally failed".to_string(),
-                    "map size and WWID match desired state".to_string(),
+                    if action.operation == Operation::Rescan {
+                        "map WWID and path state still match the reviewed topology".to_string()
+                    } else {
+                        "map size and WWID match desired state".to_string()
+                    },
                     "dependent filesystems or mappings see the expected capacity".to_string(),
                 ],
             )
@@ -2942,6 +2947,26 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "rescan each SCSI path before resizing the multipath map".to_string(),
                     "grow dependent volumes or filesystems only after the map reports the new size"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("multipathMaps") => {
+            let target = multipath_map_target(action);
+            (
+                vec![
+                    multipath_list_command(target, "inspect multipath map paths before rescan"),
+                    command(
+                        ["multipath", "-r"],
+                        true,
+                        "reload multipath maps after refreshed backing paths",
+                    ),
+                    multipath_list_command(target, "verify multipath map paths after rescan"),
+                ],
+                vec![
+                    "rescan backing SCSI or iSCSI paths before reloading the map".to_string(),
+                    "verify the map WWID and every expected path before exposing consumers"
                         .to_string(),
                 ],
                 true,
@@ -13570,6 +13595,10 @@ mod tests {
                       "/dev/sdc": "/dev/sdd"
                     },
                     "removeDevices": ["/dev/sde"]
+                  },
+                  "mpathb": {
+                    "target": "mpathb",
+                    "operation": "rescan"
                   }
                 }
               },
@@ -13593,6 +13622,19 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["multipathd", "add", "path", "/dev/sdb"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "multipathmaps:mpathb:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["multipath", "-r"] && command.mutates)
+                && step
+                    .commands
+                    .iter()
+                    .filter(|command| command.argv == ["multipath", "-ll", "mpathb"])
+                    .count()
+                    == 2
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands

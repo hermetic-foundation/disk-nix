@@ -142,6 +142,10 @@
       "addDevices": [
         "/dev/sdb"
       ]
+    },
+    "mpathb": {
+      "target": "mpathb",
+      "operation": "rescan"
     }
   },
   "vdoVolumes": {
