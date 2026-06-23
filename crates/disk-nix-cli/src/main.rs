@@ -1153,18 +1153,19 @@ fn print_partitions(output: &mut impl Write, graph: &StorageGraph) -> io::Result
 fn print_filesystems(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<32} {:>12} {:>12} {:<24}",
+        "{:<22} {:<32} {:>12} {:>12} {:<24} DETAILS",
         "KIND", "NAME", "USED", "FREE", "UUID"
     )?;
     for node in graph.nodes.iter().filter(|node| is_filesystem_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<32} {:>12} {:>12} {:<24}",
+            "{:<22} {:<32} {:>12} {:>12} {:<24} {}",
             node.kind,
             node.name,
             human_bytes(node.usage.as_ref().and_then(|usage| usage.used_bytes)),
             human_bytes(node.usage.as_ref().and_then(|usage| usage.free_bytes)),
-            node.identity.uuid.as_deref().unwrap_or("-")
+            node.identity.uuid.as_deref().unwrap_or("-"),
+            usage_details(node)
         )?;
     }
     Ok(())
@@ -1909,7 +1910,8 @@ mod tests {
 
     use super::{
         confirmation_file_accepts, is_network_storage_node, is_partition_node, is_pool_node,
-        is_snapshot_node, print_usage, snapshot_source, usage_details, usage_percent,
+        is_snapshot_node, print_filesystems, print_usage, snapshot_source, usage_details,
+        usage_percent,
     };
 
     #[test]
@@ -2085,5 +2087,27 @@ mod tests {
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains("vdo-use=50% saving=20% mode=normal write-policy=sync"));
+    }
+
+    #[test]
+    fn filesystems_table_includes_metadata_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("fs-source:/dev/mapper/vg-root", NodeKind::Filesystem, "xfs")
+                .with_usage(Usage {
+                    used_bytes: Some(512),
+                    free_bytes: Some(512),
+                    allocated_bytes: None,
+                })
+                .with_property("xfs.data.blocks", "262144")
+                .with_property("xfs.meta-data.reflink", "1"),
+        );
+
+        let mut output = Vec::new();
+        print_filesystems(&mut output, &graph).expect("filesystems table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DETAILS"));
+        assert!(output.contains("xfs-blocks=262144 reflink=1"));
     }
 }

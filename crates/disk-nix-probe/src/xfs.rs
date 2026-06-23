@@ -1,34 +1,66 @@
-use disk_nix_model::{Node, NodeKind, StorageGraph, Usage};
+use disk_nix_model::{Edge, Node, NodeKind, Relationship, StorageGraph, Usage};
 
 use crate::ProbeError;
 
 pub fn normalize_xfs_info(target: &str, bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
     let info = parse_xfs_info(bytes)?;
     let mut graph = StorageGraph::empty();
-    let mut node = Node::new(
+    let mut mount = Node::new(
         format!("mount:{target}"),
         NodeKind::Mountpoint,
         target.to_string(),
     )
     .with_property("filesystem.type", "xfs");
 
-    if let (Some(blocks), Some(block_size)) = (
+    let size_bytes = if let (Some(blocks), Some(block_size)) = (
         info.property("data", "blocks").and_then(parse_u64),
         info.property("data", "bsize").and_then(parse_u64),
     ) {
-        let size_bytes = blocks.saturating_mul(block_size);
-        node = node.with_size_bytes(size_bytes).with_usage(Usage {
+        Some(blocks.saturating_mul(block_size))
+    } else {
+        None
+    };
+
+    if let Some(size_bytes) = size_bytes {
+        mount = mount.with_size_bytes(size_bytes).with_usage(Usage {
             used_bytes: None,
             free_bytes: None,
             allocated_bytes: Some(size_bytes),
         });
     }
 
-    for (section, key, value) in info.properties {
-        node = node.with_property(format!("xfs.{section}.{key}"), value);
+    for (section, key, value) in &info.properties {
+        mount = mount.with_property(format!("xfs.{section}.{key}"), value.clone());
     }
 
-    graph.add_node(node);
+    graph.add_node(mount);
+
+    if let Some(device) = info.property("meta-data", "meta-data") {
+        let filesystem_id = format!("fs-source:{device}");
+        let mut filesystem =
+            Node::new(filesystem_id.clone(), NodeKind::Filesystem, "xfs").with_path(device);
+
+        if let Some(size_bytes) = size_bytes {
+            filesystem = filesystem.with_size_bytes(size_bytes).with_usage(Usage {
+                used_bytes: None,
+                free_bytes: None,
+                allocated_bytes: Some(size_bytes),
+            });
+        }
+
+        for (section, key, value) in &info.properties {
+            filesystem = filesystem.with_property(format!("xfs.{section}.{key}"), value.clone());
+        }
+        filesystem = filesystem.with_property("filesystem.type", "xfs");
+
+        graph.add_node(filesystem);
+        graph.add_edge(Edge::new(
+            filesystem_id,
+            format!("mount:{target}"),
+            Relationship::MountedAt,
+        ));
+    }
+
     Ok(graph)
 }
 
@@ -113,6 +145,8 @@ fn parse_u64(value: &str) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
+    use disk_nix_model::Relationship;
+
     use super::*;
 
     const XFS_INFO: &[u8] = br#"
@@ -161,5 +195,24 @@ realtime =none                   extsz=4096   blocks=0, rtextents=0
                 .iter()
                 .any(|property| { property.key == "xfs.log.blocks" && property.value == "2560" })
         );
+
+        let filesystem = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "fs-source:/dev/mapper/vg-root")
+            .expect("filesystem source node should exist");
+        assert_eq!(filesystem.kind, NodeKind::Filesystem);
+        assert_eq!(filesystem.path.as_deref(), Some("/dev/mapper/vg-root"));
+        assert_eq!(filesystem.size_bytes, Some(1_073_741_824));
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "xfs.meta-data.bigtime" && property.value == "1"
+            })
+        );
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "fs-source:/dev/mapper/vg-root"
+                && edge.to.0 == "mount:/"
+                && edge.relationship == Relationship::MountedAt
+        }));
     }
 }

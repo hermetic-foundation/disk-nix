@@ -162,7 +162,8 @@ Use these commands for:
   cache devices, multipath devices, NVMe namespaces, loop devices, and swap
 - `partitions`: partition nodes with size, PARTUUID, and path
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
-  ZFS datasets/snapshots, and NFS exports
+  ZFS datasets/snapshots, and NFS exports, with selected filesystem metadata
+  details when probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
   exports, including ZFS zvol `volsize` when reported by `zfs list`
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
