@@ -2741,6 +2741,47 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::BtrfsQgroup,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "Btrfs qgroup creation changes quota hierarchy for a mounted filesystem"
+                    .to_string(),
+                alternatives: vec![
+                    "enable quota accounting and inspect existing qgroups before creation"
+                        .to_string(),
+                    "create qgroups before assigning subvolume limits".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsQgroup,
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            advice: Some(Advice {
+                summary: "Btrfs qgroup limit changes alter referenced or exclusive quota enforcement"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect current referenced and exclusive usage before tightening limits"
+                        .to_string(),
+                    "raise limits temporarily before migrations or balance operations".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsQgroup,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "destroying a Btrfs qgroup removes quota policy for that group"
+                    .to_string(),
+                alternatives: vec![
+                    "clear limits or move subvolumes to a replacement qgroup first".to_string(),
+                    "verify quota hierarchy and usage after removing the qgroup".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::Zvol,
             operation: Operation::Create,
             risk: RiskClass::Online,
@@ -3177,6 +3218,37 @@ mod tests {
         assert_eq!(mount_create.risk, RiskClass::Online);
         assert_eq!(mount_destroy.risk, RiskClass::OfflineRequired);
         assert!(mount_destroy.advice.is_some());
+    }
+
+    #[test]
+    fn btrfs_qgroup_capabilities_describe_limit_lifecycle() {
+        let capabilities = default_capabilities();
+        let create = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsQgroup
+                    && capability.operation == Operation::Create
+            })
+            .expect("Btrfs qgroup create capability should exist");
+        let update_limit = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsQgroup
+                    && capability.operation == Operation::SetProperty
+            })
+            .expect("Btrfs qgroup property capability should exist");
+        let destroy = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsQgroup
+                    && capability.operation == Operation::Destroy
+            })
+            .expect("Btrfs qgroup destroy capability should exist");
+
+        assert_eq!(create.risk, RiskClass::Online);
+        assert_eq!(update_limit.risk, RiskClass::Safe);
+        assert_eq!(destroy.risk, RiskClass::Destructive);
+        assert!(destroy.advice.is_some());
     }
 
     #[test]
