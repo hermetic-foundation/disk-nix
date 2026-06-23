@@ -1293,14 +1293,19 @@ fn print_mappings(output: &mut impl Write, graph: &StorageGraph) -> io::Result<(
 }
 
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
-    writeln!(output, "{:<22} {:<48} FSTYPE", "KIND", "TARGET")?;
+    writeln!(
+        output,
+        "{:<22} {:<48} {:<12} DETAILS",
+        "KIND", "TARGET", "FSTYPE"
+    )?;
     for node in graph.nodes.iter().filter(|node| is_mount_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<48} {}",
+            "{:<22} {:<48} {:<12} {}",
             node.kind,
             node.name,
-            property_value(node, "filesystem.type").unwrap_or("-")
+            property_value(node, "filesystem.type").unwrap_or("-"),
+            mount_details(node)
         )?;
     }
     Ok(())
@@ -1876,6 +1881,39 @@ fn usage_details(node: &Node) -> String {
     }
 }
 
+fn mount_details(node: &Node) -> String {
+    const DETAIL_KEYS: &[(&str, &str)] = &[
+        ("mount.source", "source"),
+        ("mount.read-only", "ro"),
+        ("mount.read-write", "rw"),
+        ("mount.bind", "bind"),
+        ("mount.propagation", "propagation"),
+        ("mount.propagation.id", "propagation-id"),
+        ("tmpfs.size", "tmpfs-size"),
+        ("tmpfs.mode", "mode"),
+        ("tmpfs.uid", "uid"),
+        ("tmpfs.gid", "gid"),
+        ("tmpfs.nr-inodes", "nr-inodes"),
+        ("overlay.lowerdir", "lowerdir"),
+        ("overlay.upperdir", "upperdir"),
+        ("overlay.workdir", "workdir"),
+        ("overlay.index", "index"),
+    ];
+
+    let details = DETAIL_KEYS
+        .iter()
+        .filter_map(|(key, label)| {
+            property_value(node, key).map(|value| format!("{label}={value}"))
+        })
+        .collect::<Vec<_>>();
+
+    if details.is_empty() {
+        "-".to_string()
+    } else {
+        details.join(" ")
+    }
+}
+
 fn backing_count(graph: &StorageGraph, node: &Node) -> usize {
     graph
         .edges
@@ -1960,8 +1998,8 @@ mod tests {
 
     use super::{
         confirmation_file_accepts, is_device_node, is_mapping_node, is_network_storage_node,
-        is_partition_node, is_pool_node, is_snapshot_node, print_filesystems, print_usage,
-        snapshot_source, usage_details, usage_percent,
+        is_partition_node, is_pool_node, is_snapshot_node, mount_details, print_filesystems,
+        print_mounts, print_usage, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2180,5 +2218,55 @@ mod tests {
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains("xfs-blocks=262144 reflink=1"));
+    }
+
+    #[test]
+    fn mounts_table_includes_source_and_pseudo_mount_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("mount:/run", NodeKind::Mountpoint, "/run")
+                .with_property("filesystem.type", "tmpfs")
+                .with_property("mount.source", "tmpfs")
+                .with_property("mount.read-write", "true")
+                .with_property("tmpfs.size", "64M")
+                .with_property("tmpfs.mode", "0755"),
+        );
+        graph.add_node(
+            Node::new("mount:/srv/cache", NodeKind::Mountpoint, "/srv/cache")
+                .with_property("filesystem.type", "none")
+                .with_property("mount.source", "/var/cache/disk-nix")
+                .with_property("mount.bind", "true"),
+        );
+        graph.add_node(
+            Node::new("mount:/merged", NodeKind::Mountpoint, "/merged")
+                .with_property("filesystem.type", "overlay")
+                .with_property("mount.source", "overlay")
+                .with_property("overlay.lowerdir", "/lower")
+                .with_property("overlay.upperdir", "/upper")
+                .with_property("overlay.workdir", "/work")
+                .with_property("overlay.index", "off"),
+        );
+
+        assert_eq!(
+            mount_details(
+                graph
+                    .nodes
+                    .iter()
+                    .find(|node| node.name == "/run")
+                    .expect("tmpfs mount fixture should exist")
+            ),
+            "source=tmpfs rw=true tmpfs-size=64M mode=0755"
+        );
+
+        let mut output = Vec::new();
+        print_mounts(&mut output, &graph).expect("mount table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DETAILS"));
+        assert!(output.contains("source=/var/cache/disk-nix bind=true"));
+        assert!(
+            output
+                .contains("source=overlay lowerdir=/lower upperdir=/upper workdir=/work index=off")
+        );
     }
 }

@@ -175,7 +175,9 @@ Use these commands for:
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache
   layers
-- `mounts`: local mountpoints and NFS mounts
+- `mounts`: local mountpoints and NFS mounts, including mount source,
+  read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
+  lower/upper/work directory options when `findmnt` reports them
 - `network-storage`: iSCSI sessions, iSCSI targets, LUNs, NFS exports, and NFS
   mounts
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
