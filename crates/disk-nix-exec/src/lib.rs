@@ -2705,6 +2705,23 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("nfs.mounts") => {
+            let mountpoint = nfs_mount_target_path(action);
+            (
+                vec![nfs_mount_create_command(
+                    action.context.device.as_deref(),
+                    mountpoint,
+                    action.context.fs_type.as_deref(),
+                    action.context.options.as_deref(),
+                )],
+                vec![
+                    "verify the NFS server, export permissions, and network path before mounting"
+                        .to_string(),
+                    "persist long-lived mounts through the NixOS fileSystems entry".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create if collection == Some("disks") => {
             let disk = disk_target_path(action);
             let label = action
@@ -3409,6 +3426,22 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "drain or migrate clients before unexporting the path".to_string(),
                     "verify no active mounts still depend on the export after reload".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("nfs.mounts") => {
+            let mountpoint = nfs_mount_target_path(action);
+            (
+                vec![
+                    nfs_mount_findmnt_command(mountpoint),
+                    nfs_mount_destroy_command(mountpoint),
+                ],
+                vec![
+                    "stop services and automount units that depend on the NFS mount before unmounting"
+                        .to_string(),
+                    "verify no open files, bind mounts, or user sessions still reference the mountpoint"
+                        .to_string(),
                 ],
                 true,
             )
@@ -4709,6 +4742,106 @@ fn export_target_path(action: &PlannedAction) -> Option<&str> {
 
 fn path_like_target(target: &str) -> Option<&str> {
     target.starts_with('/').then_some(target)
+}
+
+fn nfs_mount_target_path(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .mountpoint
+        .as_deref()
+        .and_then(path_like_target)
+        .or_else(|| action.context.target.as_deref().and_then(path_like_target))
+        .or_else(|| action.context.name.as_deref().and_then(path_like_target))
+}
+
+fn nfs_mount_create_command(
+    source: Option<&str>,
+    mountpoint: Option<&str>,
+    fs_type: Option<&str>,
+    options: Option<&str>,
+) -> ExecutionCommand {
+    let source_arg = source.unwrap_or("<nfs-source>");
+    let mountpoint_arg = mountpoint.unwrap_or("<mountpoint>");
+    let fs_type_arg = fs_type.unwrap_or("nfs4");
+    let mut missing = Vec::new();
+    if source.is_none() {
+        missing.push("NFS source");
+    }
+    if mountpoint.is_none() {
+        missing.push("mountpoint path");
+    }
+
+    if source.is_some() && mountpoint.is_some() {
+        let mut argv = vec![
+            "mount".to_string(),
+            "-t".to_string(),
+            fs_type_arg.to_string(),
+        ];
+        if let Some(options) = options {
+            argv.push("-o".to_string());
+            argv.push(options.to_string());
+        }
+        argv.push(source_arg.to_string());
+        argv.push(mountpoint_arg.to_string());
+        command_vec(
+            argv,
+            true,
+            "mount the reviewed NFS source at the selected mountpoint",
+        )
+    } else {
+        let mut argv = vec![
+            "mount".to_string(),
+            "-t".to_string(),
+            fs_type_arg.to_string(),
+        ];
+        if let Some(options) = options {
+            argv.push("-o".to_string());
+            argv.push(options.to_string());
+        }
+        argv.push(source_arg.to_string());
+        argv.push(mountpoint_arg.to_string());
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "mount the NFS source after selecting a source and mountpoint",
+        )
+    }
+}
+
+fn nfs_mount_findmnt_command(mountpoint: Option<&str>) -> ExecutionCommand {
+    match mountpoint {
+        Some(mountpoint) => command(
+            ["findmnt", "--json", mountpoint],
+            false,
+            "inspect the NFS mount before unmounting",
+        ),
+        None => command_with_readiness(
+            ["findmnt", "--json", "<mountpoint>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["mountpoint path"],
+            "inspect the NFS mount after selecting the mountpoint",
+        ),
+    }
+}
+
+fn nfs_mount_destroy_command(mountpoint: Option<&str>) -> ExecutionCommand {
+    match mountpoint {
+        Some(mountpoint) => command(
+            ["umount", mountpoint],
+            true,
+            "unmount the reviewed NFS client mount without touching remote data",
+        ),
+        None => command_with_readiness(
+            ["umount", "<mountpoint>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["mountpoint path"],
+            "unmount the NFS client mount after selecting the mountpoint",
+        ),
+    }
 }
 
 fn nfs_export_destroy_command(target: Option<&str>, client: Option<&str>) -> ExecutionCommand {
@@ -9709,6 +9842,115 @@ mod tests {
                     command.argv == ["exportfs", "-u", "192.0.2.55:<export-path>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["NFS export path"]
+                })
+        }));
+    }
+
+    #[test]
+    fn nfs_mount_lifecycle_reports_mount_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "nfs": {
+                  "mounts": {
+                    "/srv/shared": {
+                      "operation": "create",
+                      "source": "nas.example.com:/srv/shared",
+                      "fsType": "nfs4",
+                      "options": ["_netdev", "vers=4.2"]
+                    },
+                    "/srv/old": {
+                      "destroy": true,
+                      "source": "nas.example.com:/srv/old"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:/srv/shared:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mount",
+                            "-t",
+                            "nfs4",
+                            "-o",
+                            "_netdev,vers=4.2",
+                            "nas.example.com:/srv/shared",
+                            "/srv/shared",
+                        ]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:/srv/old:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["umount", "/srv/old"])
+        }));
+    }
+
+    #[test]
+    fn nfs_mount_lifecycle_requires_mountpoint_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "nfs": {
+                  "mounts": {
+                    "shared": {
+                      "operation": "create",
+                      "source": "nas.example.com:/srv/shared"
+                    },
+                    "old": {
+                      "destroy": true,
+                      "source": "nas.example.com:/srv/old"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:shared:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mount",
+                            "-t",
+                            "nfs4",
+                            "nas.example.com:/srv/shared",
+                            "<mountpoint>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mountpoint path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:old:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["umount", "<mountpoint>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mountpoint path"]
                 })
         }));
     }

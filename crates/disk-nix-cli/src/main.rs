@@ -713,12 +713,15 @@ fn spec_schema() -> serde_json::Value {
                         "type": "string",
                         "enum": ["nfs", "nfs4"]
                     },
+                    "operation": { "$ref": "#/$defs/operation" },
+                    "action": { "$ref": "#/$defs/operation" },
                     "mountpoint": { "type": "string" },
                     "options": {
                         "type": "array",
                         "items": { "type": "string" }
                     },
                     "neededForBoot": { "type": "boolean" },
+                    "destroy": { "type": "boolean" },
                     "preserveData": { "type": "boolean", "default": true }
                 }
             },

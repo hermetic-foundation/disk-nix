@@ -415,10 +415,22 @@ let
       mountpoint
       options
       neededForBoot
+      operation
+      destroy
       preserveData
       ;
     device = mount.source;
   }) cfg.nfs.mounts;
+  typedNfsFilesystemSpec = lib.mapAttrs (_: mount: {
+    inherit (mount)
+      fsType
+      mountpoint
+      options
+      neededForBoot
+      preserveData
+      ;
+    device = mount.source;
+  }) activeNfsMounts;
   typedSwapSpec = lib.mapAttrs (_: swap: {
     inherit (swap)
       device
@@ -476,6 +488,7 @@ let
   isDestroyLifecycle = object: (object.destroy or false) || (object.operation or null) == "destroy";
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;
   activeLuksDevices = lib.filterAttrs (_: luks: !isDestroyLifecycle luks) cfg.luks.devices;
+  activeNfsMounts = lib.filterAttrs (_: mount: !isDestroyLifecycle mount) cfg.nfs.mounts;
   nfsExportLines =
     lib.mapAttrsToList
       (
@@ -825,6 +838,19 @@ in
                 description = "Whether this NFS mount is required in the initrd or early boot.";
               };
 
+              operation = lib.mkOption {
+                type = operationType;
+                default = null;
+                description = "Requested NFS client mount lifecycle operation for disk-nix planning.";
+                example = "create";
+              };
+
+              destroy = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Request unmount/removal of this NFS client mount in disk-nix planning.";
+              };
+
               preserveData = lib.mkOption {
                 type = lib.types.bool;
                 default = true;
@@ -1168,7 +1194,7 @@ in
 
     environment.etc."disk-nix/spec.json".source = json.generate "disk-nix-spec.json" {
       spec = cfg.spec // {
-        filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec // typedNfsMountSpec;
+        filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec // typedNfsFilesystemSpec;
         swaps = (cfg.spec.swaps or { }) // typedSwapSpec;
         luks = (cfg.spec.luks or { }) // {
           devices = ((cfg.spec.luks or { }).devices or { }) // typedLuksSpec;
@@ -1216,7 +1242,7 @@ in
             ;
           device = mount.source;
         };
-      }) cfg.nfs.mounts;
+      }) activeNfsMounts;
 
     swapDevices = lib.mapAttrsToList (
       _: swap:

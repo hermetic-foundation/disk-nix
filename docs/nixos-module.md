@@ -68,6 +68,8 @@ the disk-nix planner spec for review instead of being re-added to `/etc/exports`
 Typed swap and LUKS declarations follow the same split: destroy operations stay
 in the generated disk-nix spec, but they are not re-added to NixOS
 `swapDevices` or `boot.initrd.luks.devices`.
+Typed NFS client mounts also keep destroy operations in the generated disk-nix
+spec while filtering them out of the derived NixOS `fileSystems` entries.
 
 Lifecycle declaration attribute names are usable object names only for domains
 whose native tools address objects by name, such as ZFS datasets, ZFS pools,
@@ -131,6 +133,8 @@ Typed NFS client mount declarations include:
 - `mountpoint`
 - `options`
 - `neededForBoot`
+- `operation`
+- `destroy`
 - `preserveData`
 
 Typed iSCSI declarations include:
@@ -332,6 +336,10 @@ Example lifecycle planning through NixOS options:
       source = "nas.example.com:/srv/shared";
       fsType = "nfs4";
       options = [ "_netdev" "x-systemd.automount" "vers=4.2" ];
+    };
+    nfs.mounts."/srv/old" = {
+      source = "nas.example.com:/srv/old";
+      operation = "destroy";
     };
     iscsi = {
       initiatorName = "iqn.2026-06.example:host";

@@ -154,6 +154,10 @@
                   "vers=4.2"
                 ];
               };
+              nfs.mounts."/srv/old" = {
+                source = "nas.example.com:/srv/old";
+                operation = "destroy";
+              };
               iscsi = {
                 initiatorName = "iqn.2026-06.example:host";
                 discoverPortal = "192.0.2.10:3260";
@@ -557,7 +561,10 @@
                   and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"
                   and .spec.filesystems."/srv/shared".fsType == "nfs4"
                   and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)
+                  and (.spec.filesystems | has("/srv/old") | not)
                   and .spec.nfs.mounts."/srv/shared".source == "nas.example.com:/srv/shared"
+                  and .spec.nfs.mounts."/srv/old".source == "nas.example.com:/srv/old"
+                  and .spec.nfs.mounts."/srv/old".operation == "destroy"
                   and .spec.iscsi.initiatorName == "iqn.2026-06.example:host"
                   and .spec.iscsi.discoverPortal == "192.0.2.10:3260"
                   and .spec.iscsi.boot.target == "iqn.2026-06.example:storage.root"
@@ -662,6 +669,21 @@
                   and .cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
                   and (has("cryptold") | not)
                 ' luks-devices
+                fileSystems=${
+                  pkgs.lib.escapeShellArg (
+                    builtins.toJSON (
+                      pkgs.lib.mapAttrs (_: fs: {
+                        inherit (fs) device fsType;
+                      }) nixosModuleTest.config.fileSystems
+                    )
+                  )
+                }
+                printf '%s\n' "$fileSystems" > file-systems
+                jq -e '
+                  has("/srv/shared")
+                  and ."/srv/shared".device == "nas.example.com:/srv/shared"
+                  and (has("/srv/old") | not)
+                ' file-systems
                 printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
                 grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
                 touch "$out"

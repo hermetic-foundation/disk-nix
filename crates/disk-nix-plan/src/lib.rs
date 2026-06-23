@@ -391,6 +391,15 @@ pub fn plan_from_value(value: &Value) -> Plan {
             add_filesystem_actions(&mut actions, name, filesystem);
         }
     }
+    if let Some(nfs_mounts) = spec
+        .get("nfs")
+        .and_then(|nfs| nfs.get("mounts"))
+        .and_then(Value::as_object)
+    {
+        for (name, mount) in nfs_mounts {
+            add_lifecycle_actions(&mut actions, "nfs.mounts", name, mount);
+        }
+    }
     if let Some(swaps) = spec.get("swaps").and_then(Value::as_object) {
         for (name, swap) in swaps {
             add_swap_actions(&mut actions, name, swap);
@@ -800,8 +809,11 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         collection: Some(collection.to_string()),
         name: Some(name.to_string()),
         target: string_field(object, &["target", "path", "mountpoint"]).or(Some(name.to_string())),
-        device: string_field(object, &["device", "disk"]),
+        device: string_field(object, &["device", "disk", "source"]),
         devices: string_array_field(object, &["devices", "addDevices"]),
+        fs_type: string_field(object, &["fsType", "type"]),
+        mountpoint: string_field(object, &["mountpoint", "path"])
+            .or_else(|| name.starts_with('/').then(|| name.to_string())),
         desired_size: desired_size(object),
         start: string_field(object, &["start", "startOffset"]),
         end: string_field(object, &["end", "endOffset"]),
@@ -854,11 +866,20 @@ fn desired_size(object: &Value) -> Option<String> {
 }
 
 fn lifecycle_options(object: &Value) -> Option<String> {
-    string_field(object, &["options"]).or_else(|| {
-        object
-            .get("properties")
-            .and_then(|properties| string_field(properties, &["options"]))
-    })
+    string_field(object, &["options"])
+        .or_else(|| {
+            let options = string_array_field(object, &["options"]);
+            if options.is_empty() {
+                None
+            } else {
+                Some(options.join(","))
+            }
+        })
+        .or_else(|| {
+            object
+                .get("properties")
+                .and_then(|properties| string_field(properties, &["options"]))
+        })
 }
 
 fn property_assignments(object: &Value) -> Vec<String> {
@@ -1551,6 +1572,27 @@ fn add_destroy_guard(
             });
             return;
         }
+        if collection == "nfs.mounts" {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:destroy").to_ascii_lowercase(),
+                description: format!("unmount NFS client mount {name}"),
+                operation: Operation::Destroy,
+                risk: RiskClass::OfflineRequired,
+                destructive: false,
+                context: lifecycle_context(collection, name, object),
+                advice: Some(Advice {
+                    summary: "unmounting an NFS client path can interrupt local services"
+                        .to_string(),
+                    alternatives: vec![
+                        "stop local services and automount units before unmounting".to_string(),
+                        "switch the mount to read-only or noauto before final removal".to_string(),
+                        "verify no open files or bind mounts still depend on the mountpoint"
+                            .to_string(),
+                    ],
+                }),
+            });
+            return;
+        }
         if collection == "luns" {
             actions.push(PlannedAction {
                 id: format!("{collection}:{name}:destroy").to_ascii_lowercase(),
@@ -1963,6 +2005,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "nfs.mounts" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "mounting an NFS client path changes host namespace state".to_string(),
+                alternatives: vec![
+                    "use x-systemd.automount or nofail when the server may be unavailable"
+                        .to_string(),
+                    "verify DNS, routing, firewall, and export permissions before mounting"
+                        .to_string(),
+                    "prefer declarative NixOS fileSystems for steady-state client mounts"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "luns" => (
             RiskClass::Online,
             false,
@@ -2124,6 +2181,19 @@ fn classify_operation(
                     "remove or migrate clients before unexporting the path".to_string(),
                     "switch export options to read-only before final removal".to_string(),
                     "verify no active mounts depend on the export before reload".to_string(),
+                ],
+            }),
+        ),
+        Operation::Destroy if collection == "nfs.mounts" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "unmounting an NFS client path can interrupt local services".to_string(),
+                alternatives: vec![
+                    "stop local services and automount units before unmounting".to_string(),
+                    "switch the mount to read-only or noauto before final removal".to_string(),
+                    "verify no open files or bind mounts still depend on the mountpoint"
+                        .to_string(),
                 ],
             }),
         ),
@@ -4405,6 +4475,55 @@ mod tests {
             .expect("export destroy exists");
         assert_eq!(destroy.risk, RiskClass::OfflineRequired);
         assert!(!destroy.destructive);
+    }
+
+    #[test]
+    fn plan_classifies_nfs_mount_lifecycle_without_remote_data_destruction() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "nfs": {
+                "mounts": {
+                  "/srv/shared": {
+                    "operation": "create",
+                    "source": "nas.example.com:/srv/shared",
+                    "fsType": "nfs4",
+                    "options": ["_netdev", "vers=4.2"]
+                  },
+                  "/srv/old": {
+                    "destroy": true,
+                    "source": "nas.example.com:/srv/old"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.destructive_count, 0);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "nfs.mounts:/srv/shared:create")
+            .expect("NFS mount create exists");
+        assert_eq!(create.risk, RiskClass::Online);
+        assert_eq!(
+            create.context.device.as_deref(),
+            Some("nas.example.com:/srv/shared")
+        );
+        assert_eq!(create.context.mountpoint.as_deref(), Some("/srv/shared"));
+        assert_eq!(create.context.fs_type.as_deref(), Some("nfs4"));
+        assert_eq!(create.context.options.as_deref(), Some("_netdev,vers=4.2"));
+
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "nfs.mounts:/srv/old:destroy")
+            .expect("NFS mount destroy exists");
+        assert_eq!(destroy.risk, RiskClass::OfflineRequired);
+        assert!(!destroy.destructive);
+        assert_eq!(destroy.context.mountpoint.as_deref(), Some("/srv/old"));
     }
 
     #[test]
