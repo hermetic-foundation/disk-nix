@@ -2961,6 +2961,69 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::NfsExport,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "NFS export creation exposes a local path to selected clients".to_string(),
+                alternatives: vec![
+                    "start with restrictive client selectors and read-only options".to_string(),
+                    "verify ownership, permissions, and firewall policy before exporting"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsExport,
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            advice: Some(Advice {
+                summary: "NFS export option changes alter client access semantics".to_string(),
+                alternatives: vec![
+                    "switch writable exports to read-only before removal".to_string(),
+                    "review active clients before changing root squash or sync policy".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsExport,
+            operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "unexporting NFS paths can interrupt active remote clients".to_string(),
+                alternatives: vec![
+                    "drain or migrate clients before unexporting the path".to_string(),
+                    "verify no active mounts still depend on the export".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsMount,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "mounting an NFS source changes local namespace state".to_string(),
+                alternatives: vec![
+                    "use x-systemd.automount or nofail for unreliable networks".to_string(),
+                    "verify server reachability and export permissions before mounting"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsMount,
+            operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "unmounting an NFS client path can interrupt local services".to_string(),
+                alternatives: vec![
+                    "stop services and automount units before unmounting".to_string(),
+                    "verify no open files or bind mounts still depend on the mountpoint"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::Lun,
             operation: Operation::Grow,
             risk: RiskClass::OfflineRequired,
@@ -3075,6 +3138,45 @@ mod tests {
                 .iter()
                 .any(|alternative| alternative.contains("flush dirty data"))
         }));
+    }
+
+    #[test]
+    fn nfs_capabilities_describe_export_and_mount_lifecycle() {
+        let capabilities = default_capabilities();
+        let export_create = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NfsExport
+                    && capability.operation == Operation::Create
+            })
+            .expect("NFS export create capability should exist");
+        let export_destroy = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NfsExport
+                    && capability.operation == Operation::Destroy
+            })
+            .expect("NFS export destroy capability should exist");
+        let mount_create = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NfsMount
+                    && capability.operation == Operation::Create
+            })
+            .expect("NFS mount create capability should exist");
+        let mount_destroy = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NfsMount
+                    && capability.operation == Operation::Destroy
+            })
+            .expect("NFS mount destroy capability should exist");
+
+        assert_eq!(export_create.risk, RiskClass::Online);
+        assert_eq!(export_destroy.risk, RiskClass::OfflineRequired);
+        assert_eq!(mount_create.risk, RiskClass::Online);
+        assert_eq!(mount_destroy.risk, RiskClass::OfflineRequired);
+        assert!(mount_destroy.advice.is_some());
     }
 
     #[test]
