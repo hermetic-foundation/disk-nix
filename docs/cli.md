@@ -144,6 +144,7 @@ disk-nix mappings
 disk-nix encryption
 disk-nix cache
 disk-nix vdo
+disk-nix multipath
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -163,6 +164,7 @@ disk-nix mappings --json
 disk-nix encryption --json
 disk-nix cache --json
 disk-nix vdo --json
+disk-nix multipath --json
 disk-nix mounts --json
 disk-nix network-storage --json
 disk-nix ids --json
@@ -227,6 +229,10 @@ Use these commands for:
   device, logical and physical size, status/stat counters, operating mode,
   recovery progress, write policy, compression, deduplication, and overhead
   blocks when probes expose them
+- `multipath`: multipath maps and their backing paths, including WWID, dm
+  device, vendor/product, size, features, hardware handler, write protection,
+  path count, host path, major/minor, and path state when `multipath -ll`
+  exposes them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them

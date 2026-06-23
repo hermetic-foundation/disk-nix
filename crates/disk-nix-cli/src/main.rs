@@ -124,6 +124,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered multipath maps and path metadata.
+    Multipath {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -384,6 +390,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_vdo_node)?;
             } else {
                 print_vdo(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Multipath { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_multipath_node)?;
+            } else {
+                print_multipath(output, &graph)?;
             }
             Ok(())
         }
@@ -1453,6 +1468,27 @@ fn print_vdo(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     Ok(())
 }
 
+fn print_multipath(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<32} {:<28} {:>5} {:<20} DETAILS",
+        "KIND", "NAME", "WWID", "PATHS", "PATH-STATE"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_multipath_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<32} {:<28} {:>5} {:<20} {}",
+            node.kind,
+            node.name,
+            property_value(node, "multipath.wwid").unwrap_or("-"),
+            backing_count(graph, node),
+            property_value(node, "multipath.path-state").unwrap_or("-"),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2011,6 +2047,14 @@ fn is_vdo_node(node: &Node) -> bool {
         })
 }
 
+fn is_multipath_node(node: &Node) -> bool {
+    node.kind == NodeKind::MultipathDevice
+        || node
+            .properties
+            .iter()
+            .any(|property| property.key.starts_with("multipath."))
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
@@ -2448,11 +2492,12 @@ mod tests {
 
     use super::{
         confirmation_file_accepts, is_cache_node, is_device_node, is_encryption_node,
-        is_filesystem_node, is_mapping_node, is_network_storage_node, is_partition_node,
-        is_pool_node, is_snapshot_node, is_vdo_node, is_volume_node, mount_details, print_cache,
-        print_devices, print_encryption, print_filesystems, print_mappings, print_mounts,
-        print_network_storage, print_partitions, print_pools, print_snapshots, print_usage,
-        print_vdo, print_volumes, snapshot_source, usage_details, usage_percent,
+        is_filesystem_node, is_mapping_node, is_multipath_node, is_network_storage_node,
+        is_partition_node, is_pool_node, is_snapshot_node, is_vdo_node, is_volume_node,
+        mount_details, print_cache, print_devices, print_encryption, print_filesystems,
+        print_mappings, print_mounts, print_multipath, print_network_storage, print_partitions,
+        print_pools, print_snapshots, print_usage, print_vdo, print_volumes, snapshot_source,
+        usage_details, usage_percent,
     };
 
     #[test]
@@ -2563,6 +2608,15 @@ mod tests {
                 "vg0/archive:0"
             )
             .with_property("lvm.vdo-write-policy", "auto")
+        ));
+        assert!(is_multipath_node(&Node::new(
+            "multipath:mpatha",
+            NodeKind::MultipathDevice,
+            "mpatha"
+        )));
+        assert!(is_multipath_node(
+            &Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
+                .with_property("multipath.path-state", "active ready running")
         ));
     }
 
@@ -3451,6 +3505,64 @@ mod tests {
         assert!(output.contains("overhead-blocks=4096"));
         assert!(output.contains("vg0/archive:0"));
         assert!(output.contains("vdo-write-policy=auto"));
+    }
+
+    #[test]
+    fn multipath_table_includes_map_and_path_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("multipath:mpatha", NodeKind::MultipathDevice, "mpatha")
+                .with_path("/dev/mapper/mpatha")
+                .with_property("multipath.dm", "dm-2")
+                .with_property("multipath.wwid", "3600508b400105e210000900000490000")
+                .with_property("multipath.vendor-product", "IBM,2145")
+                .with_property("multipath.size", "100G")
+                .with_property("multipath.features", "'1 queue_if_no_path'")
+                .with_property("multipath.hwhandler", "'1 alua'")
+                .with_property("multipath.write-protect", "rw"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
+                .with_path("/dev/sdb")
+                .with_property("multipath.host-path", "2:0:0:1")
+                .with_property("major-minor", "8:16")
+                .with_property("multipath.path-state", "active ready running"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/sdc", NodeKind::PhysicalDisk, "/dev/sdc")
+                .with_path("/dev/sdc")
+                .with_property("multipath.host-path", "3:0:0:1")
+                .with_property("major-minor", "8:32")
+                .with_property("multipath.path-state", "active ready running"),
+        );
+        graph.add_edge(Edge::new(
+            "block:/dev/sdb",
+            "multipath:mpatha",
+            Relationship::Backs,
+        ));
+        graph.add_edge(Edge::new(
+            "block:/dev/sdc",
+            "multipath:mpatha",
+            Relationship::Backs,
+        ));
+
+        let mut output = Vec::new();
+        print_multipath(&mut output, &graph).expect("multipath table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("WWID"));
+        assert!(output.contains("PATHS"));
+        assert!(output.contains("PATH-STATE"));
+        assert!(output.contains("mpatha"));
+        assert!(output.contains("3600508b400105e210000900000490000"));
+        assert!(output.contains("dm=dm-2 wwid=3600508b400105e210000900000490000"));
+        assert!(output.contains("vendor=IBM,2145 size=100G"));
+        assert!(output.contains("features='1 queue_if_no_path' handler='1 alua' wp=rw"));
+        assert!(output.contains("/dev/sdb"));
+        assert!(output.contains("host-path=2:0:0:1 major-minor=8:16"));
+        assert!(output.contains("path-state=active ready running"));
+        assert!(output.contains("/dev/sdc"));
+        assert!(output.contains("host-path=3:0:0:1 major-minor=8:32"));
     }
 
     #[test]
