@@ -2106,7 +2106,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Grow if collection == Some("swaps") => {
-            let target = target.unwrap_or("<swap>");
+            let target = swap_target_path(action);
             let desired_size = action.context.desired_size.as_deref();
             (
                 vec![
@@ -2115,22 +2115,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect active swap state before resizing",
                     ),
-                    command(
-                        ["swapoff", target],
-                        true,
-                        "disable swap before changing backing storage or signature",
-                    ),
+                    swap_command("swapoff", target, "disable swap before changing backing storage or signature"),
                     swap_resize_command(target, desired_size),
-                    command(
-                        ["mkswap", target],
-                        true,
-                        "recreate the swap signature after backing storage resize",
-                    ),
-                    command(
-                        ["swapon", target],
-                        true,
-                        "reactivate swap after verification",
-                    ),
+                    swap_command("mkswap", target, "recreate the swap signature after backing storage resize"),
+                    swap_command("swapon", target, "reactivate swap after verification"),
                 ],
                 vec![
                     "verify memory pressure and hibernation dependencies before swapoff"
@@ -2793,24 +2781,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Format if collection == Some("swaps") => {
-            let target = target.unwrap_or("<swap>");
+            let target = swap_target_path(action);
             (
                 vec![
-                    command(
-                        ["disk-nix", "inspect", target],
-                        false,
+                    disk_nix_inspect_command(
+                        target,
+                        "<swap>",
+                        "swap target path",
                         "inspect target before creating a swap signature",
                     ),
-                    command(
-                        ["swapoff", target],
-                        true,
-                        "disable active swap before replacing its signature",
-                    ),
-                    command(
-                        ["mkswap", target],
-                        true,
-                        "create a swap signature on the target",
-                    ),
+                    swap_command("swapoff", target, "disable active swap before replacing its signature"),
+                    swap_command("mkswap", target, "create a swap signature on the target"),
                 ],
                 vec![
                     "verify the target does not contain data that must be preserved".to_string(),
@@ -4991,7 +4972,53 @@ fn disk_parted_machine_list_command(
     }
 }
 
-fn swap_resize_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+fn swap_target_path(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .target
+        .as_deref()
+        .filter(|target| target.starts_with('/'))
+        .or_else(|| {
+            action
+                .context
+                .device
+                .as_deref()
+                .filter(|device| device.starts_with('/'))
+        })
+}
+
+fn swap_command(
+    command_name: &'static str,
+    target: Option<&str>,
+    note: &'static str,
+) -> ExecutionCommand {
+    match target {
+        Some(target) => command([command_name, target], true, note),
+        None => command_with_readiness(
+            [command_name, "<swap>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap target path"],
+            note,
+        ),
+    }
+}
+
+fn swap_resize_command(target: Option<&str>, desired_size: Option<&str>) -> ExecutionCommand {
+    let Some(target) = target else {
+        return command_vec_with_readiness(
+            vec![
+                "<resize-swap-backing-storage>".to_string(),
+                "<swap>".to_string(),
+                desired_size.unwrap_or("<size>").to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_swap_resize_inputs(desired_size),
+            "resize the swap backing device or file after selecting the target",
+        );
+    };
+
     if !target.starts_with("/dev/") {
         return match desired_size {
             Some(size) => command(
@@ -5025,6 +5052,15 @@ fn swap_resize_command(target: &str, desired_size: Option<&str>) -> ExecutionCom
             "resize the swap backing device or file before recreating the swap signature",
         ),
     }
+}
+
+fn missing_swap_resize_inputs(desired_size: Option<&str>) -> Vec<&'static str> {
+    let mut missing = vec!["swap target path"];
+    if desired_size.is_none() {
+        missing.push("desired swap size");
+    }
+    missing.push("backing storage domain");
+    missing
 }
 
 fn luks_backing_inspect_command(device: Option<&str>, note: &str) -> ExecutionCommand {
@@ -7000,6 +7036,59 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["cryptsetup", "status", "cryptdata"])
+        }));
+    }
+
+    #[test]
+    fn swap_lifecycle_requires_target_path_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "swaps": {
+                  "scratch": {
+                    "operation": "grow",
+                    "desiredSize": "16GiB"
+                  },
+                  "primary": {
+                    "preserveData": false
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowFormat": true,
+                "allowOffline": true,
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:scratch:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["swapoff", "<swap>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["swap target path"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["<resize-swap-backing-storage>", "<swap>", "16GiB"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == ["swap target path", "backing storage domain"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:primary:format"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mkswap", "<swap>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["swap target path"]
+                })
         }));
     }
 
