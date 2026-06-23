@@ -70,6 +70,8 @@
               "$out/share/fish/vendor_completions.d/disk-nix.fish"
             install -Dm644 <("$out/bin/disk-nix" manpage) \
               "$out/share/man/man1/disk-nix.1"
+            install -Dm644 <("$out/bin/disk-nix" schema) \
+              "$out/share/disk-nix/schema/disk-nix-spec.schema.json"
           '';
           meta = {
             description = "NixOS-native storage topology and lifecycle manager";
@@ -197,6 +199,7 @@
             scriptOut=$(mktemp)
 
             ${diskNix}/bin/disk-nix schema > "$schema"
+            cmp "$schema" ${diskNix}/share/disk-nix/schema/disk-nix-spec.schema.json
             jq -e '
               ."$schema" == "https://json-schema.org/draft/2020-12/schema"
               and .properties.spec["$ref"] == "#/$defs/specBody"

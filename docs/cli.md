@@ -106,6 +106,8 @@ shape with top-level `spec` and `apply` objects. It includes the planner's
 filesystem fields, lifecycle collections, snapshot declarations, supported
 operation names, apply policy fields, and NixOS activation helper fields such
 as `probeCurrent`, `scriptOut`, and `reportOut`.
+The Nix package installs the same generated schema at
+`share/disk-nix/schema/disk-nix-spec.schema.json`.
 
 ## Focused Views
 
