@@ -797,6 +797,12 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     false,
                     "verify Btrfs snapshot subvolume existence and metadata",
                 ));
+            } else if collection == Some("lvmSnapshots") {
+                commands.push(command(
+                    ["lvs", "--reportformat", "json", snapshot],
+                    false,
+                    "verify LVM snapshot existence and attributes",
+                ));
             }
             (
                 commands,
@@ -826,6 +832,35 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "destroyed zvol no longer appears in ZFS volume listings".to_string(),
                 "downstream LUN, guest, or filesystem consumers are detached or updated"
                     .to_string(),
+            ],
+        ),
+        Operation::Destroy if collection == Some("lvmSnapshots") => (
+            vec![command(
+                ["lvs", "--reportformat", "json"],
+                false,
+                "verify LVM snapshot inventory after removal",
+            )],
+            vec![
+                "removed snapshot no longer appears in LVM reports".to_string(),
+                "origin logical volume remains active and healthy".to_string(),
+            ],
+        ),
+        Operation::Rollback if collection == Some("lvmSnapshots") => (
+            vec![
+                command(
+                    ["lvs", "--reportformat", "json", target],
+                    false,
+                    "verify LVM snapshot merge state",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify origin and snapshot graph state after rollback",
+                ),
+            ],
+            vec![
+                "snapshot merge is complete or queued for next activation".to_string(),
+                "origin logical volume contents and consumers are verified after merge".to_string(),
             ],
         ),
         Operation::Format if collection == Some("swaps") => (
@@ -1347,7 +1382,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         Operation::Snapshot => {
             let target = target.unwrap_or("<snapshot>");
             let snapshot = action.context.name.as_deref().unwrap_or(target);
-            let snapshot_command = snapshot_command(collection, target, snapshot);
+            let snapshot_command = if collection == Some("lvmSnapshots") {
+                lvm_snapshot_create_command(target, snapshot, action.context.desired_size.as_deref())
+            } else {
+                snapshot_command(collection, target, snapshot)
+            };
             (
                 vec![
                     command(
@@ -1550,6 +1589,50 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "take a snapshot or clone before destruction when rollback is required"
                         .to_string(),
                     "detach LUN, VM, or filesystem consumers before destroying the zvol".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("lvmSnapshots") => {
+            let target = target.unwrap_or("<lvm-snapshot>");
+            (
+                vec![
+                    command(
+                        ["lvs", "--reportformat", "json", target],
+                        false,
+                        "inspect LVM snapshot before removal",
+                    ),
+                    command(
+                        ["lvremove", "--yes", target],
+                        true,
+                        "remove the reviewed LVM snapshot",
+                    ),
+                ],
+                vec![
+                    "verify the snapshot is no longer needed as a recovery point".to_string(),
+                    "prefer a fresh snapshot or backup before deleting old snapshots".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rollback if collection == Some("lvmSnapshots") => {
+            let target = target.unwrap_or("<lvm-snapshot>");
+            (
+                vec![
+                    command(
+                        ["lvs", "--reportformat", "json", target],
+                        false,
+                        "inspect LVM snapshot before merge rollback",
+                    ),
+                    command(
+                        ["lvconvert", "--merge", target],
+                        true,
+                        "merge the LVM snapshot back into its origin",
+                    ),
+                ],
+                vec![
+                    "take a fresh snapshot of the origin before merging".to_string(),
+                    "schedule downtime when the origin must be deactivated for merge".to_string(),
                 ],
                 true,
             )
@@ -2006,6 +2089,43 @@ fn thin_pool_extend_command(target: &str, desired_size: Option<&str>) -> Executi
             CommandReadiness::NeedsDesiredSize,
             ["desired thin pool size or size delta"],
             "extend the LVM thin pool after selecting the desired size",
+        ),
+    }
+}
+
+fn lvm_snapshot_create_command(
+    origin: &str,
+    snapshot: &str,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
+    match desired_size {
+        Some(size) => command_vec(
+            vec![
+                "lvcreate",
+                "--snapshot",
+                "--size",
+                size,
+                "--name",
+                snapshot,
+                origin,
+            ],
+            true,
+            "create an LVM snapshot of the origin logical volume",
+        ),
+        None => command_with_readiness(
+            [
+                "lvcreate",
+                "--snapshot",
+                "--size",
+                "<size>",
+                "--name",
+                snapshot,
+                origin,
+            ],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired LVM snapshot size"],
+            "create an LVM snapshot after selecting the snapshot size",
         ),
     }
 }
@@ -2645,6 +2765,69 @@ mod tests {
                         "vg0/pool",
                     ]
             })
+        }));
+    }
+
+    #[test]
+    fn lvm_snapshot_lifecycle_reports_lvm_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "lvmSnapshots": {
+                  "vg0/root-snap": {
+                    "operation": "snapshot",
+                    "target": "vg0/root",
+                    "desiredSize": "20GiB"
+                  },
+                  "vg0/root-rollback": {
+                    "operation": "rollback"
+                  },
+                  "vg0/old-snap": {
+                    "destroy": true
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::Blocked);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "lvcreate",
+                        "--snapshot",
+                        "--size",
+                        "20GiB",
+                        "--name",
+                        "vg0/root-snap",
+                        "vg0/root",
+                    ]
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["lvremove", "--yes", "vg0/old-snap"])
+        }));
+        assert!(
+            !report.command_plan.iter().any(|step| {
+                step.commands
+                    .iter()
+                    .any(|command| command.argv == ["lvconvert", "--merge", "vg0/root-rollback"])
+            }),
+            "potential-data-loss rollback remains blocked by apply policy"
+        );
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["lvs", "--reportformat", "json", "vg0/root-snap"])
         }));
     }
 

@@ -389,6 +389,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "volumes",
         "volumeGroups",
         "thinPools",
+        "lvmSnapshots",
         "mdRaids",
         "multipathMaps",
         "pools",
@@ -1597,6 +1598,19 @@ fn classify_operation(
             (risk, false, Some(advice))
         }
         Operation::Snapshot => (RiskClass::Reversible, false, None),
+        Operation::Rollback if collection == "lvmSnapshots" => (
+            RiskClass::PotentialDataLoss,
+            false,
+            Some(Advice {
+                summary: "merging an LVM snapshot rolls the origin back to older contents"
+                    .to_string(),
+                alternatives: vec![
+                    "take a fresh snapshot of the current origin before merge".to_string(),
+                    "mount or clone the snapshot for inspection before rollback".to_string(),
+                    "schedule downtime when the origin must be deactivated for merge".to_string(),
+                ],
+            }),
+        ),
         Operation::Shrink | Operation::RemoveDevice | Operation::Rollback => (
             RiskClass::PotentialDataLoss,
             false,
@@ -1706,6 +1720,12 @@ fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
         "volumes" | "volumeGroups" | "thinPools" | "luns" | "mdRaids" | "multipathMaps" => {
             alternatives
                 .push("grow or attach replacement capacity instead of reformatting".to_string());
+        }
+        "lvmSnapshots" => {
+            alternatives.push("merge or mount the snapshot before deleting it".to_string());
+            alternatives.push(
+                "create a replacement snapshot before pruning old recovery points".to_string(),
+            );
         }
         "vdoVolumes" => {
             alternatives
@@ -1886,6 +1906,42 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "extend metadata before it approaches exhaustion".to_string(),
                     "verify autoextend policy and overcommit before growth".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmSnapshot,
+            operation: Operation::Snapshot,
+            risk: RiskClass::Reversible,
+            advice: Some(Advice {
+                summary: "LVM snapshot creation preserves an origin recovery point".to_string(),
+                alternatives: vec![
+                    "size the snapshot for expected changed blocks".to_string(),
+                    "monitor snapshot fullness while it exists".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmSnapshot,
+            operation: Operation::Rollback,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "LVM snapshot merge rolls the origin back".to_string(),
+                alternatives: vec![
+                    "take a fresh snapshot before merge".to_string(),
+                    "inspect the snapshot before rollback".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmSnapshot,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "removing an LVM snapshot deletes a recovery point".to_string(),
+                alternatives: vec![
+                    "keep the snapshot until backups are verified".to_string(),
+                    "merge or clone the snapshot before deletion".to_string(),
                 ],
             }),
         },
@@ -2558,6 +2614,52 @@ mod tests {
                     .iter()
                     .any(|alternative| alternative.contains("overcommit"))
         }));
+    }
+
+    #[test]
+    fn plan_classifies_lvm_snapshot_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "lvmSnapshots": {
+                "vg0/root-snap": {
+                  "operation": "snapshot",
+                  "target": "vg0/root",
+                  "desiredSize": "20GiB"
+                },
+                "vg0/root-rollback": {
+                  "operation": "rollback"
+                },
+                "vg0/old-snap": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.potential_data_loss_count, 1);
+        assert_eq!(plan.summary.destructive_count, 1);
+        let snapshot = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lvmsnapshots:vg0/root-snap:snapshot")
+            .expect("snapshot action exists");
+        assert_eq!(snapshot.risk, RiskClass::Reversible);
+        assert_eq!(snapshot.context.target.as_deref(), Some("vg0/root"));
+        assert_eq!(snapshot.context.desired_size.as_deref(), Some("20GiB"));
+        let rollback = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lvmsnapshots:vg0/root-rollback:rollback")
+            .expect("rollback action exists");
+        assert_eq!(rollback.risk, RiskClass::PotentialDataLoss);
+        assert!(
+            rollback
+                .advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("rolls the origin back"))
+        );
     }
 
     #[test]

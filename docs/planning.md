@@ -37,10 +37,10 @@ or the NixOS module wrapper written to `/etc/disk-nix/spec.json`:
 Current planning is intentionally conservative. It classifies filesystem
 resize policy, preservation intent, and lifecycle operations for disks,
 partitions, swap, LUKS containers, Btrfs subvolumes, VDO volumes, volumes, LVM
-thin pools, MD RAID arrays, multipath maps, pools, datasets, zvols, LUNs, iSCSI
-sessions, exports, cache layers, and snapshots. It reports destructive or
-potentially destructive behavior with alternatives instead of silently accepting
-unsafe mutation.
+thin pools, LVM snapshots, MD RAID arrays, multipath maps, pools, datasets,
+zvols, LUNs, iSCSI sessions, exports, cache layers, and snapshots. It reports
+destructive or potentially destructive behavior with alternatives instead of
+silently accepting unsafe mutation.
 
 Examples:
 
@@ -84,6 +84,9 @@ Examples:
   paths are added and deleted.
 - LVM thin pool growth is online, with advice to monitor data and metadata
   utilization, autoextend policy, and thin-volume overcommit.
+- LVM snapshot creation is reversible; snapshot merge rollback is potential
+  data loss; snapshot removal is destructive because it deletes a recovery
+  point.
 - `properties = { ... }` is classified as safe property-update intent.
 - LUN `operation = "grow"` is classified as offline-required because the
   storage target, host rescan, multipath, and consumers must be coordinated.
@@ -114,6 +117,7 @@ Lifecycle collections currently accepted by the planner:
 - `volumes`
 - `volumeGroups`
 - `thinPools`
+- `lvmSnapshots`
 - `mdRaids`
 - `multipathMaps`
 - `pools`
