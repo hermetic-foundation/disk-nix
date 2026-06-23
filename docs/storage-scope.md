@@ -64,8 +64,9 @@ The current probe layer normalizes:
   filesystem state, mount/check counters, inode and block counts, UUIDs, labels,
   and computed capacity/usage where device access is permitted
 - `xfs_info` for mounted XFS filesystem geometry, allocation group layout,
-  data/log/realtime block sizing, and metadata feature flags such as reflink
-  and bigtime
+  inode size, sector size, metadata feature flags such as reflink, bigtime,
+  finobt, sparse, and rmapbt, data allocation parameters, naming format, log
+  geometry, and realtime extent/block counters
 - `ntfsinfo -m` for NTFS volume identity, serial, state, version, sector and
   cluster sizing, index block size, MFT record size, and allocated size
 - `dump.f2fs` for F2FS volume identity, UUID, block counts, valid block usage,

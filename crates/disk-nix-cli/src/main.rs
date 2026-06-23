@@ -2927,11 +2927,38 @@ fn usage_details(node: &Node) -> String {
         ("zfs.encryption", "encryption"),
         ("zfs.keystatus", "keystatus"),
         ("zfs.volsize", "volsize"),
+        ("xfs.meta-data.meta-data", "xfs-source"),
+        ("xfs.meta-data.isize", "xfs-isize"),
+        ("xfs.meta-data.agcount", "xfs-agcount"),
+        ("xfs.meta-data.agsize", "xfs-agsize"),
+        ("xfs.meta-data.sectsz", "xfs-sectsz"),
+        ("xfs.meta-data.attr", "xfs-attr"),
+        ("xfs.meta-data.projid32bit", "xfs-projid32bit"),
+        ("xfs.meta-data.crc", "xfs-crc"),
+        ("xfs.meta-data.finobt", "xfs-finobt"),
+        ("xfs.meta-data.sparse", "xfs-sparse"),
+        ("xfs.meta-data.rmapbt", "xfs-rmapbt"),
         ("xfs.data.blocks", "xfs-blocks"),
         ("xfs.data.bsize", "xfs-bsize"),
+        ("xfs.data.imaxpct", "xfs-imaxpct"),
+        ("xfs.data.sunit", "xfs-sunit"),
+        ("xfs.data.swidth", "xfs-swidth"),
         ("xfs.meta-data.reflink", "reflink"),
         ("xfs.meta-data.bigtime", "bigtime"),
+        ("xfs.meta-data.inobtcount", "xfs-inobtcount"),
+        ("xfs.meta-data.nrext64", "xfs-nrext64"),
+        ("xfs.naming.bsize", "xfs-naming-bsize"),
+        ("xfs.naming.ascii-ci", "xfs-ascii-ci"),
+        ("xfs.naming.ftype", "xfs-ftype"),
+        ("xfs.log.bsize", "xfs-log-bsize"),
         ("xfs.log.blocks", "log-blocks"),
+        ("xfs.log.version", "xfs-log-version"),
+        ("xfs.log.sectsz", "xfs-log-sectsz"),
+        ("xfs.log.sunit", "xfs-log-sunit"),
+        ("xfs.log.lazy-count", "xfs-log-lazy-count"),
+        ("xfs.realtime.extsz", "xfs-realtime-extsz"),
+        ("xfs.realtime.blocks", "xfs-realtime-blocks"),
+        ("xfs.realtime.rtextents", "xfs-realtime-rtextents"),
     ];
 
     let details = DETAIL_KEYS
@@ -3706,13 +3733,41 @@ mod tests {
         );
 
         let xfs = Node::new("mount:/", NodeKind::Mountpoint, "/")
+            .with_property("xfs.meta-data.meta-data", "/dev/mapper/vg-root")
+            .with_property("xfs.meta-data.isize", "512")
+            .with_property("xfs.meta-data.agcount", "4")
+            .with_property("xfs.meta-data.agsize", "65536")
+            .with_property("xfs.meta-data.sectsz", "512")
+            .with_property("xfs.meta-data.attr", "2")
+            .with_property("xfs.meta-data.projid32bit", "1")
+            .with_property("xfs.meta-data.crc", "1")
+            .with_property("xfs.meta-data.finobt", "1")
+            .with_property("xfs.meta-data.sparse", "1")
+            .with_property("xfs.meta-data.rmapbt", "0")
             .with_property("xfs.data.blocks", "262144")
             .with_property("xfs.data.bsize", "4096")
+            .with_property("xfs.data.imaxpct", "25")
+            .with_property("xfs.data.sunit", "0")
+            .with_property("xfs.data.swidth", "0")
             .with_property("xfs.meta-data.reflink", "1")
-            .with_property("xfs.meta-data.bigtime", "1");
+            .with_property("xfs.meta-data.bigtime", "1")
+            .with_property("xfs.meta-data.inobtcount", "1")
+            .with_property("xfs.meta-data.nrext64", "0")
+            .with_property("xfs.naming.bsize", "4096")
+            .with_property("xfs.naming.ascii-ci", "0")
+            .with_property("xfs.naming.ftype", "1")
+            .with_property("xfs.log.bsize", "4096")
+            .with_property("xfs.log.blocks", "2560")
+            .with_property("xfs.log.version", "2")
+            .with_property("xfs.log.sectsz", "512")
+            .with_property("xfs.log.sunit", "0")
+            .with_property("xfs.log.lazy-count", "1")
+            .with_property("xfs.realtime.extsz", "4096")
+            .with_property("xfs.realtime.blocks", "0")
+            .with_property("xfs.realtime.rtextents", "0");
         assert_eq!(
             usage_details(&xfs),
-            "xfs-blocks=262144 xfs-bsize=4096 reflink=1 bigtime=1"
+            "xfs-source=/dev/mapper/vg-root xfs-isize=512 xfs-agcount=4 xfs-agsize=65536 xfs-sectsz=512 xfs-attr=2 xfs-projid32bit=1 xfs-crc=1 xfs-finobt=1 xfs-sparse=1 xfs-rmapbt=0 xfs-blocks=262144 xfs-bsize=4096 xfs-imaxpct=25 xfs-sunit=0 xfs-swidth=0 reflink=1 bigtime=1 xfs-inobtcount=1 xfs-nrext64=0 xfs-naming-bsize=4096 xfs-ascii-ci=0 xfs-ftype=1 xfs-log-bsize=4096 log-blocks=2560 xfs-log-version=2 xfs-log-sectsz=512 xfs-log-sunit=0 xfs-log-lazy-count=1 xfs-realtime-extsz=4096 xfs-realtime-blocks=0 xfs-realtime-rtextents=0"
         );
 
         let ext = Node::new("fs:/dev/sda2", NodeKind::Filesystem, "ext4")
@@ -3933,8 +3988,18 @@ mod tests {
                     free_bytes: Some(512),
                     allocated_bytes: None,
                 })
+                .with_property("xfs.meta-data.meta-data", "/dev/mapper/vg-root")
+                .with_property("xfs.meta-data.isize", "512")
+                .with_property("xfs.meta-data.agcount", "4")
+                .with_property("xfs.meta-data.crc", "1")
                 .with_property("xfs.data.blocks", "262144")
-                .with_property("xfs.meta-data.reflink", "1"),
+                .with_property("xfs.data.bsize", "4096")
+                .with_property("xfs.data.imaxpct", "25")
+                .with_property("xfs.meta-data.reflink", "1")
+                .with_property("xfs.meta-data.bigtime", "1")
+                .with_property("xfs.naming.ftype", "1")
+                .with_property("xfs.log.blocks", "2560")
+                .with_property("xfs.realtime.blocks", "0"),
         );
         graph.add_node(
             Node::new("btrfs:fs-uuid", NodeKind::BtrfsFilesystem, "data")
@@ -3985,7 +4050,10 @@ mod tests {
         let output = String::from_utf8(output).expect("table is utf8");
 
         assert!(output.contains("DETAILS"));
-        assert!(output.contains("xfs-blocks=262144 reflink=1"));
+        assert!(output.contains("xfs-source=/dev/mapper/vg-root xfs-isize=512 xfs-agcount=4"));
+        assert!(output.contains("xfs-crc=1 xfs-blocks=262144 xfs-bsize=4096"));
+        assert!(output.contains("xfs-imaxpct=25 reflink=1 bigtime=1"));
+        assert!(output.contains("xfs-ftype=1 log-blocks=2560 xfs-realtime-blocks=0"));
         assert!(output.contains(
             "mount-target=/data data-profile=single data-size=512 data-used=400 metadata-profile=DUP"
         ));
