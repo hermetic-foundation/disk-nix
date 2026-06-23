@@ -3883,16 +3883,20 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                             false,
                             "inspect ZFS snapshot before rollback",
                         ),
-                        command(
-                            ["zfs", "rollback", target],
-                            true,
-                            "roll back the ZFS dataset to the reviewed snapshot",
+                        zfs_snapshot_rollback_command(
+                            target,
+                            action.context.recursive_rollback.unwrap_or(false),
                         ),
                     ],
                     vec![
                         "take a fresh snapshot of the current dataset before rollback".to_string(),
-                        "review newer snapshots and clones before considering zfs rollback -r or -R"
-                            .to_string(),
+                        if action.context.recursive_rollback == Some(true) {
+                            "recursive rollback destroys newer snapshots in the dataset lineage; review clones and dependent retention first"
+                                .to_string()
+                        } else {
+                            "review newer snapshots and clones before considering zfs rollback -r or -R"
+                                .to_string()
+                        },
                     ],
                     true,
                 )
@@ -6820,6 +6824,22 @@ fn snapshot_hold_list_command(snapshot: &str) -> ExecutionCommand {
             CommandReadiness::NeedsDomainImplementation,
             ["ZFS snapshot name"],
             "verify snapshot hold state with the target-specific tool",
+        )
+    }
+}
+
+fn zfs_snapshot_rollback_command(snapshot: &str, recursive: bool) -> ExecutionCommand {
+    if recursive {
+        command(
+            ["zfs", "rollback", "-r", snapshot],
+            true,
+            "recursively roll back the ZFS dataset after explicit review of newer snapshots",
+        )
+    } else {
+        command(
+            ["zfs", "rollback", snapshot],
+            true,
+            "roll back the ZFS dataset to the reviewed snapshot",
         )
     }
 }
@@ -10028,6 +10048,7 @@ mod tests {
                 collection: Some("snapshots".to_string()),
                 name: Some("tank/home@before".to_string()),
                 target: Some("tank/home@before".to_string()),
+                recursive_rollback: Some(true),
                 ..ActionContext::default()
             },
             advice: None,
@@ -10038,6 +10059,7 @@ mod tests {
 
         assert!(requires_manual_review);
         assert!(notes.iter().any(|note| note.contains("fresh snapshot")));
+        assert!(notes.iter().any(|note| note.contains("recursive rollback")));
         assert!(commands.iter().any(|command| {
             command.argv
                 == [
@@ -10052,7 +10074,7 @@ mod tests {
                 && !command.mutates
         }));
         assert!(commands.iter().any(|command| {
-            command.argv == ["zfs", "rollback", "tank/home@before"]
+            command.argv == ["zfs", "rollback", "-r", "tank/home@before"]
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));

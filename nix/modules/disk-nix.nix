@@ -363,6 +363,12 @@ let
           description = "Request rollback of the target to this snapshot.";
         };
 
+        recursiveRollback = lib.mkOption {
+          type = lib.types.nullOr lib.types.bool;
+          default = null;
+          description = "Render recursive ZFS rollback with zfs rollback -r when explicitly true.";
+        };
+
         hold = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -456,6 +462,7 @@ let
         target
         destroy
         rollback
+        recursiveRollback
         hold
         holdTag
         releaseHold

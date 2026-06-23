@@ -493,7 +493,9 @@ commands for the same unambiguous domains.
 ZFS snapshot retention declarations render safe `zfs hold <tag> <snapshot>`
 and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
 ZFS snapshot rollback declarations render reviewed `zfs rollback` command
-details internally, but apply remains blocked as potential data loss.
+details internally, and `recursiveRollback`, `recursive`, or
+`zfs.rollbackRecursive` render reviewed `zfs rollback -r` details. Apply
+remains blocked as potential data loss.
 The capability inventory advertises ZFS snapshot create, hold/release,
 rollback, and destroy risks plus Btrfs snapshot create and destroy risks.
 `verificationSummary` and `verificationPlan` record read-only commands and

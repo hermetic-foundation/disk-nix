@@ -212,6 +212,8 @@ pub struct ActionContext {
     pub token_file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recursive_rollback: Option<bool>,
 }
 
 impl ActionContext {
@@ -245,6 +247,7 @@ impl ActionContext {
             && self.token_id.is_none()
             && self.token_file.is_none()
             && self.read_only.is_none()
+            && self.recursive_rollback.is_none()
     }
 }
 
@@ -2498,6 +2501,11 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
         .get("rollback")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let recursive_rollback = snapshot
+        .get("recursiveRollback")
+        .or_else(|| snapshot.get("recursive"))
+        .or_else(|| snapshot.get("zfs.rollbackRecursive"))
+        .and_then(Value::as_bool);
     let read_only = snapshot
         .get("readOnly")
         .or_else(|| snapshot.get("readonly"))
@@ -2550,6 +2558,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
                 name: Some(name.to_string()),
                 target: Some(target.to_string()),
                 read_only,
+                recursive_rollback,
                 ..ActionContext::default()
             },
             advice: Some(Advice {
@@ -7437,7 +7446,8 @@ mod tests {
               "snapshots": {
                 "tank/home@before-upgrade": {
                   "target": "tank/home",
-                  "rollback": true
+                  "rollback": true,
+                  "recursiveRollback": true
                 }
               }
             }"#,
@@ -7447,6 +7457,7 @@ mod tests {
         assert_eq!(plan.summary.action_count, 1);
         assert_eq!(plan.summary.potential_data_loss_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Rollback);
+        assert_eq!(plan.actions[0].context.recursive_rollback, Some(true));
     }
 
     #[test]

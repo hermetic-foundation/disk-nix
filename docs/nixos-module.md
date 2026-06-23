@@ -263,6 +263,7 @@ Typed snapshot declarations include:
 - `target`
 - `destroy`
 - `rollback`
+- `recursiveRollback`
 - `hold`
 - `holdTag`
 - `releaseHold`

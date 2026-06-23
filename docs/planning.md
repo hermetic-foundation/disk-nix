@@ -220,8 +220,10 @@ Examples:
   reviewed `zfs destroy` or `btrfs subvolume delete` commands. ZFS snapshot
   `hold` and `releaseHold` declarations are safe property actions that render
   `zfs hold <tag> <snapshot>` and `zfs release <tag> <snapshot>`. ZFS rollback
-  command rendering is available for review, but apply remains blocked until a
-  safer explicit potential-data-loss policy exists.
+  command rendering is available for review, and `recursiveRollback`,
+  `recursive`, or `zfs.rollbackRecursive` render explicit `zfs rollback -r`
+  details for recursive rollback review. Apply remains blocked until a safer
+  explicit potential-data-loss policy exists.
 
 The checked-in specs under `examples/` are part of `nix flake check`. The
 flake validates stable plan summaries, selected action ids, allowed simple
