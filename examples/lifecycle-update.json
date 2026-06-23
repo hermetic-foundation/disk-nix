@@ -83,6 +83,11 @@
       "desiredSize": "4TiB"
     }
   },
+  "physicalVolumes": {
+    "/dev/disk/by-id/nvme-pv-grow": {
+      "operation": "grow"
+    }
+  },
   "btrfsSubvolumes": {
     "/mnt/persist/@home": {
       "operation": "create",

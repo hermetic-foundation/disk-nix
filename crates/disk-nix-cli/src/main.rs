@@ -559,6 +559,9 @@ fn spec_schema() -> serde_json::Value {
             "vdoVolumes": {
                 "$ref": "#/$defs/lifecycleMap"
             },
+            "physicalVolumes": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
             "volumes": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -623,6 +626,7 @@ fn spec_schema() -> serde_json::Value {
                     "btrfsSubvolumes": { "$ref": "#/$defs/lifecycleMap" },
                     "btrfsQgroups": { "$ref": "#/$defs/lifecycleMap" },
                     "vdoVolumes": { "$ref": "#/$defs/lifecycleMap" },
+                    "physicalVolumes": { "$ref": "#/$defs/lifecycleMap" },
                     "volumes": { "$ref": "#/$defs/lifecycleMap" },
                     "volumeGroups": { "$ref": "#/$defs/lifecycleMap" },
                     "thinPools": { "$ref": "#/$defs/lifecycleMap" },

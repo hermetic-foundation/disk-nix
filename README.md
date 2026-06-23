@@ -171,8 +171,9 @@ the planned command phase succeeds.
 Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS format/resize/close
 workflows, Btrfs subvolume creation/deletion, VDO create/grow/remove, LVM
-logical-volume growth/removal, LVM volume-group extension/device removal,
-LVM thin-pool create/grow/remove, LVM snapshot create/merge/remove,
+physical-volume create/grow/remove, logical-volume growth/removal,
+LVM volume-group extension/device removal, LVM thin-pool create/grow/remove,
+LVM snapshot create/merge/remove,
 loop-device mapping updates, MD RAID lifecycle/member updates, multipath map
 updates, NVMe namespace create/attach/rescan/detach/delete workflows, ZFS pool
 topology updates, dataset and zvol updates including zvol property changes,

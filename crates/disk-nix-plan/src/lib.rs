@@ -426,6 +426,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "btrfsSubvolumes",
         "btrfsQgroups",
         "vdoVolumes",
+        "physicalVolumes",
         "volumes",
         "volumeGroups",
         "thinPools",
@@ -1711,6 +1712,26 @@ fn add_destroy_guard(
             });
             return;
         }
+        if collection == "physicalVolumes" {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:destroy").to_ascii_lowercase(),
+                description: format!("remove LVM physical volume metadata from {name}"),
+                operation: Operation::Destroy,
+                risk: RiskClass::Destructive,
+                destructive: true,
+                context: lifecycle_context(collection, name, object),
+                advice: Some(Advice {
+                    summary: "LVM physical volume removal erases PV metadata from the device"
+                        .to_string(),
+                    alternatives: vec![
+                        "pvmove allocated extents and vgreduce the PV before pvremove".to_string(),
+                        "verify no volume group still depends on the PV".to_string(),
+                        "preserve the device for recovery until backups are verified".to_string(),
+                    ],
+                }),
+            });
+            return;
+        }
 
         let mut alternatives = destructive_alternatives(collection, object);
         alternatives.push("rename, detach, or unmount first when supported".to_string());
@@ -1999,6 +2020,20 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "physicalVolumes" => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: "LVM physical volume creation writes PV metadata to the selected device"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect signatures and backups before pvcreate".to_string(),
+                    "reuse an existing PV when preserving volume-group data".to_string(),
+                    "add a new device to the VG instead of reinitializing an existing PV"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "thinPools" => (
             RiskClass::Online,
             false,
@@ -2246,6 +2281,19 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Grow if collection == "physicalVolumes" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "LVM physical volume growth refreshes PV size after backing storage grows"
+                    .to_string(),
+                alternatives: vec![
+                    "grow the backing partition, LUN, or disk before pvresize".to_string(),
+                    "verify VG free extents before extending logical volumes".to_string(),
+                    "coordinate dependent LV and filesystem growth after pvresize".to_string(),
+                ],
+            }),
+        ),
         Operation::Grow if collection == "loopDevices" => (
             RiskClass::Online,
             false,
@@ -2348,6 +2396,19 @@ fn classify_operation(
                         .to_string(),
                     "disable automatic session login only after dependent services no longer need the LUN"
                         .to_string(),
+                ],
+            }),
+        ),
+        Operation::Destroy if collection == "physicalVolumes" => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: "LVM physical volume removal erases PV metadata from the device"
+                    .to_string(),
+                alternatives: vec![
+                    "pvmove allocated extents and vgreduce the PV before pvremove".to_string(),
+                    "verify no volume group still depends on the PV".to_string(),
+                    "preserve the device for recovery until backups are verified".to_string(),
                 ],
             }),
         ),
@@ -3200,6 +3261,43 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::LvmPhysicalVolume,
+            operation: Operation::Create,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "physical volume creation writes LVM metadata to the device".to_string(),
+                alternatives: vec![
+                    "inspect existing signatures before pvcreate".to_string(),
+                    "reuse the existing PV when preserving VG data".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmPhysicalVolume,
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "physical volume growth refreshes LVM capacity after backing growth"
+                    .to_string(),
+                alternatives: vec![
+                    "grow backing storage before pvresize".to_string(),
+                    "verify VG free extents after pvresize".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmPhysicalVolume,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "physical volume removal erases LVM metadata from the device".to_string(),
+                alternatives: vec![
+                    "pvmove and vgreduce before pvremove".to_string(),
+                    "verify no volume group still uses the PV".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::LvmLogicalVolume,
             operation: Operation::Create,
             risk: RiskClass::Online,
@@ -3801,6 +3899,37 @@ mod tests {
     }
 
     #[test]
+    fn lvm_physical_volume_capabilities_describe_lifecycle() {
+        let capabilities = default_capabilities();
+        let create = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LvmPhysicalVolume
+                    && capability.operation == Operation::Create
+            })
+            .expect("LVM physical volume create capability should exist");
+        let grow = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LvmPhysicalVolume
+                    && capability.operation == Operation::Grow
+            })
+            .expect("LVM physical volume grow capability should exist");
+        let destroy = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LvmPhysicalVolume
+                    && capability.operation == Operation::Destroy
+            })
+            .expect("LVM physical volume destroy capability should exist");
+
+        assert_eq!(create.risk, RiskClass::Destructive);
+        assert_eq!(grow.risk, RiskClass::Online);
+        assert_eq!(destroy.risk, RiskClass::Destructive);
+        assert!(destroy.advice.is_some());
+    }
+
+    #[test]
     fn iscsi_and_lun_capabilities_describe_host_lifecycle() {
         let capabilities = default_capabilities();
         let lun_create = capabilities
@@ -4297,6 +4426,54 @@ mod tests {
             .expect("LV destroy action exists");
         assert_eq!(destroy.risk, RiskClass::Destructive);
         assert!(destroy.destructive);
+    }
+
+    #[test]
+    fn plan_classifies_lvm_physical_volume_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "physicalVolumes": {
+                "/dev/disk/by-id/nvme-pv-new": {
+                  "operation": "create"
+                },
+                "/dev/disk/by-id/nvme-pv-grow": {
+                  "operation": "grow"
+                },
+                "/dev/disk/by-id/nvme-pv-old": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.destructive_count, 2);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "physicalvolumes:/dev/disk/by-id/nvme-pv-new:create")
+            .expect("PV create action exists");
+        assert_eq!(create.risk, RiskClass::Destructive);
+        assert!(create.destructive);
+        let grow = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "physicalvolumes:/dev/disk/by-id/nvme-pv-grow:grow")
+            .expect("PV grow action exists");
+        assert_eq!(grow.risk, RiskClass::Online);
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "physicalvolumes:/dev/disk/by-id/nvme-pv-old:destroy")
+            .expect("PV destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::Destructive);
+        assert!(destroy.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("pvmove"))
+        }));
     }
 
     #[test]

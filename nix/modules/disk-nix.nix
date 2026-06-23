@@ -996,6 +996,12 @@ in
       description = "Typed VDO volume lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    physicalVolumes = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed LVM physical-volume lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a concrete block device path.";
+    };
+
     volumeGroups = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -1231,6 +1237,7 @@ in
         btrfsSubvolumes = (cfg.spec.btrfsSubvolumes or { }) // normalizeLifecycleSpec cfg.btrfsSubvolumes;
         btrfsQgroups = (cfg.spec.btrfsQgroups or { }) // normalizeLifecycleSpec cfg.btrfsQgroups;
         vdoVolumes = (cfg.spec.vdoVolumes or { }) // normalizeLifecycleSpec cfg.vdoVolumes;
+        physicalVolumes = (cfg.spec.physicalVolumes or { }) // normalizeLifecycleSpec cfg.physicalVolumes;
         volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
         thinPools = (cfg.spec.thinPools or { }) // normalizeLifecycleSpec cfg.thinPools;

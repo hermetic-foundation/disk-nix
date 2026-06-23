@@ -106,11 +106,12 @@ shape with top-level `spec` and `apply` objects. It includes the planner's
 filesystem fields, including filesystem `operation`, `device`, mount
 `options`, `properties`, and Btrfs device-membership update fields. It also
 includes disk and partition lifecycle collections, swap, LUKS, NFS mount
-wrappers, iSCSI discovery/session/boot wrappers, Btrfs subvolume, VDO, LVM thin
-pool, LVM snapshot, loop-device, MD RAID, multipath, NVMe namespace, and zvol
-lifecycle declarations, higher-layer lifecycle collections, snapshot
-declarations including Btrfs `readOnly` snapshot intent, supported operation
-names, apply policy fields, and NixOS activation helper fields such as
+wrappers, iSCSI discovery/session/boot wrappers, Btrfs subvolume, VDO, LVM
+physical volume, LVM thin pool, LVM snapshot, loop-device, MD RAID, multipath,
+NVMe namespace, and zvol lifecycle declarations, higher-layer lifecycle
+collections, snapshot declarations including Btrfs `readOnly` snapshot intent,
+supported operation names, apply policy fields, and NixOS activation helper
+fields such as
 `probeCurrent`, `failOnBlocked`, `scriptOut`,
 and `reportOut`.
 Planner-compatible aliases such as `number`, `startOffset`, `endOffset`, and
@@ -401,6 +402,9 @@ LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`, and report
 missing target form and size separately when either is absent. LV grow and
 remove commands also require the canonical `vg/lv` target form.
+LVM physical volume command plans render `pvcreate`, `pvresize`, and
+policy-gated `pvremove` for `physicalVolumes` lifecycle declarations.
+Executable plans require a concrete block-device path such as `/dev/disk/by-id/*`.
 LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
 and policy-gated `lvremove` commands for `thinPools` lifecycle declarations,
 with separate unresolved-input markers for target form and size. Thin-pool grow

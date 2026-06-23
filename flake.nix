@@ -188,6 +188,9 @@
                 operation = "grow";
                 desiredSize = "4TiB";
               };
+              physicalVolumes."/dev/disk/by-id/nvme-pv-grow" = {
+                operation = "grow";
+              };
               btrfsSubvolumes."/mnt/persist/@home" = {
                 operation = "create";
                 path = "/mnt/persist/@home";
@@ -376,6 +379,7 @@
               and .properties.btrfsSubvolumes["$ref"] == "#/$defs/lifecycleMap"
               and .properties.btrfsQgroups["$ref"] == "#/$defs/lifecycleMap"
               and .properties.vdoVolumes["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.physicalVolumes["$ref"] == "#/$defs/lifecycleMap"
               and .properties.zvols["$ref"] == "#/$defs/lifecycleMap"
               and .properties.thinPools["$ref"] == "#/$defs/lifecycleMap"
               and .properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap"
@@ -392,6 +396,7 @@
               and (."$defs".specBody.properties.btrfsSubvolumes["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.btrfsQgroups["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.vdoVolumes["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.physicalVolumes["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.zvols["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.thinPools["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap")
@@ -452,7 +457,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 31
+              .summary.actionCount == 32
               and .summary.offlineRequiredCount == 5
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
@@ -462,6 +467,7 @@
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
               and (.actions | any(.id == "volumes:vg0/scratch:create" and .risk == "online"))
               and (.actions | any(.id == "vdovolumes:archive:grow" and .risk == "online"))
+              and (.actions | any(.id == "physicalvolumes:/dev/disk/by-id/nvme-pv-grow:grow" and .risk == "online"))
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/newthin:create" and .risk == "online"))
@@ -609,6 +615,7 @@
                   and .spec.datasets."tank/home".operation == "create"
                   and .spec.vdoVolumes.archive.operation == "grow"
                   and .spec.vdoVolumes.archive.desiredSize == "4TiB"
+                  and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
                   and .spec.zvols."tank/vm/root".operation == "grow"
                   and .spec.zvols."tank/vm/root".desiredSize == "80GiB"
                   and .spec.thinPools."vg0/thinpool".operation == "grow"

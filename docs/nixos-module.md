@@ -163,6 +163,7 @@ Typed lifecycle declarations are available for:
 - `btrfsSubvolumes`
 - `btrfsQgroups`
 - `vdoVolumes`
+- `physicalVolumes`
 - `volumes`
 - `volumeGroups`
 - `thinPools`

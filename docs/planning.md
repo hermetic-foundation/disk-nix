@@ -138,6 +138,9 @@ Examples:
 - Multipath map growth and path add are online; path replacement is
   offline-required and path removal is potential-data-loss because at least one
   healthy path must remain active while paths are added and deleted.
+- LVM physical volume creation and removal are destructive because they write
+  or erase PV metadata. PV growth is online `pvresize` after backing storage
+  has already grown.
 - NVMe namespace creation and deletion are destructive because they allocate
   or remove controller-managed namespace capacity. Namespace growth is
   offline-required because disk-nix models it as a host rescan after
@@ -213,6 +216,7 @@ Lifecycle collections currently accepted by the planner:
 - `btrfsSubvolumes`
 - `btrfsQgroups`
 - `vdoVolumes`
+- `physicalVolumes`
 - `volumes`
 - `volumeGroups`
 - `thinPools`
@@ -315,6 +319,10 @@ volume device is declared, and mark the command unresolved when it is missing.
 Generic add-device, replace-device, and remove-device lifecycle operations
 remain unresolved until the device to add, the source device, the replacement
 device, or the device to remove is declared explicitly.
+LVM physical volume command plans use `pvcreate`, `pvresize`, and `pvremove`
+for `physicalVolumes` lifecycle declarations. Executable plans require a
+concrete path-shaped target or `device`, and PV removal advice recommends
+`pvmove` plus `vgreduce` before `pvremove`.
 NVMe namespace command plans use `nvme create-ns`, `nvme attach-ns`,
 `nvme ns-rescan`, `nvme detach-ns`, and `nvme delete-ns`. Create and delete
 are destructive controller namespace-management operations. Grow is

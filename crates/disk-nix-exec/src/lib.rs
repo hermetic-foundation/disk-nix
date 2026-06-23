@@ -1211,6 +1211,28 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Create | Operation::Grow | Operation::Destroy
+            if collection == Some("physicalVolumes") =>
+        {
+            (
+                vec![
+                    command(
+                        ["pvs", "--reportformat", "json"],
+                        false,
+                        "verify LVM physical volume inventory after lifecycle change",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify physical volume graph relationships after lifecycle change",
+                    ),
+                ],
+                vec![
+                    "PV metadata, size, and VG membership match the desired state".to_string(),
+                    "dependent volume groups report expected free extents".to_string(),
+                ],
+            )
+        }
         Operation::AddDevice
         | Operation::ReplaceDevice
         | Operation::RemoveDevice
@@ -1833,6 +1855,21 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Grow if collection == Some("physicalVolumes") => {
+            let target = lvm_physical_volume_target(action);
+            (
+                vec![
+                    lvm_physical_volume_inspect_command(target),
+                    lvm_physical_volume_resize_command(target),
+                ],
+                vec![
+                    "grow the backing partition, LUN, or disk before pvresize".to_string(),
+                    "verify volume group free extents before extending logical volumes"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Grow if collection == Some("thinPools") => {
             let target = lvm_volume_target_path(target);
             let desired_size = action.context.desired_size.as_deref();
@@ -1870,6 +1907,26 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         .to_string(),
                     "choose overcommit, monitoring, and autoextend policy before using the thin pool"
                         .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Create if collection == Some("physicalVolumes") => {
+            let target = lvm_physical_volume_target(action);
+            (
+                vec![
+                    disk_nix_inspect_command(
+                        target,
+                        "<physical-volume>",
+                        "physical volume device",
+                        "inspect target device before creating LVM PV metadata",
+                    ),
+                    lvm_physical_volume_create_command(target),
+                ],
+                vec![
+                    "verify the device contains no data that must be preserved before pvcreate"
+                        .to_string(),
+                    "extend or create a volume group only after pvs reports the PV".to_string(),
                 ],
                 true,
             )
@@ -3248,6 +3305,20 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "remove or migrate logical volumes before removing the volume group".to_string(),
                     "verify no filesystems, mappings, or services still reference the VG".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("physicalVolumes") => {
+            let target = lvm_physical_volume_target(action);
+            (
+                vec![
+                    lvm_physical_volume_inspect_command(target),
+                    lvm_physical_volume_remove_command(target),
+                ],
+                vec![
+                    "run pvmove and vgreduce before pvremove when the PV is in a VG".to_string(),
+                    "keep the device available for recovery until backups are verified".to_string(),
                 ],
                 true,
             )
@@ -5940,6 +6011,71 @@ fn lvm_volume_group_create_command(target: &str, device: Option<&str>) -> Execut
             CommandReadiness::NeedsDomainImplementation,
             ["physical volume device"],
             "create an LVM volume group after selecting the physical volume",
+        ),
+    }
+}
+
+fn lvm_physical_volume_target(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .device
+        .as_deref()
+        .or(action.context.target.as_deref())
+        .or(action.context.name.as_deref())
+        .filter(|target| is_path_like(target))
+}
+
+fn is_path_like(target: &str) -> bool {
+    target.starts_with('/')
+}
+
+fn lvm_physical_volume_create_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["pvcreate", target],
+            true,
+            "create LVM physical volume metadata on the reviewed device",
+        ),
+        None => command_with_readiness(
+            ["pvcreate", "<physical-volume>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["physical volume device"],
+            "create LVM physical volume metadata after selecting the device",
+        ),
+    }
+}
+
+fn lvm_physical_volume_resize_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["pvresize", target],
+            true,
+            "resize the LVM physical volume after backing storage growth",
+        ),
+        None => command_with_readiness(
+            ["pvresize", "<physical-volume>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["physical volume device"],
+            "resize the LVM physical volume after selecting the device",
+        ),
+    }
+}
+
+fn lvm_physical_volume_remove_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["pvremove", "--yes", target],
+            true,
+            "remove LVM physical volume metadata from the reviewed device",
+        ),
+        None => command_with_readiness(
+            ["pvremove", "--yes", "<physical-volume>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["physical volume device"],
+            "remove LVM physical volume metadata after selecting the device",
         ),
     }
 }
@@ -8991,6 +9127,95 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["pvs", "--reportformat", "json"])
+        }));
+    }
+
+    #[test]
+    fn lvm_physical_volume_lifecycle_reports_lvm_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "physicalVolumes": {
+                  "/dev/disk/by-id/nvme-pv-new": {
+                    "operation": "create"
+                  },
+                  "/dev/disk/by-id/nvme-pv-grow": {
+                    "operation": "grow"
+                  },
+                  "/dev/disk/by-id/nvme-pv-old": {
+                    "destroy": true
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:/dev/disk/by-id/nvme-pv-new:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["pvcreate", "/dev/disk/by-id/nvme-pv-new"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:/dev/disk/by-id/nvme-pv-grow:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["pvresize", "/dev/disk/by-id/nvme-pv-grow"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:/dev/disk/by-id/nvme-pv-old:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["pvremove", "--yes", "/dev/disk/by-id/nvme-pv-old"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:/dev/disk/by-id/nvme-pv-grow:grow"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["pvs", "--reportformat", "json"])
+        }));
+    }
+
+    #[test]
+    fn lvm_physical_volume_lifecycle_requires_device_path_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "physicalVolumes": {
+                  "logical-pv": {
+                    "operation": "create"
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:logical-pv:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["pvcreate", "<physical-volume>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["physical volume device"]
+                })
         }));
     }
 
