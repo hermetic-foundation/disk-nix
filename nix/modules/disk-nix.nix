@@ -510,6 +510,7 @@ let
       priority
       randomEncryption
       preserveData
+      properties
       ;
   }) cfg.swaps;
   typedLuksSpec = lib.mapAttrs (_: luks: {
@@ -790,6 +791,16 @@ in
                 type = lib.types.bool;
                 default = false;
                 description = "Whether the planner should treat existing swap signatures as data to preserve.";
+              };
+
+              properties = lib.mkOption {
+                type = lib.types.attrsOf json.type;
+                default = { };
+                description = "Swap properties to set through disk-nix lifecycle planning, such as label or swap.uuid.";
+                example = {
+                  label = "swap";
+                  "swap.uuid" = "01234567-89ab-cdef-0123-456789abcdef";
+                };
               };
             };
           }

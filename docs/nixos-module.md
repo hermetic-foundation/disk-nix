@@ -125,6 +125,7 @@ Typed swap declarations include:
 - `priority`
 - `randomEncryption`
 - `preserveData`
+- `properties`
 
 Typed LUKS declarations include:
 
