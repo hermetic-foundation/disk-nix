@@ -529,6 +529,12 @@ fn spec_schema() -> serde_json::Value {
             "filesystems": {
                 "$ref": "#/$defs/filesystemMap"
             },
+            "swaps": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
+            "luks": {
+                "$ref": "#/$defs/luksSpec"
+            },
             "disks": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -569,6 +575,8 @@ fn spec_schema() -> serde_json::Value {
                 "additionalProperties": true,
                 "properties": {
                     "filesystems": { "$ref": "#/$defs/filesystemMap" },
+                    "swaps": { "$ref": "#/$defs/lifecycleMap" },
+                    "luks": { "$ref": "#/$defs/luksSpec" },
                     "disks": { "$ref": "#/$defs/lifecycleMap" },
                     "partitions": { "$ref": "#/$defs/lifecycleMap" },
                     "volumes": { "$ref": "#/$defs/lifecycleMap" },
@@ -607,6 +615,13 @@ fn spec_schema() -> serde_json::Value {
                 "type": "object",
                 "additionalProperties": { "$ref": "#/$defs/lifecycleObject" }
             },
+            "luksSpec": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "devices": { "$ref": "#/$defs/lifecycleMap" }
+                }
+            },
             "lifecycleObject": {
                 "type": "object",
                 "additionalProperties": true,
@@ -632,8 +647,14 @@ fn spec_schema() -> serde_json::Value {
                     "desiredSize": { "type": ["string", "number"] },
                     "targetSize": { "type": ["string", "number"] },
                     "size": { "type": ["string", "number"] },
+                    "name": { "type": "string" },
                     "device": { "type": "string" },
                     "disk": { "type": "string" },
+                    "priority": { "type": "integer" },
+                    "randomEncryption": { "type": "boolean" },
+                    "allowDiscards": { "type": "boolean" },
+                    "bypassWorkqueues": { "type": "boolean" },
+                    "preLVM": { "type": "boolean" },
                     "start": { "type": ["string", "number"] },
                     "end": { "type": ["string", "number"] },
                     "partitionType": { "type": "string" },

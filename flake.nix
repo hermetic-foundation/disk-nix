@@ -104,6 +104,8 @@
               };
               luks.devices.cryptroot = {
                 device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
+                operation = "grow";
+                desiredSize = "100%";
                 allowDiscards = true;
               };
               filesystems.root = {
@@ -116,6 +118,8 @@
               };
               swaps.primary = {
                 device = "/dev/disk/by-label/swap";
+                operation = "format";
+                desiredSize = "8GiB";
                 priority = 5;
               };
               nfs.mounts."/srv/shared" = {
@@ -211,11 +215,15 @@
               ."$schema" == "https://json-schema.org/draft/2020-12/schema"
               and .properties.spec["$ref"] == "#/$defs/specBody"
               and .properties.apply["$ref"] == "#/$defs/applyPolicy"
+              and .properties.swaps["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.luks["$ref"] == "#/$defs/luksSpec"
               and .properties.partitions["$ref"] == "#/$defs/lifecycleMap"
               and (."$defs".operation.enum | index("grow") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
+              and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
               and (."$defs".specBody.properties.disks["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
+              and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
               and ."$defs".applyPolicy.properties.failOnBlocked.default == true
               and (."$defs".applyPolicy.properties.reportOut.type | index("string") != null)
@@ -236,12 +244,14 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 12
-              and .summary.offlineRequiredCount == 4
-              and .summary.destructiveCount == 1
+              .summary.actionCount == 14
+              and .summary.offlineRequiredCount == 5
+              and .summary.destructiveCount == 2
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
+              and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
+              and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/archive:destroy"))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
               and (.actions | any(.id == "caches:tank/l2arc0:replace-device:/dev/disk/by-id/old-cache"))
@@ -265,22 +275,22 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 7
-              and .apply.blockedSummary.offlineRequiredCount == 4
-              and .apply.blockedSummary.destructiveCount == 1
+              and .apply.blockedCount == 9
+              and .apply.blockedSummary.offlineRequiredCount == 5
+              and .apply.blockedSummary.destructiveCount == 2
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 7
+              and .apply.blockedCount == 9
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 7
-              and .messages[0] == "apply policy blocked 7 action(s)"
+              and .apply.blockedCount == 9
+              and .messages[0] == "apply policy blocked 9 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -306,6 +316,14 @@
                   .spec.filesystems.root.device == "/dev/disk/by-label/nixos-root"
                   and .spec.filesystems.root.resizePolicy == "grow-only"
                   and .spec.filesystems.root.desiredSize == "100%"
+                  and .spec.swaps.primary.device == "/dev/disk/by-label/swap"
+                  and .spec.swaps.primary.operation == "format"
+                  and .spec.swaps.primary.desiredSize == "8GiB"
+                  and .spec.swaps.primary.preserveData == false
+                  and .spec.luks.devices.cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
+                  and .spec.luks.devices.cryptroot.name == "cryptroot"
+                  and .spec.luks.devices.cryptroot.operation == "grow"
+                  and .spec.luks.devices.cryptroot.desiredSize == "100%"
                   and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"
                   and .spec.filesystems."/srv/shared".fsType == "nfs4"
                   and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)

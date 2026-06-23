@@ -257,6 +257,8 @@ let
   typedSwapSpec = lib.mapAttrs (_: swap: {
     inherit (swap)
       device
+      operation
+      desiredSize
       priority
       randomEncryption
       preserveData
@@ -266,6 +268,8 @@ let
     inherit (luks)
       device
       name
+      operation
+      desiredSize
       allowDiscards
       bypassWorkqueues
       preLVM
@@ -418,6 +422,20 @@ in
                 description = "Optional swap priority passed to NixOS swapDevices.";
               };
 
+              operation = lib.mkOption {
+                type = operationType;
+                default = null;
+                description = "Requested swap lifecycle operation for disk-nix planning.";
+                example = "grow";
+              };
+
+              desiredSize = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Desired swap size for disk-nix lifecycle planning.";
+                example = "16GiB";
+              };
+
               randomEncryption = lib.mkOption {
                 type = lib.types.bool;
                 default = false;
@@ -472,6 +490,20 @@ in
                 type = lib.types.bool;
                 default = true;
                 description = "Open this device before LVM activation.";
+              };
+
+              operation = lib.mkOption {
+                type = operationType;
+                default = null;
+                description = "Requested LUKS lifecycle operation for disk-nix planning.";
+                example = "grow";
+              };
+
+              desiredSize = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Desired opened mapper size for disk-nix lifecycle planning.";
+                example = "100%";
               };
 
               preserveData = lib.mkOption {

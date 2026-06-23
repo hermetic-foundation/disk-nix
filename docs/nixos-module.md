@@ -68,6 +68,8 @@ Typed filesystem declarations include:
 Typed swap declarations include:
 
 - `device`
+- `operation`
+- `desiredSize`
 - `priority`
 - `randomEncryption`
 - `preserveData`
@@ -76,6 +78,8 @@ Typed LUKS declarations include:
 
 - `name`
 - `device`
+- `operation`
+- `desiredSize`
 - `allowDiscards`
 - `bypassWorkqueues`
 - `preLVM`
@@ -160,6 +164,16 @@ Example lifecycle planning through NixOS options:
     partitions.root = {
       operation = "grow";
       device = "/dev/disk/by-id/nvme-root-part2";
+      desiredSize = "100%";
+    };
+    swaps.primary = {
+      device = "/dev/disk/by-label/swap";
+      operation = "format";
+      desiredSize = "8GiB";
+    };
+    luks.devices.cryptroot = {
+      device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
+      operation = "grow";
       desiredSize = "100%";
     };
     pools.tank = {

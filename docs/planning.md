@@ -36,9 +36,10 @@ or the NixOS module wrapper written to `/etc/disk-nix/spec.json`:
 
 Current planning is intentionally conservative. It classifies filesystem
 resize policy, preservation intent, and lifecycle operations for disks,
-partitions, volumes, pools, datasets, LUNs, iSCSI sessions, exports, cache
-layers, and snapshots. It reports destructive or potentially destructive
-behavior with alternatives instead of silently accepting unsafe mutation.
+partitions, swap, LUKS containers, volumes, pools, datasets, LUNs, iSCSI
+sessions, exports, cache layers, and snapshots. It reports destructive or
+potentially destructive behavior with alternatives instead of silently
+accepting unsafe mutation.
 
 Examples:
 
@@ -63,6 +64,11 @@ Examples:
   hide or replace existing storage metadata.
 - partition creation and growth are classified as offline-required because the
   kernel partition table reread and dependent consumers must be coordinated.
+- swap signature creation is classified as destructive; swap growth is
+  offline-required because active swap must be disabled before backing storage
+  and signatures are changed.
+- LUKS format/create is destructive; LUKS growth is offline-required because
+  backing capacity, mapper state, and dependent consumers must be coordinated.
 - `properties = { ... }` is classified as safe property-update intent.
 - LUN `operation = "grow"` is classified as offline-required because the
   storage target, host rescan, multipath, and consumers must be coordinated.
@@ -86,6 +92,8 @@ Lifecycle collections currently accepted by the planner:
 
 - `disks`
 - `partitions`
+- `swaps`
+- `luks.devices`
 - `volumes`
 - `volumeGroups`
 - `pools`

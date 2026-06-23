@@ -32,6 +32,21 @@
       "desiredSize": "100%"
     }
   },
+  "swaps": {
+    "primary": {
+      "device": "/dev/disk/by-label/swap",
+      "preserveData": false
+    }
+  },
+  "luks": {
+    "devices": {
+      "cryptroot": {
+        "name": "cryptroot",
+        "device": "/dev/disk/by-partuuid/root",
+        "operation": "grow"
+      }
+    }
+  },
   "luns": {
     "iqn.2026-06.example:storage/root:0": {
       "operation": "grow"

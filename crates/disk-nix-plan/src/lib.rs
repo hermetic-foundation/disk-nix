@@ -367,6 +367,20 @@ pub fn plan_from_value(value: &Value) -> Plan {
             add_filesystem_actions(&mut actions, name, filesystem);
         }
     }
+    if let Some(swaps) = spec.get("swaps").and_then(Value::as_object) {
+        for (name, swap) in swaps {
+            add_swap_actions(&mut actions, name, swap);
+        }
+    }
+    if let Some(luks) = spec
+        .get("luks")
+        .and_then(|luks| luks.get("devices"))
+        .and_then(Value::as_object)
+    {
+        for (name, luks) in luks {
+            add_luks_actions(&mut actions, name, luks);
+        }
+    }
     for collection in [
         "disks",
         "partitions",
@@ -852,6 +866,205 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
                 ],
             }),
         });
+    }
+}
+
+fn add_swap_actions(actions: &mut Vec<PlannedAction>, name: &str, swap: &Value) {
+    let device = string_field(swap, &["device"]).unwrap_or_else(|| name.to_string());
+    let operation = swap
+        .get("operation")
+        .or_else(|| swap.get("action"))
+        .and_then(Value::as_str)
+        .and_then(parse_operation);
+    let preserve_data = swap
+        .get("preserveData")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let desired_size = desired_size(swap);
+    let context = ActionContext {
+        collection: Some("swaps".to_string()),
+        name: Some(name.to_string()),
+        target: Some(device.clone()),
+        device: Some(device.clone()),
+        desired_size: desired_size.clone(),
+        ..ActionContext::default()
+    };
+
+    match operation {
+        Some(Operation::Grow) => actions.push(PlannedAction {
+            id: format!("swaps:{name}:grow"),
+            description: format!("grow swap backing storage for {device}"),
+            operation: Operation::Grow,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context,
+            advice: Some(Advice {
+                summary:
+                    "swap growth requires disabling active swap before resizing backing storage"
+                        .to_string(),
+                alternatives: vec![
+                    "add a second swap device before resizing this one".to_string(),
+                    "disable swap, resize backing storage, recreate the signature, and re-enable"
+                        .to_string(),
+                    "verify memory pressure and hibernation dependencies before disabling swap"
+                        .to_string(),
+                ],
+            }),
+        }),
+        Some(Operation::Create | Operation::Format) => actions.push(swap_format_action(
+            name,
+            &device,
+            desired_size,
+            "create or refresh swap signature",
+        )),
+        _ if !preserve_data => actions.push(swap_format_action(
+            name,
+            &device,
+            desired_size,
+            "preserveData=false permits recreating the swap signature",
+        )),
+        _ => actions.push(PlannedAction {
+            id: format!("swaps:{name}:inspect"),
+            description: format!("inspect swap declaration for {device}"),
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            destructive: false,
+            context,
+            advice: None,
+        }),
+    }
+}
+
+fn swap_format_action(
+    name: &str,
+    device: &str,
+    desired_size: Option<String>,
+    description: &str,
+) -> PlannedAction {
+    PlannedAction {
+        id: format!("swaps:{name}:format"),
+        description: format!("{description} on {device}"),
+        operation: Operation::Format,
+        risk: RiskClass::Destructive,
+        destructive: true,
+        context: ActionContext {
+            collection: Some("swaps".to_string()),
+            name: Some(name.to_string()),
+            target: Some(device.to_string()),
+            device: Some(device.to_string()),
+            desired_size,
+            ..ActionContext::default()
+        },
+        advice: Some(Advice {
+            summary: "creating a swap signature overwrites existing metadata on the target"
+                .to_string(),
+            alternatives: vec![
+                "use an additional swap file or device instead of replacing this target"
+                    .to_string(),
+                "verify the target contains no filesystem or encrypted data before mkswap"
+                    .to_string(),
+                "set preserveData=true for inspection-only planning".to_string(),
+            ],
+        }),
+    }
+}
+
+fn add_luks_actions(actions: &mut Vec<PlannedAction>, name: &str, luks: &Value) {
+    let device = string_field(luks, &["device"]).unwrap_or_else(|| name.to_string());
+    let mapper_name = string_field(luks, &["name"]).unwrap_or_else(|| name.to_string());
+    let operation = luks
+        .get("operation")
+        .or_else(|| luks.get("action"))
+        .and_then(Value::as_str)
+        .and_then(parse_operation);
+    let preserve_data = luks
+        .get("preserveData")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let context = ActionContext {
+        collection: Some("luks.devices".to_string()),
+        name: Some(name.to_string()),
+        target: Some(mapper_name.clone()),
+        device: Some(device.clone()),
+        ..ActionContext::default()
+    };
+
+    match operation {
+        Some(Operation::Grow) => actions.push(PlannedAction {
+            id: format!("luks.devices:{name}:grow"),
+            description: format!("resize LUKS mapping {mapper_name} on {device}"),
+            operation: Operation::Grow,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context,
+            advice: Some(Advice {
+                summary: "LUKS resize requires backing-device growth and mapper coordination"
+                    .to_string(),
+                alternatives: vec![
+                    "grow the partition, LUN, or volume before resizing the LUKS mapper"
+                        .to_string(),
+                    "verify the mapping is open and dependent layers are paused or coordinated"
+                        .to_string(),
+                    "resize filesystems only after cryptsetup resize reports the new size"
+                        .to_string(),
+                ],
+            }),
+        }),
+        Some(Operation::Create | Operation::Format) => actions.push(luks_format_action(
+            name,
+            &device,
+            &mapper_name,
+            "create or replace LUKS container",
+        )),
+        _ if !preserve_data => actions.push(luks_format_action(
+            name,
+            &device,
+            &mapper_name,
+            "preserveData=false permits replacing the LUKS container",
+        )),
+        _ => actions.push(PlannedAction {
+            id: format!("luks.devices:{name}:inspect"),
+            description: format!("inspect LUKS declaration {mapper_name} on {device}"),
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            destructive: false,
+            context,
+            advice: None,
+        }),
+    }
+}
+
+fn luks_format_action(
+    name: &str,
+    device: &str,
+    mapper_name: &str,
+    description: &str,
+) -> PlannedAction {
+    PlannedAction {
+        id: format!("luks.devices:{name}:format"),
+        description: format!("{description} on {device}"),
+        operation: Operation::Format,
+        risk: RiskClass::Destructive,
+        destructive: true,
+        context: ActionContext {
+            collection: Some("luks.devices".to_string()),
+            name: Some(name.to_string()),
+            target: Some(mapper_name.to_string()),
+            device: Some(device.to_string()),
+            ..ActionContext::default()
+        },
+        advice: Some(Advice {
+            summary: "formatting a LUKS container destroys access to existing encrypted data"
+                .to_string(),
+            alternatives: vec![
+                "open and reuse the existing LUKS container when data must be preserved"
+                    .to_string(),
+                "back up headers with cryptsetup luksHeaderBackup before destructive work"
+                    .to_string(),
+                "create a new encrypted target and migrate data before switching mounts"
+                    .to_string(),
+            ],
+        }),
     }
 }
 
@@ -1425,6 +1638,57 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::Swap,
+            operation: Operation::Format,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "creating a swap signature overwrites target metadata".to_string(),
+                alternatives: vec![
+                    "add another swap device or file instead of replacing this target".to_string(),
+                    "verify the target has no filesystem or encrypted data before mkswap"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Swap,
+            operation: Operation::Grow,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "swap growth requires disabling active swap and resizing backing storage"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement swap capacity before disabling this swap".to_string(),
+                    "recreate the swap signature only after backing storage resize".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
+            operation: Operation::Format,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "formatting LUKS destroys access to existing encrypted data".to_string(),
+                alternatives: vec![
+                    "reuse the existing LUKS container when preserving data".to_string(),
+                    "back up LUKS headers before destructive changes".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
+            operation: Operation::Grow,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LUKS resize requires backing-device growth and mapper coordination"
+                    .to_string(),
+                alternatives: vec![
+                    "grow the backing device before cryptsetup resize".to_string(),
+                    "resize consumers only after the mapper reports the new capacity".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::Filesystem,
             operation: Operation::Grow,
             risk: RiskClass::Online,
@@ -1680,6 +1944,67 @@ mod tests {
             .expect("disk create action exists");
         assert_eq!(disk.risk, RiskClass::Destructive);
         assert!(disk.destructive);
+    }
+
+    #[test]
+    fn plan_classifies_swap_and_luks_lifecycle_safely() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "swaps": {
+                "primary": {
+                  "device": "/dev/disk/by-label/swap",
+                  "preserveData": false
+                },
+                "scratch": {
+                  "device": "/swapfile",
+                  "operation": "grow",
+                  "desiredSize": "16GiB"
+                }
+              },
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "name": "cryptroot",
+                    "device": "/dev/disk/by-partuuid/root",
+                    "operation": "grow"
+                  },
+                  "cryptscratch": {
+                    "name": "cryptscratch",
+                    "device": "/dev/disk/by-id/scratch",
+                    "preserveData": false
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.destructive_count, 2);
+
+        let swap = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "swaps:primary:format")
+            .expect("swap format action exists");
+        assert_eq!(swap.risk, RiskClass::Destructive);
+        assert_eq!(
+            swap.context.device.as_deref(),
+            Some("/dev/disk/by-label/swap")
+        );
+
+        let luks = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:cryptroot:grow")
+            .expect("luks grow action exists");
+        assert_eq!(luks.risk, RiskClass::OfflineRequired);
+        assert_eq!(luks.context.target.as_deref(), Some("cryptroot"));
+        assert_eq!(
+            luks.context.device.as_deref(),
+            Some("/dev/disk/by-partuuid/root")
+        );
     }
 
     #[test]

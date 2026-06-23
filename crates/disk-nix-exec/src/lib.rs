@@ -448,6 +448,44 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent filesystem capacity reflects the grown backing volume".to_string(),
             ],
         ),
+        Operation::Grow if collection == Some("swaps") => (
+            vec![
+                command(
+                    ["swapon", "--show", "--bytes", "--raw"],
+                    false,
+                    "verify active swap devices after resize workflow",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify swap graph node and backing storage",
+                ),
+            ],
+            vec![
+                "swap target reports the intended capacity".to_string(),
+                "swap is active only after backing resize and signature recreation are complete"
+                    .to_string(),
+            ],
+        ),
+        Operation::Grow if collection == Some("luks.devices") => (
+            vec![
+                command(
+                    ["cryptsetup", "status", target],
+                    false,
+                    "verify LUKS mapper state after resize",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify LUKS mapping and dependent graph layers",
+                ),
+            ],
+            vec![
+                "LUKS mapper sector count reflects the grown backing device".to_string(),
+                "dependent LVM, filesystem, and mount layers see the new mapper capacity"
+                    .to_string(),
+            ],
+        ),
         Operation::Create | Operation::Grow if collection == Some("partitions") => (
             vec![
                 command(
@@ -642,6 +680,42 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "created object identity, size, and relationships match desired state".to_string(),
             ],
         ),
+        Operation::Format if collection == Some("swaps") => (
+            vec![
+                command(
+                    ["blkid", target],
+                    false,
+                    "verify swap signature identity after mkswap",
+                ),
+                command(
+                    ["swapon", "--show", "--bytes", "--raw"],
+                    false,
+                    "verify swap activation state after signature creation",
+                ),
+            ],
+            vec![
+                "target has a swap signature and no unexpected filesystem signature".to_string(),
+                "swap activation follows the desired NixOS swapDevices configuration".to_string(),
+            ],
+        ),
+        Operation::Format if collection == Some("luks.devices") => (
+            vec![
+                command(
+                    ["cryptsetup", "isLuks", target],
+                    false,
+                    "verify the target is a LUKS container",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify encrypted container identity and graph relationships",
+                ),
+            ],
+            vec![
+                "LUKS header exists and recovery header backup has been captured".to_string(),
+                "mapper name and backing device match the desired declaration".to_string(),
+            ],
+        ),
         Operation::Format
         | Operation::Shrink
         | Operation::RemoveDevice
@@ -777,6 +851,72 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ),
                 ],
                 vec!["coordinate session rescans with every dependent LUN consumer".to_string()],
+                true,
+            )
+        }
+        Operation::Grow if collection == Some("swaps") => {
+            let target = target.unwrap_or("<swap>");
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    command(
+                        ["swapon", "--show", "--bytes", "--raw"],
+                        false,
+                        "inspect active swap state before resizing",
+                    ),
+                    command(
+                        ["swapoff", target],
+                        true,
+                        "disable swap before changing backing storage or signature",
+                    ),
+                    swap_resize_command(target, desired_size),
+                    command(
+                        ["mkswap", target],
+                        true,
+                        "recreate the swap signature after backing storage resize",
+                    ),
+                    command(
+                        ["swapon", target],
+                        true,
+                        "reactivate swap after verification",
+                    ),
+                ],
+                vec![
+                    "verify memory pressure and hibernation dependencies before swapoff"
+                        .to_string(),
+                    "prefer adding replacement swap capacity before resizing active swap"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Grow if collection == Some("luks.devices") => {
+            let mapper = target.unwrap_or("<mapper>");
+            let device = action.context.device.as_deref().unwrap_or("<device>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", device],
+                        false,
+                        "inspect backing device before resizing the LUKS mapper",
+                    ),
+                    command(
+                        ["cryptsetup", "status", mapper],
+                        false,
+                        "inspect open LUKS mapper before resize",
+                    ),
+                    command(
+                        ["cryptsetup", "resize", mapper],
+                        true,
+                        "resize the open LUKS mapping after backing capacity changes",
+                    ),
+                ],
+                vec![
+                    "grow the backing partition, LUN, or volume before resizing the mapper"
+                        .to_string(),
+                    "coordinate dependent LVM and filesystem resizing after cryptsetup resize"
+                        .to_string(),
+                ],
                 true,
             )
         }
@@ -970,6 +1110,62 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "verify the start and end offsets are inside known-free space".to_string(),
                     "format or map the new partition only after it appears by stable identity"
                         .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Format if collection == Some("swaps") => {
+            let target = target.unwrap_or("<swap>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect target before creating a swap signature",
+                    ),
+                    command(
+                        ["swapoff", target],
+                        true,
+                        "disable active swap before replacing its signature",
+                    ),
+                    command(
+                        ["mkswap", target],
+                        true,
+                        "create a swap signature on the target",
+                    ),
+                ],
+                vec![
+                    "verify the target does not contain data that must be preserved".to_string(),
+                    "confirm NixOS swapDevices points at a stable device identity".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Format if collection == Some("luks.devices") => {
+            let mapper = target.unwrap_or("<mapper>");
+            let device = action.context.device.as_deref().unwrap_or("<device>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", device],
+                        false,
+                        "inspect target before creating a LUKS container",
+                    ),
+                    command(
+                        ["cryptsetup", "luksFormat", device],
+                        true,
+                        "create a LUKS container on the target device",
+                    ),
+                    command_vec(
+                        vec!["cryptsetup", "open", device, mapper],
+                        true,
+                        "open the newly created LUKS container with the desired mapper name",
+                    ),
+                ],
+                vec![
+                    "verify header backups and key enrollment policy before formatting"
+                        .to_string(),
+                    "create filesystems or LVM layers only after the mapper is open".to_string(),
                 ],
                 true,
             )
@@ -1278,6 +1474,25 @@ fn partition_grow_command(target: &str, desired_size: Option<&str>) -> Execution
     }
 }
 
+fn swap_resize_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    match desired_size {
+        Some(size) => command_vec_with_readiness(
+            vec!["<resize-swap-backing-storage>", target, size],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing storage domain"],
+            "resize the swap backing device or file before recreating the swap signature",
+        ),
+        None => command_vec_with_readiness(
+            vec!["<resize-swap-backing-storage>", target, "<size>"],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired swap size", "backing storage domain"],
+            "resize the swap backing device or file before recreating the swap signature",
+        ),
+    }
+}
+
 fn property_assignment(action: &PlannedAction) -> String {
     let key = action.context.property.as_deref().unwrap_or("<key>");
     let value = action
@@ -1489,6 +1704,53 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["parted", "-lm"])
         );
+    }
+
+    #[test]
+    fn swap_and_luks_commands_follow_policy_gates() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "swaps": {
+                  "primary": {
+                    "device": "/dev/disk/by-label/swap",
+                    "preserveData": false
+                  }
+                },
+                "luks": {
+                  "devices": {
+                    "cryptroot": {
+                      "name": "cryptroot",
+                      "device": "/dev/disk/by-partuuid/root",
+                      "operation": "grow"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowFormat": true,
+                "allowOffline": true,
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_plan.len(), 2);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["mkswap", "/dev/disk/by-label/swap"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["cryptsetup", "resize", "cryptroot"])
+        }));
     }
 
     #[test]
