@@ -148,6 +148,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         Operation::Grow if collection == Some("filesystems") || action.id.starts_with("filesystem:") => {
             let target = target.unwrap_or("<filesystem>");
             let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
+            let grow_command = filesystem_grow_command(fs_type, target);
             (
                 vec![
                     command(
@@ -155,11 +156,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "re-read graph state for the filesystem before resizing",
                     ),
-                    command(
-                        ["<filesystem-grow-tool>", target],
-                        true,
-                        "run the filesystem-specific online grow command after device growth is visible",
-                    ),
+                    grow_command,
                 ],
                 vec![
                     format!(
@@ -218,20 +215,20 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         {
             let target = target.unwrap_or("<iscsi-session>");
             (
-            vec![
-                command(
-                    ["iscsiadm", "--mode", "session", "--rescan"],
-                    true,
-                    "rescan iSCSI sessions after target-side changes",
-                ),
-                command(
-                    ["disk-nix", "inspect", target, "--json"],
-                    false,
-                    "verify updated iSCSI, LUN, and consumer topology",
-                ),
-            ],
-            vec!["coordinate session rescans with every dependent LUN consumer".to_string()],
-            true,
+                vec![
+                    command(
+                        ["iscsiadm", "--mode", "session", "--rescan"],
+                        true,
+                        "rescan iSCSI sessions after target-side changes",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify updated iSCSI, LUN, and consumer topology",
+                    ),
+                ],
+                vec!["coordinate session rescans with every dependent LUN consumer".to_string()],
+                true,
             )
         }
         Operation::Grow => {
@@ -268,13 +265,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect target health before adding a device",
                     ),
-                    command(
-                        ["<pool-or-volume-add-device-tool>", target, device],
-                        true,
-                        "attach the new device with the storage-domain-specific tool",
-                    ),
+                    add_device_command(collection, target, device),
                 ],
-                vec!["choose zpool add, btrfs device add, vgextend, or an equivalent domain command from the target kind".to_string()],
+                vec!["verify the new device identity and redundancy policy before attaching it".to_string()],
                 true,
             )
         }
@@ -297,11 +290,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect redundancy and source device health before replacement",
                     ),
-                    command(
-                        ["<replace-device-tool>", target, from, to],
-                        true,
-                        "start the storage-domain replacement operation",
-                    ),
+                    replace_device_command(collection, target, from, to),
                 ],
                 vec!["keep the old device available until post-apply verification passes".to_string()],
                 true,
@@ -309,6 +298,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Rebalance => {
             let target = target.unwrap_or("<target>");
+            let rebalance = rebalance_command(collection, target);
             (
                 vec![
                     command(
@@ -316,13 +306,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect pool or filesystem health before rebalance",
                     ),
-                    command(
-                        ["<rebalance-tool>", target],
-                        true,
-                        "run the storage-domain rebalance command",
-                    ),
+                    rebalance,
                 ],
-                vec!["choose btrfs balance or the relevant pool-specific balancing operation".to_string()],
+                vec!["monitor progress and health until the rebalance operation completes".to_string()],
                 true,
             )
         }
@@ -332,7 +318,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .context
                 .property
                 .as_deref()
-                .unwrap_or("<key>=<value>");
+                .unwrap_or("<key>");
+            let property_assignment = property_assignment(action);
             (
                 vec![
                     command(
@@ -340,11 +327,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect current properties before applying changes",
                     ),
-                    command(
-                        ["<set-property-tool>", target, property],
-                        true,
-                        "apply the storage-domain property update",
-                    ),
+                    set_property_command(collection, target, property, &property_assignment),
                 ],
                 vec!["property values must come from the desired spec and target domain".to_string()],
                 true,
@@ -353,6 +336,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         Operation::Snapshot => {
             let target = target.unwrap_or("<snapshot>");
             let snapshot = action.context.name.as_deref().unwrap_or(target);
+            let snapshot_command = snapshot_command(target, snapshot);
             (
                 vec![
                     command(
@@ -360,11 +344,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect snapshot target before creation",
                     ),
-                    command(
-                        ["<snapshot-tool>", target, snapshot],
-                        true,
-                        "create the snapshot with zfs, btrfs, lvm, or the target-specific tool",
-                    ),
+                    snapshot_command,
                 ],
                 Vec::new(),
                 true,
@@ -393,6 +373,163 @@ fn command<const N: usize>(argv: [&str; N], mutates: bool, note: &str) -> Execut
         mutates,
         note: note.to_string(),
     }
+}
+
+fn filesystem_grow_command(fs_type: &str, target: &str) -> ExecutionCommand {
+    match fs_type {
+        "xfs" => command(
+            ["xfs_growfs", target],
+            true,
+            "grow an already-mounted XFS filesystem",
+        ),
+        "ext2" | "ext3" | "ext4" => command(
+            ["resize2fs", target],
+            true,
+            "grow an ext filesystem after the backing block device has grown",
+        ),
+        "btrfs" => command(
+            ["btrfs", "filesystem", "resize", "max", target],
+            true,
+            "grow a Btrfs filesystem to the maximum visible device size",
+        ),
+        "zfs" => command(
+            ["zfs", "set", "volsize=<size>", target],
+            true,
+            "set the ZFS volume size after selecting the desired size",
+        ),
+        _ => command(
+            ["<filesystem-grow-tool>", target],
+            true,
+            "run the filesystem-specific online grow command after device growth is visible",
+        ),
+    }
+}
+
+fn add_device_command(collection: Option<&str>, target: &str, device: &str) -> ExecutionCommand {
+    match collection {
+        Some("pools") => command(
+            ["zpool", "add", target, device],
+            true,
+            "attach a vdev or device to a ZFS pool when the pool layout supports it",
+        ),
+        Some("volumeGroups") => command(
+            ["vgextend", target, device],
+            true,
+            "add a physical volume to an LVM volume group",
+        ),
+        Some("filesystems") => command(
+            ["btrfs", "device", "add", device, target],
+            true,
+            "add a device to a mounted Btrfs filesystem",
+        ),
+        _ => command(
+            ["<add-device-tool>", target, device],
+            true,
+            "attach the new device with the storage-domain-specific tool",
+        ),
+    }
+}
+
+fn replace_device_command(
+    collection: Option<&str>,
+    target: &str,
+    from: &str,
+    to: &str,
+) -> ExecutionCommand {
+    match collection {
+        Some("pools") => command(
+            ["zpool", "replace", target, from, to],
+            true,
+            "replace a ZFS pool device and resilver before detaching the old device",
+        ),
+        Some("filesystems") => command(
+            ["btrfs", "replace", "start", from, to, target],
+            true,
+            "replace a Btrfs filesystem device",
+        ),
+        Some("caches") => command(
+            ["<cache-replace-tool>", target, from, to],
+            true,
+            "flush or detach dirty cache state before replacing the cache device",
+        ),
+        _ => command(
+            ["<replace-device-tool>", target, from, to],
+            true,
+            "start the storage-domain replacement operation",
+        ),
+    }
+}
+
+fn rebalance_command(collection: Option<&str>, target: &str) -> ExecutionCommand {
+    match collection {
+        Some("pools") => command(
+            ["zpool", "scrub", target],
+            true,
+            "scrub the pool after topology changes; ZFS has no generic rebalance command",
+        ),
+        Some("filesystems") => command(
+            ["btrfs", "balance", "start", target],
+            true,
+            "rebalance Btrfs chunks across available devices",
+        ),
+        _ => command(
+            ["<rebalance-tool>", target],
+            true,
+            "run the storage-domain rebalance command",
+        ),
+    }
+}
+
+fn set_property_command(
+    collection: Option<&str>,
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    match collection {
+        Some("pools") => command(
+            ["zpool", "set", assignment, target],
+            true,
+            "set a ZFS pool property",
+        ),
+        Some("datasets") => command(
+            ["zfs", "set", assignment, target],
+            true,
+            "set a ZFS dataset property",
+        ),
+        Some("exports") => command(
+            ["exportfs", "-ra"],
+            true,
+            "reload NFS exports after export property changes",
+        ),
+        _ => command(
+            ["<set-property-tool>", target, property],
+            true,
+            "apply the storage-domain property update",
+        ),
+    }
+}
+
+fn snapshot_command(target: &str, snapshot: &str) -> ExecutionCommand {
+    if snapshot.contains('@') {
+        command(["zfs", "snapshot", snapshot], true, "create a ZFS snapshot")
+    } else {
+        command(
+            ["<snapshot-tool>", target, snapshot],
+            true,
+            "create the snapshot with zfs, btrfs, lvm, or the target-specific tool",
+        )
+    }
+}
+
+fn property_assignment(action: &PlannedAction) -> String {
+    let key = action.context.property.as_deref().unwrap_or("<key>");
+    let value = action
+        .context
+        .property_value
+        .as_deref()
+        .unwrap_or("<value>");
+    format!("{key}={value}")
 }
 
 #[cfg(test)]
@@ -501,6 +638,52 @@ mod tests {
         assert_eq!(report.command_plan.len(), 1);
         assert!(report.command_plan[0].commands.iter().any(|command| {
             command.argv == ["iscsiadm", "--mode", "session", "--rescan"] && command.mutates
+        }));
+    }
+
+    #[test]
+    fn pool_actions_report_domain_specific_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "pools": {
+                "tank": {
+                  "operation": "rebalance",
+                  "addDevices": ["/dev/disk/by-id/new"],
+                  "properties": {
+                    "autotrim": "on"
+                  }
+                }
+              },
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home"
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowPropertyChanges": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["zpool", "add", "tank", "/dev/disk/by-id/new"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["zpool", "set", "autotrim=on", "tank"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["zfs", "snapshot", "tank/home@before"])
         }));
     }
 }

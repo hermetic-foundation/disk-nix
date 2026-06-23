@@ -93,8 +93,9 @@ Lifecycle objects may use:
 
 Plan actions include typed `context` when a desired object provides useful
 executor inputs. Context fields can include collection, name, target, device,
-replacement, property, filesystem type, and mountpoint. Apply reports use this
-context to build command plans without relying on action-id parsing.
+replacement, property, property value, filesystem type, and mountpoint. Apply
+reports use this context to build command plans without relying on action-id
+parsing.
 
 Future planners should compare desired state against the probed topology before
 emitting concrete executor actions.

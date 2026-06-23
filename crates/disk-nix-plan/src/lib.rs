@@ -101,6 +101,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub property: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub property_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fs_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mountpoint: Option<String>,
@@ -115,6 +117,7 @@ impl ActionContext {
             && self.device.is_none()
             && self.replacement.is_none()
             && self.property.is_none()
+            && self.property_value.is_none()
             && self.fs_type.is_none()
             && self.mountpoint.is_none()
     }
@@ -619,7 +622,7 @@ fn add_property_actions(
         return;
     };
 
-    for property in properties.keys() {
+    for (property, value) in properties {
         actions.push(PlannedAction {
             id: format!("{collection}:{name}:set-property:{property}"),
             description: format!("set property {property} on {collection} {name}"),
@@ -628,11 +631,19 @@ fn add_property_actions(
             destructive: false,
             context: ActionContext {
                 property: Some(property.to_string()),
+                property_value: Some(property_value(value)),
                 ..lifecycle_context(collection, name)
             },
             advice: None,
         });
     }
+}
+
+fn property_value(value: &Value) -> String {
+    value
+        .as_str()
+        .map(ToString::to_string)
+        .unwrap_or_else(|| value.to_string())
 }
 
 fn add_destroy_guard(
