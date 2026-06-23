@@ -103,9 +103,11 @@ disk-nix schema
 
 The schema describes both direct planner specs and the NixOS module wrapper
 shape with top-level `spec` and `apply` objects. It includes the planner's
-filesystem fields, disk and partition lifecycle collections, swap, LUKS, Btrfs
-subvolume, VDO, LVM thin pool, LVM snapshot, loop-device, MD RAID, multipath,
-and zvol lifecycle declarations, higher-layer lifecycle collections, snapshot
+filesystem fields, including filesystem `operation`, `device`, mount
+`options`, `properties`, and Btrfs device-membership update fields. It also
+includes disk and partition lifecycle collections, swap, LUKS, Btrfs subvolume,
+VDO, LVM thin pool, LVM snapshot, loop-device, MD RAID, multipath, and zvol
+lifecycle declarations, higher-layer lifecycle collections, snapshot
 declarations including Btrfs `readOnly` snapshot intent, supported operation
 names, apply policy fields, and NixOS activation helper fields such as
 `probeCurrent`, `failOnBlocked`, `scriptOut`,

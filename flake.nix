@@ -341,6 +341,12 @@
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
               and ."$defs".snapshot.properties.readOnly.type == "boolean"
               and ."$defs".snapshot.properties.readonly.type == "boolean"
+              and ."$defs".filesystem.properties.device.type == "string"
+              and ."$defs".filesystem.properties.operation["$ref"] == "#/$defs/operation"
+              and ."$defs".filesystem.properties.properties.type == "object"
+              and ."$defs".filesystem.properties.addDevices.type == "array"
+              and ."$defs".filesystem.properties.removeDevices.type == "array"
+              and ."$defs".filesystem.properties.replaceDevices.type == "object"
               and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
               and (."$defs".lifecycleObject.properties.partitionNumber.type | index("string") != null)

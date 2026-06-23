@@ -638,8 +638,11 @@ fn spec_schema() -> serde_json::Value {
                 "additionalProperties": true,
                 "properties": {
                     "mountpoint": { "type": "string" },
+                    "device": { "type": "string" },
                     "fsType": { "type": "string" },
                     "type": { "type": "string" },
+                    "operation": { "$ref": "#/$defs/operation" },
+                    "action": { "$ref": "#/$defs/operation" },
                     "resizePolicy": {
                         "type": "string",
                         "enum": ["none", "grow-only", "shrink-allowed"]
@@ -647,6 +650,26 @@ fn spec_schema() -> serde_json::Value {
                     "desiredSize": { "type": ["string", "number"] },
                     "targetSize": { "type": ["string", "number"] },
                     "size": { "type": ["string", "number"] },
+                    "options": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "addDevices": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "removeDevices": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "replaceDevices": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" }
+                    },
+                    "properties": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
                     "preserveData": { "type": "boolean", "default": true }
                 }
             },
