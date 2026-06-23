@@ -42,6 +42,15 @@ struct FilesystemUsage {
     device_allocated: Option<u64>,
     device_unallocated: Option<u64>,
     used: Option<u64>,
+    allocation_groups: Vec<AllocationGroup>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AllocationGroup {
+    class: String,
+    profile: Option<String>,
+    size: Option<u64>,
+    used: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,6 +109,20 @@ fn add_report(graph: &mut StorageGraph, report: &BtrfsReport) -> Result<(), Prob
     };
     if !fs_usage.is_empty() {
         filesystem = filesystem.with_usage(fs_usage);
+    }
+    for group in usage.allocation_groups {
+        if let Some(profile) = group.profile {
+            filesystem =
+                filesystem.with_property(format!("btrfs.{}-profile", group.class), profile);
+        }
+        if let Some(size) = group.size {
+            filesystem =
+                filesystem.with_property(format!("btrfs.{}-size", group.class), size.to_string());
+        }
+        if let Some(used) = group.used {
+            filesystem =
+                filesystem.with_property(format!("btrfs.{}-used", group.class), used.to_string());
+        }
     }
 
     graph.add_node(filesystem);
@@ -272,6 +295,7 @@ fn parse_filesystem_usage(bytes: &[u8]) -> Result<FilesystemUsage, ProbeError> {
         device_allocated: None,
         device_unallocated: None,
         used: None,
+        allocation_groups: Vec::new(),
     };
 
     for line in text.lines().map(str::trim) {
@@ -283,10 +307,43 @@ fn parse_filesystem_usage(bytes: &[u8]) -> Result<FilesystemUsage, ProbeError> {
             usage.device_unallocated = parse_u64(value.trim());
         } else if let Some(value) = line.strip_prefix("Used:") {
             usage.used = parse_u64(value.trim());
+        } else if let Some(group) = parse_allocation_group(line) {
+            usage.allocation_groups.push(group);
         }
     }
 
     Ok(usage)
+}
+
+fn parse_allocation_group(line: &str) -> Option<AllocationGroup> {
+    let (header, values) = line.split_once(':')?;
+    let mut header_parts = header.split(',');
+    let class = header_parts.next()?.trim().to_ascii_lowercase();
+    if !matches!(class.as_str(), "data" | "metadata" | "system") {
+        return None;
+    }
+    let profile = header_parts
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let mut size = None;
+    let mut used = None;
+
+    for part in values.split(',').map(str::trim) {
+        if let Some(value) = part.strip_prefix("Size:") {
+            size = parse_u64(value.trim());
+        } else if let Some(value) = part.strip_prefix("Used:") {
+            used = parse_u64(value.trim());
+        }
+    }
+
+    Some(AllocationGroup {
+        class,
+        profile,
+        size,
+        used,
+    })
 }
 
 fn parse_subvolumes(bytes: &[u8]) -> Result<Vec<Subvolume>, ProbeError> {
@@ -399,11 +456,14 @@ mod tests {
 \tdevid    1 size 1000 used 400 path /dev/sdb1\n\
 \tdevid    2 size 1000 used 300 path /dev/sdc1\n";
 
-    const USAGE: &[u8] = b"Overall:\n\
+    const USAGE_WITH_GROUPS: &[u8] = b"Overall:\n\
     Device size:\t\t2000\n\
     Device allocated:\t\t700\n\
     Device unallocated:\t\t1300\n\
-    Used:\t\t500\n";
+    Used:\t\t500\n\
+Data,single: Size:512, Used:400\n\
+Metadata,DUP: Size:128, Used:64\n\
+System,DUP: Size:64, Used:32\n";
 
     const SUBVOLUMES: &[u8] = b"ID 256 gen 10 top level 5 uuid subvol-root parent_uuid - path @\n\
 ID 257 gen 11 top level 5 uuid snap-1 parent_uuid subvol-root path @/.snapshots/1/snapshot\n";
@@ -417,7 +477,7 @@ ID 257 gen 11 top level 5 uuid snap-1 parent_uuid subvol-root path @/.snapshots/
         let graph = normalize_btrfs_reports(&[BtrfsReport {
             target: "/data".to_string(),
             show: SHOW.to_vec(),
-            usage: USAGE.to_vec(),
+            usage: USAGE_WITH_GROUPS.to_vec(),
             subvolumes: SUBVOLUMES.to_vec(),
             qgroups: QGROUPS.to_vec(),
         }])
@@ -445,6 +505,19 @@ ID 257 gen 11 top level 5 uuid snap-1 parent_uuid subvol-root path @/.snapshots/
             node.kind == NodeKind::BtrfsQgroup
                 && node.name == "0/257"
                 && node.usage.as_ref().and_then(|usage| usage.used_bytes) == Some(1024)
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::BtrfsFilesystem
+                && node.properties.iter().any(|property| {
+                    property.key == "btrfs.data-profile" && property.value == "single"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "btrfs.metadata-profile" && property.value == "DUP"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "btrfs.data-used" && property.value == "400")
         }));
         assert!(
             graph

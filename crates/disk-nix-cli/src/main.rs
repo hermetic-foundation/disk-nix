@@ -1906,6 +1906,15 @@ fn usage_details(node: &Node) -> String {
         ("btrfs.device-id", "device-id"),
         ("btrfs.id", "subvol-id"),
         ("btrfs.parent-uuid", "parent-uuid"),
+        ("btrfs.data-profile", "data-profile"),
+        ("btrfs.data-size", "data-size"),
+        ("btrfs.data-used", "data-used"),
+        ("btrfs.metadata-profile", "metadata-profile"),
+        ("btrfs.metadata-size", "metadata-size"),
+        ("btrfs.metadata-used", "metadata-used"),
+        ("btrfs.system-profile", "system-profile"),
+        ("btrfs.system-size", "system-size"),
+        ("btrfs.system-used", "system-used"),
         ("btrfs.max-referenced", "max-rfer"),
         ("btrfs.max-exclusive", "max-excl"),
         ("vdo.storage-device", "backing"),
@@ -2604,6 +2613,19 @@ mod tests {
                 .with_property("xfs.data.blocks", "262144")
                 .with_property("xfs.meta-data.reflink", "1"),
         );
+        graph.add_node(
+            Node::new("btrfs:fs-uuid", NodeKind::BtrfsFilesystem, "data")
+                .with_property("btrfs.mount-target", "/data")
+                .with_property("btrfs.data-profile", "single")
+                .with_property("btrfs.data-size", "512")
+                .with_property("btrfs.data-used", "400")
+                .with_property("btrfs.metadata-profile", "DUP")
+                .with_property("btrfs.metadata-size", "128")
+                .with_property("btrfs.metadata-used", "64")
+                .with_property("btrfs.system-profile", "DUP")
+                .with_property("btrfs.system-size", "64")
+                .with_property("btrfs.system-used", "32"),
+        );
 
         let mut output = Vec::new();
         print_filesystems(&mut output, &graph).expect("filesystems table renders");
@@ -2611,6 +2633,12 @@ mod tests {
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains("xfs-blocks=262144 reflink=1"));
+        assert!(output.contains(
+            "mount-target=/data data-profile=single data-size=512 data-used=400 metadata-profile=DUP"
+        ));
+        assert!(output.contains(
+            "metadata-size=128 metadata-used=64 system-profile=DUP system-size=64 system-used=32"
+        ));
     }
 
     #[test]

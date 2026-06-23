@@ -173,8 +173,8 @@ Use these commands for:
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
   ZFS datasets/snapshots, and NFS exports, with selected filesystem metadata
   details such as `blkid` version/block-size/usage, exFAT GUID/serial/cluster
-  geometry, and ext state/features/block and inode counts when probes expose
-  them
+  geometry, Btrfs Data/Metadata/System allocation profiles and byte counts,
+  and ext state/features/block and inode counts when probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
   exports, including LVM origin/pool/data metadata, activation state, role, and
   cache mode/policy, MD RAID level/state, iSCSI attached disks, NFS
@@ -207,9 +207,10 @@ Use these commands for:
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
   metadata detail data, including bcache role/set/state, cache mode,
   replacement policy, dirty data, writeback percentage, `blkid` signature
-  details, ext superblock details, VDO backing and logical/physical size
-  details, NVMe namespace details, loop mapping details, and active swap
-  state/type/priority when probed
+  details, ext superblock details, Btrfs allocation class profiles and byte
+  counts, VDO backing and logical/physical size details, NVMe namespace
+  details, loop mapping details, and active swap state/type/priority when
+  probed
 
 ## Inspect
 
