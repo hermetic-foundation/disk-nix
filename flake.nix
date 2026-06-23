@@ -184,6 +184,65 @@
 
         checks = {
           inherit diskNix;
+          examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''
+            simplePlan=$(mktemp)
+            lifecyclePlan=$(mktemp)
+            simpleApply=$(mktemp)
+            lifecycleApply=$(mktemp)
+            scriptOut=$(mktemp)
+
+            ${diskNix}/bin/disk-nix plan --spec ${./examples/simple-root.json} --json > "$simplePlan"
+            jq -e '
+              .summary.actionCount == 1
+              and .summary.offlineRequiredCount == 0
+              and .summary.destructiveCount == 0
+              and .summary.potentialDataLossCount == 0
+              and .summary.unsupportedCount == 0
+              and .actions[0].id == "filesystem:root:grow"
+              and .actions[0].operation == "grow"
+              and .actions[0].risk == "online"
+              and .actions[0].context.desiredSize == "100%"
+            ' "$simplePlan"
+
+            ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
+            jq -e '
+              .summary.actionCount == 11
+              and .summary.offlineRequiredCount == 3
+              and .summary.destructiveCount == 1
+              and .summary.potentialDataLossCount == 2
+              and .summary.unsupportedCount == 0
+              and (.actions | any(.id == "datasets:tank/archive:destroy"))
+              and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
+              and (.actions | any(.id == "caches:tank/l2arc0:replace-device:/dev/disk/by-id/old-cache"))
+            ' "$lifecyclePlan"
+
+            ${diskNix}/bin/disk-nix apply --spec ${./examples/simple-root.json} --script-out "$scriptOut" --json > "$simpleApply"
+            jq -e '
+              .status == "dry-run"
+              and .apply.blockedCount == 0
+              and .commandSummary.commandCount == 2
+              and .commandSummary.needsDesiredSizeCount == 0
+              and .verificationSummary.stepCount == 1
+            ' "$simpleApply"
+            test -x "$scriptOut"
+            grep -- 'xfs_growfs /' "$scriptOut"
+            grep -- 'Post-apply verification commands' "$scriptOut"
+
+            if ${diskNix}/bin/disk-nix apply --spec ${./examples/lifecycle-update.json} --json > "$lifecycleApply"; then
+              echo "expected lifecycle example apply to be blocked" >&2
+              exit 1
+            fi
+            jq -e '
+              .status == "blocked"
+              and .apply.blockedCount == 6
+              and .apply.blockedSummary.offlineRequiredCount == 3
+              and .apply.blockedSummary.destructiveCount == 1
+              and .apply.blockedSummary.potentialDataLossCount == 2
+              and .apply.blockedSummary.unsupportedCount == 0
+            ' "$lifecycleApply"
+
+            touch "$out"
+          '';
           formatting = pkgs.runCommand "disk-nix-formatting-check" { nativeBuildInputs = [ pkgs.findutils pkgs.nixfmt ]; } ''
             cp -R ${self} source
             chmod -R u+w source

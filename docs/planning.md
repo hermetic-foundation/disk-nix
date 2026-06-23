@@ -71,6 +71,10 @@ Examples:
 - snapshot creation is reversible; snapshot rollback is potential data loss;
   snapshot destruction is destructive because it removes a recovery point.
 
+The checked-in specs under `examples/` are part of `nix flake check`. The
+flake validates stable plan summaries, selected action ids, allowed simple
+apply output, blocked lifecycle apply output, and review-script generation.
+
 Lifecycle collections currently accepted by the planner:
 
 - `volumes`
