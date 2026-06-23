@@ -2357,8 +2357,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .context
                 .device
                 .as_deref()
-                .or_else(|| parts.last().copied())
-                .unwrap_or("<device>");
+                .or_else(|| action_id_suffix(&action.id, "add-device"));
             (
                 vec![
                     command(
@@ -2378,12 +2377,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .context
                 .device
                 .as_deref()
-                .unwrap_or("<old-device>");
-            let to = action
-                .context
-                .replacement
-                .as_deref()
-                .unwrap_or("<new-device>");
+                .or_else(|| action_id_suffix(&action.id, "replace-device"));
+            let to = action.context.replacement.as_deref();
             (
                 vec![
                     command(
@@ -3873,7 +3868,26 @@ fn ext_filesystem_shrink_command(
     }
 }
 
-fn add_device_command(collection: Option<&str>, target: &str, device: &str) -> ExecutionCommand {
+fn action_id_suffix<'a>(action_id: &'a str, operation: &str) -> Option<&'a str> {
+    let marker = format!(":{operation}:");
+    let (_, suffix) = action_id.split_once(&marker)?;
+    (!suffix.is_empty()).then_some(suffix)
+}
+
+fn add_device_command(
+    collection: Option<&str>,
+    target: &str,
+    device: Option<&str>,
+) -> ExecutionCommand {
+    let Some(device) = device else {
+        return command_with_readiness(
+            ["<add-device-tool>", target, "<device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device to add"],
+            "attach the new device after selecting the reviewed device path or cache-set UUID",
+        );
+    };
     match collection {
         Some("pools") => command(
             ["zpool", "add", target, device],
@@ -3925,9 +3939,23 @@ fn add_device_command(collection: Option<&str>, target: &str, device: &str) -> E
 fn replace_device_command(
     collection: Option<&str>,
     target: &str,
-    from: &str,
-    to: &str,
+    from: Option<&str>,
+    to: Option<&str>,
 ) -> ExecutionCommand {
+    let from_arg = from.unwrap_or("<old-device>");
+    let to_arg = to.unwrap_or("<new-device>");
+    let missing = missing_replacement_inputs(from, to);
+    if !missing.is_empty() {
+        return command_vec_with_readiness(
+            vec!["<replace-device-tool>", target, from_arg, to_arg],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "start the storage-domain replacement operation after selecting both devices",
+        );
+    }
+    let from = from.expect("missing replacement source is handled above");
+    let to = to.expect("missing replacement target is handled above");
     match collection {
         Some("pools") => command(
             ["zpool", "replace", target, from, to],
@@ -3982,6 +4010,17 @@ fn replace_device_command(
             "start the storage-domain replacement operation",
         ),
     }
+}
+
+fn missing_replacement_inputs(from: Option<&str>, to: Option<&str>) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if from.is_none() {
+        missing.push("device to replace");
+    }
+    if to.is_none() {
+        missing.push("replacement device");
+    }
+    missing
 }
 
 fn rebalance_command(
@@ -7448,6 +7487,13 @@ mod tests {
                   "vgmissing": {
                     "operation": "grow"
                   },
+                  "vgadd": {
+                    "operation": "add-device"
+                  },
+                  "vgreplace": {
+                    "operation": "replace-device",
+                    "device": "/dev/disk/by-id/old-pv"
+                  },
                   "oldvg": {
                     "destroy": true
                   }
@@ -7482,6 +7528,28 @@ mod tests {
                     command.argv == ["vgextend", "vgmissing", "<physical-volume>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["physical volume device"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumegroups:vgadd:adddevice"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["<add-device-tool>", "vgadd", "<device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["device to add"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumegroups:vgreplace:replacedevice"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "<replace-device-tool>",
+                            "vgreplace",
+                            "/dev/disk/by-id/old-pv",
+                            "<new-device>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["replacement device"]
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
