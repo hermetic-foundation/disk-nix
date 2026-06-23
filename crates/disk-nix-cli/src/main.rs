@@ -82,6 +82,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List complex filesystem objects across Btrfs, bcachefs, and ZFS.
+    ComplexFilesystems {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered volumes, pools, datasets, LUNs, and exports.
     Volumes {
         /// Emit JSON for matching graph nodes.
@@ -351,6 +357,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_filesystem_node)?;
             } else {
                 print_filesystems(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::ComplexFilesystems { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_complex_filesystem_node)?;
+            } else {
+                print_complex_filesystems(output, &graph)?;
             }
             Ok(())
         }
@@ -1365,6 +1380,34 @@ fn print_filesystems(output: &mut impl Write, graph: &StorageGraph) -> io::Resul
     Ok(())
 }
 
+fn print_complex_filesystems(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:>12} {:>12} {:>7} {:>7} DETAILS",
+        "KIND", "NAME", "SIZE", "USED", "FREE", "USE%", "BACKING"
+    )?;
+    for node in graph
+        .nodes
+        .iter()
+        .filter(|node| is_complex_filesystem_node(node))
+    {
+        let usage = node.usage.as_ref();
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>12} {:>12} {:>12} {:>7} {:>7} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            human_bytes(usage.and_then(|usage| usage.used_bytes)),
+            human_bytes(usage.and_then(|usage| usage.free_bytes)),
+            usage_percent(node),
+            backing_count(graph, node),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_volumes(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2101,6 +2144,27 @@ fn is_filesystem_node(node: &Node) -> bool {
     )
 }
 
+fn is_complex_filesystem_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::BtrfsFilesystem
+            | NodeKind::BtrfsSubvolume
+            | NodeKind::BtrfsSnapshot
+            | NodeKind::BtrfsQgroup
+            | NodeKind::BcachefsFilesystem
+            | NodeKind::BcachefsDevice
+            | NodeKind::ZfsPool
+            | NodeKind::ZfsVdev
+            | NodeKind::ZfsDataset
+            | NodeKind::ZfsSnapshot
+            | NodeKind::Zvol
+    ) || node.properties.iter().any(|property| {
+        property.key.starts_with("btrfs.")
+            || property.key.starts_with("bcachefs.")
+            || property.key.starts_with("zfs.")
+    })
+}
+
 fn is_volume_node(node: &Node) -> bool {
     matches!(
         node.kind,
@@ -2687,14 +2751,14 @@ mod tests {
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 
     use super::{
-        confirmation_file_accepts, is_cache_node, is_device_node, is_encryption_node,
-        is_filesystem_node, is_loop_node, is_mapping_node, is_multipath_node,
+        confirmation_file_accepts, is_cache_node, is_complex_filesystem_node, is_device_node,
+        is_encryption_node, is_filesystem_node, is_loop_node, is_mapping_node, is_multipath_node,
         is_network_storage_node, is_nvme_node, is_partition_node, is_pool_node, is_raid_node,
         is_snapshot_node, is_swap_node, is_vdo_node, is_volume_node, mount_details, print_cache,
-        print_devices, print_encryption, print_filesystems, print_loop, print_mappings,
-        print_mounts, print_multipath, print_network_storage, print_nvme, print_partitions,
-        print_pools, print_raid, print_snapshots, print_swap, print_usage, print_vdo,
-        print_volumes, snapshot_source, usage_details, usage_percent,
+        print_complex_filesystems, print_devices, print_encryption, print_filesystems, print_loop,
+        print_mappings, print_mounts, print_multipath, print_network_storage, print_nvme,
+        print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
+        print_vdo, print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2735,8 +2799,23 @@ mod tests {
             "archive",
         );
         assert!(is_filesystem_node(&bcachefs));
+        assert!(is_complex_filesystem_node(&bcachefs));
         assert!(is_volume_node(&bcachefs));
         assert!(is_pool_node(&bcachefs));
+        assert!(is_complex_filesystem_node(&Node::new(
+            "btrfs:/mnt/persist",
+            NodeKind::BtrfsFilesystem,
+            "/mnt/persist"
+        )));
+        assert!(is_complex_filesystem_node(&Node::new(
+            "zpool:tank",
+            NodeKind::ZfsPool,
+            "tank"
+        )));
+        assert!(is_complex_filesystem_node(
+            &Node::new("filesystem:/data", NodeKind::Filesystem, "/data")
+                .with_property("btrfs.data-profile", "single")
+        ));
         assert!(is_device_node(&Node::new(
             "bcachefs-device:a2d6fc04-efd0-4e36-aece-2475941d09a3:6",
             NodeKind::BcachefsDevice,
@@ -3373,6 +3452,96 @@ mod tests {
         assert!(output.contains(
             "bcachefs-uuid=a2d6fc04-efd0-4e36-aece-2475941d09a3 bcachefs-member=/dev/sdc bcachefs-mount=/mnt/archive bcachefs-device=6 bcachefs-user=2147483648"
         ));
+    }
+
+    #[test]
+    fn complex_filesystems_table_includes_topology_and_domain_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "block:/dev/nvme0n1p2",
+            NodeKind::Partition,
+            "/dev/nvme0n1p2",
+        ));
+        graph.add_node(
+            Node::new("btrfs:fs-uuid", NodeKind::BtrfsFilesystem, "/mnt/persist")
+                .with_size_bytes(536_870_912_000)
+                .with_usage(Usage {
+                    used_bytes: Some(214_748_364_800),
+                    free_bytes: Some(322_122_547_200),
+                    allocated_bytes: None,
+                })
+                .with_property("btrfs.mount-target", "/mnt/persist")
+                .with_property("btrfs.data-profile", "single")
+                .with_property("btrfs.metadata-profile", "DUP"),
+        );
+        graph.add_node(
+            Node::new(
+                "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
+                NodeKind::BcachefsFilesystem,
+                "archive",
+            )
+            .with_usage(Usage {
+                used_bytes: Some(2_147_483_648),
+                free_bytes: Some(8_589_934_592),
+                allocated_bytes: Some(10_737_418_240),
+            })
+            .with_property("bcachefs.mount-target", "/mnt/archive")
+            .with_property("bcachefs.device-count", "2")
+            .with_property("bcachefs.data-user", "2147483648"),
+        );
+        graph.add_node(
+            Node::new("zpool:tank", NodeKind::ZfsPool, "tank")
+                .with_size_bytes(1_099_511_627_776)
+                .with_usage(Usage {
+                    used_bytes: Some(274_877_906_944),
+                    free_bytes: Some(824_633_720_832),
+                    allocated_bytes: None,
+                })
+                .with_property("zfs.health", "ONLINE"),
+        );
+        graph.add_node(
+            Node::new("zfs-dataset:tank/home", NodeKind::ZfsDataset, "tank/home")
+                .with_property("zfs.compression", "zstd")
+                .with_property("zfs.encryption", "aes-256-gcm")
+                .with_property("zfs.keystatus", "available"),
+        );
+        graph.add_node(
+            Node::new(
+                "bcachefs-device:a2d6fc04-efd0-4e36-aece-2475941d09a3:0",
+                NodeKind::BcachefsDevice,
+                "/dev/sdc",
+            )
+            .with_property("bcachefs.device-state", "rw")
+            .with_property("bcachefs.device-free", "8589934592"),
+        );
+        graph.add_edge(Edge::new(
+            "block:/dev/nvme0n1p2",
+            "btrfs:fs-uuid",
+            Relationship::Backs,
+        ));
+        graph.add_edge(Edge::new(
+            "bcachefs-device:a2d6fc04-efd0-4e36-aece-2475941d09a3:0",
+            "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
+            Relationship::MemberOf,
+        ));
+
+        let mut output = Vec::new();
+        print_complex_filesystems(&mut output, &graph).expect("complex filesystems table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("BACKING"));
+        assert!(output.contains("/mnt/persist"));
+        assert!(output.contains("500.0 GiB"));
+        assert!(output.contains("40.0%"));
+        assert!(output.contains("data-profile=single metadata-profile=DUP"));
+        assert!(output.contains("archive"));
+        assert!(output.contains("20.0%"));
+        assert!(output.contains("bcachefs-mount=/mnt/archive bcachefs-devices=2"));
+        assert!(output.contains("tank"));
+        assert!(output.contains("health=ONLINE"));
+        assert!(output.contains("tank/home"));
+        assert!(output.contains("compression=zstd encryption=aes-256-gcm keystatus=available"));
+        assert!(output.contains("bcachefs-state=rw bcachefs-device-free=8589934592"));
     }
 
     #[test]

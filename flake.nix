@@ -801,6 +801,7 @@
 
             ${diskNix}/bin/disk-nix --help | grep -- 'usage'
             ${diskNix}/bin/disk-nix --help | grep -- 'encryption'
+            ${diskNix}/bin/disk-nix --help | grep -- 'complex-filesystems'
             ${diskNix}/bin/disk-nix --help | grep -- 'cache'
             ${diskNix}/bin/disk-nix --help | grep -- 'vdo'
             ${diskNix}/bin/disk-nix --help | grep -- 'multipath'

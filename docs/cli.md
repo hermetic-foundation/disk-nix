@@ -137,6 +137,7 @@ Focused commands filter the graph for common workflows:
 disk-nix devices
 disk-nix partitions
 disk-nix filesystems
+disk-nix complex-filesystems
 disk-nix volumes
 disk-nix pools
 disk-nix snapshots
@@ -161,6 +162,7 @@ Every focused view accepts `--json`:
 disk-nix devices --json
 disk-nix partitions --json
 disk-nix filesystems --json
+disk-nix complex-filesystems --json
 disk-nix volumes --json
 disk-nix pools --json
 disk-nix snapshots --json
@@ -202,6 +204,11 @@ Use these commands for:
   bcachefs external/internal UUID, member-device, mounted usage, and data-type
   byte accounting, Btrfs Data/Metadata/System allocation profiles and byte
   counts, and ext state/features/block and inode counts when probes expose them
+- `complex-filesystems`: Btrfs, bcachefs, and ZFS pools, vdevs, datasets,
+  zvols, subvolumes, snapshots, qgroups, and member devices, including size,
+  used/free capacity, utilization, backing/member counts, allocation profiles,
+  qgroup limits, bcachefs member accounting, ZFS health/vdev state, and ZFS
+  compression/quota/reservation/encryption properties when probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, bcachefs, ZFS, zvols,
   LUNs, and exports, including LVM origin/pool/data metadata, activation state,
   role, layout, health, tags, thin-pool fullness behavior, metadata size, and
