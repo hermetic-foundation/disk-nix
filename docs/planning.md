@@ -96,7 +96,8 @@ Examples:
   thin volumes and their data.
 - LVM volume group creation and removal are destructive because they write or
   remove VG metadata on member physical volumes; prefer `vgextend` when
-  preserving an existing group is possible.
+  preserving an existing group is possible. VG growth with an explicit physical
+  volume is an online `vgextend` workflow.
 - ZFS pool creation and destruction are destructive because they write labels
   to vdev devices or remove all contained datasets and zvols; import/export is
   preferred when moving an existing pool.
@@ -259,6 +260,8 @@ missing.
 LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
 for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
 destructive policy gates allow removal.
+LVM volume group grow command plans use `vgextend <vg> <pv>` when a physical
+volume device is declared, and mark the command unresolved when it is missing.
 ZFS pool device removal renders reviewed `zpool remove <pool> <device>` steps
 when the pool layout supports evacuation. LVM volume group device removal
 renders reviewed `vgreduce <vg> <pv>` steps after `pvmove` or replacement

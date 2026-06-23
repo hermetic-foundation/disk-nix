@@ -489,6 +489,30 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "VG free extents and metadata state are reviewed before creating LVs".to_string(),
             ],
         ),
+        Operation::Grow if collection == Some("volumeGroups") => (
+            vec![
+                command(
+                    ["vgs", "--reportformat", "json", target],
+                    false,
+                    "verify LVM volume group size and free extents after extension",
+                ),
+                command(
+                    ["pvs", "--reportformat", "json"],
+                    false,
+                    "verify physical volume membership after volume group growth",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled VG graph relationships after growth",
+                ),
+            ],
+            vec![
+                "volume group includes the expected new physical volume members".to_string(),
+                "VG free extents reflect the added capacity before downstream LV growth"
+                    .to_string(),
+            ],
+        ),
         Operation::Create if collection == Some("datasets") => (
             vec![
                 command(
@@ -1497,6 +1521,26 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     grow_command,
                 ],
                 vec![note],
+                true,
+            )
+        }
+        Operation::Grow if collection == Some("volumeGroups") => {
+            let target = target.unwrap_or("<volume-group>");
+            let device = action.context.device.as_deref();
+            (
+                vec![
+                    command(
+                        ["vgs", "--reportformat", "json", target],
+                        false,
+                        "inspect current volume group size and free extents before growth",
+                    ),
+                    volume_group_extend_command(target, device),
+                ],
+                vec![
+                    "initialize or verify the physical volume before extending the VG".to_string(),
+                    "grow dependent logical volumes only after VG free extents reflect added capacity"
+                        .to_string(),
+                ],
                 true,
             )
         }
@@ -4138,6 +4182,23 @@ fn lvm_volume_group_create_command(target: &str, device: Option<&str>) -> Execut
     }
 }
 
+fn volume_group_extend_command(target: &str, device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["vgextend", target, device],
+            true,
+            "extend the LVM volume group with the reviewed physical volume",
+        ),
+        None => command_with_readiness(
+            ["vgextend", target, "<physical-volume>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["physical volume device"],
+            "extend the LVM volume group after selecting the physical volume",
+        ),
+    }
+}
+
 fn loop_device_create_command(target: &str, backing: Option<&str>) -> ExecutionCommand {
     match backing {
         Some(backing) if target.starts_with("/dev/loop") => command(
@@ -5687,6 +5748,13 @@ mod tests {
                     "operation": "create",
                     "device": "/dev/disk/by-id/nvme-vg0"
                   },
+                  "vgdata": {
+                    "operation": "grow",
+                    "device": "/dev/disk/by-id/nvme-data-pv"
+                  },
+                  "vgmissing": {
+                    "operation": "grow"
+                  },
                   "oldvg": {
                     "destroy": true
                   }
@@ -5709,6 +5777,21 @@ mod tests {
             })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumegroups:vgdata:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vgextend", "vgdata", "/dev/disk/by-id/nvme-data-pv"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumegroups:vgmissing:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vgextend", "vgmissing", "<physical-volume>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["physical volume device"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["vgremove", "--yes", "oldvg"])
@@ -5719,6 +5802,13 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["vgs", "--reportformat", "json", "vg0"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "volumegroups:vgdata:grow"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["pvs", "--reportformat", "json"])
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "volumegroups:oldvg:destroy"

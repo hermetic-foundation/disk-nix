@@ -209,7 +209,8 @@ LVM logical volume apply plans render reviewed `lvcreate` and gated
 LVM thin-pool apply plans render reviewed `lvcreate --type thin-pool`,
 `lvextend`, and gated `lvremove` steps.
 LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
-volume group lifecycle declarations, plus reviewed `vgreduce` steps for
+volume group lifecycle declarations, reviewed `vgextend` steps for grow
+operations with an explicit physical volume, and reviewed `vgreduce` steps for
 explicit physical-volume removal.
 ZFS pool apply plans render gated `zpool create` and `zpool destroy` commands,
 plus reviewed topology updates such as `zpool add`, `zpool replace`, and
