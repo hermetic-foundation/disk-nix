@@ -160,9 +160,9 @@ workflows, Btrfs subvolume creation/deletion, VDO create/grow/remove, LVM
 thin-pool create/grow/remove, LVM snapshot create/merge/remove, loop-device
 mapping updates, MD RAID member updates, multipath map updates, ZFS pool,
 dataset, and zvol updates, volume updates, network LUN growth, snapshots, and
-cache replacement.
-Cache apply plans include bcache-aware attach, cache-mode, dirty-data, and
-replacement review steps instead of a generic cache placeholder.
+cache attach/detach/replacement workflows.
+Cache apply plans include bcache-aware attach, detach, cache-mode, dirty-data,
+and replacement review steps instead of a generic cache placeholder.
 Btrfs filesystem device-removal plans include allocation inspection and
 domain-specific `btrfs device remove` rendering for review, while remaining
 blocked by the current potential-data-loss policy gate.

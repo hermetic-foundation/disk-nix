@@ -64,6 +64,9 @@ Examples:
   original device can remain available until verification passes.
 - Cache `replace-device` is classified as offline-required because dirty or
   writeback data must be flushed or detached cleanly before replacement.
+- Cache `remove-device` is classified as offline-required rather than
+  destructive; reviewed plans require dirty-data inspection before bcache
+  detach and keep the backing storage intact.
 - disk partition-table creation is classified as destructive because it can
   hide or replace existing storage metadata. When destructive policy permits
   it, apply plans render reviewed `parted mklabel` and table reread commands.

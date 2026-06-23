@@ -5254,6 +5254,7 @@ mod tests {
                 "caches": {
                   "/dev/bcache0": {
                     "addDevices": ["cache-set-uuid"],
+                    "removeDevices": ["cache-set-uuid"],
                     "replaceDevices": {
                       "/dev/disk/by-id/old-cache": "/dev/disk/by-id/new-cache"
                     },
@@ -5313,6 +5314,21 @@ mod tests {
                     ]
                     && command.readiness == CommandReadiness::NeedsDomainImplementation
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:/dev/bcache0:remove-device:cache-set-uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "printf '1\\n' > \"/sys/block/${1#/dev/}/bcache/detach\"",
+                            "disk-nix-bcache-detach",
+                            "/dev/bcache0",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.commands.iter().any(|command| {

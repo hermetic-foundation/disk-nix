@@ -1284,25 +1284,18 @@ fn add_device_membership_actions(
 
     if let Some(devices) = object.get("removeDevices").and_then(Value::as_array) {
         for device in devices.iter().filter_map(Value::as_str) {
+            let (risk, advice) = classify_remove_device(collection);
             actions.push(PlannedAction {
                 id: format!("{collection}:{name}:remove-device:{device}"),
                 description: format!("remove device {device} from {collection} {name}"),
                 operation: Operation::RemoveDevice,
-                risk: RiskClass::PotentialDataLoss,
+                risk,
                 destructive: false,
                 context: ActionContext {
                     device: Some(device.to_string()),
                     ..lifecycle_context(collection, name, object)
                 },
-                advice: Some(Advice {
-                    summary: "device removal requires enough remaining data and metadata capacity"
-                        .to_string(),
-                    alternatives: vec![
-                        "add replacement capacity before removing the old device".to_string(),
-                        "rebalance or evacuate data before removal".to_string(),
-                        "verify redundancy and current health before applying".to_string(),
-                    ],
-                }),
+                advice: Some(advice),
             });
         }
     }
@@ -1991,6 +1984,37 @@ fn classify_replace_device(collection: &str) -> (RiskClass, Advice) {
                         .to_string(),
                     "keep the original device untouched until post-apply verification passes"
                         .to_string(),
+                ],
+            },
+        )
+    }
+}
+
+fn classify_remove_device(collection: &str) -> (RiskClass, Advice) {
+    if collection == "caches" {
+        (
+            RiskClass::OfflineRequired,
+            Advice {
+                summary: "cache detach must flush dirty data before removing cache media"
+                    .to_string(),
+                alternatives: vec![
+                    "switch writeback caches to writethrough before detach".to_string(),
+                    "wait for dirty data to drain before removing the cache device".to_string(),
+                    "keep backing storage online and verify it remains readable after detach"
+                        .to_string(),
+                ],
+            },
+        )
+    } else {
+        (
+            RiskClass::PotentialDataLoss,
+            Advice {
+                summary: "device removal requires enough remaining data and metadata capacity"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement capacity before removing the old device".to_string(),
+                    "rebalance or evacuate data before removal".to_string(),
+                    "verify redundancy and current health before applying".to_string(),
                 ],
             },
         )
@@ -3816,6 +3840,7 @@ mod tests {
               "caches": {
                 "vg0/root-cache": {
                   "operation": "replace-device",
+                  "removeDevices": ["/dev/sdd"],
                   "replaceDevices": {
                     "/dev/sdb": "/dev/sdc"
                   }
@@ -3825,17 +3850,35 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
-        assert_eq!(plan.summary.offline_required_count, 2);
-        assert!(plan.actions.iter().all(|action| {
-            action.operation == Operation::ReplaceDevice
-                && action.risk == RiskClass::OfflineRequired
-                && action.advice.as_ref().is_some_and(|advice| {
-                    advice
-                        .alternatives
-                        .iter()
-                        .any(|alternative| alternative.contains("flush dirty data"))
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 3);
+        assert!(
+            plan.actions
+                .iter()
+                .filter(|action| action.operation == Operation::ReplaceDevice)
+                .all(|action| {
+                    action.operation == Operation::ReplaceDevice
+                        && action.risk == RiskClass::OfflineRequired
+                        && action.advice.as_ref().is_some_and(|advice| {
+                            advice
+                                .alternatives
+                                .iter()
+                                .any(|alternative| alternative.contains("flush dirty data"))
+                        })
                 })
+        );
+        let detach = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "caches:vg0/root-cache:remove-device:/dev/sdd")
+            .expect("cache detach action exists");
+        assert_eq!(detach.operation, Operation::RemoveDevice);
+        assert_eq!(detach.risk, RiskClass::OfflineRequired);
+        assert!(detach.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("dirty data"))
         }));
     }
 
