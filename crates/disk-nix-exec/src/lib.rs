@@ -2169,12 +2169,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Grow if collection == Some("luks.devices") => {
             let mapper = target.unwrap_or("<mapper>");
-            let device = action.context.device.as_deref().unwrap_or("<device>");
+            let device = action.context.device.as_deref();
             (
                 vec![
-                    command(
-                        ["disk-nix", "inspect", device],
-                        false,
+                    luks_backing_inspect_command(
+                        device,
                         "inspect backing device before resizing the LUKS mapper",
                     ),
                     command(
@@ -2854,22 +2853,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Format if collection == Some("luks.devices") => {
             let mapper = target.unwrap_or("<mapper>");
-            let device = action.context.device.as_deref().unwrap_or("<device>");
+            let device = action.context.device.as_deref();
             (
                 vec![
-                    command(
-                        ["disk-nix", "inspect", device],
-                        false,
+                    luks_backing_inspect_command(
+                        device,
                         "inspect target before creating a LUKS container",
                     ),
-                    command(
-                        ["cryptsetup", "luksFormat", device],
-                        true,
-                        "create a LUKS container on the target device",
-                    ),
-                    command_vec(
-                        vec!["cryptsetup", "open", device, mapper],
-                        true,
+                    luks_format_command(device),
+                    luks_open_command(
+                        device,
+                        mapper,
                         "open the newly created LUKS container with the desired mapper name",
                     ),
                 ],
@@ -2883,22 +2877,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Create if collection == Some("luks.devices") => {
             let mapper = target.unwrap_or("<mapper>");
-            let device = action.context.device.as_deref().unwrap_or("<device>");
+            let device = action.context.device.as_deref();
             (
                 vec![
-                    command(
-                        ["disk-nix", "inspect", device],
-                        false,
+                    luks_backing_inspect_command(
+                        device,
                         "inspect existing LUKS container before opening",
                     ),
-                    command(
-                        ["cryptsetup", "isLuks", device],
-                        false,
-                        "verify the backing device has a LUKS header",
-                    ),
-                    command_vec(
-                        vec!["cryptsetup", "open", device, mapper],
-                        true,
+                    luks_is_luks_command(device),
+                    luks_open_command(
+                        device,
+                        mapper,
                         "open the existing LUKS container with the desired mapper name",
                     ),
                 ],
@@ -4860,6 +4849,66 @@ fn swap_resize_command(target: &str, desired_size: Option<&str>) -> ExecutionCom
     }
 }
 
+fn luks_backing_inspect_command(device: Option<&str>, note: &str) -> ExecutionCommand {
+    match device {
+        Some(device) => command(["disk-nix", "inspect", device], false, note),
+        None => command_with_readiness(
+            ["disk-nix", "inspect", "<device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["LUKS backing device"],
+            note,
+        ),
+    }
+}
+
+fn luks_is_luks_command(device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["cryptsetup", "isLuks", device],
+            false,
+            "verify the backing device has a LUKS header",
+        ),
+        None => command_with_readiness(
+            ["cryptsetup", "isLuks", "<device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["LUKS backing device"],
+            "verify the backing device has a LUKS header after selecting it",
+        ),
+    }
+}
+
+fn luks_format_command(device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["cryptsetup", "luksFormat", device],
+            true,
+            "create a LUKS container on the target device",
+        ),
+        None => command_with_readiness(
+            ["cryptsetup", "luksFormat", "<device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["LUKS backing device"],
+            "create a LUKS container after selecting the backing device",
+        ),
+    }
+}
+
+fn luks_open_command(device: Option<&str>, mapper: &str, note: &str) -> ExecutionCommand {
+    match device {
+        Some(device) => command_vec(vec!["cryptsetup", "open", device, mapper], true, note),
+        None => command_vec_with_readiness(
+            vec!["cryptsetup", "open", "<device>", mapper],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["LUKS backing device"],
+            note,
+        ),
+    }
+}
+
 fn vdo_grow_logical_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
     match desired_size {
         Some(size) => command_vec(
@@ -6345,6 +6394,10 @@ mod tests {
                       "device": "/dev/disk/by-id/data-luks",
                       "operation": "create"
                     },
+                    "cryptmissing": {
+                      "name": "cryptmissing",
+                      "operation": "create"
+                    },
                     "cryptold": {
                       "name": "cryptold",
                       "device": "/dev/disk/by-id/old-luks",
@@ -6366,7 +6419,7 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_plan.len(), 5);
+        assert_eq!(report.command_plan.len(), 6);
         assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
@@ -6395,6 +6448,21 @@ mod tests {
                         ]
                         && command.mutates
                         && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptmissing:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "isLuks", "<device>"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["LUKS backing device"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "open", "<device>", "cryptmissing"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["LUKS backing device"]
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
