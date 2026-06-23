@@ -361,10 +361,31 @@ let
           example = "4";
         };
 
+        nsid = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Short alias accepted by disk-nix for NVMe namespace id.";
+          example = "4";
+        };
+
         controllers = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
           description = "Comma-separated NVMe controller id list used by namespace attach and detach operations.";
+          example = "0x1";
+        };
+
+        controllerId = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias accepted by disk-nix for NVMe controller id lists.";
+          example = "0x1";
+        };
+
+        controller = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Short alias accepted by disk-nix for NVMe controller id lists.";
           example = "0x1";
         };
 
@@ -375,10 +396,38 @@ let
           example = "1";
         };
 
+        "key-slot" = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Hyphenated alias accepted by disk-nix for LUKS keyslot number.";
+          example = "1";
+        };
+
+        slot = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Short alias accepted by disk-nix for LUKS keyslot number.";
+          example = "1";
+        };
+
         keyFile = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
           description = "Existing LUKS key file used when changing key material.";
+          example = "/run/keys/root-old";
+        };
+
+        "key-file" = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Hyphenated alias accepted by disk-nix for the existing LUKS key file.";
+          example = "/run/keys/root-old";
+        };
+
+        currentKeyFile = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias accepted by disk-nix for the existing LUKS key file.";
           example = "/run/keys/root-old";
         };
 
@@ -389,6 +438,13 @@ let
           example = "/run/keys/root-new";
         };
 
+        "new-key-file" = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Hyphenated alias accepted by disk-nix for the replacement or newly enrolled LUKS key file.";
+          example = "/run/keys/root-new";
+        };
+
         tokenId = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -396,10 +452,31 @@ let
           example = "0";
         };
 
+        "token-id" = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Hyphenated alias accepted by disk-nix for LUKS token id.";
+          example = "0";
+        };
+
+        token = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Short alias accepted by disk-nix for LUKS token id.";
+          example = "0";
+        };
+
         tokenFile = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
           description = "JSON token file imported by LUKS token lifecycle declarations.";
+          example = "/run/keys/root-token.json";
+        };
+
+        "token-file" = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Hyphenated alias accepted by disk-nix for the imported LUKS token JSON file.";
           example = "/run/keys/root-token.json";
         };
 
@@ -630,14 +707,25 @@ let
         raidLevel
         portal
         namespaceId
+        nsid
         controllers
+        controllerId
+        controller
         keySlot
+        slot
         keyFile
+        currentKeyFile
         newKeyFile
         tokenId
+        token
         tokenFile
         jsonFile
         ;
+      "key-slot" = object."key-slot";
+      "key-file" = object."key-file";
+      "new-key-file" = object."new-key-file";
+      "token-id" = object."token-id";
+      "token-file" = object."token-file";
     }
   );
   normalizeSnapshotSpec = lib.mapAttrs (

@@ -323,7 +323,24 @@ Each lifecycle declaration includes:
 - `raidLevel`
 - `portal`
 - `namespaceId`
+- `nsid`
 - `controllers`
+- `controllerId`
+- `controller`
+- `keySlot`
+- `key-slot`
+- `slot`
+- `keyFile`
+- `key-file`
+- `currentKeyFile`
+- `newKeyFile`
+- `new-key-file`
+- `tokenId`
+- `token-id`
+- `token`
+- `tokenFile`
+- `token-file`
+- `jsonFile`
 - `metadata`
 
 Typed snapshot declarations include:

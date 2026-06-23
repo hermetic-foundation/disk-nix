@@ -1,4 +1,4 @@
-#![recursion_limit = "256"]
+#![recursion_limit = "512"]
 
 use std::{
     collections::BTreeSet,
@@ -821,10 +821,18 @@ fn spec_schema() -> serde_json::Value {
                     "controllerId": { "type": ["string", "number"] },
                     "controller": { "type": ["string", "number"] },
                     "keySlot": { "type": ["string", "number"] },
+                    "key-slot": { "type": ["string", "number"] },
+                    "slot": { "type": ["string", "number"] },
                     "keyFile": { "type": "string" },
+                    "key-file": { "type": "string" },
+                    "currentKeyFile": { "type": "string" },
                     "newKeyFile": { "type": "string" },
+                    "new-key-file": { "type": "string" },
                     "tokenId": { "type": ["string", "number"] },
+                    "token-id": { "type": ["string", "number"] },
+                    "token": { "type": ["string", "number"] },
                     "tokenFile": { "type": "string" },
+                    "token-file": { "type": "string" },
                     "jsonFile": { "type": "string" },
                     "options": { "type": "string" },
                     "priority": { "type": "integer" },

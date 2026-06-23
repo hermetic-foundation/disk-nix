@@ -414,6 +414,17 @@
                 device = "/dev/disk/by-id/root-luks";
                 keySlot = "2";
               };
+              luksKeyslots."cryptroot:3" = {
+                operation = "add-key";
+                device = "/dev/disk/by-id/root-luks";
+                "key-slot" = "3";
+                "new-key-file" = "/run/keys/root-new-alias";
+              };
+              luksKeyslots."cryptroot:4" = {
+                operation = "remove-key";
+                device = "/dev/disk/by-id/root-luks";
+                slot = "4";
+              };
               luksTokens."cryptroot:0" = {
                 operation = "import-token";
                 device = "/dev/disk/by-id/root-luks";
@@ -424,6 +435,17 @@
                 operation = "remove-token";
                 device = "/dev/disk/by-id/root-luks";
                 tokenId = "1";
+              };
+              luksTokens."cryptroot:2" = {
+                operation = "import-token";
+                device = "/dev/disk/by-id/root-luks";
+                token = "2";
+                "token-file" = "/run/keys/root-token-alias.json";
+              };
+              luksTokens."cryptroot:3" = {
+                operation = "remove-token";
+                device = "/dev/disk/by-id/root-luks";
+                "token-id" = "3";
               };
               btrfsSubvolumes."/mnt/persist/@home" = {
                 operation = "create";
@@ -578,6 +600,16 @@
                 controllers = "0x1";
               };
               nvmeNamespaces."/dev/nvme1".operation = "rescan";
+              nvmeNamespaces."/dev/nvme2" = {
+                operation = "attach";
+                nsid = "7";
+                controllerId = "0x2";
+              };
+              nvmeNamespaces."/dev/nvme3" = {
+                operation = "detach";
+                namespaceId = "8";
+                controller = "0x3";
+              };
               exports."/srv/share" = {
                 operation = "export";
                 client = "192.0.2.0/24";
@@ -868,12 +900,23 @@
               and ."$defs".lifecycleObject.properties.client.type == "string"
               and ."$defs".lifecycleObject.properties.portal.type == "string"
               and (."$defs".lifecycleObject.properties.namespaceId.type | index("string") != null)
+              and (."$defs".lifecycleObject.properties.nsid.type | index("string") != null)
               and ."$defs".lifecycleObject.properties.controllers.type == "string"
+              and (."$defs".lifecycleObject.properties.controllerId.type | index("string") != null)
+              and (."$defs".lifecycleObject.properties.controller.type | index("string") != null)
               and (."$defs".lifecycleObject.properties.keySlot.type | index("string") != null)
+              and (."$defs".lifecycleObject.properties."key-slot".type | index("string") != null)
+              and (."$defs".lifecycleObject.properties.slot.type | index("string") != null)
               and ."$defs".lifecycleObject.properties.keyFile.type == "string"
+              and ."$defs".lifecycleObject.properties."key-file".type == "string"
+              and ."$defs".lifecycleObject.properties.currentKeyFile.type == "string"
               and ."$defs".lifecycleObject.properties.newKeyFile.type == "string"
+              and ."$defs".lifecycleObject.properties."new-key-file".type == "string"
               and (."$defs".lifecycleObject.properties.tokenId.type | index("string") != null)
+              and (."$defs".lifecycleObject.properties."token-id".type | index("string") != null)
+              and (."$defs".lifecycleObject.properties.token.type | index("string") != null)
               and ."$defs".lifecycleObject.properties.tokenFile.type == "string"
+              and ."$defs".lifecycleObject.properties."token-file".type == "string"
               and ."$defs".lifecycleObject.properties.jsonFile.type == "string"
               and ."$defs".lifecycleObject.properties.options.type == "string"
               and ."$defs".applyPolicy.properties.failOnBlocked.default == true
@@ -1192,6 +1235,10 @@
                     and .spec.nvmeNamespaces."/dev/nvme0".namespaceId == "4"
                     and .spec.nvmeNamespaces."/dev/nvme0".controllers == "0x1"
                     and .spec.nvmeNamespaces."/dev/nvme1".operation == "rescan"
+                    and .spec.nvmeNamespaces."/dev/nvme2".nsid == "7"
+                    and .spec.nvmeNamespaces."/dev/nvme2".controllerId == "0x2"
+                    and .spec.nvmeNamespaces."/dev/nvme3".namespaceId == "8"
+                    and .spec.nvmeNamespaces."/dev/nvme3".controller == "0x3"
                     and .spec.exports."/srv/share".operation == "export"
                     and .spec.exports."/srv/share".client == "192.0.2.0/24"
                     and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
@@ -1235,6 +1282,9 @@
                     and .spec.luksKeyslots."cryptroot:2".operation == "remove-key"
                     and .spec.luksKeyslots."cryptroot:2".device == "/dev/disk/by-id/root-luks"
                     and .spec.luksKeyslots."cryptroot:2".keySlot == "2"
+                    and .spec.luksKeyslots."cryptroot:3"."key-slot" == "3"
+                    and .spec.luksKeyslots."cryptroot:3"."new-key-file" == "/run/keys/root-new-alias"
+                    and .spec.luksKeyslots."cryptroot:4".slot == "4"
                     and .spec.luksTokens."cryptroot:0".operation == "import-token"
                     and .spec.luksTokens."cryptroot:0".device == "/dev/disk/by-id/root-luks"
                     and .spec.luksTokens."cryptroot:0".tokenId == "0"
@@ -1242,6 +1292,9 @@
                     and .spec.luksTokens."cryptroot:1".operation == "remove-token"
                     and .spec.luksTokens."cryptroot:1".device == "/dev/disk/by-id/root-luks"
                     and .spec.luksTokens."cryptroot:1".tokenId == "1"
+                    and .spec.luksTokens."cryptroot:2".token == "2"
+                    and .spec.luksTokens."cryptroot:2"."token-file" == "/run/keys/root-token-alias.json"
+                    and .spec.luksTokens."cryptroot:3"."token-id" == "3"
                     and .spec.zvols."tank/vm/root".operation == "grow"
                     and .spec.zvols."tank/vm/root".desiredSize == "80GiB"
                     and .spec.zvols."tank/vm/inventory".operation == "rescan"
