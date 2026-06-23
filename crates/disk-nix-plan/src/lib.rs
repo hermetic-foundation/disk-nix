@@ -780,12 +780,14 @@ fn filesystem_context(
     name: &str,
     mountpoint: &str,
     fs_type: &str,
+    device: Option<String>,
     desired_size: Option<String>,
 ) -> ActionContext {
     ActionContext {
         collection: Some("filesystems".to_string()),
         name: Some(name.to_string()),
         target: Some(mountpoint.to_string()),
+        device,
         fs_type: Some(fs_type.to_string()),
         mountpoint: Some(mountpoint.to_string()),
         desired_size,
@@ -899,6 +901,7 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
         .and_then(Value::as_bool)
         .unwrap_or(true);
     let desired_size = desired_size(filesystem);
+    let device = string_field(filesystem, &["device", "disk"]);
 
     match resize_policy {
         "grow-only" => actions.push(PlannedAction {
@@ -909,13 +912,20 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             operation: Operation::Grow,
             risk: RiskClass::Online,
             destructive: false,
-            context: filesystem_context(name, mountpoint, fs_type, desired_size.clone()),
+            context: filesystem_context(
+                name,
+                mountpoint,
+                fs_type,
+                device.clone(),
+                desired_size.clone(),
+            ),
             advice: None,
         }),
         "shrink-allowed" => actions.push(filesystem_shrink_action(
             name,
             mountpoint,
             fs_type,
+            device.clone(),
             desired_size.clone(),
         )),
         _ => actions.push(PlannedAction {
@@ -924,7 +934,13 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             operation: Operation::SetProperty,
             risk: RiskClass::Safe,
             destructive: false,
-            context: filesystem_context(name, mountpoint, fs_type, desired_size.clone()),
+            context: filesystem_context(
+                name,
+                mountpoint,
+                fs_type,
+                device.clone(),
+                desired_size.clone(),
+            ),
             advice: None,
         }),
     }
@@ -938,7 +954,13 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             operation: Operation::Format,
             risk: RiskClass::Destructive,
             destructive: true,
-            context: filesystem_context(name, mountpoint, fs_type, desired_size.clone()),
+            context: filesystem_context(
+                name,
+                mountpoint,
+                fs_type,
+                device.clone(),
+                desired_size.clone(),
+            ),
             advice: Some(Advice {
                 summary: "formatting or replacing a filesystem destroys existing data".to_string(),
                 alternatives: vec![
@@ -969,7 +991,13 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             context: ActionContext {
                 collection: Some("filesystems".to_string()),
                 property_assignments: property_assignments(filesystem),
-                ..filesystem_context(name, mountpoint, fs_type, desired_size.clone())
+                ..filesystem_context(
+                    name,
+                    mountpoint,
+                    fs_type,
+                    device.clone(),
+                    desired_size.clone(),
+                )
             },
             advice,
         });
@@ -1002,8 +1030,13 @@ fn add_filesystem_property_actions(
                 property: Some(property.to_string()),
                 property_value: Some(property_value(value)),
                 property_assignments: property_assignments(filesystem),
-                device: string_field(filesystem, &["device", "disk"]),
-                ..filesystem_context(name, mountpoint, fs_type, desired_size.clone())
+                ..filesystem_context(
+                    name,
+                    mountpoint,
+                    fs_type,
+                    string_field(filesystem, &["device", "disk"]),
+                    desired_size.clone(),
+                )
             },
             advice: None,
         });
@@ -1251,6 +1284,7 @@ fn filesystem_shrink_action(
     name: &str,
     mountpoint: &str,
     fs_type: &str,
+    device: Option<String>,
     desired_size: Option<String>,
 ) -> PlannedAction {
     let (risk, advice) = match fs_type {
@@ -1312,7 +1346,7 @@ fn filesystem_shrink_action(
         operation: Operation::Shrink,
         risk,
         destructive: false,
-        context: filesystem_context(name, mountpoint, fs_type, desired_size),
+        context: filesystem_context(name, mountpoint, fs_type, device, desired_size),
         advice: Some(advice),
     }
 }
@@ -3022,6 +3056,36 @@ mod tests {
         assert_eq!(plan.actions[0].risk, RiskClass::PotentialDataLoss);
         assert_eq!(plan.actions[0].context.fs_type.as_deref(), Some("ext4"));
         assert_eq!(plan.actions[0].context.mountpoint.as_deref(), Some("/home"));
+    }
+
+    #[test]
+    fn plan_carries_filesystem_device_for_lifecycle_actions() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "home": {
+                  "mountpoint": "/home",
+                  "device": "/dev/disk/by-label/home",
+                  "fsType": "ext4",
+                  "resizePolicy": "shrink-allowed",
+                  "desiredSize": "100G"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.actions[0].operation, Operation::Shrink);
+        assert_eq!(
+            plan.actions[0].context.device.as_deref(),
+            Some("/dev/disk/by-label/home")
+        );
+        assert_eq!(plan.actions[0].context.target.as_deref(), Some("/home"));
+        assert_eq!(
+            plan.actions[0].context.desired_size.as_deref(),
+            Some("100G")
+        );
     }
 
     #[test]

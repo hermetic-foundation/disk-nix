@@ -1730,8 +1730,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         Operation::Grow if collection == Some("filesystems") || action.id.starts_with("filesystem:") => {
             let target = target.unwrap_or("<filesystem>");
             let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
+            let device = action.context.device.as_deref();
             let desired_size = action.context.desired_size.as_deref();
-            let grow_command = filesystem_grow_command(fs_type, target, desired_size);
+            let grow_command = filesystem_grow_command(fs_type, target, device, desired_size);
             (
                 vec![
                     command(
@@ -1755,9 +1756,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         {
             let target = target.unwrap_or("<filesystem>");
             let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
+            let device = action.context.device.as_deref();
             let desired_size = action.context.desired_size.as_deref();
             (
-                filesystem_shrink_commands(fs_type, target, desired_size),
+                filesystem_shrink_commands(fs_type, target, device, desired_size),
                 vec![
                     "shrink only after backups or snapshots are verified".to_string(),
                     "prefer migrate-to-smaller-filesystem workflows when online shrink support is absent"
@@ -3664,6 +3666,7 @@ where
 fn filesystem_grow_command(
     fs_type: &str,
     target: &str,
+    device: Option<&str>,
     desired_size: Option<&str>,
 ) -> ExecutionCommand {
     match fs_type {
@@ -3672,18 +3675,7 @@ fn filesystem_grow_command(
             true,
             "grow an already-mounted XFS filesystem",
         ),
-        "ext2" | "ext3" | "ext4" => match desired_size {
-            Some(size) => command_vec(
-                vec!["resize2fs", target, size],
-                true,
-                "grow an ext filesystem to the desired size after the backing block device has grown",
-            ),
-            None => command(
-                ["resize2fs", target],
-                true,
-                "grow an ext filesystem after the backing block device has grown",
-            ),
-        },
+        "ext2" | "ext3" | "ext4" => ext_filesystem_grow_command(target, device, desired_size),
         "btrfs" => command_vec(
             vec![
                 "btrfs",
@@ -3727,6 +3719,7 @@ fn filesystem_grow_command(
 fn filesystem_shrink_commands(
     fs_type: &str,
     target: &str,
+    device: Option<&str>,
     desired_size: Option<&str>,
 ) -> Vec<ExecutionCommand> {
     let mut commands = vec![command(
@@ -3761,8 +3754,8 @@ fn filesystem_shrink_commands(
                 true,
                 "unmount the ext filesystem before fsck and shrink",
             ));
-            commands.push(ext_filesystem_check_command(target));
-            commands.push(ext_filesystem_shrink_command(target, desired_size));
+            commands.push(ext_filesystem_check_command(target, device));
+            commands.push(ext_filesystem_shrink_command(target, device, desired_size));
         }
         "xfs" => {
             commands.push(command_with_readiness(
@@ -3801,10 +3794,47 @@ fn btrfs_filesystem_shrink_command(target: &str, desired_size: Option<&str>) -> 
     }
 }
 
-fn ext_filesystem_check_command(target: &str) -> ExecutionCommand {
-    if target.starts_with("/dev/") {
+fn ext_filesystem_device<'a>(target: &'a str, device: Option<&'a str>) -> Option<&'a str> {
+    device.or_else(|| target.starts_with("/dev/").then_some(target))
+}
+
+fn ext_filesystem_grow_command(
+    target: &str,
+    device: Option<&str>,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
+    match (ext_filesystem_device(target, device), desired_size) {
+        (Some(device), Some(size)) => command_vec(
+            vec!["resize2fs", device, size],
+            true,
+            "grow an ext filesystem to the desired size after the backing block device has grown",
+        ),
+        (Some(device), None) => command(
+            ["resize2fs", device],
+            true,
+            "grow an ext filesystem after the backing block device has grown",
+        ),
+        (None, Some(size)) => command_vec_with_readiness(
+            vec!["resize2fs", "<filesystem-device>", size],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "grow the ext filesystem after resolving the source block device",
+        ),
+        (None, None) => command_with_readiness(
+            ["resize2fs", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "grow the ext filesystem after resolving the source block device",
+        ),
+    }
+}
+
+fn ext_filesystem_check_command(target: &str, device: Option<&str>) -> ExecutionCommand {
+    if let Some(device) = ext_filesystem_device(target, device) {
         command(
-            ["e2fsck", "-f", target],
+            ["e2fsck", "-f", device],
             true,
             "run a forced ext filesystem check before shrinking",
         )
@@ -3819,28 +3849,32 @@ fn ext_filesystem_check_command(target: &str) -> ExecutionCommand {
     }
 }
 
-fn ext_filesystem_shrink_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
-    match (target.starts_with("/dev/"), desired_size) {
-        (true, Some(size)) => command(
-            ["resize2fs", target, size],
+fn ext_filesystem_shrink_command(
+    target: &str,
+    device: Option<&str>,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
+    match (ext_filesystem_device(target, device), desired_size) {
+        (Some(device), Some(size)) => command(
+            ["resize2fs", device, size],
             true,
             "shrink the ext filesystem to the reviewed size",
         ),
-        (true, None) => command_with_readiness(
-            ["resize2fs", target, "<size>"],
+        (Some(device), None) => command_with_readiness(
+            ["resize2fs", device, "<size>"],
             true,
             CommandReadiness::NeedsDesiredSize,
             ["desired filesystem size"],
             "shrink the ext filesystem after selecting the target size",
         ),
-        (false, Some(size)) => command_vec_with_readiness(
+        (None, Some(size)) => command_vec_with_readiness(
             vec!["resize2fs", "<filesystem-device>", size],
             true,
             CommandReadiness::NeedsDomainImplementation,
             ["filesystem source device"],
             "shrink the ext filesystem after resolving the source device",
         ),
-        (false, None) => command_with_readiness(
+        (None, None) => command_with_readiness(
             ["resize2fs", "<filesystem-device>", "<size>"],
             true,
             CommandReadiness::NeedsDomainImplementation,
@@ -5374,7 +5408,7 @@ mod tests {
     }
 
     #[test]
-    fn desired_sizes_make_resize_commands_concrete() {
+    fn desired_sizes_and_devices_drive_resize_commands() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
               "spec": {
@@ -5384,6 +5418,19 @@ mod tests {
                     "fsType": "btrfs",
                     "resizePolicy": "grow-only",
                     "desiredSize": "750GiB"
+                  },
+                  "srv": {
+                    "mountpoint": "/srv",
+                    "device": "/dev/disk/by-label/srv",
+                    "fsType": "ext4",
+                    "resizePolicy": "grow-only",
+                    "desiredSize": "100G"
+                  },
+                  "var": {
+                    "mountpoint": "/var",
+                    "fsType": "ext4",
+                    "resizePolicy": "grow-only",
+                    "desiredSize": "50G"
                   }
                 },
                 "volumes": {
@@ -5404,11 +5451,27 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert_eq!(report.command_summary.needs_desired_size_count, 0);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
                 command.argv == ["btrfs", "filesystem", "resize", "750GiB", "/home"]
                     && command.readiness == CommandReadiness::Ready
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystem:srv:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["resize2fs", "/dev/disk/by-label/srv", "100G"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystem:var:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["resize2fs", "<filesystem-device>", "50G"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
@@ -5452,8 +5515,25 @@ mod tests {
                 collection: Some("filesystems".to_string()),
                 name: Some("home".to_string()),
                 target: Some("/home".to_string()),
+                device: Some("/dev/disk/by-label/home".to_string()),
                 fs_type: Some("ext4".to_string()),
                 desired_size: Some("100G".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let ext_mountpoint_action = PlannedAction {
+            id: "filesystem:srv:shrink".to_string(),
+            description: "shrink ext srv".to_string(),
+            operation: Operation::Shrink,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("filesystems".to_string()),
+                name: Some("srv".to_string()),
+                target: Some("/srv".to_string()),
+                fs_type: Some("ext4".to_string()),
+                desired_size: Some("50G".to_string()),
                 ..ActionContext::default()
             },
             advice: None,
@@ -5477,6 +5557,7 @@ mod tests {
 
         let (btrfs_commands, btrfs_notes, btrfs_manual_review) = commands_for_action(&btrfs_action);
         let (ext_commands, ext_notes, ext_manual_review) = commands_for_action(&ext_action);
+        let (ext_mountpoint_commands, _, _) = commands_for_action(&ext_mountpoint_action);
         let (xfs_commands, _, xfs_manual_review) = commands_for_action(&xfs_action);
 
         assert!(btrfs_manual_review);
@@ -5513,7 +5594,17 @@ mod tests {
                 && command.readiness == CommandReadiness::Ready
         }));
         assert!(ext_commands.iter().any(|command| {
-            command.argv == ["resize2fs", "<filesystem-device>", "100G"]
+            command.argv == ["e2fsck", "-f", "/dev/disk/by-label/home"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(ext_commands.iter().any(|command| {
+            command.argv == ["resize2fs", "/dev/disk/by-label/home", "100G"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(ext_mountpoint_commands.iter().any(|command| {
+            command.argv == ["resize2fs", "<filesystem-device>", "50G"]
                 && command.mutates
                 && command.readiness == CommandReadiness::NeedsDomainImplementation
                 && command.unresolved_inputs == ["filesystem source device"]
