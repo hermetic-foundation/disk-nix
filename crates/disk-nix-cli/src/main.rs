@@ -904,6 +904,8 @@ fn spec_schema() -> serde_json::Value {
                     "assemble",
                     "start",
                     "stop",
+                    "login",
+                    "logout",
                     "open",
                     "close",
                     "remount",

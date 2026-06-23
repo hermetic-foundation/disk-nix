@@ -243,6 +243,16 @@
       ]
     }
   },
+  "iscsiSessions": {
+    "iqn.2026-06.example:storage.login": {
+      "operation": "login",
+      "portal": "192.0.2.10:3260"
+    },
+    "iqn.2026-06.example:storage.logout": {
+      "operation": "logout",
+      "portal": "192.0.2.11:3260"
+    }
+  },
   "nvmeNamespaces": {
     "/dev/nvme0": {
       "operation": "create",

@@ -56,6 +56,8 @@ pub enum Operation {
     Assemble,
     Start,
     Stop,
+    Login,
+    Logout,
     Open,
     Close,
     Remount,
@@ -2784,6 +2786,8 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "assemble" => Some(Operation::Assemble),
         "start" => Some(Operation::Start),
         "stop" => Some(Operation::Stop),
+        "login" | "log-in" | "logIn" => Some(Operation::Login),
+        "logout" | "log-out" | "logOut" => Some(Operation::Logout),
         "open" => Some(Operation::Open),
         "close" => Some(Operation::Close),
         "remount" => Some(Operation::Remount),
@@ -2819,6 +2823,8 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Assemble => "assemble",
         Operation::Start => "start",
         Operation::Stop => "stop",
+        Operation::Login => "login",
+        Operation::Logout => "logout",
         Operation::Open => "open",
         Operation::Close => "close",
         Operation::Remount => "remount",
@@ -3227,7 +3233,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Create if collection == "iscsiSessions" => (
+        Operation::Create | Operation::Login if collection == "iscsiSessions" => (
             RiskClass::Online,
             false,
             Some(Advice {
@@ -3639,7 +3645,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Destroy if collection == "iscsiSessions" => (
+        Operation::Destroy | Operation::Logout if collection == "iscsiSessions" => (
             RiskClass::OfflineRequired,
             false,
             Some(Advice {
@@ -3794,6 +3800,22 @@ fn classify_operation(
                     "use operation = \"start\" or \"stop\" on vdoVolumes declarations for VDO activation lifecycle"
                         .to_string(),
                     "use subsystem-specific import, export, activate, or deactivate operations where supported"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Login | Operation::Logout => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} operations are currently only supported for iscsiSessions",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "use operation = \"login\" or \"logout\" on iscsiSessions declarations for iSCSI session lifecycle"
+                        .to_string(),
+                    "use create/destroy only where a storage domain has not yet gained explicit lifecycle verbs"
                         .to_string(),
                 ],
             }),
@@ -4078,6 +4100,8 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Assemble => "assemble",
         Operation::Start => "start",
         Operation::Stop => "stop",
+        Operation::Login => "login",
+        Operation::Logout => "logout",
         Operation::Open => "open",
         Operation::Close => "close",
         Operation::Remount => "remount",
@@ -5614,6 +5638,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::IscsiSession,
+            operation: Operation::Login,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "iSCSI login attaches remote targets and may expose new LUN paths"
+                    .to_string(),
+                alternatives: vec![
+                    "verify portal and target IQN before login".to_string(),
+                    "prefer stable by-path devices before layering filesystems or mappings"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::IscsiSession,
             operation: Operation::Grow,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
@@ -5629,6 +5667,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         Capability {
             node_kind: NodeKind::IscsiSession,
             operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "iSCSI logout detaches remote LUN paths from this host".to_string(),
+                alternatives: vec![
+                    "drain filesystems, multipath maps, and LVM consumers before logout"
+                        .to_string(),
+                    "disable automatic login only after dependent services are migrated"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::IscsiSession,
+            operation: Operation::Logout,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
                 summary: "iSCSI logout detaches remote LUN paths from this host".to_string(),
@@ -6004,6 +6056,13 @@ mod tests {
                     && capability.operation == Operation::Create
             })
             .expect("iSCSI session create capability should exist");
+        let session_login = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::IscsiSession
+                    && capability.operation == Operation::Login
+            })
+            .expect("iSCSI session login capability should exist");
         let session_destroy = capabilities
             .iter()
             .find(|capability| {
@@ -6011,11 +6070,20 @@ mod tests {
                     && capability.operation == Operation::Destroy
             })
             .expect("iSCSI session destroy capability should exist");
+        let session_logout = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::IscsiSession
+                    && capability.operation == Operation::Logout
+            })
+            .expect("iSCSI session logout capability should exist");
 
         assert_eq!(lun_create.risk, RiskClass::Online);
         assert_eq!(lun_destroy.risk, RiskClass::OfflineRequired);
         assert_eq!(session_create.risk, RiskClass::Online);
+        assert_eq!(session_login.risk, RiskClass::Online);
         assert_eq!(session_destroy.risk, RiskClass::OfflineRequired);
+        assert_eq!(session_logout.risk, RiskClass::OfflineRequired);
         assert!(lun_destroy.advice.as_ref().is_some_and(|advice| {
             advice.summary.contains("without deleting target-side data")
         }));
@@ -8910,13 +8978,13 @@ mod tests {
             br#"{
               "iscsiSessions": {
                 "iqn.2026-06.example:storage.root": {
-                  "operation": "create",
+                  "operation": "login",
                   "metadata": {
                     "portal": "192.0.2.10:3260"
                   }
                 },
                 "iqn.2026-06.example:storage.old": {
-                  "destroy": true,
+                  "operation": "logout",
                   "portal": "192.0.2.11:3260"
                 }
               }
@@ -8930,18 +8998,18 @@ mod tests {
         let create = plan
             .actions
             .iter()
-            .find(|action| action.id == "iscsisessions:iqn.2026-06.example:storage.root:create")
-            .expect("iSCSI create action exists");
-        assert_eq!(create.operation, Operation::Create);
+            .find(|action| action.id == "iscsisessions:iqn.2026-06.example:storage.root:login")
+            .expect("iSCSI login action exists");
+        assert_eq!(create.operation, Operation::Login);
         assert_eq!(create.risk, RiskClass::Online);
         assert_eq!(create.context.portal.as_deref(), Some("192.0.2.10:3260"));
 
         let destroy = plan
             .actions
             .iter()
-            .find(|action| action.id == "iscsisessions:iqn.2026-06.example:storage.old:destroy")
-            .expect("iSCSI destroy action exists");
-        assert_eq!(destroy.operation, Operation::Destroy);
+            .find(|action| action.id == "iscsisessions:iqn.2026-06.example:storage.old:logout")
+            .expect("iSCSI logout action exists");
+        assert_eq!(destroy.operation, Operation::Logout);
         assert_eq!(destroy.risk, RiskClass::OfflineRequired);
         assert_eq!(destroy.context.portal.as_deref(), Some("192.0.2.11:3260"));
     }

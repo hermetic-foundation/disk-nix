@@ -105,7 +105,9 @@ regular `services.openiscsi.discoverPortal` and
 `boot.iscsi-initiator.discoverPortal` when the corresponding global or boot
 portal option is not set. A regular initiator still requires
 `iscsi.initiatorName`, because the upstream NixOS `services.openiscsi.name`
-option has no implicit safe default.
+option has no implicit safe default. Session `login` and `logout` declarations
+remain in the generated planner spec as imperative lifecycle actions; `logout`
+is excluded from active NixOS auto-login derivation.
 
 Lifecycle declaration attribute names are usable object names only for domains
 whose native tools address objects by name, such as ZFS datasets, ZFS pools,
@@ -479,6 +481,14 @@ Example lifecycle planning through NixOS options:
         operation = "grow";
         desiredSize = "2TiB";
         metadata.portal = "192.0.2.10:3260";
+      };
+      sessions."iqn.2026-06.example:storage.login" = {
+        operation = "login";
+        metadata.portal = "192.0.2.10:3260";
+      };
+      sessions."iqn.2026-06.example:storage.logout" = {
+        operation = "logout";
+        metadata.portal = "192.0.2.11:3260";
       };
     };
     snapshots."tank/home@before-upgrade" = {

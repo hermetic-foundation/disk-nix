@@ -224,6 +224,14 @@
                   desiredSize = "2TiB";
                   portal = "192.0.2.10:3260";
                 };
+                sessions."iqn.2026-06.example:storage.login" = {
+                  operation = "login";
+                  portal = "192.0.2.10:3260";
+                };
+                sessions."iqn.2026-06.example:storage.logout" = {
+                  operation = "logout";
+                  portal = "192.0.2.11:3260";
+                };
               };
               pools.tank = {
                 operation = "rebalance";
@@ -561,6 +569,8 @@
               and (."$defs".operation.enum | index("assemble") != null)
               and (."$defs".operation.enum | index("start") != null)
               and (."$defs".operation.enum | index("stop") != null)
+              and (."$defs".operation.enum | index("login") != null)
+              and (."$defs".operation.enum | index("logout") != null)
               and (."$defs".operation.enum | index("open") != null)
               and (."$defs".operation.enum | index("close") != null)
               and (."$defs".operation.enum | index("remount") != null)
@@ -621,8 +631,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 61
-              and .summary.offlineRequiredCount == 24
+              .summary.actionCount == 63
+              and .summary.offlineRequiredCount == 25
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -643,6 +653,8 @@
               and (.actions | any(.id == "physicalvolumes:/dev/disk/by-id/nvme-pv-grow:grow" and .risk == "online"))
               and (.actions | any(.id == "lukskeyslots:cryptroot:1:create" and .risk == "offline-required"))
               and (.actions | any(.id == "lukstokens:cryptroot:0:create" and .risk == "offline-required"))
+              and (.actions | any(.id == "iscsisessions:iqn.2026-06.example:storage.login:login" and .risk == "online"))
+              and (.actions | any(.id == "iscsisessions:iqn.2026-06.example:storage.logout:logout" and .risk == "offline-required"))
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/newthin:create" and .risk == "online"))
@@ -706,8 +718,8 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 29
-              and .apply.blockedSummary.offlineRequiredCount == 24
+              and .apply.blockedCount == 30
+              and .apply.blockedSummary.offlineRequiredCount == 25
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
@@ -718,6 +730,7 @@
               and (.apply.blocked | any(.id == "volumegroups:importvg:import"))
               and (.apply.blocked | any(.id == "volumegroups:exportvg:export"))
               and (.apply.blocked | any(.id == "volumegroups:activevg:activate"))
+              and (.apply.blocked | any(.id == "iscsisessions:iqn.2026-06.example:storage.logout:logout"))
               and (.apply.blocked | any(.id == "volumes:vg0/archive:deactivate"))
               and (.apply.blocked | any(.id == "vdovolumes:warmarchive:start"))
               and (.apply.blocked | any(.id == "vdovolumes:coldarchive:stop"))
@@ -729,14 +742,14 @@
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 29
+              and .apply.blockedCount == 30
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 29
-              and .messages[0] == "apply policy blocked 29 action(s)"
+              and .apply.blockedCount == 30
+              and .messages[0] == "apply policy blocked 30 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -812,9 +825,15 @@
                   and .spec.iscsi.boot.target == "iqn.2026-06.example:storage.root"
                   and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".operation == "grow"
                   and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
+                  and .spec.iscsi.sessions."iqn.2026-06.example:storage.login".operation == "login"
+                  and .spec.iscsi.sessions."iqn.2026-06.example:storage.logout".operation == "logout"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".portal == "192.0.2.10:3260"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
+                  and .spec.iscsiSessions."iqn.2026-06.example:storage.login".operation == "login"
+                  and .spec.iscsiSessions."iqn.2026-06.example:storage.login".portal == "192.0.2.10:3260"
+                  and .spec.iscsiSessions."iqn.2026-06.example:storage.logout".operation == "logout"
+                  and .spec.iscsiSessions."iqn.2026-06.example:storage.logout".portal == "192.0.2.11:3260"
                   and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
                   and .spec.luns."iqn.2026-06.example:storage/root:0".device == "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
                   and (.spec.luns."iqn.2026-06.example:storage/root:0".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0") != null)

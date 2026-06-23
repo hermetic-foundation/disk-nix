@@ -1113,7 +1113,9 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
-        Operation::Create | Operation::Destroy if collection == Some("iscsiSessions") => (
+        Operation::Create | Operation::Destroy | Operation::Login | Operation::Logout
+            if collection == Some("iscsiSessions") =>
+        (
             vec![
                 command(
                     ["iscsiadm", "--mode", "session"],
@@ -2075,6 +2077,8 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Assemble
         | Operation::Start
         | Operation::Stop
+        | Operation::Login
+        | Operation::Logout
         | Operation::Open
         | Operation::Close
         | Operation::Remount
@@ -2512,7 +2516,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Create
+        Operation::Create | Operation::Login
             if collection == Some("iscsiSessions") || action.id.starts_with("iscsiSessions:") =>
         {
             let target = target.unwrap_or("<iscsi-target-iqn>");
@@ -2589,7 +2593,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Destroy
+        Operation::Destroy | Operation::Logout
             if collection == Some("iscsiSessions") || action.id.starts_with("iscsiSessions:") =>
         {
             let target = target.unwrap_or("<iscsi-target-iqn>");
@@ -4946,6 +4950,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Assemble
         | Operation::Start
         | Operation::Stop
+        | Operation::Login
+        | Operation::Logout
         | Operation::Open
         | Operation::Close
         | Operation::Remount
@@ -14783,11 +14789,11 @@ mod tests {
             br#"{
               "iscsiSessions": {
                 "iqn.2026-06.example:storage.root": {
-                  "operation": "create",
+                  "operation": "login",
                   "portal": "192.0.2.10:3260"
                 },
                 "iqn.2026-06.example:storage.old": {
-                  "destroy": true,
+                  "operation": "logout",
                   "metadata": {
                     "portal": "192.0.2.11:3260"
                   }
@@ -14852,7 +14858,7 @@ mod tests {
             })
         }));
         assert!(report.verification_plan.iter().any(|step| {
-            step.action_id == "iscsisessions:iqn.2026-06.example:storage.root:create"
+            step.action_id == "iscsisessions:iqn.2026-06.example:storage.root:login"
                 && step
                     .commands
                     .iter()

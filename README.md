@@ -138,8 +138,9 @@ swraid support, multipath support, and `boot.zfs.extraPools` for typed active
 ZFS declarations, and bcache boot/initrd support for typed active cache
 declarations, and VDO-capable LVM boot support for typed active VDO
 declarations. Typed active iSCSI session portals can derive the regular
-open-iscsi discovery portal. It keeps lifecycle domains available in the same
-planner spec.
+open-iscsi discovery portal, while logout lifecycle declarations stay in the
+planner spec without being treated as active auto-login targets. It keeps
+lifecycle domains available in the same planner spec.
 Override `toolPackages` to pin alternate tool builds or trim unused domains.
 Explicit non-destroy
 `exports` declarations with `client` and `options` also derive NixOS NFS server
@@ -291,11 +292,14 @@ NFS client mount apply plans render reviewed `mount` create commands and
 `umount` destroy commands from `nfs.mounts`; missing sources or concrete
 mountpoints remain non-ready.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
-and rescan commands from explicit target IQN and portal declarations. LUN apply
-plans model host-side attach, growth rescan, and detach: attach and grow rescan
-sessions, grow rescans declared SCSI paths, and detach deletes only declared
-stable path devices before refreshing multipath. Executable LUN attach, grow,
-and detach plans require declared stable `device` or `devices` paths.
+and rescan commands from explicit target IQN and portal declarations. Prefer
+`operation = "login"` and `operation = "logout"` for session lifecycle;
+legacy session `create` and `destroy` still map to the same command plans. LUN
+apply plans model host-side attach, growth rescan, and detach: attach and grow
+rescan sessions, grow rescans declared SCSI paths, and detach deletes only
+declared stable path devices before refreshing multipath. Executable LUN
+attach, grow, and detach plans require declared stable `device` or `devices`
+paths.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain. Btrfs snapshot declarations with `readOnly = true` render

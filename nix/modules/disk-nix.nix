@@ -85,6 +85,8 @@ let
       "assemble"
       "start"
       "stop"
+      "login"
+      "logout"
       "open"
       "close"
       "remount"
@@ -618,6 +620,7 @@ let
     || builtins.elem (object.operation or null) [
       "destroy"
       "close"
+      "logout"
     ];
   activeLifecycleAttrs = attrs: lib.filterAttrs (_: object: !isDestroyLifecycle object) attrs;
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;

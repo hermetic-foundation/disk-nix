@@ -217,9 +217,13 @@ Examples:
   plans render per-path SCSI rescans or deletes in addition to broad iSCSI
   session and multipath refreshes. Executable attach, grow, and detach plans
   remain non-ready until those stable LUN paths are declared.
-- iSCSI session `operation = "grow"` is classified as offline-required because
-  target growth, session/path rescan, and dependent consumers must be
-  coordinated.
+- iSCSI session `operation = "login"` discovers/logs into an existing target
+  and is online. Legacy `operation = "create"` remains accepted for the same
+  login flow. `operation = "logout"` detaches remote LUN paths from the host,
+  is offline-required, and preserves target-side data. Legacy `destroy = true`
+  remains accepted for the same logout flow. Session `operation = "grow"` is
+  offline-required because target growth, session/path rescan, and dependent
+  consumers must be coordinated.
 - `destroy = true` is classified as destructive and recommends backup,
   migration, snapshot, rename, or unmount-first alternatives depending on the
   target type.
