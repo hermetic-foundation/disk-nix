@@ -851,6 +851,8 @@
                       mdadmConf = nixosModuleTest.config.boot.swraid.mdadmConf;
                       multipath = nixosModuleTest.config.services.multipath.enable;
                       zfsExtraPools = nixosModuleTest.config.boot.zfs.extraPools;
+                      bcache = nixosModuleTest.config.boot.bcache.enable;
+                      bcacheInitrd = nixosModuleTest.config.boot.initrd.services.bcache.enable;
                     }
                   )
                 }
@@ -864,6 +866,8 @@
                   and .multipath == true
                   and (.zfsExtraPools | index("tank") != null)
                   and (.zfsExtraPools | index("mnt") == null)
+                  and .bcache == true
+                  and .bcacheInitrd == true
                 ' native-storage
                 printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
                 grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports

@@ -576,6 +576,7 @@ let
   activeDatasets = activeLifecycleAttrs cfg.datasets;
   activeZvols = activeLifecycleAttrs cfg.zvols;
   activeSnapshots = lib.filterAttrs (_: snapshot: !snapshot.destroy) cfg.snapshots;
+  activeCaches = activeLifecycleAttrs cfg.caches;
   hasActiveAttrs = attrs: attrs != { };
   hasActiveLvm =
     hasActiveAttrs activePhysicalVolumes
@@ -587,6 +588,7 @@ let
   hasActiveLvmThinSupport = hasActiveAttrs activeThinPools || hasActiveAttrs activeLvmCaches;
   hasActiveMdRaids = hasActiveAttrs activeMdRaids;
   hasActiveMultipathMaps = hasActiveAttrs activeMultipathMaps;
+  hasActiveCaches = hasActiveAttrs activeCaches;
   zfsPoolNameFromIdentity =
     identity: builtins.head (lib.splitString "/" (builtins.head (lib.splitString "@" identity)));
   zfsLifecycleIdentities =
@@ -1465,6 +1467,10 @@ in
     services.multipath.enable = lib.mkIf hasActiveMultipathMaps (lib.mkDefault true);
 
     boot.zfs.extraPools = lib.mkIf (zfsExtraPools != [ ]) (lib.mkAfter zfsExtraPools);
+
+    boot.bcache.enable = lib.mkIf hasActiveCaches (lib.mkDefault true);
+
+    boot.initrd.services.bcache.enable = lib.mkIf hasActiveCaches (lib.mkDefault true);
 
     services.openiscsi = lib.mkIf (cfg.iscsi.initiatorName != null) {
       enable = true;
