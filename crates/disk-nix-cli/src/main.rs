@@ -181,6 +181,8 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Emit the supported desired-spec JSON contract.
+    Schema,
     /// Generate shell completions.
     Completions {
         /// Shell completion format to emit.
@@ -465,6 +467,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
 
             Ok(())
         }
+        Command::Schema => {
+            writeln!(
+                output,
+                "{}",
+                serde_json::to_string_pretty(&spec_schema())
+                    .map_err(|error| AppError::Message(error.to_string()))?
+            )?;
+            Ok(())
+        }
         Command::Completions { shell } => {
             let mut command = Cli::command();
             generate(shell, &mut command, "disk-nix", output);
@@ -476,6 +487,207 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             Ok(())
         }
     }
+}
+
+fn spec_schema() -> serde_json::Value {
+    serde_json::json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://github.com/midischwarz12/disk-nix/schema/disk-nix-spec.schema.json",
+        "title": "disk-nix desired storage spec",
+        "description": "Desired storage declaration accepted by disk-nix plan, apply, and validate. The CLI accepts either this direct shape or a wrapper with { spec, apply } as produced by the NixOS module.",
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+            "version": {
+                "type": "integer",
+                "description": "Optional spec version marker for callers."
+            },
+            "spec": {
+                "$ref": "#/$defs/specBody",
+                "description": "NixOS module wrapper body. When present, planner lifecycle inputs are read from this object."
+            },
+            "apply": {
+                "$ref": "#/$defs/applyPolicy"
+            },
+            "filesystems": {
+                "$ref": "#/$defs/filesystemMap"
+            },
+            "volumes": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
+            "volumeGroups": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
+            "pools": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
+            "datasets": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
+            "luns": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
+            "iscsiSessions": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
+            "exports": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
+            "caches": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
+            "snapshots": {
+                "$ref": "#/$defs/snapshotMap"
+            }
+        },
+        "$defs": {
+            "specBody": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "filesystems": { "$ref": "#/$defs/filesystemMap" },
+                    "volumes": { "$ref": "#/$defs/lifecycleMap" },
+                    "volumeGroups": { "$ref": "#/$defs/lifecycleMap" },
+                    "pools": { "$ref": "#/$defs/lifecycleMap" },
+                    "datasets": { "$ref": "#/$defs/lifecycleMap" },
+                    "luns": { "$ref": "#/$defs/lifecycleMap" },
+                    "iscsiSessions": { "$ref": "#/$defs/lifecycleMap" },
+                    "exports": { "$ref": "#/$defs/lifecycleMap" },
+                    "caches": { "$ref": "#/$defs/lifecycleMap" },
+                    "snapshots": { "$ref": "#/$defs/snapshotMap" }
+                }
+            },
+            "filesystemMap": {
+                "type": "object",
+                "additionalProperties": { "$ref": "#/$defs/filesystem" }
+            },
+            "filesystem": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "mountpoint": { "type": "string" },
+                    "fsType": { "type": "string" },
+                    "type": { "type": "string" },
+                    "resizePolicy": {
+                        "type": "string",
+                        "enum": ["none", "grow-only", "shrink-allowed"]
+                    },
+                    "desiredSize": { "type": ["string", "number"] },
+                    "targetSize": { "type": ["string", "number"] },
+                    "size": { "type": ["string", "number"] },
+                    "preserveData": { "type": "boolean", "default": true }
+                }
+            },
+            "lifecycleMap": {
+                "type": "object",
+                "additionalProperties": { "$ref": "#/$defs/lifecycleObject" }
+            },
+            "lifecycleObject": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "operation": { "$ref": "#/$defs/operation" },
+                    "action": { "$ref": "#/$defs/operation" },
+                    "addDevices": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "removeDevices": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "replaceDevices": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" }
+                    },
+                    "properties": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "desiredSize": { "type": ["string", "number"] },
+                    "targetSize": { "type": ["string", "number"] },
+                    "size": { "type": ["string", "number"] },
+                    "destroy": { "type": "boolean" },
+                    "preserveData": { "type": "boolean", "default": true },
+                    "metadata": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                }
+            },
+            "snapshotMap": {
+                "type": "object",
+                "additionalProperties": { "$ref": "#/$defs/snapshot" }
+            },
+            "snapshot": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "target": { "type": "string" },
+                    "destroy": { "type": "boolean" },
+                    "rollback": { "type": "boolean" },
+                    "preserveData": { "type": "boolean", "default": true },
+                    "metadata": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                }
+            },
+            "operation": {
+                "type": "string",
+                "enum": [
+                    "create",
+                    "format",
+                    "grow",
+                    "shrink",
+                    "replace-device",
+                    "add-device",
+                    "remove-device",
+                    "set-property",
+                    "snapshot",
+                    "rebalance",
+                    "rollback",
+                    "destroy"
+                ]
+            },
+            "applyPolicy": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["manual", "activation", "boot", "install"],
+                        "default": "manual"
+                    },
+                    "allowDestructive": { "type": "boolean", "default": false },
+                    "allowFormat": { "type": "boolean", "default": false },
+                    "allowShrink": { "type": "boolean", "default": false },
+                    "allowGrow": { "type": "boolean", "default": true },
+                    "allowOffline": { "type": "boolean", "default": false },
+                    "allowPropertyChanges": { "type": "boolean", "default": true },
+                    "allowDeviceReplacement": { "type": "boolean", "default": true },
+                    "allowRebalance": { "type": "boolean", "default": true },
+                    "requireBackup": { "type": "boolean", "default": false },
+                    "backupVerified": { "type": "boolean", "default": false },
+                    "requireConfirmation": { "type": "boolean", "default": false },
+                    "confirmation": { "type": "boolean", "default": false },
+                    "requireConfirmationFile": { "type": ["string", "null"] },
+                    "probeCurrent": {
+                        "type": "boolean",
+                        "description": "NixOS module helper that controls whether activation validation passes --probe-current."
+                    },
+                    "scriptOut": {
+                        "type": ["string", "null"],
+                        "description": "NixOS module helper that controls activation --script-out."
+                    },
+                    "reportOut": {
+                        "type": ["string", "null"],
+                        "description": "NixOS module helper that controls activation --report-out."
+                    }
+                }
+            }
+        }
+    })
 }
 
 fn prepare_apply_report(

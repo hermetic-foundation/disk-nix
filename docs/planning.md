@@ -74,6 +74,9 @@ Examples:
 The checked-in specs under `examples/` are part of `nix flake check`. The
 flake validates stable plan summaries, selected action ids, allowed simple
 apply output, blocked lifecycle apply output, and review-script generation.
+`disk-nix schema` emits a JSON Schema-style contract for direct specs, NixOS
+module wrapper specs, lifecycle collections, snapshot declarations, and apply
+policy fields.
 
 Lifecycle collections currently accepted by the planner:
 

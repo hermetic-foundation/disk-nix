@@ -80,6 +80,7 @@ disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
 disk-nix apply --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
 disk-nix apply --spec ./examples/lifecycle-update.json --report-out ./apply-report.json
 disk-nix validate --spec ./examples/lifecycle-update.json --json
+disk-nix schema
 disk-nix completions bash
 disk-nix manpage
 ```
@@ -95,6 +96,8 @@ matrix.
 The Nix package installs generated bash, zsh, and fish completions plus a
 `disk-nix(1)` manpage. The `completions` and `manpage` commands can also emit
 those artifacts directly.
+`schema` emits the supported desired-spec JSON contract for editor integration
+and automation.
 
 See [docs/cli.md](docs/cli.md) for the command reference and JSON contracts.
 

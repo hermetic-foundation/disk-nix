@@ -193,7 +193,19 @@
             lifecycleValidate=$(mktemp)
             lifecycleApplyReport=$(mktemp)
             lifecycleValidateReport=$(mktemp)
+            schema=$(mktemp)
             scriptOut=$(mktemp)
+
+            ${diskNix}/bin/disk-nix schema > "$schema"
+            jq -e '
+              ."$schema" == "https://json-schema.org/draft/2020-12/schema"
+              and .properties.spec["$ref"] == "#/$defs/specBody"
+              and .properties.apply["$ref"] == "#/$defs/applyPolicy"
+              and (."$defs".operation.enum | index("grow") != null)
+              and (."$defs".operation.enum | index("replace-device") != null)
+              and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
+              and (."$defs".applyPolicy.properties.reportOut.type | index("string") != null)
+            ' "$schema"
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/simple-root.json} --json > "$simplePlan"
             jq -e '

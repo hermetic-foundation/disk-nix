@@ -93,6 +93,20 @@ disk-nix manpage
 The manpage is generated from the same Clap command definition as `--help`, so
 packaged documentation tracks the supported subcommands and flags.
 
+## Spec Schema
+
+`schema` emits a JSON Schema-style contract for desired storage specs:
+
+```sh
+disk-nix schema
+```
+
+The schema describes both direct planner specs and the NixOS module wrapper
+shape with top-level `spec` and `apply` objects. It includes the planner's
+filesystem fields, lifecycle collections, snapshot declarations, supported
+operation names, apply policy fields, and NixOS activation helper fields such
+as `probeCurrent`, `scriptOut`, and `reportOut`.
+
 ## Focused Views
 
 Focused commands filter the graph for common workflows:
