@@ -580,6 +580,8 @@
                 grep -- 'lvm2-' service-paths
                 grep -- 'open-iscsi-' service-paths
                 grep -- 'zfs-user-' service-paths
+                printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
+                grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
                 touch "$out"
               '';
           nixosModuleExecute =

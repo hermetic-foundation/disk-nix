@@ -462,6 +462,27 @@ let
     // lib.optionalAttrs (filesystem.options != [ ]) {
       inherit (filesystem) options;
     };
+  nfsExportLines =
+    lib.mapAttrsToList
+      (
+        name: export:
+        let
+          exportPath =
+            if export.path != null then
+              export.path
+            else if export.target != null then
+              export.target
+            else
+              name;
+        in
+        "${exportPath} ${export.client}(${export.options})"
+      )
+      (
+        lib.filterAttrs (
+          _: export:
+          export.client != null && export.options != null && !export.destroy && export.operation != "destroy"
+        ) cfg.exports
+      );
 in
 {
   options.services.disk-nix = {
@@ -1167,6 +1188,11 @@ in
         extraConfig
         ;
       discoverPortal = cfg.iscsi.discoverPortal;
+    };
+
+    services.nfs.server = lib.mkIf (nfsExportLines != [ ]) {
+      enable = lib.mkDefault true;
+      exports = lib.mkAfter ("\n" + lib.concatStringsSep "\n" nfsExportLines + "\n");
     };
 
     boot.iscsi-initiator = lib.mkIf cfg.iscsi.boot.enable {

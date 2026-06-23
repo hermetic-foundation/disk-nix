@@ -132,10 +132,12 @@ The module installs the CLI plus default storage tooling, writes a normalized
 storage spec to `/etc/disk-nix/spec.json`, derives typed NixOS `fileSystems`,
 `swapDevices`, and initrd LUKS options, and keeps lifecycle domains available
 in the same planner spec. Override `toolPackages` to pin alternate tool builds
-or trim unused domains. When `apply.scriptOut` is set, activation validation
-asks the CLI to write the allowed command plan and post-apply verification plan
-to that reviewable shell script path. When `apply.reportOut` is set, activation
-also writes the JSON report before returning blocked-policy failures. Set
+or trim unused domains. Explicit non-destroy `exports` declarations with
+`client` and `options` also derive NixOS NFS server export lines. When
+`apply.scriptOut` is set, activation validation asks the CLI to write the
+allowed command plan and post-apply verification plan to that reviewable shell
+script path. When `apply.reportOut` is set, activation also writes the JSON
+report before returning blocked-policy failures. Set
 `apply.failOnBlocked = false` to use report-only validation during activation;
 blocked actions are still reported, but the unit exits successfully. Set
 `apply.execute = true` only when activation should run ready, policy-allowed

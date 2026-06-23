@@ -50,9 +50,9 @@ The NixOS module is the primary declarative interface.
 
 The module writes `/etc/disk-nix/spec.json`, installs the CLI and default
 storage tooling, and derives the matching NixOS `fileSystems`, `swapDevices`,
-`boot.initrd.luks.devices`, `services.openiscsi`, and `boot.iscsi-initiator`
-entries. Raw `spec` remains available for storage domains whose typed NixOS
-options have not been implemented yet.
+`boot.initrd.luks.devices`, `services.openiscsi`, `boot.iscsi-initiator`, and
+selected `services.nfs.server.exports` entries. Raw `spec` remains available
+for storage domains whose typed NixOS options have not been implemented yet.
 
 `toolPackages` defaults to the storage tools used by the probe and executor
 adapters, including Btrfs, ext, XFS, LVM, cryptsetup, MD RAID, multipath, NFS,
@@ -60,6 +60,11 @@ iSCSI, NVMe, VDO, bcache, ZFS, partitioning, and util-linux tooling. The apply
 service adds these packages to `PATH`, and the same packages are installed in
 `environment.systemPackages`. Override the list to pin site-specific tool
 builds or to trim unused storage domains.
+
+Typed NFS export declarations derive regular NixOS NFS server export lines
+only when they are non-destroy declarations with explicit `client` and
+`options` fields. Destructive or under-specified export declarations remain in
+the disk-nix planner spec for review instead of being re-added to `/etc/exports`.
 
 Typed filesystem declarations include:
 
