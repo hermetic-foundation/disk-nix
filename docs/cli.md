@@ -145,6 +145,7 @@ disk-nix encryption
 disk-nix cache
 disk-nix vdo
 disk-nix multipath
+disk-nix nvme
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -165,6 +166,7 @@ disk-nix encryption --json
 disk-nix cache --json
 disk-nix vdo --json
 disk-nix multipath --json
+disk-nix nvme --json
 disk-nix mounts --json
 disk-nix network-storage --json
 disk-nix ids --json
@@ -233,6 +235,9 @@ Use these commands for:
   device, vendor/product, size, features, hardware handler, write protection,
   path count, host path, major/minor, and path state when `multipath -ll`
   exposes them
+- `nvme`: NVMe namespaces, including path, serial, model, firmware, namespace
+  index, maximum LBA, sector size, physical size, used bytes, free bytes, and
+  utilization when `nvme list -o json` exposes them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them

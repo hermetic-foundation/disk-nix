@@ -69,6 +69,7 @@ disk-nix encryption
 disk-nix cache
 disk-nix vdo
 disk-nix multipath
+disk-nix nvme
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -97,8 +98,8 @@ The canonical interface is intended to be stable JSON. Human tables and tree
 views are presentation layers over the same model. Focused JSON commands such
 as `devices --json`, `partitions --json`, `pools --json`,
 `snapshots --json`, `mappings --json`, `encryption --json`,
-`cache --json`, `vdo --json`, `multipath --json`, `network-storage --json`,
-`ids --json`, and `usage --json` return subgraphs and preserve relationships between nodes
+`cache --json`, `vdo --json`, `multipath --json`, `nvme --json`,
+`network-storage --json`, `ids --json`, and `usage --json` return subgraphs and preserve relationships between nodes
 included in the result. `usage` summarizes size, used, free, allocated,
 utilization, and selected metadata details across graph nodes that expose
 capacity data.

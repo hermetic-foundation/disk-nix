@@ -130,6 +130,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered NVMe namespaces and namespace metadata.
+    Nvme {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -399,6 +405,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_multipath_node)?;
             } else {
                 print_multipath(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Nvme { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_nvme_node)?;
+            } else {
+                print_nvme(output, &graph)?;
             }
             Ok(())
         }
@@ -1489,6 +1504,29 @@ fn print_multipath(output: &mut impl Write, graph: &StorageGraph) -> io::Result<
     Ok(())
 }
 
+fn print_nvme(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<24} {:>12} {:>12} {:>7} {:<20} DETAILS",
+        "KIND", "NAME", "SIZE", "USED", "USE%", "SERIAL"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_nvme_node(node)) {
+        let usage = node.usage.as_ref();
+        writeln!(
+            output,
+            "{:<22} {:<24} {:>12} {:>12} {:>7} {:<20} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            human_bytes(usage.and_then(|usage| usage.used_bytes)),
+            usage_percent(node),
+            node.identity.serial.as_deref().unwrap_or("-"),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2055,6 +2093,14 @@ fn is_multipath_node(node: &Node) -> bool {
             .any(|property| property.key.starts_with("multipath."))
 }
 
+fn is_nvme_node(node: &Node) -> bool {
+    node.kind == NodeKind::NvmeNamespace
+        || node
+            .properties
+            .iter()
+            .any(|property| property.key.starts_with("nvme."))
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
@@ -2493,11 +2539,11 @@ mod tests {
     use super::{
         confirmation_file_accepts, is_cache_node, is_device_node, is_encryption_node,
         is_filesystem_node, is_mapping_node, is_multipath_node, is_network_storage_node,
-        is_partition_node, is_pool_node, is_snapshot_node, is_vdo_node, is_volume_node,
-        mount_details, print_cache, print_devices, print_encryption, print_filesystems,
-        print_mappings, print_mounts, print_multipath, print_network_storage, print_partitions,
-        print_pools, print_snapshots, print_usage, print_vdo, print_volumes, snapshot_source,
-        usage_details, usage_percent,
+        is_nvme_node, is_partition_node, is_pool_node, is_snapshot_node, is_vdo_node,
+        is_volume_node, mount_details, print_cache, print_devices, print_encryption,
+        print_filesystems, print_mappings, print_mounts, print_multipath, print_network_storage,
+        print_nvme, print_partitions, print_pools, print_snapshots, print_usage, print_vdo,
+        print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2617,6 +2663,15 @@ mod tests {
         assert!(is_multipath_node(
             &Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
                 .with_property("multipath.path-state", "active ready running")
+        ));
+        assert!(is_nvme_node(&Node::new(
+            "block:/dev/nvme0n1",
+            NodeKind::NvmeNamespace,
+            "/dev/nvme0n1"
+        )));
+        assert!(is_nvme_node(
+            &Node::new("block:/dev/nvme1n1", NodeKind::PhysicalDisk, "/dev/nvme1n1")
+                .with_property("nvme.model", "Example NVMe")
         ));
     }
 
@@ -3563,6 +3618,46 @@ mod tests {
         assert!(output.contains("path-state=active ready running"));
         assert!(output.contains("/dev/sdc"));
         assert!(output.contains("host-path=3:0:0:1 major-minor=8:32"));
+    }
+
+    #[test]
+    fn nvme_table_includes_namespace_identity_and_geometry() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/nvme0n1",
+                NodeKind::NvmeNamespace,
+                "/dev/nvme0n1",
+            )
+            .with_path("/dev/nvme0n1")
+            .with_size_bytes(1_000_000_000_000)
+            .with_usage(Usage {
+                used_bytes: Some(400_000_000_000),
+                free_bytes: Some(600_000_000_000),
+                allocated_bytes: Some(400_000_000_000),
+            })
+            .with_identity(Identity {
+                serial: Some("SERIAL123".to_string()),
+                ..Identity::default()
+            })
+            .with_property("nvme.model", "Example NVMe")
+            .with_property("nvme.firmware", "1.0")
+            .with_property("nvme.index", "0")
+            .with_property("nvme.maximum-lba", "1953125")
+            .with_property("nvme.sector-size", "512"),
+        );
+
+        let mut output = Vec::new();
+        print_nvme(&mut output, &graph).expect("nvme table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("SERIAL"));
+        assert!(output.contains("USE%"));
+        assert!(output.contains("/dev/nvme0n1"));
+        assert!(output.contains("SERIAL123"));
+        assert!(output.contains("40.0%"));
+        assert!(output.contains("nvme-model=Example NVMe firmware=1.0"));
+        assert!(output.contains("ns-index=0 max-lba=1953125 sector-size=512"));
     }
 
     #[test]
