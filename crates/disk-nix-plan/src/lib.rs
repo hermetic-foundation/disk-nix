@@ -1557,6 +1557,24 @@ fn add_swap_actions(actions: &mut Vec<PlannedAction>, name: &str, swap: &Value) 
                 ],
             }),
         }),
+        Some(Operation::Rescan) => actions.push(PlannedAction {
+            id: format!("swaps:{name}:rescan"),
+            description: format!("refresh swap inventory for {device}"),
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            destructive: false,
+            context: context.clone(),
+            advice: Some(Advice {
+                summary: "swap rescan refreshes signature, activation, and graph inventory"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow when backing swap capacity must change".to_string(),
+                    "use format only when replacing the swap signature is intended".to_string(),
+                    "verify resume and hibernation references before changing swap identity"
+                        .to_string(),
+                ],
+            }),
+        }),
         Some(Operation::Create | Operation::Format) => actions.push(swap_format_action(
             name,
             &device,
@@ -4707,6 +4725,19 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::Swap,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "swap inventory refresh reads activation, size, label, and UUID state"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow when backing capacity changed".to_string(),
+                    "use swaplabel property updates only when identity must change".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::LuksContainer,
             operation: Operation::Format,
             risk: RiskClass::Destructive,
@@ -7411,6 +7442,7 @@ mod tests {
                 Operation::Rescan,
                 RiskClass::Online,
             ),
+            (NodeKind::Swap, Operation::Rescan, RiskClass::Online),
             (
                 NodeKind::BtrfsSubvolume,
                 Operation::Rescan,
@@ -8544,6 +8576,10 @@ mod tests {
                   "device": "/swapfile",
                   "operation": "grow",
                   "desiredSize": "16GiB"
+                },
+                "inventory": {
+                  "device": "/dev/disk/by-label/swap-inventory",
+                  "operation": "rescan"
                 }
               },
               "luks": {
@@ -8589,7 +8625,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 9);
+        assert_eq!(plan.summary.action_count, 10);
         assert_eq!(plan.summary.offline_required_count, 7);
         assert_eq!(plan.summary.destructive_count, 2);
 
@@ -8602,6 +8638,19 @@ mod tests {
         assert_eq!(
             swap.context.device.as_deref(),
             Some("/dev/disk/by-label/swap")
+        );
+
+        let swap_rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "swaps:inventory:rescan")
+            .expect("swap rescan action exists");
+        assert_eq!(swap_rescan.operation, Operation::Rescan);
+        assert_eq!(swap_rescan.risk, RiskClass::Online);
+        assert!(!swap_rescan.destructive);
+        assert_eq!(
+            swap_rescan.context.device.as_deref(),
+            Some("/dev/disk/by-label/swap-inventory")
         );
 
         let luks = plan

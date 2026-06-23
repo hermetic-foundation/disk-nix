@@ -338,6 +338,10 @@ Example lifecycle planning through NixOS options:
       properties.label = "swap";
       properties."swap.uuid" = "01234567-89ab-cdef-0123-456789abcdef";
     };
+    swaps.inventory = {
+      device = "/dev/disk/by-label/swap-inventory";
+      operation = "rescan";
+    };
     luks.devices.cryptroot = {
       device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
       operation = "grow";

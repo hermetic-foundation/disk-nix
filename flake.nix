@@ -196,6 +196,10 @@
                 properties.label = "swap";
                 properties."swap.uuid" = "01234567-89ab-cdef-0123-456789abcdef";
               };
+              swaps.inventory = {
+                device = "/dev/disk/by-label/swap-inventory";
+                operation = "rescan";
+              };
               swaps.old = {
                 device = "/dev/disk/by-label/old-swap";
                 operation = "destroy";
@@ -741,7 +745,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 95
+              .summary.actionCount == 96
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -795,6 +799,7 @@
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "partitions:data-table:rescan" and .risk == "online"))
               and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
+              and (.actions | any(.id == "swaps:inventory:rescan" and .risk == "online"))
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "luks.devices:cryptarchive:open" and .risk == "offline-required"))
               and (.actions | any(.id == "luks.devices:cryptclosed:close" and .risk == "offline-required"))
@@ -941,6 +946,8 @@
                   and .spec.swaps.primary.preserveData == false
                   and .spec.swaps.primary.properties.label == "swap"
                   and .spec.swaps.primary.properties."swap.uuid" == "01234567-89ab-cdef-0123-456789abcdef"
+                  and .spec.swaps.inventory.operation == "rescan"
+                  and .spec.swaps.inventory.device == "/dev/disk/by-label/swap-inventory"
                   and .spec.swaps.old.operation == "destroy"
                   and .spec.swaps.old.device == "/dev/disk/by-label/old-swap"
                   and .spec.luks.devices.cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
@@ -1149,8 +1156,9 @@
                 }
                 printf '%s\n' "$swapDevices" > swap-devices
                 jq -e '
-                  length == 1
-                  and .[0].device == "/dev/disk/by-label/swap"
+                  length == 2
+                  and any(.[]; .device == "/dev/disk/by-label/swap")
+                  and any(.[]; .device == "/dev/disk/by-label/swap-inventory")
                 ' swap-devices
                 luksDevices=${
                   pkgs.lib.escapeShellArg (

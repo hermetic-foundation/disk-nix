@@ -269,7 +269,9 @@ and `swapon` steps while keeping block-device backing growth explicit. Swap
 grow and format commands require a path-shaped swap target such as `/swapfile`
 or `/dev/disk/by-*`. Swap label and UUID property updates render
 `swaplabel --label <label> <target>` and `swaplabel --uuid <uuid> <target>` as
-offline-required signature identity changes.
+offline-required signature identity changes. Swap `operation = "rescan"`
+renders read-only `swapon --show`, `blkid`, and graph inspection for
+activation, capacity, label, UUID, and backing-storage refresh.
 LUKS open plans render reviewed `cryptsetup open` commands for preserved
 existing containers; close plans render offline-policy-gated `cryptsetup close`
 commands and verify the topology without erasing the backing LUKS header or

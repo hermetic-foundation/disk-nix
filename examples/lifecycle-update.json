@@ -285,6 +285,10 @@
     "primary": {
       "device": "/dev/disk/by-label/swap",
       "preserveData": false
+    },
+    "inventory": {
+      "device": "/dev/disk/by-label/swap-inventory",
+      "operation": "rescan"
     }
   },
   "luks": {

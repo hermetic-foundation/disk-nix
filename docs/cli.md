@@ -347,7 +347,9 @@ non-ready until the partition, LV, LUN, or other backing layer is selected.
 Swap grow and format commands require a path-shaped target such as `/swapfile`
 or `/dev/disk/by-*`. Swap label and UUID property updates render
 `swaplabel --label <label> <target>` and `swaplabel --uuid <uuid> <target>` and
-remain offline-required.
+remain offline-required. Swap `operation = "rescan"` renders read-only
+`swapon --show`, `blkid`, and graph inspection commands for activation,
+capacity, label, UUID, and backing-storage refresh.
 LUKS `operation = "open"` command plans render `cryptsetup open` for preserved
 existing containers. Legacy preserved `operation = "create"` still maps to the
 same open flow. `operation = "close"` plans render offline-policy-gated

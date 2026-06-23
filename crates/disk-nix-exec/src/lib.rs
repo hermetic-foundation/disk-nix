@@ -962,6 +962,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Rescan if collection == Some("swaps") => {
+            let target = swap_target_path(action);
+            (
+                vec![
+                    command(
+                        ["swapon", "--show", "--bytes", "--raw"],
+                        false,
+                        "verify active swap inventory after refresh",
+                    ),
+                    swap_blkid_command(target, "verify swap signature label and UUID after refresh"),
+                    swap_inspect_json_command(target, "verify swap graph node and backing storage after refresh"),
+                ],
+                vec![
+                    "swap activation state, size, label, and UUID are reviewed".to_string(),
+                    "resume, hibernation, and NixOS swapDevices references still match the refreshed identity"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Grow if collection == Some("luks.devices") => (
             vec![
                 command(
@@ -3429,6 +3448,28 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         .to_string(),
                     "prefer adding replacement swap capacity before resizing active swap"
                         .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("swaps") => {
+            let target = swap_target_path(action);
+            (
+                vec![
+                    command(
+                        ["swapon", "--show", "--bytes", "--raw"],
+                        false,
+                        "refresh active swap inventory",
+                    ),
+                    swap_blkid_command(target, "refresh swap signature label and UUID"),
+                    swap_inspect_command(
+                        target,
+                        "inspect modeled swap relationships after refresh",
+                    ),
+                ],
+                vec![
+                    "use grow when backing swap capacity changed".to_string(),
+                    "use format only when replacing the swap signature is intended".to_string(),
                 ],
                 true,
             )
@@ -9405,6 +9446,36 @@ fn swap_command(
     }
 }
 
+fn swap_blkid_command(target: Option<&str>, note: &'static str) -> ExecutionCommand {
+    match target {
+        Some(target) => command(["blkid", target], false, note),
+        None => command_with_readiness(
+            ["blkid", "<swap>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap target path"],
+            note,
+        ),
+    }
+}
+
+fn swap_inspect_command(target: Option<&str>, note: &'static str) -> ExecutionCommand {
+    disk_nix_inspect_command(target, "<swap>", "swap target path", note)
+}
+
+fn swap_inspect_json_command(target: Option<&str>, note: &'static str) -> ExecutionCommand {
+    match target {
+        Some(target) => command(["disk-nix", "inspect", target, "--json"], false, note),
+        None => command_with_readiness(
+            ["disk-nix", "inspect", "<swap>", "--json"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap target path"],
+            note,
+        ),
+    }
+}
+
 fn swap_resize_command(target: Option<&str>, desired_size: Option<&str>) -> ExecutionCommand {
     let Some(target) = target else {
         return command_vec_with_readiness(
@@ -13489,6 +13560,10 @@ mod tests {
                     "device": "/swapfile",
                     "operation": "grow",
                     "desiredSize": "16GiB"
+                  },
+                  "inventory": {
+                    "device": "/dev/disk/by-label/swap-inventory",
+                    "operation": "rescan"
                   }
                 },
                 "luks": {
@@ -13538,7 +13613,7 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_plan.len(), 8);
+        assert_eq!(report.command_plan.len(), 9);
         assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
@@ -13549,6 +13624,19 @@ mod tests {
                 command.argv == ["fallocate", "--length", "16GiB", "/swapfile"]
                     && command.readiness == CommandReadiness::Ready
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["blkid", "/dev/disk/by-label/swap-inventory"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/disk/by-label/swap-inventory"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands
@@ -13622,6 +13710,18 @@ mod tests {
                     .any(|command| command.argv == ["swapon", "--show", "--bytes", "--raw"])
         }));
         assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "swaps:inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "disk-nix",
+                            "inspect",
+                            "/dev/disk/by-label/swap-inventory",
+                            "--json",
+                        ]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "luks.devices:cryptold:destroy"
                 && step
                     .commands
@@ -13661,6 +13761,9 @@ mod tests {
                     "operation": "grow",
                     "desiredSize": "16GiB"
                   },
+                  "inventory": {
+                    "operation": "rescan"
+                  },
                   "primary": {
                     "preserveData": false
                   }
@@ -13692,6 +13795,19 @@ mod tests {
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs
                             == ["swap target path", "backing storage domain"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["blkid", "<swap>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["swap target path"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "<swap>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["swap target path"]
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
