@@ -16,6 +16,23 @@ let
   );
   applyCommand = if cfg.apply.failOnBlocked then "apply" else "validate";
   applyPolicy = builtins.removeAttrs cfg.apply [ "execute" ];
+  defaultToolPackages = with pkgs; [
+    bcache-tools
+    btrfs-progs
+    cryptsetup
+    e2fsprogs
+    lvm2
+    mdadm
+    multipath-tools
+    nfs-utils
+    nvme-cli
+    openiscsi
+    parted
+    util-linux
+    vdo
+    xfsprogs
+    zfs
+  ];
   applyArgs = [
     applyCommand
     "--spec"
@@ -455,6 +472,35 @@ in
       default = self.packages.${pkgs.system}.disk-nix;
       defaultText = lib.literalExpression "inputs.disk-nix.packages.${pkgs.system}.disk-nix";
       description = "disk-nix CLI package used by the NixOS module.";
+    };
+
+    toolPackages = lib.mkOption {
+      type = lib.types.listOf lib.types.package;
+      default = defaultToolPackages;
+      defaultText = lib.literalExpression ''
+        with pkgs; [
+          bcache-tools
+          btrfs-progs
+          cryptsetup
+          e2fsprogs
+          lvm2
+          mdadm
+          multipath-tools
+          nfs-utils
+          nvme-cli
+          openiscsi
+          parted
+          util-linux
+          vdo
+          xfsprogs
+          zfs
+        ]
+      '';
+      description = ''
+        Storage probe and apply tools installed with disk-nix and added to the
+        disk-nix apply service PATH. Override this to pin alternate tool
+        packages or to trim domains that are not used on a host.
+      '';
     };
 
     spec = lib.mkOption {
@@ -1037,7 +1083,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [ cfg.package ];
+    environment.systemPackages = [ cfg.package ] ++ cfg.toolPackages;
 
     environment.etc."disk-nix/spec.json".source = json.generate "disk-nix-spec.json" {
       spec = cfg.spec // {
@@ -1142,6 +1188,7 @@ in
     systemd.services.disk-nix-plan = {
       description = "Validate disk-nix storage apply policy";
       wantedBy = lib.mkIf (cfg.apply.mode == "activation") [ "multi-user.target" ];
+      path = cfg.toolPackages;
       serviceConfig = {
         Type = "oneshot";
         ExecStart = applyValidationScript;
