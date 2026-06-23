@@ -101,8 +101,9 @@ Examples:
 - ZFS dataset creation is online, with advice to review inherited mountpoint,
   quota, reservation, and encryption policy; dataset destruction remains
   destructive and recommends snapshots or rename-first validation.
-- zvol creation and growth are online operations, with advice to verify pool
-  capacity, reservation policy, and downstream block consumers.
+- zvol creation, growth, and property updates are online operations, with
+  advice to verify pool capacity, reservation policy, and downstream block
+  consumers. zvol `properties = { ... }` render `zfs set key=value <zvol>`.
 - MD RAID creation is destructive because it writes array metadata to member
   devices. Member add is online; replacement and grow/reshape are
   offline-required because redundancy, resync, and dependent consumers must be

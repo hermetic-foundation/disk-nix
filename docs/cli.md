@@ -343,6 +343,9 @@ ZFS pool command plans render policy-gated `zpool create` and `zpool destroy`,
 plus online topology commands such as `zpool add`, `zpool replace`, and scrub.
 ZFS dataset command plans render reviewed `zfs create` and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations.
+Zvol command plans render `zfs create -V`, `zfs set volsize=...`, policy-gated
+`zfs destroy`, and `zfs set key=value` property updates for `zvols`
+lifecycle declarations.
 Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
 `btrfs subvolume delete`, and `btrfs property set -ts <path> ro true|false`
 for read-only property declarations.

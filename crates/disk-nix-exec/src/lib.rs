@@ -978,6 +978,21 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             ],
             vec!["changed property equals the desired value".to_string()],
         ),
+        Operation::SetProperty if collection == Some("zvols") => (
+            vec![
+                command(
+                    ["zfs", "get", "all", target],
+                    false,
+                    "verify zvol properties after update",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled zvol properties after re-probe",
+                ),
+            ],
+            vec!["changed property equals the desired value".to_string()],
+        ),
         Operation::SetProperty if collection == Some("exports") => (
             vec![
                 command(
@@ -3143,6 +3158,11 @@ fn set_property_command(
             true,
             "set a ZFS dataset property",
         ),
+        Some("zvols") => command(
+            ["zfs", "set", assignment, target],
+            true,
+            "set a zvol property",
+        ),
         Some("btrfsSubvolumes") => btrfs_subvolume_property_command(target, property, assignment),
         Some("exports") => command(
             ["exportfs", "-ra"],
@@ -4691,7 +4711,10 @@ mod tests {
                 "zvols": {
                   "tank/vm/root": {
                     "operation": "grow",
-                    "desiredSize": "80GiB"
+                    "desiredSize": "80GiB",
+                    "properties": {
+                      "compression": "zstd"
+                    }
                   },
                   "tank/vm/tmp": {
                     "operation": "create",
@@ -4720,6 +4743,13 @@ mod tests {
             })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "zvols:tank/vm/root:set-property:compression"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "set", "compression=zstd", "tank/vm/root"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
                 command.argv == ["zfs", "create", "-V", "20GiB", "tank/vm/tmp"]
                     && command.readiness == CommandReadiness::Ready
@@ -4734,6 +4764,13 @@ mod tests {
             step.commands.iter().any(|command| {
                 command.argv == ["zfs", "list", "-H", "-p", "-t", "volume", "tank/vm/root"]
             })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "zvols:tank/vm/root:set-property:compression"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "get", "all", "tank/vm/root"])
         }));
     }
 
