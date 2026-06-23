@@ -397,7 +397,8 @@ Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
 for read-only property declarations.
 Btrfs qgroup command plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` for referenced and exclusive
-limit declarations in `btrfsQgroups`.
+limit declarations in `btrfsQgroups`. Qgroup create, destroy, and limit plans
+remain non-ready until the mounted filesystem `target` path is declared.
 Generic snapshot declarations render concrete `zfs snapshot` commands for
 `dataset@snapshot` names and Btrfs `subvolume snapshot` commands when both the
 source target and snapshot name are absolute paths. Destructive snapshot

@@ -2530,27 +2530,51 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Create if collection == Some("btrfsQgroups") => {
-            let target = target.unwrap_or("<btrfs-filesystem-path>");
             let qgroup_id = action.context.name.as_deref().unwrap_or("<qgroupid>");
+            let target_path = btrfs_qgroup_target_path(action.context.target.as_deref(), qgroup_id);
+            let target = target_path.unwrap_or("<btrfs-filesystem-path>");
+            let inspect_command = match target_path {
+                Some(target) => command(
+                    ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                    false,
+                    "inspect Btrfs qgroup inventory before creation",
+                ),
+                None => command_with_readiness(
+                    ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["mounted Btrfs filesystem path"],
+                    "inspect Btrfs qgroups after selecting the mounted filesystem path",
+                ),
+            };
+            let create_command = match target_path {
+                Some(target) => command_vec(
+                    vec![
+                        "btrfs".to_string(),
+                        "qgroup".to_string(),
+                        "create".to_string(),
+                        qgroup_id.to_string(),
+                        target.to_string(),
+                    ],
+                    true,
+                    "create the reviewed Btrfs qgroup",
+                ),
+                None => command_vec_with_readiness(
+                    vec![
+                        "btrfs".to_string(),
+                        "qgroup".to_string(),
+                        "create".to_string(),
+                        qgroup_id.to_string(),
+                        target.to_string(),
+                    ],
+                    true,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["mounted Btrfs filesystem path"],
+                    "create the Btrfs qgroup after selecting the mounted filesystem path",
+                ),
+            };
             (
-                vec![
-                    command(
-                        ["btrfs", "qgroup", "show", "--raw", "-reF", target],
-                        false,
-                        "inspect Btrfs qgroup inventory before creation",
-                    ),
-                    command_vec(
-                        vec![
-                            "btrfs".to_string(),
-                            "qgroup".to_string(),
-                            "create".to_string(),
-                            qgroup_id.to_string(),
-                            target.to_string(),
-                        ],
-                        true,
-                        "create the reviewed Btrfs qgroup",
-                    ),
-                ],
+                vec![inspect_command, create_command],
                 vec![
                     "verify qgroup quota accounting is enabled on the filesystem".to_string(),
                     "select the qgroup id intentionally to avoid hierarchy collisions".to_string(),
@@ -2943,27 +2967,51 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Destroy if collection == Some("btrfsQgroups") => {
-            let target = target.unwrap_or("<btrfs-filesystem-path>");
             let qgroup_id = action.context.name.as_deref().unwrap_or("<qgroupid>");
+            let target_path = btrfs_qgroup_target_path(action.context.target.as_deref(), qgroup_id);
+            let target = target_path.unwrap_or("<btrfs-filesystem-path>");
+            let inspect_command = match target_path {
+                Some(target) => command(
+                    ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                    false,
+                    "inspect Btrfs qgroup inventory before destruction",
+                ),
+                None => command_with_readiness(
+                    ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["mounted Btrfs filesystem path"],
+                    "inspect Btrfs qgroups after selecting the mounted filesystem path",
+                ),
+            };
+            let destroy_command = match target_path {
+                Some(target) => command_vec(
+                    vec![
+                        "btrfs".to_string(),
+                        "qgroup".to_string(),
+                        "destroy".to_string(),
+                        qgroup_id.to_string(),
+                        target.to_string(),
+                    ],
+                    true,
+                    "destroy the reviewed Btrfs qgroup",
+                ),
+                None => command_vec_with_readiness(
+                    vec![
+                        "btrfs".to_string(),
+                        "qgroup".to_string(),
+                        "destroy".to_string(),
+                        qgroup_id.to_string(),
+                        target.to_string(),
+                    ],
+                    true,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["mounted Btrfs filesystem path"],
+                    "destroy the Btrfs qgroup after selecting the mounted filesystem path",
+                ),
+            };
             (
-                vec![
-                    command(
-                        ["btrfs", "qgroup", "show", "--raw", "-reF", target],
-                        false,
-                        "inspect Btrfs qgroup inventory before destruction",
-                    ),
-                    command_vec(
-                        vec![
-                            "btrfs".to_string(),
-                            "qgroup".to_string(),
-                            "destroy".to_string(),
-                            qgroup_id.to_string(),
-                            target.to_string(),
-                        ],
-                        true,
-                        "destroy the reviewed Btrfs qgroup",
-                    ),
-                ],
+                vec![inspect_command, destroy_command],
                 vec![
                     "verify no subvolume still depends on the qgroup limit".to_string(),
                     "preserve qgroup accounting policy elsewhere before deleting the qgroup"
@@ -4203,6 +4251,15 @@ fn btrfs_qgroup_property_command(
             ["supported Btrfs qgroup property"],
             "set a Btrfs qgroup property after selecting a supported property mapping",
         ),
+    }
+}
+
+fn btrfs_qgroup_target_path<'a>(target: Option<&'a str>, qgroup_id: &str) -> Option<&'a str> {
+    let target = target?;
+    if target == qgroup_id || target.starts_with("0/") {
+        None
+    } else {
+        Some(target)
     }
 }
 
@@ -6537,6 +6594,77 @@ mod tests {
         }));
         assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
         assert!(report.command_summary.all_commands_ready());
+    }
+
+    #[test]
+    fn btrfs_qgroup_lifecycle_without_target_reports_unresolved_path() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "btrfsQgroups": {
+                  "0/260": {
+                    "operation": "create"
+                  },
+                  "0/261": {
+                    "properties": {
+                      "limit": "5GiB"
+                    }
+                  },
+                  "0/262": {
+                    "destroy": true
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsqgroups:0/260:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "qgroup",
+                            "create",
+                            "0/260",
+                            "<btrfs-filesystem-path>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mounted Btrfs filesystem path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsQgroups:0/261:set-property:limit"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "qgroup", "limit", "5GiB", "0/261", "<path>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mounted Btrfs filesystem path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsqgroups:0/262:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "qgroup",
+                            "destroy",
+                            "0/262",
+                            "<btrfs-filesystem-path>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mounted Btrfs filesystem path"]
+                })
+        }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 5);
+        assert!(!report.command_summary.all_commands_ready());
     }
 
     #[test]

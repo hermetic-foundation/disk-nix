@@ -192,7 +192,8 @@ Btrfs subvolume property updates render read-only toggles with
 properties stay explicit as domain-specific review items.
 Btrfs qgroup lifecycle plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` updates for referenced and
-exclusive byte limits from `btrfsQgroups` declarations.
+exclusive byte limits from `btrfsQgroups` declarations. Executable qgroup
+create, destroy, and limit plans require a mounted filesystem `target` path.
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit.
 LUKS open plans render reviewed `cryptsetup open` commands for preserved
