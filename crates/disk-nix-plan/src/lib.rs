@@ -2629,6 +2629,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::Filesystem,
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            advice: Some(Advice {
+                summary: "supported filesystem property updates reconcile labels and ZFS filesystem properties"
+                    .to_string(),
+                alternatives: vec![
+                    "use filesystem label aliases for Btrfs and ext filesystems".to_string(),
+                    "model arbitrary ZFS filesystem properties through ZFS dataset declarations"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Filesystem,
             operation: Operation::Shrink,
             risk: RiskClass::PotentialDataLoss,
             advice: Some(Advice {
@@ -2850,6 +2864,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::ZfsPool,
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            advice: Some(Advice {
+                summary: "ZFS pool property updates use zpool set on the reviewed pool"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect current pool properties before changing behavior".to_string(),
+                    "prefer reversible property changes before topology changes".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsPool,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             advice: Some(Advice {
@@ -2896,6 +2923,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "take a read-only snapshot before deletion".to_string(),
                     "rename the subvolume before final removal".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsSubvolume,
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            advice: Some(Advice {
+                summary: "Btrfs subvolume property updates support read-only toggles".to_string(),
+                alternatives: vec![
+                    "use readOnly, readonly, ro, btrfs.readonly, or btrfs.ro".to_string(),
+                    "review unsupported subvolume properties manually before changing them"
+                        .to_string(),
                 ],
             }),
         },
@@ -2967,6 +3007,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::Zvol,
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            advice: Some(Advice {
+                summary: "zvol property updates use zfs set on the reviewed block volume"
+                    .to_string(),
+                alternatives: vec![
+                    "verify dependent guests or LUN exports before changing zvol behavior"
+                        .to_string(),
+                    "snapshot or clone the zvol before risky property changes".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Zvol,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             advice: Some(Advice {
@@ -2989,6 +3043,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                         .to_string(),
                     "create under the intended parent dataset before exposing consumers"
                         .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsDataset,
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            advice: Some(Advice {
+                summary: "ZFS dataset property updates use zfs set on the reviewed dataset"
+                    .to_string(),
+                alternatives: vec![
+                    "review inherited quota, reservation, mountpoint, and encryption policy first"
+                        .to_string(),
+                    "snapshot datasets before property changes that affect consumers".to_string(),
                 ],
             }),
         },
@@ -3550,6 +3618,29 @@ mod tests {
         assert_eq!(zfs_rollback.risk, RiskClass::PotentialDataLoss);
         assert_eq!(btrfs_snapshot.risk, RiskClass::Reversible);
         assert_eq!(btrfs_destroy.risk, RiskClass::Destructive);
+    }
+
+    #[test]
+    fn property_capabilities_cover_supported_update_domains() {
+        let capabilities = default_capabilities();
+        for node_kind in [
+            NodeKind::Filesystem,
+            NodeKind::BtrfsSubvolume,
+            NodeKind::ZfsPool,
+            NodeKind::ZfsDataset,
+            NodeKind::Zvol,
+        ] {
+            let capability = capabilities
+                .iter()
+                .find(|capability| {
+                    capability.node_kind == node_kind
+                        && capability.operation == Operation::SetProperty
+                })
+                .unwrap_or_else(|| panic!("{node_kind} set-property capability should exist"));
+
+            assert_eq!(capability.risk, RiskClass::Safe);
+            assert!(capability.advice.is_some());
+        }
     }
 
     #[test]

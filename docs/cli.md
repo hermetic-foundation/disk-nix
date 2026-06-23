@@ -211,7 +211,8 @@ disk-nix capabilities --json
 ```
 
 The matrix includes local block layers, complex filesystems, cache layers, NFS
-exports and client mounts, iSCSI sessions, LUNs, and ZFS/Btrfs/LVM snapshots.
+exports and client mounts, iSCSI sessions, LUNs, safe property updates, and
+ZFS/Btrfs/LVM snapshots.
 
 The JSON records include:
 

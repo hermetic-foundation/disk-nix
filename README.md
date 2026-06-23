@@ -198,7 +198,7 @@ source-device commands unresolved when only a mountpoint is declared. XFS shrink
 remains manual-only migration guidance.
 Btrfs subvolume property updates render read-only toggles with
 `btrfs property set -ts <path> ro true|false`; unsupported Btrfs subvolume
-properties stay explicit as domain-specific review items.
+properties are classified as unsupported with manual-review alternatives.
 Btrfs qgroup lifecycle plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` updates for referenced and
 exclusive byte limits from `btrfsQgroups` declarations. Executable qgroup
