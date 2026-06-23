@@ -42,11 +42,7 @@ fn parse_export_db(bytes: &[u8]) -> Result<Vec<UdevRecord>, ProbeError> {
         match prefix {
             "P" => record.devpath = non_empty(value),
             "N" => record.name = non_empty(value),
-            "S" => {
-                if !value.is_empty() {
-                    record.symlinks.push(value.to_string());
-                }
-            }
+            "S" if !value.is_empty() => record.symlinks.push(value.to_string()),
             "E" => {
                 if let Some((key, field_value)) = value.split_once('=') {
                     if !field_value.is_empty() {

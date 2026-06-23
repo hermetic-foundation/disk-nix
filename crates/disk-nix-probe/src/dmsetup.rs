@@ -153,9 +153,8 @@ fn kind_from_uuid(uuid: Option<&str>) -> NodeKind {
 fn backing_kind(device: &str) -> NodeKind {
     if device.starts_with("dm-") {
         NodeKind::DeviceMapper
-    } else if device.starts_with("nvme") && device.contains('p') {
-        NodeKind::Partition
-    } else if device.starts_with("sd") && device.chars().last().is_some_and(|c| c.is_ascii_digit())
+    } else if (device.starts_with("nvme") && device.contains('p'))
+        || (device.starts_with("sd") && device.chars().last().is_some_and(|c| c.is_ascii_digit()))
     {
         NodeKind::Partition
     } else {

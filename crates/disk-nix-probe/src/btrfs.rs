@@ -364,7 +364,6 @@ fn extract_after(line: &str, marker: &str) -> Option<String> {
     line.split_once(marker)
         .map(|(_, value)| {
             value
-                .trim()
                 .split_whitespace()
                 .next()
                 .unwrap_or_default()
