@@ -100,9 +100,10 @@ Examples:
   `vdostats`. Create preflight inspection is marked unresolved until a backing
   device is declared.
 - LVM logical volume creation is online when it allocates from existing volume
-  group free extents; LV removal is destructive because it deletes the volume
-  contents. Create command plans report missing `vg/lv` target form and size
-  inputs separately.
+  group free extents; LV growth is also online when the volume group has free
+  extents; LV removal is destructive because it deletes the volume contents.
+  Create command plans report missing `vg/lv` target form and size inputs
+  separately.
 - LVM thin-pool creation and growth are online allocations inside an existing
   volume group; thin-pool removal is destructive because it removes contained
   thin volumes and their data. Create command plans report missing `vg/pool`
@@ -110,13 +111,16 @@ Examples:
 - LVM volume group creation and removal are destructive because they write or
   remove VG metadata on member physical volumes; prefer `vgextend` when
   preserving an existing group is possible. VG growth with an explicit physical
-  volume is an online `vgextend` workflow.
+  volume is an online `vgextend` workflow. VG device removal is
+  potential-data-loss unless allocated extents are evacuated before `vgreduce`.
 - ZFS pool creation and destruction are destructive because they write labels
   to vdev devices or remove all contained datasets and zvols; create command
   plans accept either a single `device` or an explicit `devices` vdev list.
   Preflight inspection targets path-like vdev entries, while topology keywords
   such as `mirror` stay in the rendered `zpool create` command. Import/export
-  is preferred when moving an existing pool.
+  is preferred when moving an existing pool. Pool device replacement is
+  offline-required, and device removal remains potential-data-loss unless pool
+  topology, free space, and evacuation support have been verified.
 - ZFS dataset creation is online, with declared `properties = { ... }`
   rendered as create-time `zfs create -o key=value` options as well as
   explicit property reconciliation actions. Advice still calls out inherited
@@ -126,14 +130,14 @@ Examples:
   advice to verify pool capacity, reservation policy, and downstream block
   consumers. zvol `properties = { ... }` render create-time `-o key=value`
   options and `zfs set key=value <zvol>` reconciliation actions.
-- MD RAID creation is destructive because it writes array metadata to member
-  devices. Create command plans identify missing RAID level and member-device
-  fields separately. Member add is online; replacement and grow/reshape are
-  offline-required because redundancy, resync, and dependent consumers must be
-  coordinated.
+- MD RAID creation and destruction are destructive because they write array
+  metadata or make the assembled array unavailable. Create command plans
+  identify missing RAID level and member-device fields separately. Member add
+  is online; replacement and grow/reshape are offline-required because
+  redundancy, resync, and dependent consumers must be coordinated.
 - Multipath map growth and path add are online; path replacement is
-  offline-required because at least one healthy path must remain active while
-  paths are added and deleted.
+  offline-required and path removal is potential-data-loss because at least one
+  healthy path must remain active while paths are added and deleted.
 - LVM thin pool growth is online, with advice to monitor data and metadata
   utilization, autoextend policy, and thin-volume overcommit.
 - LVM snapshot creation is reversible; snapshot merge rollback is potential
@@ -155,9 +159,9 @@ Examples:
   destroy, and limit plans remain non-ready until that mounted filesystem path
   is declared.
 - Cache attach and cache-mode updates are online or safe when they use an
-  existing cache-set identity; cache replacement remains offline-required
-  because dirty writeback data must be flushed or detached before media
-  changes.
+  existing cache-set identity; cache replacement remains offline-required and
+  cache removal is potential-data-loss because dirty writeback data must be
+  flushed or detached before media changes.
 - NFS export creation is online when it publishes an existing path to explicit
   clients and options; unexporting is offline-required because remote clients
   may need to be drained, but it is not treated as data destruction.

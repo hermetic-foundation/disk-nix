@@ -2864,6 +2864,32 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::ZfsPool,
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "ZFS pool device replacement must preserve pool health through resilver"
+                    .to_string(),
+                alternatives: vec![
+                    "attach or add replacement capacity before removing a weak vdev".to_string(),
+                    "monitor zpool status until resilver completes".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsPool,
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "ZFS pool device removal depends on pool topology and evacuation support"
+                    .to_string(),
+                alternatives: vec![
+                    "replace the device instead when removal is not supported".to_string(),
+                    "verify pool free space and health before starting evacuation".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsPool,
             operation: Operation::SetProperty,
             risk: RiskClass::Safe,
             advice: Some(Advice {
@@ -3127,6 +3153,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::LvmLogicalVolume,
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "logical volume growth consumes free extents from the volume group"
+                    .to_string(),
+                alternatives: vec![
+                    "verify volume group free space before lvextend".to_string(),
+                    "grow the filesystem only after the LV reports the new size".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmLogicalVolume,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             advice: Some(Advice {
@@ -3147,6 +3186,33 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "inspect pvs and block identity before creation".to_string(),
                     "extend an existing volume group instead of recreating it".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmVolumeGroup,
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "volume group growth adds reviewed physical volumes to the VG"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect the candidate PV before vgextend".to_string(),
+                    "extend the existing VG instead of recreating it".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmVolumeGroup,
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "volume group device removal must evacuate allocated extents first"
+                    .to_string(),
+                alternatives: vec![
+                    "run pvmove to drain the physical volume before vgreduce".to_string(),
+                    "add replacement capacity before reducing a full or constrained VG"
+                        .to_string(),
                 ],
             }),
         },
@@ -3180,6 +3246,31 @@ pub fn default_capabilities() -> Vec<Capability> {
             operation: Operation::Rebalance,
             risk: RiskClass::Online,
             advice: None,
+        },
+        Capability {
+            node_kind: NodeKind::MdRaid,
+            operation: Operation::Create,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "MD RAID creation writes array metadata to member devices".to_string(),
+                alternatives: vec![
+                    "inspect member signatures before mdadm --create".to_string(),
+                    "assemble an existing array instead of recreating it".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MdRaid,
+            operation: Operation::Grow,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "MD RAID growth and reshape require redundancy and resync coordination"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement capacity before increasing array size".to_string(),
+                    "monitor /proc/mdstat until reshape completes".to_string(),
+                ],
+            }),
         },
         Capability {
             node_kind: NodeKind::MdRaid,
@@ -3219,6 +3310,20 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::MdRaid,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "stopping and removing an MD RAID array can make member data inaccessible"
+                    .to_string(),
+                alternatives: vec![
+                    "deactivate consumers and preserve member devices for later assembly"
+                        .to_string(),
+                    "verify backups before zeroing or reusing member metadata".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::MultipathDevice,
             operation: Operation::Grow,
             risk: RiskClass::Online,
@@ -3227,6 +3332,18 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "rescan all backing paths before resizing the map".to_string(),
                     "verify every active path reports the new size".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MultipathDevice,
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "multipath path removal can reduce or break path redundancy".to_string(),
+                alternatives: vec![
+                    "remove a path only after alternate paths are active".to_string(),
+                    "verify the path WWID before deleting it from the map".to_string(),
                 ],
             }),
         },
@@ -3442,6 +3559,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 ],
             }),
         },
+        Capability {
+            node_kind: NodeKind::CacheDevice,
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "cache detachment must account for dirty data and backing-device safety"
+                    .to_string(),
+                alternatives: vec![
+                    "switch writeback caches to writethrough before detach".to_string(),
+                    "wait for dirty data to drain before removing cache media".to_string(),
+                ],
+            }),
+        },
     ]
 }
 
@@ -3481,9 +3611,17 @@ mod tests {
                     && capability.operation == Operation::ReplaceDevice
             })
             .expect("cache replace capability should exist");
+        let remove = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::CacheDevice
+                    && capability.operation == Operation::RemoveDevice
+            })
+            .expect("cache remove capability should exist");
 
         assert_eq!(add.risk, RiskClass::Online);
         assert_eq!(replace.risk, RiskClass::OfflineRequired);
+        assert_eq!(remove.risk, RiskClass::PotentialDataLoss);
         assert!(replace.advice.as_ref().is_some_and(|advice| {
             advice
                 .alternatives
@@ -3699,6 +3837,56 @@ mod tests {
         assert_eq!(replace.risk, RiskClass::OfflineRequired);
         assert_eq!(remove.risk, RiskClass::PotentialDataLoss);
         assert!(replace.advice.is_some());
+    }
+
+    #[test]
+    fn capability_inventory_covers_rendered_topology_updates() {
+        let capabilities = default_capabilities();
+        for (node_kind, operation, risk) in [
+            (
+                NodeKind::ZfsPool,
+                Operation::ReplaceDevice,
+                RiskClass::OfflineRequired,
+            ),
+            (
+                NodeKind::ZfsPool,
+                Operation::RemoveDevice,
+                RiskClass::PotentialDataLoss,
+            ),
+            (
+                NodeKind::LvmLogicalVolume,
+                Operation::Grow,
+                RiskClass::Online,
+            ),
+            (NodeKind::LvmVolumeGroup, Operation::Grow, RiskClass::Online),
+            (
+                NodeKind::LvmVolumeGroup,
+                Operation::RemoveDevice,
+                RiskClass::PotentialDataLoss,
+            ),
+            (NodeKind::MdRaid, Operation::Create, RiskClass::Destructive),
+            (
+                NodeKind::MdRaid,
+                Operation::Grow,
+                RiskClass::OfflineRequired,
+            ),
+            (NodeKind::MdRaid, Operation::Destroy, RiskClass::Destructive),
+            (
+                NodeKind::MultipathDevice,
+                Operation::RemoveDevice,
+                RiskClass::PotentialDataLoss,
+            ),
+        ] {
+            let capability = capabilities
+                .iter()
+                .find(|capability| {
+                    capability.node_kind == node_kind && capability.operation == operation
+                })
+                .unwrap_or_else(|| panic!("{node_kind} {operation:?} capability should exist"));
+
+            assert_eq!(capability.risk, risk);
+            assert!(capability.advice.is_some());
+        }
     }
 
     #[test]

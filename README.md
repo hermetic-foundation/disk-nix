@@ -171,10 +171,12 @@ the planned command phase succeeds.
 Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS format/resize/close
 workflows, Btrfs subvolume creation/deletion, VDO create/grow/remove, LVM
-thin-pool create/grow/remove, LVM snapshot create/merge/remove, loop-device
-mapping updates, MD RAID member updates, multipath map updates, ZFS pool,
-dataset, and zvol updates including zvol property changes, volume updates,
-network LUN growth, snapshots, and cache attach/detach/replacement workflows.
+logical-volume growth/removal, LVM volume-group extension/device removal,
+LVM thin-pool create/grow/remove, LVM snapshot create/merge/remove,
+loop-device mapping updates, MD RAID lifecycle/member updates, multipath map
+updates, ZFS pool topology updates, dataset and zvol updates including zvol
+property changes, volume updates, network LUN growth, snapshots, and cache
+attach/detach/replacement workflows.
 Cache apply plans include bcache-aware attach, detach, cache-mode, dirty-data,
 and replacement review steps instead of a generic cache placeholder. bcache
 sysfs commands require a concrete `/dev/bcache*` target; logical cache names
