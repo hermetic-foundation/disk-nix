@@ -168,6 +168,8 @@ ZFS dataset apply plans render reviewed `zfs create` commands and
 policy-gated `zfs destroy` commands.
 LVM logical volume apply plans render reviewed `lvcreate` and gated
 `lvremove` steps for volume lifecycle declarations.
+LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
+volume group lifecycle declarations.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
 Use `--report-out` with either command to persist the JSON report for review

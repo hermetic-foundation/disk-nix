@@ -78,6 +78,9 @@ Examples:
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV removal is destructive because it deletes the volume
   contents.
+- LVM volume group creation and removal are destructive because they write or
+  remove VG metadata on member physical volumes; prefer `vgextend` when
+  preserving an existing group is possible.
 - ZFS dataset creation is online, with advice to review inherited mountpoint,
   quota, reservation, and encryption policy; dataset destruction remains
   destructive and recommends snapshots or rename-first validation.

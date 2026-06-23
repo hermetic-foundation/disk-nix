@@ -1540,6 +1540,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "volumeGroups" => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: "volume group creation writes LVM metadata to the selected physical volume"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the physical volume contains no data that must be preserved"
+                        .to_string(),
+                    "extend an existing volume group when preserving consumers is possible"
+                        .to_string(),
+                    "use stable /dev/disk/by-id paths and inspect pvs before vgcreate".to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "mdRaids" => (
             RiskClass::Destructive,
             true,
@@ -2247,6 +2262,32 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::LvmVolumeGroup,
+            operation: Operation::Create,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "creating an LVM volume group writes metadata to member physical volumes"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect pvs and block identity before creation".to_string(),
+                    "extend an existing volume group instead of recreating it".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmVolumeGroup,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "removing an LVM volume group removes the grouping layer for all contained volumes"
+                    .to_string(),
+                alternatives: vec![
+                    "remove or migrate logical volumes before vgremove".to_string(),
+                    "deactivate or rename the volume group while validating consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::ZfsDataset,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
@@ -2580,6 +2621,50 @@ mod tests {
             .expect("LV destroy action exists");
         assert_eq!(destroy.risk, RiskClass::Destructive);
         assert!(destroy.destructive);
+    }
+
+    #[test]
+    fn plan_classifies_lvm_volume_group_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumeGroups": {
+                "vg0": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/nvme-vg0"
+                },
+                "oldvg": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.destructive_count, 2);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumegroups:vg0:create")
+            .expect("volume group create action exists");
+        assert_eq!(create.risk, RiskClass::Destructive);
+        assert!(create.destructive);
+        assert_eq!(
+            create.context.device.as_deref(),
+            Some("/dev/disk/by-id/nvme-vg0")
+        );
+        assert!(create.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("pvs"))
+        }));
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumegroups:oldvg:destroy")
+            .expect("volume group destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::Destructive);
     }
 
     #[test]
