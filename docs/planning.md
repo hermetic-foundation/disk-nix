@@ -110,7 +110,8 @@ Examples:
   advice to verify pool capacity, reservation policy, and downstream block
   consumers. zvol `properties = { ... }` render `zfs set key=value <zvol>`.
 - MD RAID creation is destructive because it writes array metadata to member
-  devices. Member add is online; replacement and grow/reshape are
+  devices. Create command plans identify missing RAID level and member-device
+  fields separately. Member add is online; replacement and grow/reshape are
   offline-required because redundancy, resync, and dependent consumers must be
   coordinated.
 - Multipath map growth and path add are online; path replacement is

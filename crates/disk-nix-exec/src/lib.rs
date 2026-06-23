@@ -4374,7 +4374,7 @@ fn md_raid_create_command(
             argv,
             true,
             CommandReadiness::NeedsDomainImplementation,
-            ["RAID level", "member devices"],
+            missing_md_raid_create_inputs(missing_level, missing_devices),
             "create the MD RAID array after selecting level and reviewed member devices",
         )
     } else {
@@ -4384,6 +4384,17 @@ fn md_raid_create_command(
             "create the reviewed MD RAID array from explicit member devices",
         )
     }
+}
+
+fn missing_md_raid_create_inputs(missing_level: bool, missing_devices: bool) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if missing_level {
+        missing.push("RAID level");
+    }
+    if missing_devices {
+        missing.push("member devices");
+    }
+    missing
 }
 
 fn md_raid_grow_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
@@ -5592,6 +5603,19 @@ mod tests {
                       "/dev/disk/by-id/nvme-a",
                       "/dev/disk/by-id/nvme-b"
                     ]
+                  },
+                  "missing-level": {
+                    "target": "/dev/md/missing-level",
+                    "operation": "create",
+                    "devices": [
+                      "/dev/disk/by-id/nvme-c",
+                      "/dev/disk/by-id/nvme-d"
+                    ]
+                  },
+                  "missing-members": {
+                    "target": "/dev/md/missing-members",
+                    "operation": "create",
+                    "level": "10"
                   }
                 }
               },
@@ -5622,6 +5646,43 @@ mod tests {
                     && command.readiness == CommandReadiness::Ready
                     && command.mutates
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:missing-level:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mdadm",
+                            "--create",
+                            "/dev/md/missing-level",
+                            "--level",
+                            "<level>",
+                            "--raid-devices",
+                            "2",
+                            "/dev/disk/by-id/nvme-c",
+                            "/dev/disk/by-id/nvme-d",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["RAID level"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:missing-members:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mdadm",
+                            "--create",
+                            "/dev/md/missing-members",
+                            "--level",
+                            "10",
+                            "--raid-devices",
+                            "<member-count>",
+                            "<member-device>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["member devices"]
+                })
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "mdraids:newroot:create"

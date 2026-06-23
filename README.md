@@ -188,7 +188,8 @@ Partition grow plans render reviewed `parted resizepart` commands and partition
 table rereads when `device`, `partitionNumber`, and `end` or `desiredSize` are
 declared.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
-from explicit member devices and RAID level declarations.
+from explicit member devices and RAID level declarations, with exact
+unresolved-input markers when either field is missing.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
 online `vdo growLogical` and physical growth review steps.
 NFS export apply plans render reviewed `exportfs` create, option update, and

@@ -332,7 +332,8 @@ Partition grow command plans render concrete `parted resizepart`, `partprobe`,
 and `blockdev --rereadpt` commands when `device`, `partitionNumber`, and `end`
 or `desiredSize` are declared.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
-from explicit `level` and `devices` fields, with `/proc/mdstat` verification.
+from explicit `level` and `devices` fields, with exact unresolved-input markers
+when either field is missing and `/proc/mdstat` verification.
 VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
 plus online `vdo growLogical` and `vdo growPhysical` growth steps.
 NFS export command plans use explicit `client` and `options` lifecycle fields
