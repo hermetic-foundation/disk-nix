@@ -839,6 +839,27 @@
                   and .btrfs == true
                   and .nfs4 == true
                 ' supported-filesystems
+                nativeStorage=${
+                  pkgs.lib.escapeShellArg (
+                    builtins.toJSON {
+                      lvm = nixosModuleTest.config.services.lvm.enable;
+                      lvmInitrd = nixosModuleTest.config.boot.initrd.services.lvm.enable;
+                      lvmThin = nixosModuleTest.config.services.lvm.boot.thin.enable;
+                      swraid = nixosModuleTest.config.boot.swraid.enable;
+                      mdadmConf = nixosModuleTest.config.boot.swraid.mdadmConf;
+                      multipath = nixosModuleTest.config.services.multipath.enable;
+                    }
+                  )
+                }
+                printf '%s\n' "$nativeStorage" > native-storage
+                jq -e '
+                  .lvm == true
+                  and .lvmInitrd == true
+                  and .lvmThin == true
+                  and .swraid == true
+                  and (.mdadmConf | test("^PROGRAM .*/bin/true$"))
+                  and .multipath == true
+                ' native-storage
                 printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
                 grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
                 touch "$out"

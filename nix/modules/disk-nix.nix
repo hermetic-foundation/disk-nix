@@ -560,9 +560,29 @@ let
       inherit (filesystem) options;
     };
   isDestroyLifecycle = object: (object.destroy or false) || (object.operation or null) == "destroy";
+  activeLifecycleAttrs = attrs: lib.filterAttrs (_: object: !isDestroyLifecycle object) attrs;
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;
   activeLuksDevices = lib.filterAttrs (_: luks: !isDestroyLifecycle luks) cfg.luks.devices;
   activeNfsMounts = lib.filterAttrs (_: mount: !isDestroyLifecycle mount) cfg.nfs.mounts;
+  activePhysicalVolumes = activeLifecycleAttrs cfg.physicalVolumes;
+  activeVolumeGroups = activeLifecycleAttrs cfg.volumeGroups;
+  activeVolumes = activeLifecycleAttrs cfg.volumes;
+  activeThinPools = activeLifecycleAttrs cfg.thinPools;
+  activeLvmSnapshots = activeLifecycleAttrs cfg.lvmSnapshots;
+  activeLvmCaches = activeLifecycleAttrs cfg.lvmCaches;
+  activeMdRaids = activeLifecycleAttrs cfg.mdRaids;
+  activeMultipathMaps = activeLifecycleAttrs cfg.multipathMaps;
+  hasActiveAttrs = attrs: attrs != { };
+  hasActiveLvm =
+    hasActiveAttrs activePhysicalVolumes
+    || hasActiveAttrs activeVolumeGroups
+    || hasActiveAttrs activeVolumes
+    || hasActiveAttrs activeThinPools
+    || hasActiveAttrs activeLvmSnapshots
+    || hasActiveAttrs activeLvmCaches;
+  hasActiveLvmThinSupport = hasActiveAttrs activeThinPools || hasActiveAttrs activeLvmCaches;
+  hasActiveMdRaids = hasActiveAttrs activeMdRaids;
+  hasActiveMultipathMaps = hasActiveAttrs activeMultipathMaps;
   nfsExportLines =
     lib.mapAttrsToList
       (
@@ -1409,6 +1429,20 @@ in
     }) activeLuksDevices;
 
     boot.supportedFilesystems = supportedFilesystemTypes;
+
+    services.lvm = lib.mkIf hasActiveLvm {
+      enable = lib.mkDefault true;
+      boot.thin.enable = lib.mkIf hasActiveLvmThinSupport (lib.mkDefault true);
+    };
+
+    boot.initrd.services.lvm.enable = lib.mkIf hasActiveLvm (lib.mkDefault true);
+
+    boot.swraid = lib.mkIf hasActiveMdRaids {
+      enable = lib.mkDefault true;
+      mdadmConf = lib.mkDefault "PROGRAM ${pkgs.coreutils}/bin/true";
+    };
+
+    services.multipath.enable = lib.mkIf hasActiveMultipathMaps (lib.mkDefault true);
 
     services.openiscsi = lib.mkIf (cfg.iscsi.initiatorName != null) {
       enable = true;

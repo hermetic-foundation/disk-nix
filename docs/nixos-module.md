@@ -50,8 +50,10 @@ The NixOS module is the primary declarative interface.
 
 The module writes `/etc/disk-nix/spec.json`, installs the CLI and default
 storage tooling, and derives the matching NixOS `fileSystems`, `swapDevices`,
-`boot.initrd.luks.devices`, `boot.supportedFilesystems`, `services.openiscsi`,
-`boot.iscsi-initiator`, and selected `services.nfs.server.exports` entries.
+`boot.initrd.luks.devices`, `boot.supportedFilesystems`, `services.lvm`,
+`boot.initrd.services.lvm`, `boot.swraid`, `services.multipath`,
+`services.openiscsi`, `boot.iscsi-initiator`, and selected
+`services.nfs.server.exports` entries.
 Raw `spec` remains available for storage domains whose typed NixOS options have
 not been implemented yet.
 
@@ -71,6 +73,13 @@ in the generated disk-nix spec, but they are not re-added to NixOS
 `swapDevices` or `boot.initrd.luks.devices`.
 Typed NFS client mounts also keep destroy operations in the generated disk-nix
 spec while filtering them out of the derived NixOS `fileSystems` entries.
+Typed active LVM declarations enable NixOS LVM support and initrd LVM support by
+default, and typed thin-pool or LVM-cache declarations also enable NixOS thin
+support. Typed active MD RAID declarations enable `boot.swraid` and add the same
+no-op `PROGRAM` line used by the installer profile unless the host overrides
+`boot.swraid.mdadmConf`. Typed active multipath map declarations enable
+`services.multipath` so stage-1 and stage-2 include the daemon and kernel
+support expected by `/dev/mapper/mpath*` consumers.
 
 Lifecycle declaration attribute names are usable object names only for domains
 whose native tools address objects by name, such as ZFS datasets, ZFS pools,
