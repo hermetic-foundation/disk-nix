@@ -186,7 +186,8 @@ Use these commands for:
   mounts
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
-  metadata detail data
+  metadata detail data, including bcache role/set/state, cache mode,
+  replacement policy, dirty data, and writeback percentage when probed
 
 ## Inspect
 

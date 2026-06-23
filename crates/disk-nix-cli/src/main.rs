@@ -1863,8 +1863,13 @@ fn usage_details(node: &Node) -> String {
         ("exfat.free-clusters", "free-clusters"),
         ("exfat.bytes-per-sector", "sector-bytes"),
         ("exfat.sectors-per-cluster", "sectors-per-cluster"),
-        ("bcache.cache_mode", "cache-mode"),
-        ("bcache.dirty_data", "dirty"),
+        ("bcache.role", "role"),
+        ("bcache.set-uuid", "set-uuid"),
+        ("bcache.state", "state"),
+        ("bcache.cache-mode", "cache-mode"),
+        ("bcache.cache-replacement-policy", "replacement"),
+        ("bcache.dirty-data", "dirty"),
+        ("bcache.writeback-percent", "writeback-percent"),
         ("zfs.health", "health"),
         ("zfs.state", "state"),
         ("zfs.vdev-role", "vdev-role"),
@@ -2188,6 +2193,19 @@ mod tests {
         assert_eq!(
             usage_details(&exfat),
             "serial=0x6eef953b clusters=49984 free-clusters=1024 sector-bytes=512 sectors-per-cluster=64"
+        );
+
+        let bcache = Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
+            .with_property("bcache.role", "backing")
+            .with_property("bcache.set-uuid", "cache-set-uuid")
+            .with_property("bcache.state", "clean")
+            .with_property("bcache.cache-mode", "writeback")
+            .with_property("bcache.cache-replacement-policy", "lru")
+            .with_property("bcache.dirty-data", "64.0M")
+            .with_property("bcache.writeback-percent", "10");
+        assert_eq!(
+            usage_details(&bcache),
+            "role=backing set-uuid=cache-set-uuid state=clean cache-mode=writeback replacement=lru dirty=64.0M writeback-percent=10"
         );
     }
 
