@@ -88,6 +88,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List ZFS pools, vdevs, datasets, snapshots, and zvols.
+    Zfs {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered volumes, pools, datasets, LUNs, and exports.
     Volumes {
         /// Emit JSON for matching graph nodes.
@@ -384,6 +390,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_complex_filesystem_node)?;
             } else {
                 print_complex_filesystems(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Zfs { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_zfs_node)?;
+            } else {
+                print_zfs(output, &graph)?;
             }
             Ok(())
         }
@@ -1453,6 +1468,34 @@ fn print_complex_filesystems(output: &mut impl Write, graph: &StorageGraph) -> i
     Ok(())
 }
 
+fn print_zfs(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:>12} {:>12} {:<12} {:<24} {:>8} DETAILS",
+        "KIND", "NAME", "SIZE", "USED", "FREE", "HEALTH", "ORIGIN", "CHILDREN"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_zfs_node(node)) {
+        let usage = node.usage.as_ref();
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>12} {:>12} {:>12} {:<12} {:<24} {:>8} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            human_bytes(usage.and_then(|usage| usage.used_bytes)),
+            human_bytes(usage.and_then(|usage| usage.free_bytes)),
+            property_value(node, "zfs.health")
+                .or_else(|| property_value(node, "zfs.state"))
+                .or_else(|| property_value(node, "zfs.vdev-state"))
+                .unwrap_or("-"),
+            property_value(node, "zfs.origin").unwrap_or("-"),
+            zfs_child_count(graph, node),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_volumes(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2279,6 +2322,20 @@ fn is_complex_filesystem_node(node: &Node) -> bool {
     })
 }
 
+fn is_zfs_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::ZfsPool
+            | NodeKind::ZfsVdev
+            | NodeKind::ZfsDataset
+            | NodeKind::ZfsSnapshot
+            | NodeKind::Zvol
+    ) || node
+        .properties
+        .iter()
+        .any(|property| property.key.starts_with("zfs."))
+}
+
 fn is_volume_node(node: &Node) -> bool {
     matches!(
         node.kind,
@@ -2905,6 +2962,22 @@ fn nfs_mount_count(graph: &StorageGraph, node: &Node) -> usize {
         .count()
 }
 
+fn zfs_child_count(graph: &StorageGraph, node: &Node) -> usize {
+    graph
+        .edges
+        .iter()
+        .filter(|edge| {
+            edge.from == node.id
+                && matches!(
+                    edge.relationship,
+                    disk_nix_model::Relationship::Contains
+                        | disk_nix_model::Relationship::MountedAt
+                        | disk_nix_model::Relationship::SnapshotOf
+                )
+        })
+        .count()
+}
+
 fn snapshot_source<'a>(graph: &'a StorageGraph, node: &Node) -> Option<&'a str> {
     graph
         .edges
@@ -2976,12 +3049,12 @@ mod tests {
         is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node, is_lvm_node,
         is_mapping_node, is_multipath_node, is_network_storage_node, is_nfs_node, is_nvme_node,
         is_partition_node, is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node,
-        is_volume_node, iscsi_lun_count, mount_details, nfs_mount_count, print_cache,
+        is_volume_node, is_zfs_node, iscsi_lun_count, mount_details, nfs_mount_count, print_cache,
         print_complex_filesystems, print_devices, print_encryption, print_filesystems, print_iscsi,
         print_loop, print_lvm, print_mappings, print_mounts, print_multipath,
         print_network_storage, print_nfs, print_nvme, print_partitions, print_pools, print_raid,
-        print_snapshots, print_swap, print_usage, print_vdo, print_volumes, snapshot_source,
-        usage_details, usage_percent,
+        print_snapshots, print_swap, print_usage, print_vdo, print_volumes, print_zfs,
+        snapshot_source, usage_details, usage_percent, zfs_child_count,
     };
 
     #[test]
@@ -3048,6 +3121,15 @@ mod tests {
             NodeKind::ZfsPool,
             "tank"
         )));
+        assert!(is_zfs_node(&Node::new(
+            "zpool:tank",
+            NodeKind::ZfsPool,
+            "tank"
+        )));
+        assert!(is_zfs_node(
+            &Node::new("filesystem:tank/home", NodeKind::Filesystem, "tank/home")
+                .with_property("zfs.compression", "zstd")
+        ));
         assert!(is_complex_filesystem_node(
             &Node::new("filesystem:/data", NodeKind::Filesystem, "/data")
                 .with_property("btrfs.data-profile", "single")
@@ -3796,6 +3878,119 @@ mod tests {
         assert!(output.contains("tank/home"));
         assert!(output.contains("compression=zstd encryption=aes-256-gcm keystatus=available"));
         assert!(output.contains("bcachefs-state=rw bcachefs-device-free=8589934592"));
+    }
+
+    #[test]
+    fn zfs_table_includes_pool_vdev_dataset_snapshot_and_zvol_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zfs-pool:tank", NodeKind::ZfsPool, "tank")
+                .with_size_bytes(1_099_511_627_776)
+                .with_usage(Usage {
+                    used_bytes: Some(274_877_906_944),
+                    free_bytes: Some(824_633_720_832),
+                    allocated_bytes: Some(274_877_906_944),
+                })
+                .with_property("zfs.health", "ONLINE")
+                .with_property("zfs.state", "ONLINE"),
+        );
+        graph.add_node(
+            Node::new(
+                "zfs-vdev:tank:/dev/disk/by-id/nvme-tank-a",
+                NodeKind::ZfsVdev,
+                "/dev/disk/by-id/nvme-tank-a",
+            )
+            .with_path("/dev/disk/by-id/nvme-tank-a")
+            .with_property("zfs.vdev-role", "data")
+            .with_property("zfs.vdev-state", "ONLINE")
+            .with_property("zfs.read-errors", "0")
+            .with_property("zfs.write-errors", "1")
+            .with_property("zfs.checksum-errors", "2"),
+        );
+        graph.add_node(
+            Node::new("zfs-dataset:tank/home", NodeKind::ZfsDataset, "tank/home")
+                .with_usage(Usage {
+                    used_bytes: Some(107_374_182_400),
+                    free_bytes: Some(805_306_368_000),
+                    allocated_bytes: Some(107_374_182_400),
+                })
+                .with_property("zfs.compression", "zstd")
+                .with_property("zfs.quota", "500G")
+                .with_property("zfs.reservation", "10G")
+                .with_property("zfs.encryption", "aes-256-gcm")
+                .with_property("zfs.keystatus", "available"),
+        );
+        graph.add_node(
+            Node::new(
+                "zfs-snapshot:tank/home@daily",
+                NodeKind::ZfsSnapshot,
+                "tank/home@daily",
+            )
+            .with_property("zfs.userrefs", "2")
+            .with_property("zfs.compression", "zstd"),
+        );
+        graph.add_node(
+            Node::new("zvol:tank/vm/root", NodeKind::Zvol, "tank/vm/root")
+                .with_size_bytes(85_899_345_920)
+                .with_property("zfs.origin", "tank/vm/base@clean")
+                .with_property("zfs.volsize", "80G"),
+        );
+        graph.add_edge(Edge::new(
+            "zfs-pool:tank",
+            "zfs-vdev:tank:/dev/disk/by-id/nvme-tank-a",
+            Relationship::Contains,
+        ));
+        graph.add_edge(Edge::new(
+            "zfs-pool:tank",
+            "zfs-dataset:tank/home",
+            Relationship::Contains,
+        ));
+        graph.add_edge(Edge::new(
+            "zfs-pool:tank",
+            "zvol:tank/vm/root",
+            Relationship::Contains,
+        ));
+        graph.add_edge(Edge::new(
+            "zfs-snapshot:tank/home@daily",
+            "zfs-dataset:tank/home",
+            Relationship::SnapshotOf,
+        ));
+
+        let pool = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::ZfsPool)
+            .expect("pool fixture exists");
+        let snapshot = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::ZfsSnapshot)
+            .expect("snapshot fixture exists");
+        assert_eq!(zfs_child_count(&graph, pool), 3);
+        assert_eq!(zfs_child_count(&graph, snapshot), 1);
+
+        let mut output = Vec::new();
+        print_zfs(&mut output, &graph).expect("zfs table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("HEALTH"));
+        assert!(output.contains("ORIGIN"));
+        assert!(output.contains("CHILDREN"));
+        assert!(output.contains("tank"));
+        assert!(output.contains("ONLINE"));
+        assert!(
+            output
+                .contains("data vdev-state=ONLINE read-errors=0 write-errors=1 checksum-errors=2")
+        );
+        assert!(output.contains("tank/home"));
+        assert!(output.contains(
+            "compression=zstd quota=500G reservation=10G encryption=aes-256-gcm keystatus=available"
+        ));
+        assert!(output.contains("tank/home@daily"));
+        assert!(output.contains("userrefs=2 compression=zstd"));
+        assert!(output.contains("tank/vm/root"));
+        assert!(output.contains("tank/vm/base@clean"));
+        assert!(output.contains("volsize=80G"));
     }
 
     #[test]

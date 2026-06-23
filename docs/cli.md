@@ -138,6 +138,7 @@ disk-nix devices
 disk-nix partitions
 disk-nix filesystems
 disk-nix complex-filesystems
+disk-nix zfs
 disk-nix volumes
 disk-nix pools
 disk-nix snapshots
@@ -166,6 +167,7 @@ disk-nix devices --json
 disk-nix partitions --json
 disk-nix filesystems --json
 disk-nix complex-filesystems --json
+disk-nix zfs --json
 disk-nix volumes --json
 disk-nix pools --json
 disk-nix snapshots --json
@@ -215,6 +217,11 @@ Use these commands for:
   used/free capacity, utilization, backing/member counts, allocation profiles,
   qgroup limits, bcachefs member accounting, ZFS health/vdev state, and ZFS
   compression/quota/reservation/encryption properties when probes expose them
+- `zfs`: ZFS pools, vdevs, datasets, snapshots, and zvols, including pool
+  health/state, vdev roles and error counters, dataset compression, quota,
+  reservation, encryption, key status, snapshot user references, zvol volume
+  size, origin, and pool/dataset/snapshot child relationships when `zpool` and
+  `zfs` probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, bcachefs, ZFS, zvols,
   LUNs, and exports, including LVM origin/pool/data metadata, activation state,
   role, layout, health, tags, thin-pool fullness behavior, metadata size, and
