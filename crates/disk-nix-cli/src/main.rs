@@ -1948,6 +1948,7 @@ fn usage_details(node: &Node) -> String {
         ("md.state", "state"),
         ("md.raid-devices", "raid-devices"),
         ("md.total-devices", "total-devices"),
+        ("md.member-state", "member-state"),
         ("iscsi.portal", "portal"),
         ("iscsi.attached-disk", "attached-disk"),
         ("nfs.server", "server"),
@@ -2286,6 +2287,11 @@ mod tests {
                 .with_property("swap.priority", "100"),
         );
         graph.add_node(
+            Node::new("block:/dev/sda1", NodeKind::Partition, "/dev/sda1")
+                .with_path("/dev/sda1")
+                .with_property("md.member-state", "active sync"),
+        );
+        graph.add_node(
             Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
                 .with_path("/dev/sdb")
                 .with_property("multipath.host-path", "2:0:0:1")
@@ -2309,6 +2315,7 @@ mod tests {
         ));
         assert!(output.contains("loop-backing=true"));
         assert!(output.contains("swap-active=true swap-type=partition swap-priority=100"));
+        assert!(output.contains("member-state=active sync"));
         assert!(
             output.contains("host-path=2:0:0:1 major-minor=8:16 path-state=active ready running")
         );
