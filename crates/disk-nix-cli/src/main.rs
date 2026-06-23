@@ -2892,13 +2892,23 @@ fn usage_details(node: &Node) -> String {
         ("bcache.set-uuid", "set-uuid"),
         ("bcache.label", "label"),
         ("bcache.state", "state"),
+        ("bcache.running", "running"),
+        ("bcache.cache-available-percent", "available-percent"),
         ("bcache.cache-mode", "cache-mode"),
         ("bcache.cache-replacement-policy", "replacement"),
+        ("bcache.discard", "discard"),
         ("bcache.dirty-data", "dirty"),
+        ("bcache.io-errors", "io-errors"),
+        ("bcache.metadata-written", "metadata-written"),
+        ("bcache.priority-stats", "priority-stats"),
         ("bcache.readahead", "readahead"),
         ("bcache.sequential-cutoff", "sequential-cutoff"),
+        ("bcache.written", "written"),
+        ("bcache.writeback-delay", "writeback-delay"),
+        ("bcache.writeback-metadata", "writeback-metadata"),
         ("bcache.writeback-percent", "writeback-percent"),
         ("bcache.writeback-rate", "writeback-rate"),
+        ("bcache.writeback-running", "writeback-running"),
         ("zfs.health", "health"),
         ("zfs.state", "state"),
         ("zfs.vdev-role", "vdev-role"),
@@ -3814,16 +3824,26 @@ mod tests {
             .with_property("bcache.set-uuid", "cache-set-uuid")
             .with_property("bcache.label", "fast-cache")
             .with_property("bcache.state", "clean")
+            .with_property("bcache.running", "1")
+            .with_property("bcache.cache-available-percent", "78")
             .with_property("bcache.cache-mode", "writeback")
             .with_property("bcache.cache-replacement-policy", "lru")
+            .with_property("bcache.discard", "true")
             .with_property("bcache.dirty-data", "64.0M")
+            .with_property("bcache.io-errors", "0")
+            .with_property("bcache.metadata-written", "128.0M")
+            .with_property("bcache.priority-stats", "Unused: 0% Metadata: 1%")
             .with_property("bcache.readahead", "0")
             .with_property("bcache.sequential-cutoff", "4.0M")
+            .with_property("bcache.written", "512.0M")
+            .with_property("bcache.writeback-delay", "30")
+            .with_property("bcache.writeback-metadata", "true")
             .with_property("bcache.writeback-percent", "10")
-            .with_property("bcache.writeback-rate", "1.0M/sec");
+            .with_property("bcache.writeback-rate", "1.0M/sec")
+            .with_property("bcache.writeback-running", "1");
         assert_eq!(
             usage_details(&bcache),
-            "role=backing kind=cache-set set-uuid=cache-set-uuid label=fast-cache state=clean cache-mode=writeback replacement=lru dirty=64.0M readahead=0 sequential-cutoff=4.0M writeback-percent=10 writeback-rate=1.0M/sec"
+            "role=backing kind=cache-set set-uuid=cache-set-uuid label=fast-cache state=clean running=1 available-percent=78 cache-mode=writeback replacement=lru discard=true dirty=64.0M io-errors=0 metadata-written=128.0M priority-stats=Unused: 0% Metadata: 1% readahead=0 sequential-cutoff=4.0M written=512.0M writeback-delay=30 writeback-metadata=true writeback-percent=10 writeback-rate=1.0M/sec writeback-running=1"
         );
 
         let swap = Node::new("swap:/dev/zram0", NodeKind::Swap, "/dev/zram0")
@@ -4748,9 +4768,15 @@ mod tests {
                 .with_property("bcache.kind", "cache-set")
                 .with_property("bcache.set-uuid", "cache-set-uuid")
                 .with_property("bcache.state", "clean")
+                .with_property("bcache.running", "1")
+                .with_property("bcache.cache-available-percent", "78")
                 .with_property("bcache.cache-mode", "writeback")
                 .with_property("bcache.cache-replacement-policy", "lru")
-                .with_property("bcache.dirty-data", "64.0M"),
+                .with_property("bcache.dirty-data", "64.0M")
+                .with_property("bcache.io-errors", "0")
+                .with_property("bcache.metadata-written", "128.0M")
+                .with_property("bcache.writeback-delay", "30")
+                .with_property("bcache.writeback-running", "1"),
         );
         graph.add_node(
             Node::new("lvm-lv:vg/root", NodeKind::LvmLogicalVolume, "vg/root")
@@ -4779,6 +4805,10 @@ mod tests {
         assert!(output.contains("writeback"));
         assert!(output.contains("lru"));
         assert!(output.contains("dirty=64.0M"));
+        assert!(output.contains("running=1 available-percent=78"));
+        assert!(output.contains("io-errors=0 metadata-written=128.0M"));
+        assert!(output.contains("writeback-delay=30"));
+        assert!(output.contains("writeback-running=1"));
         assert!(output.contains("vg/root"));
         assert!(output.contains("writethrough"));
         assert!(output.contains("cache-policy=smq"));
@@ -5260,9 +5290,14 @@ mod tests {
                 .with_property("bcache.kind", "cache-set")
                 .with_property("bcache.label", "fast-cache")
                 .with_property("bcache.state", "clean")
+                .with_property("bcache.running", "1")
+                .with_property("bcache.cache-available-percent", "78")
                 .with_property("bcache.cache-mode", "writeback")
+                .with_property("bcache.discard", "true")
+                .with_property("bcache.io-errors", "0")
                 .with_property("bcache.readahead", "0")
                 .with_property("bcache.sequential-cutoff", "4.0M")
+                .with_property("bcache.written", "512.0M")
                 .with_property("bcache.writeback-rate", "1.0M/sec"),
         );
 
@@ -5294,7 +5329,7 @@ mod tests {
         assert!(output.contains("segment-cache-policy=smq"));
         assert!(output.contains("vdo-write-policy=auto"));
         assert!(output.contains(
-            "role=backing kind=cache-set label=fast-cache state=clean cache-mode=writeback readahead=0 sequential-cutoff=4.0M writeback-rate=1.0M/sec"
+            "role=backing kind=cache-set label=fast-cache state=clean running=1 available-percent=78 cache-mode=writeback discard=true io-errors=0 readahead=0 sequential-cutoff=4.0M written=512.0M writeback-rate=1.0M/sec"
         ));
     }
 

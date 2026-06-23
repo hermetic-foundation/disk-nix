@@ -82,15 +82,25 @@ fn read_device(name: &str, bcache_dir: &Path) -> BcacheDevice {
     let mut properties = Vec::new();
 
     for key in [
+        "cache_available_percent",
         "cache_mode",
         "cache_replacement_policy",
+        "discard",
         "dirty_data",
+        "io_errors",
         "label",
+        "metadata_written",
+        "priority_stats",
         "readahead",
+        "running",
         "sequential_cutoff",
         "state",
+        "written",
+        "writeback_delay",
+        "writeback_metadata",
         "writeback_percent",
         "writeback_rate",
+        "writeback_running",
     ] {
         if let Some(value) = read_trimmed(bcache_dir.join(key)) {
             properties.push((format!("bcache.{}", key.replace('_', "-")), value));
@@ -198,8 +208,16 @@ mod tests {
                     backing_device: Some("sdb1".to_string()),
                     set_uuid: Some("cache-set-uuid".to_string()),
                     properties: vec![
+                        (
+                            "bcache.cache-available-percent".to_string(),
+                            "78".to_string(),
+                        ),
                         ("bcache.cache-mode".to_string(), "writeback".to_string()),
+                        ("bcache.dirty-data".to_string(), "64.0M".to_string()),
+                        ("bcache.running".to_string(), "1".to_string()),
                         ("bcache.state".to_string(), "clean".to_string()),
+                        ("bcache.writeback-delay".to_string(), "30".to_string()),
+                        ("bcache.writeback-running".to_string(), "1".to_string()),
                     ],
                 },
                 BcacheDevice {
@@ -207,7 +225,17 @@ mod tests {
                     role: BcacheRole::Cache,
                     backing_device: None,
                     set_uuid: Some("cache-set-uuid".to_string()),
-                    properties: vec![("bcache.label".to_string(), "fast-cache".to_string())],
+                    properties: vec![
+                        ("bcache.label".to_string(), "fast-cache".to_string()),
+                        ("bcache.discard".to_string(), "true".to_string()),
+                        ("bcache.io-errors".to_string(), "0".to_string()),
+                        ("bcache.metadata-written".to_string(), "128.0M".to_string()),
+                        (
+                            "bcache.priority-stats".to_string(),
+                            "Unused: 0% Metadata: 1%".to_string(),
+                        ),
+                        ("bcache.written".to_string(), "512.0M".to_string()),
+                    ],
                 },
             ],
         };
@@ -218,6 +246,23 @@ mod tests {
             node.id.0 == "block:/dev/bcache0"
                 && node.properties.iter().any(|property| {
                     property.key == "bcache.cache-mode" && property.value == "writeback"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "bcache.cache-available-percent" && property.value == "78"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "bcache.writeback-running" && property.value == "1"
+                })
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.id.0 == "block:/dev/nvme0n1p3"
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "bcache.io-errors" && property.value == "0")
+                && node.properties.iter().any(|property| {
+                    property.key == "bcache.priority-stats"
+                        && property.value == "Unused: 0% Metadata: 1%"
                 })
         }));
         assert!(graph.edges.iter().any(|edge| {

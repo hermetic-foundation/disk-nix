@@ -246,15 +246,18 @@ Use these commands for:
   VDO segment compression/dedup/write-policy details, multipath WWID/size/path
   state, VDO backing device, logical/physical size, mode, and data-reduction
   settings, loop backing/offset/read-only/direct-I/O settings, and bcache
-  role/cache-set/tuning details such as label, state,
-  cache mode, readahead, sequential cutoff, and writeback rate when probes
-  expose them
+  role/cache-set/tuning details such as label, state, running flag, available
+  cache percentage, cache mode, discard, I/O errors, written/metadata-written
+  accounting, readahead, sequential cutoff, priority stats, writeback delay,
+  and writeback rate when probes expose them
 - `encryption`: LUKS/dm-crypt mappings and header metadata, including cipher,
   active/in-use state, keyslot/token counts and ids, LUKS version, epoch,
   metadata/keyslot area sizes, flags, subsystem, and data-segment details
 - `cache`: bcache devices/cache sets, LVM cache/writecache metadata, bcachefs
   member-device cache accounting, and ZFS cache vdevs, including cache mode,
-  policy, dirty/writeback data, cache-set identity, state, and vdev state
+  policy, dirty/writeback data, cache-set identity, state/running flags,
+  available cache percentage, discard, I/O errors, written/metadata-written
+  accounting, priority stats, and vdev state
 - `lvm`: LVM physical volumes, volume groups, logical volumes, segments, thin
   pools, snapshots, and cache/writecache layers, including data and metadata
   percentages, active state, extent/PV/LV counts, origin/pool relationships,
@@ -307,7 +310,8 @@ Use these commands for:
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
   metadata detail data, including bcache role/set/state, cache mode,
-  replacement policy, dirty data, writeback percentage, `blkid` signature
+  replacement policy, available cache percentage, dirty data, I/O errors,
+  writeback percentage, `blkid` signature
   details, ext superblock details, LVM layout, health, thin/cache/writecache
   status, NTFS volume geometry and MFT record sizing, F2FS block/segment usage,
   bcachefs filesystem and member-device capacity accounting, Btrfs allocation
