@@ -1951,10 +1951,17 @@ fn usage_details(node: &Node) -> String {
         ("multipath.host-path", "host-path"),
         ("major-minor", "major-minor"),
         ("multipath.path-state", "path-state"),
+        ("md.version", "md-version"),
         ("md.level", "level"),
         ("md.state", "state"),
         ("md.raid-devices", "raid-devices"),
         ("md.total-devices", "total-devices"),
+        ("md.name", "md-name"),
+        ("md.events", "events"),
+        ("md.chunk-size", "chunk"),
+        ("md.layout", "layout"),
+        ("md.creation-time", "created"),
+        ("md.update-time", "updated"),
         ("md.member-state", "member-state"),
         ("iscsi.portal", "portal"),
         ("iscsi.persistent-portal", "persistent-portal"),
@@ -2785,8 +2792,13 @@ mod tests {
         );
         graph.add_node(
             Node::new("md:/dev/md/root", NodeKind::MdRaid, "/dev/md/root")
+                .with_property("md.version", "1.2")
                 .with_property("md.level", "raid1")
-                .with_property("md.state", "clean"),
+                .with_property("md.state", "clean")
+                .with_property("md.raid-devices", "2")
+                .with_property("md.total-devices", "2")
+                .with_property("md.name", "host:root")
+                .with_property("md.events", "17"),
         );
 
         let mut output = Vec::new();
@@ -2800,7 +2812,9 @@ mod tests {
         ));
         assert!(output.contains("extent=4.00m pvs=2 lvs=8"));
         assert!(output.contains("qgroup=0/257 max-rfer=25GiB"));
-        assert!(output.contains("level=raid1 state=clean"));
+        assert!(output.contains(
+            "md-version=1.2 level=raid1 state=clean raid-devices=2 total-devices=2 md-name=host:root events=17"
+        ));
     }
 
     #[test]

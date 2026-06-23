@@ -182,7 +182,8 @@ Use these commands for:
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
   pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays,
   including ZFS health/vdev role/state/error counters, LVM extent and PV/LV
-  counts, Btrfs qgroup limits, and RAID level/state where probes expose them
+  counts, Btrfs qgroup limits, and MD RAID metadata version, name, level,
+  state, device counts, and event counters where probes expose them
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
   source relationships, LVM origin/pool/data metadata, Btrfs subvolume IDs and
   parent UUIDs, and ZFS user-reference, compression, and encryption details

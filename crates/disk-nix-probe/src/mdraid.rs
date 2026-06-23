@@ -12,11 +12,18 @@ pub struct MdArrayReport {
 struct MdArray {
     name: String,
     uuid: Option<String>,
+    version: Option<String>,
     level: Option<String>,
     state: Option<String>,
     size_bytes: Option<u64>,
     used_devices: Option<String>,
     total_devices: Option<String>,
+    name_property: Option<String>,
+    creation_time: Option<String>,
+    update_time: Option<String>,
+    events: Option<String>,
+    chunk_size: Option<String>,
+    layout: Option<String>,
     members: Vec<MdMember>,
 }
 
@@ -60,18 +67,27 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
     let mut array = MdArray {
         name: name.to_string(),
         uuid: None,
+        version: None,
         level: None,
         state: None,
         size_bytes: None,
         used_devices: None,
         total_devices: None,
+        name_property: None,
+        creation_time: None,
+        update_time: None,
+        events: None,
+        chunk_size: None,
+        layout: None,
         members: Vec::new(),
     };
     let mut in_member_table = false;
 
     for line in text.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("Raid Level :") {
+        if trimmed.starts_with("Version :") {
+            array.version = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Raid Level :") {
             array.level = value_after_colon(trimmed);
         } else if trimmed.starts_with("Array Size :") {
             array.size_bytes = parse_array_size(trimmed);
@@ -79,6 +95,18 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
             array.state = value_after_colon(trimmed);
         } else if trimmed.starts_with("UUID :") {
             array.uuid = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Name :") {
+            array.name_property = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Creation Time :") {
+            array.creation_time = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Update Time :") {
+            array.update_time = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Events :") {
+            array.events = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Chunk Size :") {
+            array.chunk_size = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Layout :") {
+            array.layout = value_after_colon(trimmed);
         } else if trimmed.starts_with("Raid Devices :") {
             array.used_devices = value_after_colon(trimmed);
         } else if trimmed.starts_with("Total Devices :") {
@@ -124,10 +152,17 @@ fn add_array(graph: &mut StorageGraph, array: MdArray) {
     }
 
     for (key, value) in [
+        ("md.version", array.version),
         ("md.level", array.level),
         ("md.state", array.state),
         ("md.raid-devices", array.used_devices),
         ("md.total-devices", array.total_devices),
+        ("md.name", array.name_property),
+        ("md.creation-time", array.creation_time),
+        ("md.update-time", array.update_time),
+        ("md.events", array.events),
+        ("md.chunk-size", array.chunk_size),
+        ("md.layout", array.layout),
     ] {
         if let Some(value) = value {
             node = node.with_property(key, value);
@@ -186,12 +221,16 @@ mod tests {
     const SCAN: &[u8] = b"ARRAY /dev/md0 metadata=1.2 UUID=aaaa:bbbb:cccc:dddd name=host:0\n";
     const DETAIL: &[u8] = b"/dev/md0:\n\
            Version : 1.2\n\
+     Creation Time : Tue Jun 23 10:15:00 2026\n\
         Raid Level : raid1\n\
         Array Size : 1046528 (1022.00 MiB 1071.64 MB)\n\
        Raid Devices : 2\n\
       Total Devices : 2\n\
               State : clean\n\
+        Update Time : Tue Jun 23 10:16:00 2026\n\
                UUID : aaaa:bbbb:cccc:dddd\n\
+               Name : host:0\n\
+             Events : 17\n\
 \n\
     Number   Major   Minor   RaidDevice State\n\
        0       8        1        0      active sync   /dev/sda1\n\
@@ -219,6 +258,22 @@ mod tests {
                 .iter()
                 .any(|node| node.kind == NodeKind::MdRaid && node.name == "/dev/md0")
         );
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::MdRaid
+                && node.name == "/dev/md0"
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.version" && property.value == "1.2")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.events" && property.value == "17")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.name" && property.value == "host:0")
+        }));
         assert_eq!(
             graph
                 .edges
