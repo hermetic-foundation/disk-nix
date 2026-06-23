@@ -679,6 +679,12 @@ in
       description = "Typed partition lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    vdoVolumes = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed VDO volume lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
     volumeGroups = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -856,6 +862,7 @@ in
         };
         disks = (cfg.spec.disks or { }) // normalizeLifecycleSpec cfg.disks;
         partitions = (cfg.spec.partitions or { }) // normalizeLifecycleSpec cfg.partitions;
+        vdoVolumes = (cfg.spec.vdoVolumes or { }) // normalizeLifecycleSpec cfg.vdoVolumes;
         volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
         pools = (cfg.spec.pools or { }) // normalizeLifecycleSpec cfg.pools;

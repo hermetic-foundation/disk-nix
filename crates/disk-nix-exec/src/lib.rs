@@ -486,6 +486,30 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Grow if collection == Some("vdoVolumes") => (
+            vec![
+                command(
+                    ["vdo", "status", "--name", target],
+                    false,
+                    "verify VDO volume configuration after growth",
+                ),
+                command(
+                    ["vdostats", "--human-readable", target],
+                    false,
+                    "verify VDO runtime capacity, utilization, and savings after growth",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify VDO graph node and backing relationships",
+                ),
+            ],
+            vec![
+                "VDO logical or physical size matches desired state".to_string(),
+                "used, available, and space-saving counters are reviewed after growth".to_string(),
+                "dependent filesystems or mappings see the intended capacity".to_string(),
+            ],
+        ),
         Operation::Create | Operation::Grow if collection == Some("partitions") => (
             vec![
                 command(
@@ -915,6 +939,33 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "grow the backing partition, LUN, or volume before resizing the mapper"
                         .to_string(),
                     "coordinate dependent LVM and filesystem resizing after cryptsetup resize"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Grow if collection == Some("vdoVolumes") => {
+            let target = target.unwrap_or("<vdo-volume>");
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    command(
+                        ["vdo", "status", "--name", target],
+                        false,
+                        "inspect VDO logical and physical size before growth",
+                    ),
+                    vdo_grow_logical_command(target, desired_size),
+                    command(
+                        ["vdo", "growPhysical", "--name", target],
+                        true,
+                        "grow VDO physical capacity after backing storage has grown",
+                    ),
+                ],
+                vec![
+                    "choose logical and physical growth intentionally; they are separate VDO operations"
+                        .to_string(),
+                    "confirm backing storage capacity before physical VDO growth".to_string(),
+                    "review deduplication, compression, and slab utilization before increasing logical size"
                         .to_string(),
                 ],
                 true,
@@ -1493,6 +1544,37 @@ fn swap_resize_command(target: &str, desired_size: Option<&str>) -> ExecutionCom
     }
 }
 
+fn vdo_grow_logical_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    match desired_size {
+        Some(size) => command_vec(
+            vec![
+                "vdo",
+                "growLogical",
+                "--name",
+                target,
+                "--vdoLogicalSize",
+                size,
+            ],
+            true,
+            "grow VDO logical size to the desired value",
+        ),
+        None => command_with_readiness(
+            [
+                "vdo",
+                "growLogical",
+                "--name",
+                target,
+                "--vdoLogicalSize",
+                "<size>",
+            ],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired VDO logical size"],
+            "grow VDO logical size after selecting the desired size",
+        ),
+    }
+}
+
 fn property_assignment(action: &PlannedAction) -> String {
     let key = action.context.property.as_deref().unwrap_or("<key>");
     let value = action
@@ -1750,6 +1832,49 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["cryptsetup", "resize", "cryptroot"])
+        }));
+    }
+
+    #[test]
+    fn vdo_growth_reports_vdo_commands_and_verification() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "vdoVolumes": {
+                  "archive": {
+                    "operation": "grow",
+                    "desiredSize": "4TiB"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "vdo",
+                        "growLogical",
+                        "--name",
+                        "archive",
+                        "--vdoLogicalSize",
+                        "4TiB",
+                    ]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["vdostats", "--human-readable", "archive"])
         }));
     }
 

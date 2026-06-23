@@ -541,6 +541,9 @@ fn spec_schema() -> serde_json::Value {
             "partitions": {
                 "$ref": "#/$defs/lifecycleMap"
             },
+            "vdoVolumes": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
             "volumes": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -579,6 +582,7 @@ fn spec_schema() -> serde_json::Value {
                     "luks": { "$ref": "#/$defs/luksSpec" },
                     "disks": { "$ref": "#/$defs/lifecycleMap" },
                     "partitions": { "$ref": "#/$defs/lifecycleMap" },
+                    "vdoVolumes": { "$ref": "#/$defs/lifecycleMap" },
                     "volumes": { "$ref": "#/$defs/lifecycleMap" },
                     "volumeGroups": { "$ref": "#/$defs/lifecycleMap" },
                     "pools": { "$ref": "#/$defs/lifecycleMap" },

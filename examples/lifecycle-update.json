@@ -25,6 +25,12 @@
       "preserveData": true
     }
   },
+  "vdoVolumes": {
+    "archive": {
+      "operation": "grow",
+      "desiredSize": "4TiB"
+    }
+  },
   "partitions": {
     "root": {
       "operation": "grow",

@@ -117,6 +117,7 @@ Typed lifecycle declarations are available for:
 
 - `disks`
 - `partitions`
+- `vdoVolumes`
 - `volumes`
 - `volumeGroups`
 - `pools`
@@ -175,6 +176,10 @@ Example lifecycle planning through NixOS options:
       device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
       operation = "grow";
       desiredSize = "100%";
+    };
+    vdoVolumes.archive = {
+      operation = "grow";
+      desiredSize = "4TiB";
     };
     pools.tank = {
       operation = "rebalance";

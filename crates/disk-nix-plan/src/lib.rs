@@ -384,6 +384,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
     for collection in [
         "disks",
         "partitions",
+        "vdoVolumes",
         "volumes",
         "volumeGroups",
         "pools",
@@ -1472,6 +1473,20 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Grow if collection == "vdoVolumes" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "VDO growth must distinguish logical size from backing physical capacity"
+                    .to_string(),
+                alternatives: vec![
+                    "grow physical backing storage before VDO physical growth".to_string(),
+                    "grow logical size only after confirming pool utilization and slab health"
+                        .to_string(),
+                    "verify vdostats and dependent filesystems after the grow".to_string(),
+                ],
+            }),
+        ),
         Operation::Grow | Operation::AddDevice | Operation::Rebalance => {
             (RiskClass::Online, false, None)
         }
@@ -1554,6 +1569,12 @@ fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
         "volumes" | "volumeGroups" | "luns" => {
             alternatives
                 .push("grow or attach replacement capacity instead of reformatting".to_string());
+        }
+        "vdoVolumes" => {
+            alternatives
+                .push("grow the VDO logical or physical size instead of recreating it".to_string());
+            alternatives
+                .push("migrate data to a replacement VDO volume before removal".to_string());
         }
         "disks" | "partitions" => {
             alternatives.push(
@@ -1685,6 +1706,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "grow the backing device before cryptsetup resize".to_string(),
                     "resize consumers only after the mapper reports the new capacity".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::VdoVolume,
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "VDO growth separates logical size from physical backing capacity"
+                    .to_string(),
+                alternatives: vec![
+                    "confirm vdostats utilization before increasing logical size".to_string(),
+                    "grow backing storage before physical VDO growth".to_string(),
                 ],
             }),
         },
@@ -2005,6 +2039,33 @@ mod tests {
             luks.context.device.as_deref(),
             Some("/dev/disk/by-partuuid/root")
         );
+    }
+
+    #[test]
+    fn plan_classifies_vdo_growth_as_online_with_vdo_advice() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "operation": "grow",
+                  "desiredSize": "4TiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        assert_eq!(plan.actions[0].id, "vdovolumes:archive:grow");
+        assert_eq!(plan.actions[0].risk, RiskClass::Online);
+        assert!(plan.actions[0].advice.as_ref().is_some_and(|advice| {
+            advice.summary.contains("logical size")
+                && advice
+                    .alternatives
+                    .iter()
+                    .any(|alternative| alternative.contains("vdostats"))
+        }));
     }
 
     #[test]

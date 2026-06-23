@@ -158,6 +158,10 @@
                 device = "/dev/disk/by-id/nvme-root-part2";
                 desiredSize = "100%";
               };
+              vdoVolumes.archive = {
+                operation = "grow";
+                desiredSize = "4TiB";
+              };
               datasets."tank/archive" = {
                 destroy = true;
               };
@@ -218,10 +222,12 @@
               and .properties.swaps["$ref"] == "#/$defs/lifecycleMap"
               and .properties.luks["$ref"] == "#/$defs/luksSpec"
               and .properties.partitions["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.vdoVolumes["$ref"] == "#/$defs/lifecycleMap"
               and (."$defs".operation.enum | index("grow") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
               and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
               and (."$defs".specBody.properties.disks["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.vdoVolumes["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
               and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
@@ -244,11 +250,12 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 14
+              .summary.actionCount == 15
               and .summary.offlineRequiredCount == 5
               and .summary.destructiveCount == 2
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
+              and (.actions | any(.id == "vdovolumes:archive:grow" and .risk == "online"))
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
@@ -340,6 +347,8 @@
                   and .spec.partitions.root.operation == "grow"
                   and .spec.partitions.root.device == "/dev/disk/by-id/nvme-root-part2"
                   and .spec.partitions.root.desiredSize == "100%"
+                  and .spec.vdoVolumes.archive.operation == "grow"
+                  and .spec.vdoVolumes.archive.desiredSize == "4TiB"
                   and .apply.mode == "activation"
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false
