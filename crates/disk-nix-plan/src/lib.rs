@@ -1136,7 +1136,7 @@ fn classify_filesystem_property_change(
                 "{fs_type} filesystem property {property} is not mapped to a safe command"
             ),
             alternatives: vec![
-                "use label, filesystem.label, btrfs.label, or ext.label when changing filesystem labels"
+                "use label, filesystem.label, btrfs.label, ext.label, or xfs.label when changing filesystem labels"
                     .to_string(),
                 "use ZFS dataset declarations for arbitrary zfs set property updates".to_string(),
                 "apply unsupported filesystem property changes manually after reviewing filesystem-specific tooling"
@@ -1152,6 +1152,7 @@ fn is_filesystem_property_supported(fs_type: &str, property: &str) -> bool {
         "ext2" | "ext3" | "ext4" => {
             matches!(property, "label" | "ext.label" | "filesystem.label")
         }
+        "xfs" => matches!(property, "label" | "xfs.label" | "filesystem.label"),
         "zfs" => true,
         _ => false,
     }
@@ -4900,6 +4901,51 @@ mod tests {
                 .iter()
                 .any(|alternative| alternative.contains("ZFS dataset"))
         }));
+    }
+
+    #[test]
+    fn plan_accepts_xfs_filesystem_label_property() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "scratch": {
+                  "mountpoint": "/scratch",
+                  "device": "/dev/disk/by-label/scratch",
+                  "fsType": "xfs",
+                  "properties": {
+                    "xfs.label": "scratch-new",
+                    "xfs.reflink": "1"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.unsupported_count, 1);
+        let label = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:scratch:set-property:xfs.label")
+            .expect("XFS label property action should exist");
+
+        assert_eq!(label.operation, Operation::SetProperty);
+        assert_eq!(label.risk, RiskClass::Safe);
+        assert_eq!(label.context.target.as_deref(), Some("/scratch"));
+        assert_eq!(
+            label.context.device.as_deref(),
+            Some("/dev/disk/by-label/scratch")
+        );
+        assert_eq!(label.context.fs_type.as_deref(), Some("xfs"));
+        assert_eq!(label.context.property_value.as_deref(), Some("scratch-new"));
+
+        let unsupported = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:scratch:set-property:xfs.reflink")
+            .expect("unsupported XFS property action should exist");
+        assert_eq!(unsupported.risk, RiskClass::Unsupported);
     }
 
     #[test]

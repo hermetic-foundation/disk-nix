@@ -199,7 +199,8 @@ mounted filesystems.
 Regular Btrfs filesystem label updates render
 `btrfs filesystem label <path> <label>`. Ext filesystem label updates render
 `e2label <device> <label>` when the declaration includes an explicit backing
-device; otherwise the command stays non-ready until the source device is
+device. XFS filesystem label updates render `xfs_admin -L <label> <device>`.
+Missing backing devices keep the command non-ready until the source device is
 resolved. Unsupported filesystem properties are classified as unsupported so
 apply policy blocks them until a domain-specific command mapping exists.
 Filesystem shrink plans render Btrfs usage checks and `btrfs filesystem resize`

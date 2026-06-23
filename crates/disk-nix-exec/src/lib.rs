@@ -5043,6 +5043,7 @@ fn filesystem_property_command(
         Some("ext2" | "ext3" | "ext4") => {
             ext_filesystem_property_command(device, target, property, assignment)
         }
+        Some("xfs") => xfs_filesystem_property_command(device, target, property, assignment),
         Some("zfs") => command(
             ["zfs", "set", assignment, target],
             true,
@@ -5054,6 +5055,44 @@ fn filesystem_property_command(
             CommandReadiness::NeedsDomainImplementation,
             ["filesystem type", "supported filesystem property"],
             "set a filesystem property after selecting the filesystem-specific command",
+        ),
+    }
+}
+
+fn xfs_filesystem_property_command(
+    device: Option<&str>,
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            ["<xfs-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["XFS filesystem property value"],
+            "set an XFS filesystem property after resolving the desired value",
+        );
+    };
+    match (property, device) {
+        ("label" | "xfs.label" | "filesystem.label", Some(device)) => command(
+            ["xfs_admin", "-L", value, device],
+            true,
+            "set the XFS filesystem label on the reviewed backing device",
+        ),
+        ("label" | "xfs.label" | "filesystem.label", None) => command_with_readiness(
+            ["xfs_admin", "-L", value, "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "set the XFS filesystem label after resolving the backing device",
+        ),
+        _ => command_with_readiness(
+            ["<xfs-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported XFS filesystem property"],
+            "set an XFS filesystem property after selecting a supported property mapping",
         ),
     }
 }
@@ -8203,6 +8242,59 @@ mod tests {
             step.action_id == "filesystems:missing-device:set-property:label"
                 && step.commands.iter().any(|command| {
                     command.argv == ["e2label", "<filesystem-device>", "srv-new"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+    }
+
+    #[test]
+    fn xfs_filesystem_label_uses_declared_device() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "scratch": {
+                    "mountpoint": "/scratch",
+                    "device": "/dev/disk/by-label/scratch-old",
+                    "fsType": "xfs",
+                    "properties": {
+                      "label": "scratch-new"
+                    }
+                  },
+                  "missing-device": {
+                    "mountpoint": "/archive",
+                    "fsType": "xfs",
+                    "properties": {
+                      "xfs.label": "archive-new"
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "xfs_admin",
+                            "-L",
+                            "scratch-new",
+                            "/dev/disk/by-label/scratch-old",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:missing-device:set-property:xfs.label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["xfs_admin", "-L", "archive-new", "<filesystem-device>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["filesystem source device"]
                 })
