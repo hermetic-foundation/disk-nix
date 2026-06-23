@@ -80,6 +80,7 @@
         apps.default = {
           type = "app";
           program = "${diskNix}/bin/disk-nix";
+          meta = diskNix.meta;
         };
 
         checks = {
