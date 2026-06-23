@@ -847,6 +847,7 @@
                       lvm = nixosModuleTest.config.services.lvm.enable;
                       lvmInitrd = nixosModuleTest.config.boot.initrd.services.lvm.enable;
                       lvmThin = nixosModuleTest.config.services.lvm.boot.thin.enable;
+                      lvmVdo = nixosModuleTest.config.services.lvm.boot.vdo.enable;
                       swraid = nixosModuleTest.config.boot.swraid.enable;
                       mdadmConf = nixosModuleTest.config.boot.swraid.mdadmConf;
                       multipath = nixosModuleTest.config.services.multipath.enable;
@@ -861,6 +862,7 @@
                   .lvm == true
                   and .lvmInitrd == true
                   and .lvmThin == true
+                  and .lvmVdo == true
                   and .swraid == true
                   and (.mdadmConf | test("^PROGRAM .*/bin/true$"))
                   and .multipath == true

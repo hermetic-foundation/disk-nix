@@ -135,6 +135,7 @@ storage spec to `/etc/disk-nix/spec.json`, derives typed NixOS `fileSystems`,
 `swapDevices`, initrd LUKS options, `boot.supportedFilesystems`, LVM support,
 swraid support, multipath support, and `boot.zfs.extraPools` for typed active
 ZFS declarations, and bcache boot/initrd support for typed active cache
+declarations, and VDO-capable LVM boot support for typed active VDO
 declarations. It keeps lifecycle domains available in the same planner spec.
 Override `toolPackages` to pin alternate tool builds or trim unused domains.
 Explicit non-destroy

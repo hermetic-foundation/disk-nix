@@ -572,6 +572,7 @@ let
   activeLvmCaches = activeLifecycleAttrs cfg.lvmCaches;
   activeMdRaids = activeLifecycleAttrs cfg.mdRaids;
   activeMultipathMaps = activeLifecycleAttrs cfg.multipathMaps;
+  activeVdoVolumes = activeLifecycleAttrs cfg.vdoVolumes;
   activePools = activeLifecycleAttrs cfg.pools;
   activeDatasets = activeLifecycleAttrs cfg.datasets;
   activeZvols = activeLifecycleAttrs cfg.zvols;
@@ -586,6 +587,7 @@ let
     || hasActiveAttrs activeLvmSnapshots
     || hasActiveAttrs activeLvmCaches;
   hasActiveLvmThinSupport = hasActiveAttrs activeThinPools || hasActiveAttrs activeLvmCaches;
+  hasActiveVdoVolumes = hasActiveAttrs activeVdoVolumes;
   hasActiveMdRaids = hasActiveAttrs activeMdRaids;
   hasActiveMultipathMaps = hasActiveAttrs activeMultipathMaps;
   hasActiveCaches = hasActiveAttrs activeCaches;
@@ -1452,12 +1454,15 @@ in
 
     boot.supportedFilesystems = supportedFilesystemTypes;
 
-    services.lvm = lib.mkIf hasActiveLvm {
+    services.lvm = lib.mkIf (hasActiveLvm || hasActiveVdoVolumes) {
       enable = lib.mkDefault true;
       boot.thin.enable = lib.mkIf hasActiveLvmThinSupport (lib.mkDefault true);
+      boot.vdo.enable = lib.mkIf hasActiveVdoVolumes (lib.mkDefault true);
     };
 
-    boot.initrd.services.lvm.enable = lib.mkIf hasActiveLvm (lib.mkDefault true);
+    boot.initrd.services.lvm.enable = lib.mkIf (hasActiveLvm || hasActiveVdoVolumes) (
+      lib.mkDefault true
+    );
 
     boot.swraid = lib.mkIf hasActiveMdRaids {
       enable = lib.mkDefault true;

@@ -53,8 +53,8 @@ storage tooling, and derives the matching NixOS `fileSystems`, `swapDevices`,
 `boot.initrd.luks.devices`, `boot.supportedFilesystems`, `services.lvm`,
 `boot.initrd.services.lvm`, `boot.swraid`, `services.multipath`,
 `boot.zfs.extraPools`, `boot.bcache`, `boot.initrd.services.bcache`,
-`services.openiscsi`, `boot.iscsi-initiator`, and selected
-`services.nfs.server.exports` entries.
+`services.lvm.boot.vdo.enable`, `services.openiscsi`, `boot.iscsi-initiator`,
+and selected `services.nfs.server.exports` entries.
 Raw `spec` remains available for storage domains whose typed NixOS options have
 not been implemented yet.
 
@@ -89,6 +89,9 @@ NixOS requires `networking.hostId` whenever ZFS support is enabled.
 Typed active bcache cache declarations enable NixOS bcache support and initrd
 bcache udev support by default, so `/dev/bcache*` mappings are assembled before
 early consumers try to mount or inspect them.
+Typed active VDO declarations enable the NixOS VDO-capable LVM stack and initrd
+LVM support by default. Upstream NixOS requires a kernel with `dm-vdo` support
+for `services.lvm.boot.vdo.enable`.
 
 Lifecycle declaration attribute names are usable object names only for domains
 whose native tools address objects by name, such as ZFS datasets, ZFS pools,
