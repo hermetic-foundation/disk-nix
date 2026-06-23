@@ -112,6 +112,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered cache layers and cache device metadata.
+    Cache {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -354,6 +360,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_encryption_node)?;
             } else {
                 print_encryption(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Cache { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_cache_node)?;
+            } else {
+                print_cache(output, &graph)?;
             }
             Ok(())
         }
@@ -1366,6 +1381,35 @@ fn print_encryption(output: &mut impl Write, graph: &StorageGraph) -> io::Result
     Ok(())
 }
 
+fn print_cache(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:<14} {:<14} {:<14} DETAILS",
+        "KIND", "NAME", "MODE", "POLICY", "DIRTY"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_cache_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<38} {:<14} {:<14} {:<14} {}",
+            node.kind,
+            node.name,
+            property_value(node, "bcache.cache-mode")
+                .or_else(|| property_value(node, "lvm.cache-mode"))
+                .or_else(|| property_value(node, "lvm.segment-cache-mode"))
+                .unwrap_or("-"),
+            property_value(node, "bcache.cache-replacement-policy")
+                .or_else(|| property_value(node, "lvm.cache-policy"))
+                .or_else(|| property_value(node, "lvm.segment-cache-policy"))
+                .unwrap_or("-"),
+            property_value(node, "bcache.dirty-data")
+                .or_else(|| property_value(node, "lvm.writecache-writeback-blocks"))
+                .unwrap_or("-"),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -1897,6 +1941,26 @@ fn is_encryption_node(node: &Node) -> bool {
             .any(|property| property.key.starts_with("cryptsetup."))
 }
 
+fn is_cache_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::LvmCache | NodeKind::CacheDevice | NodeKind::BcachefsDevice
+    ) || node.properties.iter().any(|property| {
+        property.key.starts_with("bcache.")
+            || property.key.starts_with("bcachefs.device-")
+            || property.key == "lvm.cache-mode"
+            || property.key == "lvm.cache-policy"
+            || property.key == "lvm.kernel-cache-mode"
+            || property.key == "lvm.kernel-cache-policy"
+            || property.key == "lvm.cache-metadata-format"
+            || property.key == "lvm.segment-cache-mode"
+            || property.key == "lvm.segment-cache-policy"
+            || property.key == "lvm.cache-settings"
+            || property.key.starts_with("lvm.writecache-")
+            || (property.key == "zfs.vdev-role" && property.value == "cache")
+    })
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
@@ -2333,12 +2397,12 @@ mod tests {
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 
     use super::{
-        confirmation_file_accepts, is_device_node, is_encryption_node, is_filesystem_node,
-        is_mapping_node, is_network_storage_node, is_partition_node, is_pool_node,
-        is_snapshot_node, is_volume_node, mount_details, print_devices, print_encryption,
-        print_filesystems, print_mappings, print_mounts, print_network_storage, print_partitions,
-        print_pools, print_snapshots, print_usage, print_volumes, snapshot_source, usage_details,
-        usage_percent,
+        confirmation_file_accepts, is_cache_node, is_device_node, is_encryption_node,
+        is_filesystem_node, is_mapping_node, is_network_storage_node, is_partition_node,
+        is_pool_node, is_snapshot_node, is_volume_node, mount_details, print_cache, print_devices,
+        print_encryption, print_filesystems, print_mappings, print_mounts, print_network_storage,
+        print_partitions, print_pools, print_snapshots, print_usage, print_volumes,
+        snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2419,6 +2483,23 @@ mod tests {
         assert!(is_encryption_node(
             &Node::new("dm:cryptroot", NodeKind::DeviceMapper, "cryptroot")
                 .with_property("cryptsetup.active", "true")
+        ));
+        assert!(is_cache_node(&Node::new(
+            "block:/dev/bcache0",
+            NodeKind::CacheDevice,
+            "bcache0"
+        )));
+        assert!(is_cache_node(
+            &Node::new("lvm-lv:vg/root", NodeKind::LvmLogicalVolume, "vg/root")
+                .with_property("lvm.cache-mode", "writeback")
+        ));
+        assert!(is_cache_node(
+            &Node::new(
+                "zfs-vdev:tank:cache0",
+                NodeKind::ZfsVdev,
+                "/dev/disk/by-id/cache0"
+            )
+            .with_property("zfs.vdev-role", "cache")
         ));
     }
 
@@ -3204,6 +3285,55 @@ mod tests {
         assert!(output.contains("active=true in-use=true cipher=aes-xts-plain64"));
         assert!(output.contains("luks=2 epoch=7 metadata-area=16384 [bytes]"));
         assert!(output.contains("keyslot-ids=0,1 token-ids=0"));
+    }
+
+    #[test]
+    fn cache_table_includes_cache_layer_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
+                .with_path("/dev/bcache0")
+                .with_property("bcache.role", "backing")
+                .with_property("bcache.kind", "cache-set")
+                .with_property("bcache.set-uuid", "cache-set-uuid")
+                .with_property("bcache.state", "clean")
+                .with_property("bcache.cache-mode", "writeback")
+                .with_property("bcache.cache-replacement-policy", "lru")
+                .with_property("bcache.dirty-data", "64.0M"),
+        );
+        graph.add_node(
+            Node::new("lvm-lv:vg/root", NodeKind::LvmLogicalVolume, "vg/root")
+                .with_property("lvm.cache-mode", "writethrough")
+                .with_property("lvm.cache-policy", "smq")
+                .with_property("lvm.writecache-writeback-blocks", "16"),
+        );
+        graph.add_node(
+            Node::new(
+                "zfs-vdev:tank:cache0",
+                NodeKind::ZfsVdev,
+                "/dev/disk/by-id/cache0",
+            )
+            .with_property("zfs.vdev-role", "cache")
+            .with_property("zfs.vdev-state", "ONLINE"),
+        );
+
+        let mut output = Vec::new();
+        print_cache(&mut output, &graph).expect("cache table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("MODE"));
+        assert!(output.contains("POLICY"));
+        assert!(output.contains("DIRTY"));
+        assert!(output.contains("bcache0"));
+        assert!(output.contains("writeback"));
+        assert!(output.contains("lru"));
+        assert!(output.contains("dirty=64.0M"));
+        assert!(output.contains("vg/root"));
+        assert!(output.contains("writethrough"));
+        assert!(output.contains("cache-policy=smq"));
+        assert!(output.contains("writecache-writeback=16"));
+        assert!(output.contains("/dev/disk/by-id/cache0"));
+        assert!(output.contains("vdev-role=cache vdev-state=ONLINE"));
     }
 
     #[test]
