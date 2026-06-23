@@ -449,7 +449,10 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                     report.apply.blocked_count
                 )));
             }
-            if report.status == ExecutionStatus::ExecutorUnavailable {
+            if matches!(
+                report.status,
+                ExecutionStatus::NotReady | ExecutionStatus::Failed
+            ) {
                 return Err(AppError::Message(report.messages.join("; ")));
             }
 
@@ -1450,6 +1453,32 @@ fn print_execution_report(
                 }
                 for note in &step.notes {
                     writeln!(output, "  note: {note}")?;
+                }
+            }
+        }
+        if !report.execution_results.is_empty() {
+            writeln!(
+                output,
+                "Execution results: {} command(s)",
+                report.execution_results.len()
+            )?;
+            for result in &report.execution_results {
+                let status = if result.success { "ok" } else { "failed" };
+                writeln!(
+                    output,
+                    "- {:?} {} {}",
+                    result.phase,
+                    status,
+                    result.argv.join(" ")
+                )?;
+                if let Some(status_code) = result.status_code {
+                    writeln!(output, "  exit: {status_code}")?;
+                }
+                if !result.stdout.is_empty() {
+                    writeln!(output, "  stdout: {}", result.stdout.trim_end())?;
+                }
+                if !result.stderr.is_empty() {
+                    writeln!(output, "  stderr: {}", result.stderr.trim_end())?;
                 }
             }
         }

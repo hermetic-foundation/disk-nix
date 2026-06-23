@@ -262,7 +262,7 @@ size checks. The comparison is advisory and does not mutate storage.
 
 ## Apply Evaluation
 
-Apply is currently policy evaluation, not mutation:
+Apply defaults to policy evaluation and dry-run command planning:
 
 ```sh
 disk-nix apply --spec ./examples/lifecycle-update.json
@@ -286,14 +286,19 @@ The report includes:
 - `commandPlan`
 - `verificationSummary`
 - `verificationPlan`
+- `executionResults` when `--execute` runs commands
 - `messages`
 
 The default policy allows online grow and property-change intents, but blocks
 offline-required, destructive, irreversible, format, shrink, and
 potential-data-loss actions. Unsupported actions are always blocked.
 
-`--execute` is intentionally refused until the mutating executor is
-implemented:
+`--execute` runs storage commands only after policy validation passes and every
+planned command reports `ready`. It refuses plans with unresolved desired sizes,
+domain-specific placeholders, or manual-only commands. Execution is sequential,
+stops on the first failed command, records stdout, stderr, and exit status for
+each command result, and runs verification commands only after all planned
+commands succeed:
 
 ```sh
 disk-nix apply --spec ./examples/lifecycle-update.json --execute
@@ -304,9 +309,9 @@ reported advice before requesting a more permissive policy.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.
-When policy allows an action, `commandPlan` records the non-executed commands,
-whether each command would mutate system state, and notes that still require
-manual or future executor review. Each command also reports readiness:
+When policy allows an action, `commandPlan` records the planned commands,
+whether each command mutates system state, and notes that still require
+operator review. Each command also reports readiness:
 `ready`, `needs-desired-size`, `needs-domain-implementation`, or `manual-only`,
 plus unresolved inputs when applicable.
 When an action context includes `desiredSize`, supported resize commands use

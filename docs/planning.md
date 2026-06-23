@@ -334,5 +334,7 @@ requires `backupVerified=true` for destructive or potential-data-loss actions.
 offline actions. `requireConfirmationFile` points at an operator-controlled
 file; the CLI treats it as confirmed only when the file contains a standalone
 line equal to `disk-nix confirm`, and otherwise leaves the action blocked.
-`--execute` is reserved for the future executor and is refused after policy
-validation so the command cannot pretend to have modified storage.
+`--execute` requires policy validation and a fully ready command plan. It runs
+planned commands sequentially, stops on the first command failure, records
+stdout, stderr, and exit status, and only runs verification commands after the
+planned command phase succeeds.

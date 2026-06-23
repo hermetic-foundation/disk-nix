@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, process::Command};
 
 use disk_nix_plan::{
     ApplyPolicy, ApplyReport, Operation, Plan, PlannedAction, RiskClass, TopologyComparison,
@@ -18,7 +18,9 @@ pub enum ExecutionMode {
 pub enum ExecutionStatus {
     DryRun,
     Blocked,
-    ExecutorUnavailable,
+    NotReady,
+    Succeeded,
+    Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -32,6 +34,8 @@ pub struct ExecutionReport {
     pub command_plan: Vec<ExecutionStep>,
     pub verification_summary: VerificationPlanSummary,
     pub verification_plan: Vec<VerificationStep>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub execution_results: Vec<ExecutionCommandResult>,
     pub messages: Vec<String>,
 }
 
@@ -84,6 +88,34 @@ pub struct VerificationStep {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum ExecutionPhase {
+    Command,
+    Verification,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionCommandResult {
+    pub phase: ExecutionPhase,
+    pub action_id: String,
+    pub argv: Vec<String>,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CommandRunResult {
+    success: bool,
+    status_code: Option<i32>,
+    stdout: String,
+    stderr: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum CommandReadiness {
     Ready,
     NeedsDesiredSize,
@@ -123,6 +155,15 @@ impl CommandPlanSummary {
 
 #[must_use]
 pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) -> ExecutionReport {
+    prepare_execution_with_runner(plan, policy, mode, run_command)
+}
+
+fn prepare_execution_with_runner(
+    plan: &Plan,
+    policy: ApplyPolicy,
+    mode: ExecutionMode,
+    mut runner: impl FnMut(&[String]) -> CommandRunResult,
+) -> ExecutionReport {
     let apply = evaluate_apply_policy(plan, policy);
     let topology_comparison = plan.topology_comparison.clone();
     let command_plan = command_plan(plan, &apply);
@@ -139,6 +180,7 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
             command_plan,
             verification_summary,
             verification_plan,
+            execution_results: Vec::new(),
             messages: vec![format!("apply policy blocked {blocked_count} action(s)")],
         };
     }
@@ -157,20 +199,141 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
             )],
             command_plan,
             verification_plan,
+            execution_results: Vec::new(),
         },
-        ExecutionMode::Execute => ExecutionReport {
-            apply,
-            status: ExecutionStatus::ExecutorUnavailable,
-            topology_comparison,
-            command_summary,
-            command_plan,
-            verification_summary,
-            verification_plan,
-            messages: vec![
-                "executor is not implemented yet; policy validation passed but no storage commands were run"
-                    .to_string(),
-            ],
+        ExecutionMode::Execute => {
+            if !command_summary.all_commands_ready() {
+                return ExecutionReport {
+                    apply,
+                    status: ExecutionStatus::NotReady,
+                    topology_comparison,
+                    command_summary,
+                    command_plan,
+                    verification_summary,
+                    verification_plan,
+                    execution_results: Vec::new(),
+                    messages: vec![
+                        "execute refused: every planned command must be ready before mutating storage"
+                            .to_string(),
+                    ],
+                };
+            }
+
+            let (status, execution_results) = execute_command_and_verification_plan(
+                &command_plan,
+                &verification_plan,
+                &mut runner,
+            );
+            let messages = match status {
+                ExecutionStatus::Succeeded => vec![format!(
+                    "execute completed: ran {} planned command(s) and verification command(s)",
+                    execution_results.len()
+                )],
+                ExecutionStatus::Failed => vec![format!(
+                    "execute failed: stopped after {} command result(s)",
+                    execution_results.len()
+                )],
+                _ => Vec::new(),
+            };
+
+            ExecutionReport {
+                apply,
+                status,
+                topology_comparison,
+                command_summary,
+                command_plan,
+                verification_summary,
+                verification_plan,
+                execution_results,
+                messages,
+            }
+        }
+    }
+}
+
+fn run_command(argv: &[String]) -> CommandRunResult {
+    let Some((program, args)) = argv.split_first() else {
+        return CommandRunResult {
+            success: false,
+            status_code: None,
+            stdout: String::new(),
+            stderr: "empty command argv".to_string(),
+        };
+    };
+
+    match Command::new(program).args(args).output() {
+        Ok(output) => CommandRunResult {
+            success: output.status.success(),
+            status_code: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         },
+        Err(error) => CommandRunResult {
+            success: false,
+            status_code: None,
+            stdout: String::new(),
+            stderr: error.to_string(),
+        },
+    }
+}
+
+fn execute_command_and_verification_plan(
+    command_plan: &[ExecutionStep],
+    verification_plan: &[VerificationStep],
+    runner: &mut impl FnMut(&[String]) -> CommandRunResult,
+) -> (ExecutionStatus, Vec<ExecutionCommandResult>) {
+    let mut results = Vec::new();
+
+    for step in command_plan {
+        for command in &step.commands {
+            let result = run_planned_command(
+                ExecutionPhase::Command,
+                &step.action_id,
+                &command.argv,
+                runner,
+            );
+            let success = result.success;
+            results.push(result);
+            if !success {
+                return (ExecutionStatus::Failed, results);
+            }
+        }
+    }
+
+    for step in verification_plan {
+        for command in &step.commands {
+            let result = run_planned_command(
+                ExecutionPhase::Verification,
+                &step.action_id,
+                &command.argv,
+                runner,
+            );
+            let success = result.success;
+            results.push(result);
+            if !success {
+                return (ExecutionStatus::Failed, results);
+            }
+        }
+    }
+
+    (ExecutionStatus::Succeeded, results)
+}
+
+fn run_planned_command(
+    phase: ExecutionPhase,
+    action_id: &str,
+    argv: &[String],
+    runner: &mut impl FnMut(&[String]) -> CommandRunResult,
+) -> ExecutionCommandResult {
+    let result = runner(argv);
+    ExecutionCommandResult {
+        phase,
+        action_id: action_id.to_string(),
+        argv: argv.to_vec(),
+        success: result.success,
+        status_code: result.status_code,
+        stdout: result.stdout,
+        stderr: result.stderr,
     }
 }
 
@@ -6977,7 +7140,7 @@ mod tests {
     }
 
     #[test]
-    fn execute_reports_executor_unavailable_after_policy_passes() {
+    fn execute_refuses_non_ready_command_plans() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
               "spec": {
@@ -6994,9 +7157,90 @@ mod tests {
 
         let report = prepare_execution(&plan, policy, ExecutionMode::Execute);
 
-        assert_eq!(report.status, ExecutionStatus::ExecutorUnavailable);
+        assert_eq!(report.status, ExecutionStatus::NotReady);
         assert!(!report.can_apply());
         assert_eq!(report.command_plan.len(), 1);
+        assert!(report.execution_results.is_empty());
+        assert!(
+            report
+                .messages
+                .iter()
+                .any(|message| message.contains("every planned command must be ready"))
+        );
+    }
+
+    #[test]
+    fn execute_runs_ready_commands_and_verification_with_runner() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "exports": {
+                "/srv/share": {
+                  "operation": "create",
+                  "client": "192.0.2.0/24",
+                  "options": "ro,sync"
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let mut seen = Vec::new();
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            seen.push(argv.to_vec());
+            CommandRunResult {
+                success: true,
+                status_code: Some(0),
+                stdout: "ok\n".to_string(),
+                stderr: String::new(),
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Succeeded);
+        assert_eq!(report.execution_results.len(), seen.len());
+        assert!(report.execution_results.iter().all(|result| result.success));
+        assert!(seen.iter().any(|argv| {
+            argv == &[
+                "exportfs".to_string(),
+                "-i".to_string(),
+                "-o".to_string(),
+                "ro,sync".to_string(),
+                "192.0.2.0/24:/srv/share".to_string(),
+            ]
+        }));
+        assert!(report.execution_results.iter().any(|result| {
+            result.phase == ExecutionPhase::Verification && result.argv == ["exportfs", "-v"]
+        }));
+    }
+
+    #[test]
+    fn execute_stops_after_first_failed_command() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "exports": {
+                "/srv/share": {
+                  "operation": "create",
+                  "client": "192.0.2.0/24",
+                  "options": "ro,sync"
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report =
+            prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |_argv| {
+                CommandRunResult {
+                    success: false,
+                    status_code: Some(32),
+                    stdout: String::new(),
+                    stderr: "export failed".to_string(),
+                }
+            });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert_eq!(report.execution_results.len(), 1);
+        assert_eq!(report.execution_results[0].status_code, Some(32));
+        assert_eq!(report.execution_results[0].stderr, "export failed");
     }
 
     #[test]

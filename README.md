@@ -151,11 +151,13 @@ blocked actions are still reported, but the unit exits successfully.
 
 No destructive operation should be implicit.
 
-`disk-nix apply` is currently a policy-gated dry run. It evaluates the planned
+`disk-nix apply` defaults to a policy-gated dry run. It evaluates the planned
 actions against the `apply` policy in the spec, reports blocked operations,
 emits advisory command and verification plans, and can write those plans to a
-reviewable shell script with `--script-out`. The `--execute` flag is
-intentionally refused until a direct mutating executor exists.
+reviewable shell script with `--script-out`. With `--execute`, disk-nix runs
+only policy-allowed plans where every command is ready, records each command
+result, stops on the first failure, and runs verification commands only after
+the planned command phase succeeds.
 Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS format/resize/close
 workflows, Btrfs subvolume creation/deletion, VDO create/grow/remove, LVM
