@@ -417,6 +417,7 @@
               and .properties.luks["$ref"] == "#/$defs/luksSpec"
               and .properties.nfs["$ref"] == "#/$defs/nfsSpec"
               and .properties.iscsi["$ref"] == "#/$defs/iscsiSpec"
+              and .properties.disks["$ref"] == "#/$defs/lifecycleMap"
               and .properties.partitions["$ref"] == "#/$defs/lifecycleMap"
               and .properties.btrfsSubvolumes["$ref"] == "#/$defs/lifecycleMap"
               and .properties.btrfsQgroups["$ref"] == "#/$defs/lifecycleMap"
@@ -424,6 +425,8 @@
               and .properties.physicalVolumes["$ref"] == "#/$defs/lifecycleMap"
               and .properties.luksKeyslots["$ref"] == "#/$defs/lifecycleMap"
               and .properties.luksTokens["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.volumes["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.volumeGroups["$ref"] == "#/$defs/lifecycleMap"
               and .properties.zvols["$ref"] == "#/$defs/lifecycleMap"
               and .properties.thinPools["$ref"] == "#/$defs/lifecycleMap"
               and .properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap"
@@ -431,7 +434,14 @@
               and .properties.loopDevices["$ref"] == "#/$defs/lifecycleMap"
               and .properties.mdRaids["$ref"] == "#/$defs/lifecycleMap"
               and .properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.pools["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.datasets["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.luns["$ref"] == "#/$defs/lifecycleMap"
               and .properties.nvmeNamespaces["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.iscsiSessions["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.exports["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.caches["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.snapshots["$ref"] == "#/$defs/snapshotMap"
               and (."$defs".operation.enum | index("grow") != null)
               and (."$defs".operation.enum | index("check") != null)
               and (."$defs".operation.enum | index("repair") != null)
@@ -448,6 +458,8 @@
               and (."$defs".specBody.properties.physicalVolumes["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.luksKeyslots["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.luksTokens["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.volumes["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.volumeGroups["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.zvols["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.thinPools["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap")
@@ -455,7 +467,13 @@
               and (."$defs".specBody.properties.loopDevices["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.mdRaids["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.pools["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.datasets["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.luns["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.nvmeNamespaces["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.iscsiSessions["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.exports["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.caches["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
               and ."$defs".snapshot.properties.readOnly.type == "boolean"
               and ."$defs".snapshot.properties.readonly.type == "boolean"
