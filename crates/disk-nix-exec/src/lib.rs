@@ -735,6 +735,34 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::AddDevice
+        | Operation::ReplaceDevice
+        | Operation::RemoveDevice
+        | Operation::SetProperty
+            if collection == Some("caches") =>
+        {
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify modeled cache layer relationships after cache update",
+                    ),
+                    bcache_sysfs_read_command(target, "state", "verify bcache state after update"),
+                    bcache_sysfs_read_command(
+                        target,
+                        "dirty_data",
+                        "verify dirty data after cache update",
+                    ),
+                ],
+                vec![
+                    "cache backing device and cache-set relationships match desired topology"
+                        .to_string(),
+                    "dirty writeback data is flushed before detach or replacement".to_string(),
+                    "cache mode matches the desired safety posture after the operation".to_string(),
+                ],
+            )
+        }
         Operation::AddDevice | Operation::ReplaceDevice | Operation::Rebalance => (
             vec![command(
                 ["disk-nix", "inspect", target, "--json"],
@@ -1786,6 +1814,37 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::RemoveDevice if collection == Some("caches") => {
+            let target = target.unwrap_or("<cache-device>");
+            (
+                vec![
+                    bcache_sysfs_read_command(
+                        target,
+                        "dirty_data",
+                        "inspect dirty data before bcache detach",
+                    ),
+                    command_vec(
+                        vec![
+                            "sh".to_string(),
+                            "-c".to_string(),
+                            "printf '1\\n' > \"/sys/block/${1#/dev/}/bcache/detach\""
+                                .to_string(),
+                            "disk-nix-bcache-detach".to_string(),
+                            target.to_string(),
+                        ],
+                        true,
+                        "detach the bcache cache set from the backing device after dirty data is flushed",
+                    ),
+                ],
+                vec![
+                    "switch writeback caches to writethrough and wait for dirty data to drain before detach"
+                        .to_string(),
+                    "keep backing storage online and verify it remains readable after detach"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Format | Operation::Shrink | Operation::RemoveDevice | Operation::Rollback | Operation::Destroy => (
             Vec::new(),
             vec!["no command plan is generated for this risk class unless future explicit policy and executor support are added".to_string()],
@@ -1938,6 +1997,18 @@ fn add_device_command(collection: Option<&str>, target: &str, device: &str) -> E
             true,
             "add or re-add a path to multipathd",
         ),
+        Some("caches") => command_vec(
+            vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/attach\"".to_string(),
+                "disk-nix-bcache-attach".to_string(),
+                target.to_string(),
+                device.to_string(),
+            ],
+            true,
+            "attach an existing bcache cache-set UUID to the backing bcache device",
+        ),
         Some("filesystems") => command(
             ["btrfs", "device", "add", device, target],
             true,
@@ -1988,12 +2059,22 @@ fn replace_device_command(
             true,
             "add the replacement multipath path before deleting the old path",
         ),
-        Some("caches") => command_with_readiness(
-            ["<cache-replace-tool>", target, from, to],
+        Some("caches") => command_vec_with_readiness(
+            vec![
+                "make-bcache".to_string(),
+                "-C".to_string(),
+                to.to_string(),
+                "--writeback".to_string(),
+            ],
             true,
             CommandReadiness::NeedsDomainImplementation,
-            ["cache replacement tool", "cache flush or detach workflow"],
-            "flush or detach dirty cache state before replacing the cache device",
+            [
+                "confirmed empty replacement cache device",
+                "new cache-set UUID",
+            ],
+            &format!(
+                "initialize replacement cache device after flushing and detaching {from} from {target}"
+            ),
         ),
         _ => command_with_readiness(
             ["<replace-device-tool>", target, from, to],
@@ -2049,6 +2130,7 @@ fn set_property_command(
             true,
             "reload NFS exports after export property changes",
         ),
+        Some("caches") => bcache_property_command(target, property, assignment),
         _ => command_with_readiness(
             ["<set-property-tool>", target, property],
             true,
@@ -2057,6 +2139,53 @@ fn set_property_command(
             "apply the storage-domain property update",
         ),
     }
+}
+
+fn bcache_property_command(target: &str, property: &str, assignment: &str) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            ["<cache-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["cache property value"],
+            "set a cache property after resolving the desired value",
+        );
+    };
+    command_vec(
+        vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"".to_string(),
+            "disk-nix-bcache-property".to_string(),
+            target.to_string(),
+            value.to_string(),
+            bcache_sysfs_key(property),
+        ],
+        true,
+        "set a bcache sysfs property on the target cache device",
+    )
+}
+
+fn bcache_sysfs_read_command(target: &str, key: &str, note: &str) -> ExecutionCommand {
+    command_vec(
+        vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            "cat \"/sys/block/${1#/dev/}/bcache/$2\"".to_string(),
+            "disk-nix-bcache-read".to_string(),
+            target.to_string(),
+            key.to_string(),
+        ],
+        false,
+        note,
+    )
+}
+
+fn bcache_sysfs_key(property: &str) -> String {
+    property
+        .strip_prefix("bcache.")
+        .unwrap_or(property)
+        .replace('-', "_")
 }
 
 fn snapshot_command(collection: Option<&str>, target: &str, snapshot: &str) -> ExecutionCommand {
@@ -3189,5 +3318,88 @@ mod tests {
         }));
         assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
         assert!(report.command_summary.all_commands_ready());
+    }
+
+    #[test]
+    fn cache_lifecycle_reports_bcache_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "caches": {
+                  "/dev/bcache0": {
+                    "addDevices": ["cache-set-uuid"],
+                    "replaceDevices": {
+                      "/dev/disk/by-id/old-cache": "/dev/disk/by-id/new-cache"
+                    },
+                    "properties": {
+                      "bcache.cache-mode": "writethrough"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowDeviceReplacement": true,
+                "allowOffline": true,
+                "allowPropertyChanges": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "sh",
+                        "-c",
+                        "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/attach\"",
+                        "disk-nix-bcache-attach",
+                        "/dev/bcache0",
+                        "cache-set-uuid",
+                    ]
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "sh",
+                        "-c",
+                        "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"",
+                        "disk-nix-bcache-property",
+                        "/dev/bcache0",
+                        "writethrough",
+                        "cache_mode",
+                    ]
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "make-bcache",
+                        "-C",
+                        "/dev/disk/by-id/new-cache",
+                        "--writeback",
+                    ]
+                    && command.readiness == CommandReadiness::NeedsDomainImplementation
+            })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "sh",
+                        "-c",
+                        "cat \"/sys/block/${1#/dev/}/bcache/$2\"",
+                        "disk-nix-bcache-read",
+                        "/dev/bcache0",
+                        "dirty_data",
+                    ]
+            })
+        }));
     }
 }

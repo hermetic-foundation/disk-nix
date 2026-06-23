@@ -92,6 +92,10 @@ Examples:
   offline-required because mounts, mappers, and other consumers must be stopped
   before the mapping is removed.
 - `properties = { ... }` is classified as safe property-update intent.
+- Cache attach and cache-mode updates are online or safe when they use an
+  existing cache-set identity; cache replacement remains offline-required
+  because dirty writeback data must be flushed or detached before media
+  changes.
 - LUN `operation = "grow"` is classified as offline-required because the
   storage target, host rescan, multipath, and consumers must be coordinated.
 - iSCSI session `operation = "grow"` is classified as offline-required because
@@ -183,6 +187,10 @@ notes. If `--probe-current` is set, the report also includes the same
 `verificationSummary` plus a `verificationPlan` with read-only post-apply
 commands and checks for the relevant storage domain. These plans are
 intentionally advisory until the executor can run mutating commands directly.
+Cache command plans include bcache-aware sysfs updates for existing cache-set
+attachment, cache-mode property changes, dirty-data checks, and replacement
+scaffolding that remains marked as needing domain implementation until the
+replacement cache device and new cache-set UUID are verified.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.

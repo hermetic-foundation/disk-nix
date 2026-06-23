@@ -207,6 +207,10 @@
                   "/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
                 };
               };
+              caches."/dev/bcache0" = {
+                addDevices = [ "cache-set-uuid" ];
+                properties."bcache.cache-mode" = "writethrough";
+              };
               snapshots."tank/home@before-upgrade" = {
                 target = "tank/home";
               };
@@ -294,7 +298,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 22
+              .summary.actionCount == 24
               and .summary.offlineRequiredCount == 5
               and .summary.destructiveCount == 2
               and .summary.potentialDataLossCount == 2
@@ -312,6 +316,8 @@
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/archive:destroy"))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
+              and (.actions | any(.id == "caches:/dev/bcache0:add-device:cache-set-uuid" and .risk == "online"))
+              and (.actions | any(.id == "caches:/dev/bcache0:set-property:bcache.cache-mode" and .risk == "safe"))
               and (.actions | any(.id == "caches:tank/l2arc0:replace-device:/dev/disk/by-id/old-cache"))
             ' "$lifecyclePlan"
 
@@ -415,6 +421,8 @@
                   and (.spec.mdRaids.root.addDevices | index("/dev/disk/by-id/nvme-md-spare") != null)
                   and .spec.multipathMaps.mpatha.target == "mpatha"
                   and (.spec.multipathMaps.mpatha.addDevices | index("/dev/sdb") != null)
+                  and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
+                  and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
                   and .apply.mode == "activation"
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false

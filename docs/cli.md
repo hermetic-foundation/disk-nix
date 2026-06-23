@@ -306,6 +306,9 @@ manual or future executor review. Each command also reports readiness:
 plus unresolved inputs when applicable.
 When an action context includes `desiredSize`, supported resize commands use
 that concrete target and no longer report `needs-desired-size`.
+Cache-layer command plans include bcache sysfs operations for attaching an
+existing cache-set UUID, changing cache mode, checking dirty data, and staging
+replacement cache media without silently formatting unknown devices.
 `verificationSummary` and `verificationPlan` record read-only commands and
 state checks that should run after a future mutating executor or manual apply
 finishes. These checks re-probe the relevant graph node and include

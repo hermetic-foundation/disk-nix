@@ -2234,6 +2234,46 @@ pub fn default_capabilities() -> Vec<Capability> {
                 ],
             }),
         },
+        Capability {
+            node_kind: NodeKind::CacheDevice,
+            operation: Operation::AddDevice,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "cache attachment must preserve backing data and cache identity"
+                    .to_string(),
+                alternatives: vec![
+                    "attach an existing clean cache set instead of formatting a cache device"
+                        .to_string(),
+                    "verify backing and cache-set identity before enabling writeback".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::CacheDevice,
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            advice: Some(Advice {
+                summary: "cache property changes should be staged toward safer modes first"
+                    .to_string(),
+                alternatives: vec![
+                    "switch to writethrough or writearound before detaching cache media"
+                        .to_string(),
+                    "verify dirty data is zero before disabling a writeback cache".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::CacheDevice,
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "cache replacement must flush or detach dirty cache state".to_string(),
+                alternatives: vec![
+                    "flush dirty data before replacing the cache device".to_string(),
+                    "disable writeback before removing the source cache".to_string(),
+                ],
+            }),
+        },
     ]
 }
 
@@ -2254,6 +2294,34 @@ mod tests {
 
         assert_eq!(capability.risk, RiskClass::Destructive);
         assert!(capability.advice.is_some());
+    }
+
+    #[test]
+    fn cache_device_capabilities_describe_safe_lifecycle_paths() {
+        let capabilities = default_capabilities();
+        let add = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::CacheDevice
+                    && capability.operation == Operation::AddDevice
+            })
+            .expect("cache add capability should exist");
+        let replace = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::CacheDevice
+                    && capability.operation == Operation::ReplaceDevice
+            })
+            .expect("cache replace capability should exist");
+
+        assert_eq!(add.risk, RiskClass::Online);
+        assert_eq!(replace.risk, RiskClass::OfflineRequired);
+        assert!(replace.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("flush dirty data"))
+        }));
     }
 
     #[test]

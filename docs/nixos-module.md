@@ -227,6 +227,13 @@ Example lifecycle planning through NixOS options:
       target = "mpatha";
       addDevices = [ "/dev/sdb" ];
     };
+    caches."tank/l2arc0" = {
+      replaceDevices."/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
+    };
+    caches."/dev/bcache0" = {
+      addDevices = [ "cache-set-uuid" ];
+      properties."bcache.cache-mode" = "writethrough";
+    };
     nfs.mounts."/srv/shared" = {
       source = "nas.example.com:/srv/shared";
       fsType = "nfs4";

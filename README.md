@@ -160,6 +160,8 @@ workflows, Btrfs subvolume creation/deletion, VDO growth, LVM thin-pool growth,
 LVM snapshot create/merge/remove, loop-device mapping updates, MD RAID member
 updates, multipath map updates, zvol updates, volume and pool updates, network
 LUN growth, snapshots, and cache replacement.
+Cache apply plans include bcache-aware attach, cache-mode, dirty-data, and
+replacement review steps instead of a generic cache placeholder.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
 Use `--report-out` with either command to persist the JSON report for review
