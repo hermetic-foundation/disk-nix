@@ -403,11 +403,13 @@ Example lifecycle planning through NixOS options:
       renameTo = "tank/legacy-staged";
     };
     datasets."tank/home-review".operation = "promote";
+    datasets."tank/inventory".operation = "rescan";
     datasets."tank/archive".destroy = true;
     zvols."tank/vm/root" = {
       operation = "grow";
       desiredSize = "80GiB";
     };
+    zvols."tank/vm/inventory".operation = "rescan";
     thinPools."vg0/thinpool" = {
       operation = "grow";
       desiredSize = "500GiB";

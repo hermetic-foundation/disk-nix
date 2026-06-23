@@ -3106,6 +3106,20 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "zvols" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "zvol rescan refreshes ZFS volume properties and block graph state"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow only when volsize must change".to_string(),
+                    "inspect dependent guests, LUNs, and filesystems before changing consumers"
+                        .to_string(),
+                    "snapshot or clone the zvol before destructive cleanup".to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "pools" => (
             RiskClass::Destructive,
             true,
@@ -3133,6 +3147,21 @@ fn classify_operation(
                         .to_string(),
                     "create snapshots or consumers only after the dataset appears in zfs list"
                         .to_string(),
+                ],
+            }),
+        ),
+        Operation::Rescan if collection == "datasets" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "ZFS dataset rescan refreshes dataset properties, mounts, and graph state"
+                    .to_string(),
+                alternatives: vec![
+                    "use property updates only when mountpoint, quota, or reservation policy must change"
+                        .to_string(),
+                    "inspect snapshots and clones before promote, rollback, or destroy work"
+                        .to_string(),
+                    "verify consumers still use the intended mounted dataset".to_string(),
                 ],
             }),
         ),
@@ -4199,7 +4228,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NFS exports/mounts, NVMe namespaces, multipath maps, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NFS exports/mounts, NVMe namespaces, multipath maps, ZFS datasets/zvols, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4231,6 +4260,10 @@ fn classify_operation(
                     "use snapshots.<name>.operation = \"rescan\" to refresh snapshot metadata and holds"
                         .to_string(),
                     "use btrfsSubvolumes.<path>.operation = \"rescan\" to refresh subvolume metadata and read-only state"
+                        .to_string(),
+                    "use datasets.<name>.operation = \"rescan\" to refresh ZFS dataset properties and graph state"
+                        .to_string(),
+                    "use zvols.<name>.operation = \"rescan\" to refresh ZFS volume properties and block graph state"
                         .to_string(),
                     "use mdRaids.<name>.operation = \"rescan\" to refresh MD RAID metadata inventory"
                         .to_string(),
@@ -5581,6 +5614,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::Zvol,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "zvol rescan refreshes volume properties and block graph state"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow only when volsize must change".to_string(),
+                    "review dependent guests and LUN exports before changing consumers"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Zvol,
             operation: Operation::Rename,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
@@ -5645,6 +5692,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                     "review inherited quota, reservation, mountpoint, and encryption policy first"
                         .to_string(),
                     "snapshot datasets before property changes that affect consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsDataset,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "ZFS dataset rescan refreshes properties, mounts, and graph state"
+                    .to_string(),
+                alternatives: vec![
+                    "use property updates only when dataset policy must change".to_string(),
+                    "inspect snapshots and clones before destructive cleanup".to_string(),
                 ],
             }),
         },
@@ -7327,6 +7387,8 @@ mod tests {
                 Operation::Rescan,
                 RiskClass::Online,
             ),
+            (NodeKind::ZfsDataset, Operation::Rescan, RiskClass::Online),
+            (NodeKind::Zvol, Operation::Rescan, RiskClass::Online),
             (NodeKind::BtrfsQgroup, Operation::Rescan, RiskClass::Online),
             (NodeKind::LvmVolumeGroup, Operation::Grow, RiskClass::Online),
             (
@@ -9194,13 +9256,16 @@ mod tests {
                 "tank/vm/tmp": {
                   "operation": "create",
                   "desiredSize": "20GiB"
+                },
+                "tank/vm/inventory": {
+                  "operation": "rescan"
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.action_count, 3);
         assert_eq!(plan.summary.offline_required_count, 0);
         let grow = plan
             .actions
@@ -9221,6 +9286,14 @@ mod tests {
             .find(|action| action.id == "zvols:tank/vm/tmp:create")
             .expect("zvol create action exists");
         assert_eq!(create.risk, RiskClass::Online);
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "zvols:tank/vm/inventory:rescan")
+            .expect("zvol rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
     }
 
     #[test]
@@ -9235,6 +9308,9 @@ mod tests {
                     "mountpoint": "/home"
                   }
                 },
+                "tank/inventory": {
+                  "operation": "rescan"
+                },
                 "tank/archive": {
                   "destroy": true
                 }
@@ -9243,7 +9319,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.action_count, 5);
         assert_eq!(plan.summary.destructive_count, 1);
         let create = plan
             .actions
@@ -9264,6 +9340,14 @@ mod tests {
                 .iter()
                 .any(|alternative| alternative.contains("mountpoint"))
         }));
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "datasets:tank/inventory:rescan")
+            .expect("dataset rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
         let destroy = plan
             .actions
             .iter()

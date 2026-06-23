@@ -532,13 +532,16 @@ declarations render `zpool import`, optional
 `zpool export <pool>` command plans.
 ZFS dataset command plans render reviewed `zfs create` commands, including
 create-time `-o key=value` options from declared properties, and policy-gated
-`zfs destroy` commands for `datasets` lifecycle declarations. Dataset and zvol
-rename declarations render reviewed `zfs rename <old> <new>` commands from
-`operation = "rename"` plus `renameTo`. ZFS clone promotion declarations render
-reviewed `zfs get origin <clone>` preflight checks and `zfs promote <clone>`
-commands from `operation = "promote"`.
+`zfs destroy` commands for `datasets` lifecycle declarations. Dataset
+`operation = "rescan"` renders read-only `zfs list`, `zfs get`, and graph
+inspection commands. Dataset and zvol rename declarations render reviewed
+`zfs rename <old> <new>` commands from `operation = "rename"` plus `renameTo`.
+ZFS clone promotion declarations render reviewed `zfs get origin <clone>`
+preflight checks and `zfs promote <clone>` commands from
+`operation = "promote"`.
 Zvol command plans render `zfs create -o key=value -V` for declared create-time
 properties, `zfs set volsize=...`, policy-gated `zfs destroy`, and
+read-only `operation = "rescan"` inventory/property probes plus
 `zfs set key=value` property reconciliation updates for `zvols` lifecycle
 declarations. Zvol clone promotion uses the same reviewed `zfs promote`
 lifecycle path.

@@ -60,6 +60,9 @@
     "tank/home-review": {
       "operation": "promote"
     },
+    "tank/inventory": {
+      "operation": "rescan"
+    },
     "tank/archive": {
       "destroy": true
     }
@@ -68,6 +71,9 @@
     "tank/vm/root": {
       "operation": "grow",
       "desiredSize": "80GiB"
+    },
+    "tank/vm/inventory": {
+      "operation": "rescan"
     }
   },
   "volumes": {

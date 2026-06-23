@@ -354,9 +354,15 @@
               datasets."tank/home-review" = {
                 operation = "promote";
               };
+              datasets."tank/inventory" = {
+                operation = "rescan";
+              };
               zvols."tank/vm/root" = {
                 operation = "grow";
                 desiredSize = "80GiB";
+              };
+              zvols."tank/vm/inventory" = {
+                operation = "rescan";
               };
               thinPools."vg0/thinpool" = {
                 operation = "grow";
@@ -734,7 +740,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 92
+              .summary.actionCount == 94
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -769,6 +775,7 @@
               and (.actions | any(.id == "luns:iqn.2026-06.example:storage/old:3:detach" and .risk == "offline-required"))
               and (.actions | any(.id == "luns:iqn.2026-06.example:storage/rescan:4:rescan" and .risk == "online"))
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
+              and (.actions | any(.id == "zvols:tank/vm/inventory:rescan" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/newthin:create" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/reporting:rescan" and .risk == "online"))
@@ -797,6 +804,7 @@
               and (.actions | any(.id == "volumegroups:exportvg:export" and .risk == "offline-required"))
               and (.actions | any(.id == "volumegroups:activevg:activate" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/home:create" and .risk == "online"))
+              and (.actions | any(.id == "datasets:tank/inventory:rescan" and .risk == "online"))
               and (.actions | any(.id == "datasets:tank/home-review:promote" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/legacy:rename" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/archive:destroy"))
@@ -1013,6 +1021,7 @@
                   and .spec.volumes."vg0/scratch".desiredSize == "10GiB"
                   and .spec.volumes."vg0/reporting".operation == "rescan"
                   and .spec.datasets."tank/home".operation == "create"
+                  and .spec.datasets."tank/inventory".operation == "rescan"
                   and .spec.vdoVolumes.archive.operation == "grow"
                   and .spec.vdoVolumes.archive.desiredSize == "4TiB"
                   and .spec.vdoVolumes.archive.properties.writePolicy == "sync"
@@ -1039,6 +1048,7 @@
                   and .spec.luksTokens."cryptroot:1".tokenId == "1"
                   and .spec.zvols."tank/vm/root".operation == "grow"
                   and .spec.zvols."tank/vm/root".desiredSize == "80GiB"
+                  and .spec.zvols."tank/vm/inventory".operation == "rescan"
                   and .spec.thinPools."vg0/thinpool".operation == "grow"
                   and .spec.thinPools."vg0/thinpool".desiredSize == "500GiB"
                   and .spec.thinPools."vg0/newthin".operation == "create"

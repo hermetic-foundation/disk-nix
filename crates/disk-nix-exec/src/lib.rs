@@ -1793,6 +1793,73 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             ],
             vec!["changed property equals the desired value".to_string()],
         ),
+        Operation::Rescan if collection == Some("datasets") => (
+            vec![
+                command(
+                    ["zfs", "list", "-H", "-p", "-t", "filesystem", target],
+                    false,
+                    "verify ZFS dataset inventory after rescan",
+                ),
+                command(
+                    [
+                        "zfs",
+                        "get",
+                        "-H",
+                        "-p",
+                        "-o",
+                        "property,value,source",
+                        "all",
+                        target,
+                    ],
+                    false,
+                    "verify ZFS dataset properties after rescan",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled ZFS dataset graph state after rescan",
+                ),
+            ],
+            vec![
+                "dataset properties, mountpoint, and inherited policy match refreshed inventory"
+                    .to_string(),
+                "snapshot, clone, mount, and export relationships are reviewed".to_string(),
+            ],
+        ),
+        Operation::Rescan if collection == Some("zvols") => (
+            vec![
+                command(
+                    ["zfs", "list", "-H", "-p", "-t", "volume", target],
+                    false,
+                    "verify zvol inventory after rescan",
+                ),
+                command(
+                    [
+                        "zfs",
+                        "get",
+                        "-H",
+                        "-p",
+                        "-o",
+                        "property,value,source",
+                        "all",
+                        target,
+                    ],
+                    false,
+                    "verify zvol properties after rescan",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled zvol block graph state after rescan",
+                ),
+            ],
+            vec![
+                "zvol volsize, reservation, and property state match refreshed inventory"
+                    .to_string(),
+                "dependent LUN, guest, partition, and filesystem consumers are reviewed"
+                    .to_string(),
+            ],
+        ),
         Operation::SetProperty if collection == Some("vdoVolumes") => (
             vec![
                 command(
@@ -4391,6 +4458,80 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "review inherited mountpoint, quota, reservation, and encryption properties"
                         .to_string(),
                     "set required properties before exposing the dataset to consumers".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("datasets") => {
+            let target = target.unwrap_or("<zfs-dataset>");
+            (
+                vec![
+                    command(
+                        ["zfs", "list", "-H", "-p", "-t", "filesystem", target],
+                        false,
+                        "refresh ZFS dataset inventory, mountpoint, and usage",
+                    ),
+                    command(
+                        [
+                            "zfs",
+                            "get",
+                            "-H",
+                            "-p",
+                            "-o",
+                            "property,value,source",
+                            "all",
+                            target,
+                        ],
+                        false,
+                        "refresh ZFS dataset property sources",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect modeled ZFS dataset relationships after refresh",
+                    ),
+                ],
+                vec![
+                    "dataset rescan does not change mountpoints, quotas, or reservations"
+                        .to_string(),
+                    "use property updates only after reviewing inherited policy".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("zvols") => {
+            let target = target.unwrap_or("<zvol>");
+            (
+                vec![
+                    command(
+                        ["zfs", "list", "-H", "-p", "-t", "volume", target],
+                        false,
+                        "refresh zvol inventory, volsize, and usage",
+                    ),
+                    command(
+                        [
+                            "zfs",
+                            "get",
+                            "-H",
+                            "-p",
+                            "-o",
+                            "property,value,source",
+                            "all",
+                            target,
+                        ],
+                        false,
+                        "refresh zvol property sources",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect modeled zvol block relationships after refresh",
+                    ),
+                ],
+                vec![
+                    "zvol rescan does not change volsize, reservations, or consumers".to_string(),
+                    "use grow only after reviewing pool capacity and downstream consumers"
+                        .to_string(),
                 ],
                 true,
             )
@@ -14403,6 +14544,9 @@ mod tests {
                       "volblocksize": "16K"
                     }
                   },
+                  "tank/vm/inventory": {
+                    "operation": "rescan"
+                  },
                   "tank/vm/old": {
                     "destroy": true
                   }
@@ -14454,10 +14598,38 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["zfs", "destroy", "tank/vm/old"])
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "zvols:tank/vm/inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "zfs",
+                            "list",
+                            "-H",
+                            "-p",
+                            "-t",
+                            "volume",
+                            "tank/vm/inventory",
+                        ]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "tank/vm/inventory"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
                 command.argv == ["zfs", "list", "-H", "-p", "-t", "volume", "tank/vm/root"]
             })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "zvols:tank/vm/inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "tank/vm/inventory", "--json"]
+                })
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "zvols:tank/vm/root:set-property:compression"
@@ -14480,6 +14652,9 @@ mod tests {
                       "compression": "zstd",
                       "mountpoint": "/home"
                     }
+                  },
+                  "tank/inventory": {
+                    "operation": "rescan"
                   },
                   "tank/archive": {
                     "destroy": true
@@ -14516,10 +14691,38 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["zfs", "destroy", "tank/archive"])
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "datasets:tank/inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "zfs",
+                            "list",
+                            "-H",
+                            "-p",
+                            "-t",
+                            "filesystem",
+                            "tank/inventory",
+                        ]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "tank/inventory"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "datasets:tank/home:create"
                 && step.commands.iter().any(|command| {
                     command.argv == ["zfs", "list", "-H", "-p", "-t", "filesystem", "tank/home"]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "datasets:tank/inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "tank/inventory", "--json"]
                 })
         }));
         assert!(report.verification_plan.iter().any(|step| {

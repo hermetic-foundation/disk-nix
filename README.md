@@ -194,6 +194,9 @@ updates, NVMe namespace create/attach/rescan/detach/delete workflows, ZFS pool
 topology updates, dataset and zvol updates including zvol property changes,
 volume updates, network LUN growth, snapshots, and cache
 attach/detach/rescan/replacement workflows.
+ZFS dataset and zvol `operation = "rescan"` plans are online read-only
+refreshes that render focused `zfs list`, `zfs get`, and graph inspection
+commands before later property, growth, promotion, or destruction work.
 Cache apply plans include bcache-aware attach, detach, rescan, cache-mode,
 dirty-data, and replacement review steps instead of a generic cache
 placeholder. bcache rescan reads state, cache mode, dirty-data, and graph

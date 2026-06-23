@@ -313,6 +313,14 @@ Lifecycle collections currently accepted by the planner:
 - `caches`
 - `snapshots`
 
+ZFS dataset and zvol `operation = "rescan"` actions are online read-only
+refreshes. Dataset rescan renders `zfs list -t filesystem`, `zfs get`, and
+graph inspection for mountpoint, quota, reservation, snapshot, clone, mount,
+and export relationships. Zvol rescan renders the equivalent
+`zfs list -t volume`, `zfs get`, and graph inspection for volsize,
+reservation, and block consumers. Use property updates or grow only when state
+must actually change.
+
 Lifecycle objects may use:
 
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
