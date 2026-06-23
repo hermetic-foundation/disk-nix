@@ -1791,6 +1791,12 @@ fn usage_details(node: &Node) -> String {
         ("vdo.recovery-percentage", "recovery"),
         ("vdo.write-policy", "write-policy"),
         ("vdo.overhead-blocks-used", "overhead-blocks"),
+        ("exfat.volume-serial", "serial"),
+        ("exfat.volume-length-sectors", "sectors"),
+        ("exfat.cluster-count", "clusters"),
+        ("exfat.free-clusters", "free-clusters"),
+        ("exfat.bytes-per-sector", "sector-bytes"),
+        ("exfat.sectors-per-cluster", "sectors-per-cluster"),
         ("bcache.cache_mode", "cache-mode"),
         ("bcache.dirty_data", "dirty"),
         ("zfs.health", "health"),
@@ -2061,6 +2067,17 @@ mod tests {
         assert_eq!(
             usage_details(&xfs),
             "xfs-blocks=262144 xfs-bsize=4096 reflink=1 bigtime=1"
+        );
+
+        let exfat = Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
+            .with_property("exfat.volume-serial", "0x6eef953b")
+            .with_property("exfat.cluster-count", "49984")
+            .with_property("exfat.free-clusters", "1024")
+            .with_property("exfat.bytes-per-sector", "512")
+            .with_property("exfat.sectors-per-cluster", "64");
+        assert_eq!(
+            usage_details(&exfat),
+            "serial=0x6eef953b clusters=49984 free-clusters=1024 sector-bytes=512 sectors-per-cluster=64"
         );
     }
 

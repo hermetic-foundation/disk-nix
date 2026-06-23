@@ -41,9 +41,11 @@ Edges include:
 - `relationship`
 
 The graph can represent block devices, partitions, filesystems, mountpoints,
-swap, LUKS, device-mapper, LVM, VDO, MD RAID, Btrfs, ZFS, iSCSI, LUNs, NFS,
-bcache, multipath, NVMe namespaces, and loop devices. Nodes are merged by id
-when multiple probe adapters report complementary information.
+swap, LUKS, device-mapper, LVM, VDO, MD RAID, Btrfs, ZFS, exFAT, iSCSI, LUNs,
+NFS, bcache, multipath, NVMe namespaces, and loop devices. Nodes are merged by
+id when multiple probe adapters report complementary information. exFAT probing
+uses `tune.exfat` and `dump.exfat` when available to add label, GUID, serial,
+sector, cluster, size, and free-space metadata beyond generic `blkid` fields.
 
 ## Probe Status
 
