@@ -262,9 +262,9 @@ table rereads when `device`, `partitionNumber`, and `end` or `desiredSize` are
 declared.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit member devices and RAID level declarations, with exact
-unresolved-input markers when either field is missing. MD create, grow, and
-member-removal command plans require an explicit array path such as
-`/dev/md/root`; logical array names remain non-ready.
+unresolved-input markers when either field is missing. MD create, grow, member
+add, replacement, and removal command plans require an explicit array path such
+as `/dev/md/root`; logical array names remain non-ready.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
 online `vdo growLogical` and physical growth review steps. Create preflight is
 marked unresolved until a backing device is declared. VDO property updates

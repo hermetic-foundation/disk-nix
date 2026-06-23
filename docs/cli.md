@@ -396,8 +396,8 @@ classified as unsupported before execution.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit `level` and `devices` fields, with exact unresolved-input markers
 when either field is missing and `/proc/mdstat` verification. MD create, grow,
-and member-removal commands require an explicit array path such as
-`/dev/md/root`.
+member add, replacement, and removal commands require an explicit array path
+such as `/dev/md/root`.
 VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
 plus online `vdo growLogical` and `vdo growPhysical` growth steps. Create
 preflight remains non-ready until a backing device is declared. Supported

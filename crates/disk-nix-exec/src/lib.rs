@@ -2615,6 +2615,46 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::AddDevice if collection == Some("mdRaids") => {
+            let target = md_array_target_path(action);
+            let device = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| action_id_suffix(&action.id, "add-device"));
+            (
+                vec![
+                    md_raid_detail_command(target, "inspect MD RAID redundancy before adding a member"),
+                    md_raid_add_member_command(target, device),
+                ],
+                vec![
+                    "add a member or spare only after confirming array health and intended role"
+                        .to_string(),
+                    "monitor /proc/mdstat until recovery or reshape completes".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::AddDevice if collection == Some("multipathMaps") => {
+            let target = multipath_map_target(action);
+            let path = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| action_id_suffix(&action.id, "add-device"));
+            (
+                vec![
+                    multipath_list_command(target, "inspect live multipath paths before adding a path"),
+                    multipath_add_path_command(path),
+                ],
+                vec![
+                    "verify the path belongs to the intended LUN before adding it to multipathd"
+                        .to_string(),
+                    "reload or resize maps only after every expected path is visible".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::AddDevice => {
             let target = target.unwrap_or("<target>");
             let device = action
@@ -2632,6 +2672,47 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     add_device_command(collection, target, device),
                 ],
                 vec!["verify the new device identity and redundancy policy before attaching it".to_string()],
+                true,
+            )
+        }
+        Operation::ReplaceDevice if collection == Some("mdRaids") => {
+            let target = md_array_target_path(action);
+            let from = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| action_id_suffix(&action.id, "replace-device"));
+            let to = action.context.replacement.as_deref();
+            (
+                vec![
+                    md_raid_detail_command(target, "inspect MD RAID redundancy before member replacement"),
+                    md_raid_replace_member_command(target, from, to),
+                ],
+                vec![
+                    "replace one member at a time while the array is healthy".to_string(),
+                    "monitor /proc/mdstat until replacement sync completes".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::ReplaceDevice if collection == Some("multipathMaps") => {
+            let target = multipath_map_target(action);
+            let from = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| action_id_suffix(&action.id, "replace-device"));
+            let to = action.context.replacement.as_deref();
+            (
+                vec![
+                    multipath_list_command(target, "inspect live multipath paths before replacement"),
+                    multipath_add_path_command(to),
+                    multipath_delete_path_command(from),
+                ],
+                vec![
+                    "add and verify the replacement path before deleting the old path".to_string(),
+                    "keep alternate paths active while replacing a single path".to_string(),
+                ],
                 true,
             )
         }
@@ -4814,6 +4895,24 @@ fn md_raid_detail_command(target: Option<&str>, note: &'static str) -> Execution
     }
 }
 
+fn md_raid_add_member_command(target: Option<&str>, device: Option<&str>) -> ExecutionCommand {
+    let target_arg = target.unwrap_or("<md-array>");
+    match (target, device) {
+        (Some(_), Some(device)) => command(
+            ["mdadm", target_arg, "--add", device],
+            true,
+            "add the reviewed member or spare to the MD RAID array",
+        ),
+        _ => command_vec_with_readiness(
+            vec!["mdadm", target_arg, "--add", device.unwrap_or("<device>")],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_md_member_operation_inputs(target, device),
+            "add the MD RAID member after selecting the array and member",
+        ),
+    }
+}
+
 fn md_raid_fail_member_command(target: Option<&str>, device: Option<&str>) -> ExecutionCommand {
     let target_arg = target.unwrap_or("<md-array>");
     match (target, device) {
@@ -4855,6 +4954,56 @@ fn md_raid_remove_member_command(target: Option<&str>, device: Option<&str>) -> 
     }
 }
 
+fn md_raid_replace_member_command(
+    target: Option<&str>,
+    source: Option<&str>,
+    replacement: Option<&str>,
+) -> ExecutionCommand {
+    let target_arg = target.unwrap_or("<md-array>");
+    let source_arg = source.unwrap_or("<old-device>");
+    let replacement_arg = replacement.unwrap_or("<new-device>");
+    let mut missing = Vec::new();
+    if target.is_none() {
+        missing.push("MD array path");
+    }
+    if source.is_none() {
+        missing.push("device to replace");
+    }
+    if replacement.is_none() {
+        missing.push("replacement device");
+    }
+
+    if missing.is_empty() {
+        command(
+            [
+                "mdadm",
+                target_arg,
+                "--replace",
+                source_arg,
+                "--with",
+                replacement_arg,
+            ],
+            true,
+            "replace an MD RAID member while preserving array redundancy",
+        )
+    } else {
+        command_vec_with_readiness(
+            vec![
+                "mdadm",
+                target_arg,
+                "--replace",
+                source_arg,
+                "--with",
+                replacement_arg,
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "replace the MD RAID member after selecting the array, old member, and replacement",
+        )
+    }
+}
+
 fn missing_md_member_operation_inputs(
     target: Option<&str>,
     device: Option<&str>,
@@ -4867,6 +5016,23 @@ fn missing_md_member_operation_inputs(
         missing.push("member device to remove");
     }
     missing
+}
+
+fn multipath_add_path_command(path: Option<&str>) -> ExecutionCommand {
+    match path {
+        Some(path) => command(
+            ["multipathd", "add", "path", path],
+            true,
+            "add or re-add the reviewed path to multipathd",
+        ),
+        None => command_with_readiness(
+            ["multipathd", "add", "path", "<path>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["multipath path to add"],
+            "add the multipath path after selecting the reviewed path",
+        ),
+    }
 }
 
 fn multipath_delete_path_command(path: Option<&str>) -> ExecutionCommand {
@@ -11718,6 +11884,58 @@ mod tests {
                 && command.readiness == CommandReadiness::NeedsDomainImplementation
                 && command.unresolved_inputs == ["MD array path"]
         }));
+
+        let add_action = PlannedAction {
+            id: "mdRaids:root:add-device:/dev/disk/by-id/nvme-spare".to_string(),
+            description: "add MD member".to_string(),
+            operation: Operation::AddDevice,
+            risk: RiskClass::Online,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("mdRaids".to_string()),
+                name: Some("root".to_string()),
+                target: Some("root".to_string()),
+                device: Some("/dev/disk/by-id/nvme-spare".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let replace_action = PlannedAction {
+            id: "mdRaids:root:replace-device:/dev/disk/by-id/old-md-member".to_string(),
+            description: "replace MD member".to_string(),
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("mdRaids".to_string()),
+                name: Some("root".to_string()),
+                target: Some("root".to_string()),
+                device: Some("/dev/disk/by-id/old-md-member".to_string()),
+                replacement: Some("/dev/disk/by-id/new-md-member".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let (add_commands, _, _) = commands_for_action(&add_action);
+        let (replace_commands, _, _) = commands_for_action(&replace_action);
+        assert!(add_commands.iter().any(|command| {
+            command.argv == ["mdadm", "<md-array>", "--add", "/dev/disk/by-id/nvme-spare"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["MD array path"]
+        }));
+        assert!(replace_commands.iter().any(|command| {
+            command.argv
+                == [
+                    "mdadm",
+                    "<md-array>",
+                    "--replace",
+                    "/dev/disk/by-id/old-md-member",
+                    "--with",
+                    "/dev/disk/by-id/new-md-member",
+                ]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["MD array path"]
+        }));
     }
 
     #[test]
@@ -11759,14 +11977,13 @@ mod tests {
                 .any(|command| command.argv == ["multipathd", "add", "path", "/dev/sdb"])
         }));
         assert!(report.command_plan.iter().any(|step| {
-            step.commands.iter().any(|command| {
-                command.argv
-                    == [
-                        "sh",
-                        "-c",
-                        "multipathd add path /dev/sdd && multipathd del path /dev/sdc",
-                    ]
-            })
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["multipathd", "add", "path", "/dev/sdd"])
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["multipathd", "del", "path", "/dev/sdc"])
         }));
         assert!(
             !report.command_plan.iter().any(|step| {

@@ -370,10 +370,12 @@ target and `desiredSize`; attach and delete flows require `namespaceId` plus
 `controllers` when attachment state is changed.
 Swap grow, format, label, and UUID command plans require a path-shaped swap
 target. Label and UUID updates render `swaplabel --label` and
-`swaplabel --uuid`. MD RAID create, grow, and member-removal command plans
-require an explicit array path such as `/dev/md/root`. Loop-device refresh and
-detach command plans require `/dev/loop*` targets. Multipath map growth requires
-a concrete map target such as `mpatha` or `/dev/mapper/mpatha`.
+`swaplabel --uuid`. MD RAID create, grow, member add, replacement, and removal
+command plans require an explicit array path such as `/dev/md/root`.
+Loop-device refresh and detach command plans require `/dev/loop*` targets.
+Multipath map growth and path replacement preflight require a concrete map
+target such as `mpatha` or `/dev/mapper/mpatha`; replacement renders separate
+path add and delete steps so each command can be reviewed independently.
 ZFS pool device removal renders reviewed `zpool remove <pool> <device>` steps
 when the pool layout supports evacuation. LVM volume group device removal
 renders reviewed `pvmove <pv>` then `vgreduce <vg> <pv>` steps so allocated
