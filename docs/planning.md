@@ -118,7 +118,9 @@ Examples:
 - Loop-device creation and capacity refresh are online; detach is
   offline-required because mounts, mappers, and other consumers must be stopped
   before the mapping is removed.
-- `properties = { ... }` is classified as safe property-update intent.
+- `properties = { ... }` is classified as safe property-update intent. Btrfs
+  subvolume `readonly`, `readOnly`, or `ro` declarations render
+  `btrfs property set -ts <path> ro true|false`.
 - Cache attach and cache-mode updates are online or safe when they use an
   existing cache-set identity; cache replacement remains offline-required
   because dirty writeback data must be flushed or detached before media

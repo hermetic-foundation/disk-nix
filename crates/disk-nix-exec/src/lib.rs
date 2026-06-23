@@ -3143,6 +3143,7 @@ fn set_property_command(
             true,
             "set a ZFS dataset property",
         ),
+        Some("btrfsSubvolumes") => btrfs_subvolume_property_command(target, property, assignment),
         Some("exports") => command(
             ["exportfs", "-ra"],
             true,
@@ -3156,6 +3157,55 @@ fn set_property_command(
             ["property update tool"],
             "apply the storage-domain property update",
         ),
+    }
+}
+
+fn btrfs_subvolume_property_command(
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            ["<btrfs-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["Btrfs property value"],
+            "set a Btrfs subvolume property after resolving the desired value",
+        );
+    };
+    let property_name = match property {
+        "ro" | "readonly" | "readOnly" | "btrfs.readonly" | "btrfs.ro" => "ro",
+        _ => {
+            return command_with_readiness(
+                ["<btrfs-property-tool>", target, property],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["supported Btrfs subvolume property"],
+                "set a Btrfs subvolume property after selecting a supported property mapping",
+            );
+        }
+    };
+    command_vec(
+        vec![
+            "btrfs".to_string(),
+            "property".to_string(),
+            "set".to_string(),
+            "-ts".to_string(),
+            target.to_string(),
+            property_name.to_string(),
+            normalize_boolish_btrfs_property_value(value),
+        ],
+        true,
+        "set a Btrfs subvolume property",
+    )
+}
+
+fn normalize_boolish_btrfs_property_value(value: &str) -> String {
+    match value {
+        "1" | "yes" | "on" | "true" => "true".to_string(),
+        "0" | "no" | "off" | "false" => "false".to_string(),
+        other => other.to_string(),
     }
 }
 
@@ -4577,7 +4627,10 @@ mod tests {
                 "btrfsSubvolumes": {
                   "/mnt/persist/@home": {
                     "operation": "create",
-                    "path": "/mnt/persist/@home"
+                    "path": "/mnt/persist/@home",
+                    "properties": {
+                      "readonly": true
+                    }
                   },
                   "/mnt/persist/@old": {
                     "destroy": true,
@@ -4599,6 +4652,22 @@ mod tests {
             step.commands.iter().any(|command| {
                 command.argv == ["btrfs", "subvolume", "create", "/mnt/persist/@home"]
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsSubvolumes:/mnt/persist/@home:set-property:readonly"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "property",
+                            "set",
+                            "-ts",
+                            "/mnt/persist/@home",
+                            "ro",
+                            "true",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {

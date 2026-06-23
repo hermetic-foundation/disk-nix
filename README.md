@@ -167,6 +167,9 @@ and replacement review steps instead of a generic cache placeholder.
 Btrfs filesystem device-removal plans include allocation inspection and
 domain-specific `btrfs device remove` rendering for review, while remaining
 blocked by the current potential-data-loss policy gate.
+Btrfs subvolume property updates render read-only toggles with
+`btrfs property set -ts <path> ro true|false`; unsupported Btrfs subvolume
+properties stay explicit as domain-specific review items.
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit.
 LUKS close plans render offline-policy-gated `cryptsetup close` commands and
