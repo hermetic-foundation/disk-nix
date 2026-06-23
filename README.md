@@ -78,6 +78,7 @@ disk-nix apply --spec ./examples/lifecycle-update.json
 disk-nix apply --spec ./examples/lifecycle-update.json --json
 disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
 disk-nix apply --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
+disk-nix apply --spec ./examples/lifecycle-update.json --report-out ./apply-report.json
 disk-nix validate --spec ./examples/lifecycle-update.json --json
 disk-nix completions bash
 disk-nix manpage
@@ -110,6 +111,7 @@ The flake exposes a NixOS module:
     apply.mode = "activation";
     apply.probeCurrent = true;
     apply.scriptOut = "/run/disk-nix/apply.sh";
+    apply.reportOut = "/run/disk-nix/apply-report.json";
   };
 }
 ```
@@ -119,7 +121,8 @@ The module installs the CLI, writes a normalized storage spec to
 and initrd LUKS options, and keeps lifecycle domains available in the same
 planner spec. When `apply.scriptOut` is set, activation validation asks the CLI
 to write the allowed command plan and post-apply verification plan to that
-reviewable shell script path.
+reviewable shell script path. When `apply.reportOut` is set, activation also
+writes the JSON report before returning blocked-policy failures.
 
 ## Safety model
 
@@ -142,3 +145,5 @@ reviewable shell script with `--script-out`. The `--execute` flag is
 intentionally refused until a direct mutating executor exists.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
+Use `--report-out` with either command to persist the JSON report for review
+even when policy blocks the operation.

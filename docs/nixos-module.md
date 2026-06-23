@@ -149,6 +149,7 @@ Example lifecycle planning through NixOS options:
       mode = "activation";
       probeCurrent = true;
       scriptOut = "/run/disk-nix/apply.sh";
+      reportOut = "/run/disk-nix/apply-report.json";
     };
     pools.tank = {
       operation = "rebalance";
@@ -188,7 +189,8 @@ Example lifecycle planning through NixOS options:
   potential-data-loss actions are refused by default. Set `probeCurrent = true`
   to include current topology comparison in that validation report. Set
   `scriptOut` to emit the allowed command and verification plan as a reviewable
-  shell script during validation.
+  shell script during validation. Set `reportOut` to persist the JSON report
+  before blocked-policy failures are returned.
 - `boot`: reserved for boot-time lifecycle work
 - `install`: reserved for installer workflows
 
@@ -211,6 +213,7 @@ Mutation policy should remain explicit:
 - `requireConfirmationFile`
 - `probeCurrent`
 - `scriptOut`
+- `reportOut`
 
 `requireBackup` and `requireConfirmation` are additional safety gates for
 high-risk actions. `requireConfirmationFile` stores the expected file path in
@@ -218,3 +221,5 @@ the generated policy; `disk-nix apply` only treats it as confirmed when the file
 contains a standalone line equal to `disk-nix confirm`.
 `scriptOut` must be an absolute path. The activation service creates its parent
 directory before asking the CLI to write the review script.
+`reportOut` must also be an absolute path. The activation service creates its
+parent directory before asking the CLI to write the JSON apply report.

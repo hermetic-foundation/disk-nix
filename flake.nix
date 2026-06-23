@@ -97,6 +97,7 @@
                 confirmation = false;
                 requireConfirmationFile = "/run/disk-nix/confirm";
                 scriptOut = "/run/disk-nix/apply.sh";
+                reportOut = "/run/disk-nix/apply-report.json";
               };
               luks.devices.cryptroot = {
                 device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
@@ -190,6 +191,8 @@
             simpleApply=$(mktemp)
             lifecycleApply=$(mktemp)
             lifecycleValidate=$(mktemp)
+            lifecycleApplyReport=$(mktemp)
+            lifecycleValidateReport=$(mktemp)
             scriptOut=$(mktemp)
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/simple-root.json} --json > "$simplePlan"
@@ -229,7 +232,7 @@
             grep -- 'xfs_growfs /' "$scriptOut"
             grep -- 'Post-apply verification commands' "$scriptOut"
 
-            if ${diskNix}/bin/disk-nix apply --spec ${./examples/lifecycle-update.json} --json > "$lifecycleApply"; then
+            if ${diskNix}/bin/disk-nix apply --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleApplyReport" --json > "$lifecycleApply"; then
               echo "expected lifecycle example apply to be blocked" >&2
               exit 1
             fi
@@ -241,13 +244,18 @@
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
             ' "$lifecycleApply"
+            jq -e '
+              .status == "blocked"
+              and .apply.blockedCount == 6
+            ' "$lifecycleApplyReport"
 
-            ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --json > "$lifecycleValidate"
+            ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
               and .apply.blockedCount == 6
               and .messages[0] == "apply policy blocked 6 action(s)"
             ' "$lifecycleValidate"
+            cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
             touch "$out"
           '';
@@ -296,11 +304,14 @@
                   and .apply.confirmation == false
                   and .apply.requireConfirmationFile == "/run/disk-nix/confirm"
                   and .apply.scriptOut == "/run/disk-nix/apply.sh"
+                  and .apply.reportOut == "/run/disk-nix/apply-report.json"
                 ' "$spec"
                 applyScript='${nixosModuleTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'
                 grep -- '--probe-current' "$applyScript"
                 grep -- '--script-out' "$applyScript"
                 grep -- '/run/disk-nix/apply.sh' "$applyScript"
+                grep -- '--report-out' "$applyScript"
+                grep -- '/run/disk-nix/apply-report.json' "$applyScript"
                 touch "$out"
               '';
         };

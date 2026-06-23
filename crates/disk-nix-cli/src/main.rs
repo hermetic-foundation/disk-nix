@@ -156,6 +156,9 @@ enum Command {
         /// Write a reviewable shell script for the allowed command and verification plan.
         #[arg(long)]
         script_out: Option<String>,
+        /// Write the JSON apply report to a file before exit handling.
+        #[arg(long)]
+        report_out: Option<String>,
         /// Emit JSON apply report.
         #[arg(long)]
         json: bool,
@@ -171,6 +174,9 @@ enum Command {
         /// Write a reviewable shell script when every planned action is policy-allowed.
         #[arg(long)]
         script_out: Option<String>,
+        /// Write the JSON validation report to a file.
+        #[arg(long)]
+        report_out: Option<String>,
         /// Emit JSON validation report.
         #[arg(long)]
         json: bool,
@@ -390,6 +396,7 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             probe_current,
             execute,
             script_out,
+            report_out,
             json,
         } => {
             let mode = if execute {
@@ -398,6 +405,9 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 ExecutionMode::DryRun
             };
             let report = prepare_apply_report(&spec, probe_current, mode)?;
+            if let Some(report_out) = report_out.as_deref() {
+                write_execution_report(report_out, &report)?;
+            }
             if let Some(script_out) = script_out.as_deref() {
                 write_execution_script(script_out, &report)?;
             }
@@ -430,9 +440,13 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             spec,
             probe_current,
             script_out,
+            report_out,
             json,
         } => {
             let report = prepare_apply_report(&spec, probe_current, ExecutionMode::DryRun)?;
+            if let Some(report_out) = report_out.as_deref() {
+                write_execution_report(report_out, &report)?;
+            }
             if let Some(script_out) = script_out.as_deref() {
                 write_execution_script(script_out, &report)?;
             }
@@ -511,6 +525,15 @@ fn write_execution_script(path: &str, report: &ExecutionReport) -> Result<(), Ap
     let mut permissions = std::fs::metadata(path)?.permissions();
     permissions.set_mode(0o700);
     std::fs::set_permissions(path, permissions)?;
+    Ok(())
+}
+
+fn write_execution_report(path: &str, report: &ExecutionReport) -> Result<(), AppError> {
+    let mut report_json = report
+        .to_json()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    report_json.push('\n');
+    std::fs::write(path, report_json)?;
     Ok(())
 }
 

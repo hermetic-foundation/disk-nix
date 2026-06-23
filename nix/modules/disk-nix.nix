@@ -11,6 +11,9 @@ let
   applyScriptOutDir = lib.optionalString (cfg.apply.scriptOut != null) (
     builtins.dirOf cfg.apply.scriptOut
   );
+  applyReportOutDir = lib.optionalString (cfg.apply.reportOut != null) (
+    builtins.dirOf cfg.apply.reportOut
+  );
   applyArgs = [
     "apply"
     "--spec"
@@ -20,10 +23,17 @@ let
   ++ lib.optionals (cfg.apply.scriptOut != null) [
     "--script-out"
     cfg.apply.scriptOut
+  ]
+  ++ lib.optionals (cfg.apply.reportOut != null) [
+    "--report-out"
+    cfg.apply.reportOut
   ];
   applyValidationScript = pkgs.writeShellScript "disk-nix-apply-validation" ''
     ${lib.optionalString (cfg.apply.scriptOut != null) ''
       mkdir -p ${lib.escapeShellArg applyScriptOutDir}
+    ''}
+    ${lib.optionalString (cfg.apply.reportOut != null) ''
+      mkdir -p ${lib.escapeShellArg applyReportOutDir}
     ''}
     exec ${lib.escapeShellArgs ([ (lib.getExe cfg.package) ] ++ applyArgs)}
   '';
@@ -736,6 +746,13 @@ in
         example = "/run/disk-nix/apply.sh";
         description = "Write the allowed command and verification plan to this reviewable shell script path during apply-policy validation.";
       };
+
+      reportOut = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "/run/disk-nix/apply-report.json";
+        description = "Write the JSON apply-policy report to this path during validation, including blocked policy details before failures are returned.";
+      };
     };
   };
 
@@ -848,6 +865,10 @@ in
       {
         assertion = cfg.apply.scriptOut != null -> lib.hasPrefix "/" cfg.apply.scriptOut;
         message = "services.disk-nix.apply.scriptOut must be an absolute path.";
+      }
+      {
+        assertion = cfg.apply.reportOut != null -> lib.hasPrefix "/" cfg.apply.reportOut;
+        message = "services.disk-nix.apply.reportOut must be an absolute path.";
       }
       {
         assertion = cfg.iscsi.boot.enable -> cfg.iscsi.initiatorName != null;
