@@ -187,7 +187,8 @@ Use these commands for:
   parent UUIDs, and ZFS user-reference, compression, and encryption details
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
-  counts, dm open/segment counters, multipath WWID/path state, VDO mode and
+  counts, header area/epoch/flag details, data-segment cipher/offset/length
+  details, dm open/segment counters, multipath WWID/path state, VDO mode and
   data-reduction settings, loop backing/offset/read-only/direct-I/O settings,
   and bcache role/state/cache mode when probes expose them
 - `mounts`: local mountpoints and NFS mounts, including mount source,

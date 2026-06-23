@@ -1922,8 +1922,18 @@ fn usage_details(node: &Node) -> String {
         ("cryptsetup.sector-size", "sector-size"),
         ("cryptsetup.sector-count", "sectors"),
         ("cryptsetup.luks-version", "luks"),
+        ("cryptsetup.luks-epoch", "epoch"),
+        ("cryptsetup.luks-metadata-area", "metadata-area"),
+        ("cryptsetup.luks-keyslots-area", "keyslots-area"),
+        ("cryptsetup.luks-subsystem", "subsystem"),
+        ("cryptsetup.luks-flags", "flags"),
         ("cryptsetup.luks-keyslot-count", "keyslots"),
         ("cryptsetup.luks-token-count", "tokens"),
+        ("cryptsetup.luks-keyslots", "keyslot-ids"),
+        ("cryptsetup.luks-tokens", "token-ids"),
+        ("cryptsetup.luks-data-cipher", "data-cipher"),
+        ("cryptsetup.luks-data-offset", "data-offset"),
+        ("cryptsetup.luks-data-length", "data-length"),
         ("cryptsetup.luks-data-sector", "data-sector"),
         ("multipath.dm", "dm"),
         ("multipath.wwid", "wwid"),
@@ -2774,8 +2784,19 @@ mod tests {
             .with_property("cryptsetup.in-use", "true")
             .with_property("cryptsetup.cipher", "aes-xts-plain64")
             .with_property("cryptsetup.luks-version", "2")
+            .with_property("cryptsetup.luks-epoch", "7")
+            .with_property("cryptsetup.luks-metadata-area", "16384 [bytes]")
+            .with_property("cryptsetup.luks-keyslots-area", "16744448 [bytes]")
+            .with_property("cryptsetup.luks-subsystem", "(no subsystem)")
+            .with_property("cryptsetup.luks-flags", "allow-discards")
             .with_property("cryptsetup.luks-keyslot-count", "2")
-            .with_property("cryptsetup.luks-token-count", "1"),
+            .with_property("cryptsetup.luks-token-count", "1")
+            .with_property("cryptsetup.luks-keyslots", "0,1")
+            .with_property("cryptsetup.luks-tokens", "0")
+            .with_property("cryptsetup.luks-data-cipher", "aes-xts-plain64")
+            .with_property("cryptsetup.luks-data-offset", "32768 [bytes]")
+            .with_property("cryptsetup.luks-data-length", "(whole device)")
+            .with_property("cryptsetup.luks-data-sector", "4096 [bytes]"),
         );
         graph.add_edge(Edge::new(
             "block:/dev/nvme0n1p2",
@@ -2815,7 +2836,7 @@ mod tests {
         assert!(output.contains("       1 dm-uuid=CRYPT-LUKS2-crypt-uuid-cryptroot"));
         assert!(
             output.contains(
-                "active=true in-use=true cipher=aes-xts-plain64 luks=2 keyslots=2 tokens=1"
+                "active=true in-use=true cipher=aes-xts-plain64 luks=2 epoch=7 metadata-area=16384 [bytes] keyslots-area=16744448 [bytes] subsystem=(no subsystem) flags=allow-discards keyslots=2 tokens=1 keyslot-ids=0,1 token-ids=0 data-cipher=aes-xts-plain64 data-offset=32768 [bytes] data-length=(whole device) data-sector=4096 [bytes]"
             )
         );
         assert!(output.contains("dm=dm-2 wwid=3600508b400105e210000900000490000 vendor=IBM,2145"));
