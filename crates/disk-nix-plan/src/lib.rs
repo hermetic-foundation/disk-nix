@@ -389,6 +389,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "volumes",
         "volumeGroups",
         "mdRaids",
+        "multipathMaps",
         "pools",
         "datasets",
         "zvols",
@@ -1501,6 +1502,19 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Grow if collection == "multipathMaps" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "multipath map growth requires path rescan and map resize coordination"
+                    .to_string(),
+                alternatives: vec![
+                    "rescan every backing SCSI path before resizing the map".to_string(),
+                    "verify all expected paths are active before growing consumers".to_string(),
+                    "reload multipath maps and confirm no stale path reports the old size".to_string(),
+                ],
+            }),
+        ),
         Operation::Grow if collection == "zvols" => (
             RiskClass::Online,
             false,
@@ -1624,6 +1638,20 @@ fn classify_replace_device(collection: &str) -> (RiskClass, Advice) {
                 ],
             },
         )
+    } else if collection == "multipathMaps" {
+        (
+            RiskClass::OfflineRequired,
+            Advice {
+                summary: "multipath path replacement must preserve live path redundancy"
+                    .to_string(),
+                alternatives: vec![
+                    "add and verify the replacement path before deleting the old path".to_string(),
+                    "fail or disable one path at a time while other paths remain active"
+                        .to_string(),
+                    "reload maps only after every expected path is visible".to_string(),
+                ],
+            },
+        )
     } else {
         (
             RiskClass::Reversible,
@@ -1659,7 +1687,7 @@ fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
             alternatives
                 .push("rename the subvolume and validate consumers before removal".to_string());
         }
-        "volumes" | "volumeGroups" | "luns" | "mdRaids" => {
+        "volumes" | "volumeGroups" | "luns" | "mdRaids" | "multipathMaps" => {
             alternatives
                 .push("grow or attach replacement capacity instead of reformatting".to_string());
         }
@@ -1972,6 +2000,43 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "add replacement capacity before removal".to_string(),
                     "verify the array remains redundant after removal".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MultipathDevice,
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "multipath map growth requires path rescan and map resize".to_string(),
+                alternatives: vec![
+                    "rescan all backing paths before resizing the map".to_string(),
+                    "verify every active path reports the new size".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MultipathDevice,
+            operation: Operation::AddDevice,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "adding a multipath path should preserve active path redundancy"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the path WWID matches the intended map".to_string(),
+                    "reload maps after adding the path".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MultipathDevice,
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "multipath path replacement needs live-path coordination".to_string(),
+                alternatives: vec![
+                    "add replacement paths before deleting old paths".to_string(),
+                    "keep at least one healthy path active during replacement".to_string(),
                 ],
             }),
         },
@@ -2389,6 +2454,52 @@ mod tests {
             .iter()
             .find(|action| action.id == "mdRaids:root:replace-device:/dev/disk/by-id/old-md-member")
             .expect("md replace action exists");
+        assert_eq!(replace.risk, RiskClass::OfflineRequired);
+    }
+
+    #[test]
+    fn plan_classifies_multipath_map_lifecycle_with_path_advice() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "multipathMaps": {
+                "mpatha": {
+                  "target": "mpatha",
+                  "operation": "grow",
+                  "addDevices": ["/dev/sdb"],
+                  "replaceDevices": {
+                    "/dev/sdc": "/dev/sdd"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        let grow = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "multipathmaps:mpatha:grow")
+            .expect("multipath grow action exists");
+        assert_eq!(grow.risk, RiskClass::Online);
+        assert!(grow.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("rescan"))
+        }));
+        let add = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "multipathMaps:mpatha:add-device:/dev/sdb")
+            .expect("multipath add action exists");
+        assert_eq!(add.risk, RiskClass::Online);
+        let replace = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "multipathMaps:mpatha:replace-device:/dev/sdc")
+            .expect("multipath replace action exists");
         assert_eq!(replace.risk, RiskClass::OfflineRequired);
     }
 

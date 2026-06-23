@@ -177,6 +177,10 @@
                 target = "/dev/md/root";
                 addDevices = [ "/dev/disk/by-id/nvme-md-spare" ];
               };
+              multipathMaps.mpatha = {
+                target = "mpatha";
+                addDevices = [ "/dev/sdb" ];
+              };
               luns."iqn.2026-06.example:storage/root:0" = {
                 operation = "grow";
                 metadata = {
@@ -238,6 +242,7 @@
               and .properties.vdoVolumes["$ref"] == "#/$defs/lifecycleMap"
               and .properties.zvols["$ref"] == "#/$defs/lifecycleMap"
               and .properties.mdRaids["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap"
               and (."$defs".operation.enum | index("grow") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
               and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
@@ -246,6 +251,7 @@
               and (."$defs".specBody.properties.vdoVolumes["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.zvols["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.mdRaids["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
               and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
@@ -269,7 +275,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 18
+              .summary.actionCount == 19
               and .summary.offlineRequiredCount == 5
               and .summary.destructiveCount == 2
               and .summary.potentialDataLossCount == 2
@@ -278,6 +284,7 @@
               and (.actions | any(.id == "vdovolumes:archive:grow" and .risk == "online"))
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
               and (.actions | any(.id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-md-spare" and .risk == "online"))
+              and (.actions | any(.id == "multipathMaps:mpatha:add-device:/dev/sdb" and .risk == "online"))
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
@@ -377,6 +384,8 @@
                   and .spec.zvols."tank/vm/root".desiredSize == "80GiB"
                   and .spec.mdRaids.root.target == "/dev/md/root"
                   and (.spec.mdRaids.root.addDevices | index("/dev/disk/by-id/nvme-md-spare") != null)
+                  and .spec.multipathMaps.mpatha.target == "mpatha"
+                  and (.spec.multipathMaps.mpatha.addDevices | index("/dev/sdb") != null)
                   and .apply.mode == "activation"
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false

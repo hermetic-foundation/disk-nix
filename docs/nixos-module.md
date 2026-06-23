@@ -122,6 +122,7 @@ Typed lifecycle declarations are available for:
 - `volumes`
 - `volumeGroups`
 - `mdRaids`
+- `multipathMaps`
 - `pools`
 - `datasets`
 - `zvols`
@@ -205,6 +206,10 @@ Example lifecycle planning through NixOS options:
     mdRaids.root = {
       target = "/dev/md/root";
       addDevices = [ "/dev/disk/by-id/nvme-md-spare" ];
+    };
+    multipathMaps.mpatha = {
+      target = "mpatha";
+      addDevices = [ "/dev/sdb" ];
     };
     nfs.mounts."/srv/shared" = {
       source = "nas.example.com:/srv/shared";

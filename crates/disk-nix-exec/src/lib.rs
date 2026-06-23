@@ -663,6 +663,32 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::AddDevice
+        | Operation::ReplaceDevice
+        | Operation::RemoveDevice
+        | Operation::Grow
+            if collection == Some("multipathMaps") =>
+        {
+            (
+                vec![
+                    command(
+                        ["multipath", "-ll", target],
+                        false,
+                        "verify multipath map paths, policy, and size",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify multipath graph relationships after path or map change",
+                    ),
+                ],
+                vec![
+                    "all expected paths are active or intentionally failed".to_string(),
+                    "map size and WWID match desired state".to_string(),
+                    "dependent filesystems or mappings see the expected capacity".to_string(),
+                ],
+            )
+        }
         Operation::AddDevice | Operation::ReplaceDevice | Operation::Rebalance => (
             vec![command(
                 ["disk-nix", "inspect", target, "--json"],
@@ -1097,6 +1123,34 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Grow if collection == Some("multipathMaps") => {
+            let target = target.unwrap_or("<multipath-map>");
+            (
+                vec![
+                    command(
+                        ["multipath", "-ll", target],
+                        false,
+                        "inspect multipath map paths and size before growth",
+                    ),
+                    command(
+                        ["multipathd", "resize", "map", target],
+                        true,
+                        "resize the multipath map after every backing path sees the new LUN size",
+                    ),
+                    command(
+                        ["multipath", "-r"],
+                        true,
+                        "reload multipath maps after path rescans",
+                    ),
+                ],
+                vec![
+                    "rescan each SCSI path before resizing the multipath map".to_string(),
+                    "grow dependent volumes or filesystems only after the map reports the new size"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Grow if collection == Some("partitions") => {
             let target = target.unwrap_or("<partition>");
             let desired_size = action.context.desired_size.as_deref();
@@ -1479,6 +1533,34 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::RemoveDevice if collection == Some("multipathMaps") => {
+            let target = target.unwrap_or("<multipath-map>");
+            let path = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| parts.last().copied())
+                .unwrap_or("<path>");
+            (
+                vec![
+                    command(
+                        ["multipath", "-ll", target],
+                        false,
+                        "inspect live multipath paths before deletion",
+                    ),
+                    command(
+                        ["multipathd", "del", "path", path],
+                        true,
+                        "delete the reviewed path from multipathd",
+                    ),
+                ],
+                vec![
+                    "remove a path only when alternate paths remain active".to_string(),
+                    "verify the path belongs to the intended map WWID before deletion".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Format | Operation::Shrink | Operation::RemoveDevice | Operation::Rollback | Operation::Destroy => (
             Vec::new(),
             vec!["no command plan is generated for this risk class unless future explicit policy and executor support are added".to_string()],
@@ -1626,6 +1708,11 @@ fn add_device_command(collection: Option<&str>, target: &str, device: &str) -> E
             true,
             "add a member or spare to an MD RAID array",
         ),
+        Some("multipathMaps") => command(
+            ["multipathd", "add", "path", device],
+            true,
+            "add or re-add a path to multipathd",
+        ),
         Some("filesystems") => command(
             ["btrfs", "device", "add", device, target],
             true,
@@ -1662,6 +1749,19 @@ fn replace_device_command(
             ["mdadm", target, "--replace", from, "--with", to],
             true,
             "replace an MD RAID member while preserving array redundancy",
+        ),
+        Some("multipathMaps") => command_vec(
+            vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                format!(
+                    "multipathd add path {} && multipathd del path {}",
+                    shell_quote(to),
+                    shell_quote(from)
+                ),
+            ],
+            true,
+            "add the replacement multipath path before deleting the old path",
         ),
         Some("caches") => command_with_readiness(
             ["<cache-replace-tool>", target, from, to],
@@ -2367,6 +2467,69 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["cat", "/proc/mdstat"])
+        }));
+    }
+
+    #[test]
+    fn multipath_map_lifecycle_reports_multipath_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "multipathMaps": {
+                  "mpatha": {
+                    "target": "mpatha",
+                    "operation": "grow",
+                    "addDevices": ["/dev/sdb"],
+                    "replaceDevices": {
+                      "/dev/sdc": "/dev/sdd"
+                    },
+                    "removeDevices": ["/dev/sde"]
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::Blocked);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["multipathd", "resize", "map", "mpatha"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["multipathd", "add", "path", "/dev/sdb"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "sh",
+                        "-c",
+                        "multipathd add path /dev/sdd && multipathd del path /dev/sdc",
+                    ]
+            })
+        }));
+        assert!(
+            !report.command_plan.iter().any(|step| {
+                step.commands
+                    .iter()
+                    .any(|command| command.argv == ["multipathd", "del", "path", "/dev/sde"])
+            }),
+            "potential-data-loss path removal remains blocked by apply policy"
+        );
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["multipath", "-ll", "mpatha"])
         }));
     }
 

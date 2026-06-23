@@ -37,9 +37,10 @@ or the NixOS module wrapper written to `/etc/disk-nix/spec.json`:
 Current planning is intentionally conservative. It classifies filesystem
 resize policy, preservation intent, and lifecycle operations for disks,
 partitions, swap, LUKS containers, Btrfs subvolumes, VDO volumes, volumes, MD
-RAID arrays, pools, datasets, zvols, LUNs, iSCSI sessions, exports, cache
-layers, and snapshots. It reports destructive or potentially destructive
-behavior with alternatives instead of silently accepting unsafe mutation.
+RAID arrays, multipath maps, pools, datasets, zvols, LUNs, iSCSI sessions,
+exports, cache layers, and snapshots. It reports destructive or potentially
+destructive behavior with alternatives instead of silently accepting unsafe
+mutation.
 
 Examples:
 
@@ -78,6 +79,9 @@ Examples:
 - MD RAID member add is online; replacement and grow/reshape are
   offline-required because redundancy, resync, and dependent consumers must be
   coordinated.
+- Multipath map growth and path add are online; path replacement is
+  offline-required because at least one healthy path must remain active while
+  paths are added and deleted.
 - `properties = { ... }` is classified as safe property-update intent.
 - LUN `operation = "grow"` is classified as offline-required because the
   storage target, host rescan, multipath, and consumers must be coordinated.
@@ -108,6 +112,7 @@ Lifecycle collections currently accepted by the planner:
 - `volumes`
 - `volumeGroups`
 - `mdRaids`
+- `multipathMaps`
 - `pools`
 - `datasets`
 - `zvols`

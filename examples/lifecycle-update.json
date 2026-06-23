@@ -39,6 +39,14 @@
       ]
     }
   },
+  "multipathMaps": {
+    "mpatha": {
+      "target": "mpatha",
+      "addDevices": [
+        "/dev/sdb"
+      ]
+    }
+  },
   "vdoVolumes": {
     "archive": {
       "operation": "grow",

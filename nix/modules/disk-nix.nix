@@ -727,6 +727,12 @@ in
       description = "Typed MD RAID lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    multipathMaps = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed multipath map lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
     pools = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -909,6 +915,7 @@ in
         volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
         mdRaids = (cfg.spec.mdRaids or { }) // normalizeLifecycleSpec cfg.mdRaids;
+        multipathMaps = (cfg.spec.multipathMaps or { }) // normalizeLifecycleSpec cfg.multipathMaps;
         pools = (cfg.spec.pools or { }) // normalizeLifecycleSpec cfg.pools;
         datasets = (cfg.spec.datasets or { }) // normalizeLifecycleSpec cfg.datasets;
         zvols = (cfg.spec.zvols or { }) // normalizeLifecycleSpec cfg.zvols;
