@@ -92,6 +92,10 @@ early consumers try to mount or inspect them.
 Typed active VDO declarations enable the NixOS VDO-capable LVM stack and initrd
 LVM support by default. Upstream NixOS requires a kernel with `dm-vdo` support
 for `services.lvm.boot.vdo.enable`.
+Typed active iSCSI session declarations with `portal` metadata derive the
+regular `services.openiscsi.discoverPortal` when `iscsi.discoverPortal` is not
+set. A regular initiator still requires `iscsi.initiatorName`, because the
+upstream NixOS `services.openiscsi.name` option has no implicit safe default.
 
 Lifecycle declaration attribute names are usable object names only for domains
 whose native tools address objects by name, such as ZFS datasets, ZFS pools,

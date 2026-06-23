@@ -578,6 +578,17 @@ let
   activeZvols = activeLifecycleAttrs cfg.zvols;
   activeSnapshots = lib.filterAttrs (_: snapshot: !snapshot.destroy) cfg.snapshots;
   activeCaches = activeLifecycleAttrs cfg.caches;
+  activeIscsiSessions = activeLifecycleAttrs cfg.iscsi.sessions;
+  activeIscsiSessionPortals = lib.filter (portal: portal != null) (
+    map (session: session.portal) (lib.attrValues activeIscsiSessions)
+  );
+  iscsiDiscoverPortal =
+    if cfg.iscsi.discoverPortal != null then
+      cfg.iscsi.discoverPortal
+    else if activeIscsiSessionPortals != [ ] then
+      builtins.head activeIscsiSessionPortals
+    else
+      null;
   hasActiveAttrs = attrs: attrs != { };
   hasActiveLvm =
     hasActiveAttrs activePhysicalVolumes
@@ -1484,7 +1495,7 @@ in
         enableAutoLoginOut
         extraConfig
         ;
-      discoverPortal = cfg.iscsi.discoverPortal;
+      discoverPortal = iscsiDiscoverPortal;
     };
 
     services.nfs.server = lib.mkIf (nfsExportLines != [ ]) {
