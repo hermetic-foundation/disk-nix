@@ -1089,6 +1089,7 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
         | Operation::Rebalance
         | Operation::Mount
         | Operation::Unmount
+        | Operation::Rescan
         | Operation::Remount),
     ) = filesystem
         .get("operation")
@@ -3026,6 +3027,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "filesystems" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "filesystem rescan refreshes mount and graph inventory without changing data"
+                    .to_string(),
+                alternatives: vec![
+                    "use rescan before mount, remount, trim, check, or repair planning when current state may be stale"
+                        .to_string(),
+                    "use filesystem-specific check or scrub operations when integrity validation is needed"
+                        .to_string(),
+                    "persist steady-state mount declarations through NixOS fileSystems"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Remount if collection == "filesystems" => (
             RiskClass::Online,
             false,
@@ -4302,9 +4319,11 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NFS exports/mounts, NVMe namespaces, multipath maps, loop devices, ZFS datasets/zvols, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for filesystems, disks, partitions, snapshots, LUNs, iSCSI sessions, NFS exports/mounts, NVMe namespaces, multipath maps, loop devices, ZFS datasets/zvols, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
+                    "use filesystems.<name>.operation = \"rescan\" to refresh local mount and graph inventory"
+                        .to_string(),
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
                         .to_string(),
                     "use partitions.<name>.operation = \"rescan\" to refresh a reviewed backing disk"
@@ -5050,6 +5069,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                     "verify discard propagation through LUKS, LVM, thin, and virtual layers"
                         .to_string(),
                     "schedule regular fstrim instead of ad hoc discard on busy systems"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Filesystem,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "filesystem rescan refreshes mount and modeled graph state".to_string(),
+                alternatives: vec![
+                    "use rescan before planning mount, remount, trim, check, or repair work"
+                        .to_string(),
+                    "use check, scrub, or repair when data or metadata integrity must be validated"
                         .to_string(),
                 ],
             }),
@@ -8307,6 +8340,46 @@ mod tests {
             trim.advice
                 .as_ref()
                 .is_some_and(|advice| { advice.summary.contains("discards unused blocks") })
+        );
+    }
+
+    #[test]
+    fn plan_accepts_filesystem_rescan_operation() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "scratch": {
+                  "mountpoint": "/scratch",
+                  "device": "/dev/disk/by-label/scratch",
+                  "fsType": "xfs",
+                  "operation": "rescan"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        assert_eq!(plan.summary.unsupported_count, 0);
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:scratch:rescan")
+            .expect("filesystem rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
+        assert_eq!(rescan.context.target.as_deref(), Some("/scratch"));
+        assert_eq!(
+            rescan.context.device.as_deref(),
+            Some("/dev/disk/by-label/scratch")
+        );
+        assert!(
+            rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("refreshes mount"))
         );
     }
 

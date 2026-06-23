@@ -332,8 +332,10 @@ mount inventory/stat probes, and `operation = "unmount"` commands from
 `nfs.mounts`; legacy NFS mount `create` and `destroy` still map to the same
 command plans. Missing sources or concrete mountpoints remain non-ready.
 Local filesystem apply plans also render reviewed `operation = "mount"`,
-`operation = "remount"`, and `operation = "unmount"` commands from
-`filesystems`/NixOS `fileSystems`-compatible declarations. Mounts use
+read-only `operation = "rescan"`, `operation = "remount"`, and
+`operation = "unmount"` commands from `filesystems`/NixOS
+`fileSystems`-compatible declarations. Rescans refresh `findmnt` and modeled
+graph state without changing mounts or filesystem metadata. Mounts use
 `mount [-t <fsType>] [-o <options>] <device> <mountpoint>` when a source device
 and concrete mountpoint are available; unmounts use `umount <mountpoint>` and
 remain offline-gated because they can interrupt local services without deleting

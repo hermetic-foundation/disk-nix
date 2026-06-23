@@ -192,6 +192,12 @@
                 mountpoint = "/mnt/local-unmount";
                 operation = "unmount";
               };
+              filesystems.localRescan = {
+                device = "/dev/disk/by-label/local-rescan";
+                fsType = "xfs";
+                mountpoint = "/mnt/local-rescan";
+                operation = "rescan";
+              };
               filesystems.runTmpfs = {
                 device = "tmpfs";
                 fsType = "tmpfs";
@@ -1001,6 +1007,9 @@
                   and .spec.filesystems.localUnmount.operation == "unmount"
                   and .spec.filesystems.localUnmount.device == "/dev/disk/by-label/local-unmount"
                   and .spec.filesystems.localUnmount.mountpoint == "/mnt/local-unmount"
+                  and .spec.filesystems.localRescan.operation == "rescan"
+                  and .spec.filesystems.localRescan.device == "/dev/disk/by-label/local-rescan"
+                  and .spec.filesystems.localRescan.mountpoint == "/mnt/local-rescan"
                   and .spec.filesystems.runTmpfs.device == "tmpfs"
                   and .spec.filesystems.runTmpfs.fsType == "tmpfs"
                   and .spec.filesystems.runTmpfs.mountpoint == "/run/disk-nix-tmp"
@@ -1276,6 +1285,9 @@
                   and ."/mnt/local-mount".device == "/dev/disk/by-label/local-mount"
                   and ."/mnt/local-mount".fsType == "xfs"
                   and (has("/mnt/local-unmount") | not)
+                  and has("/mnt/local-rescan")
+                  and ."/mnt/local-rescan".device == "/dev/disk/by-label/local-rescan"
+                  and ."/mnt/local-rescan".fsType == "xfs"
                   and has("/run/disk-nix-tmp")
                   and ."/run/disk-nix-tmp".device == "tmpfs"
                   and ."/run/disk-nix-tmp".fsType == "tmpfs"

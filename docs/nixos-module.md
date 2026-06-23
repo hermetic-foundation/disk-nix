@@ -173,6 +173,10 @@ device for tools such as `e2fsck`, `xfs_repair`, `btrfs check`, `fsck.fat`,
 not a replacement for Windows `chkdsk`.
 Local filesystem `operation = "mount"` command plans use the same `device`,
 `fsType`, `mountpoint`, and `options` fields that derive NixOS `fileSystems`.
+Local filesystem `operation = "rescan"` command plans use the same `mountpoint`
+field for read-only `findmnt` and graph inventory refreshes, and remain in the
+derived NixOS `fileSystems` entry because they describe an active steady-state
+mount.
 Local filesystem `operation = "unmount"` command plans use `mountpoint`, remain
 offline-gated by apply policy, and are kept out of generated `fileSystems`.
 For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, `operation = "trim"`, device add/remove/replace operations, and filesystem property

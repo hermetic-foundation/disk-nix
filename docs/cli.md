@@ -464,6 +464,10 @@ Filesystem remount command plans render reviewed
 without deleting data. Missing concrete mountpoints keep remount commands
 non-ready, and long-lived option changes should still be persisted through
 NixOS `fileSystems`.
+Filesystem rescan command plans render read-only `findmnt --json <mountpoint>`
+and `disk-nix inspect <mountpoint>` commands for `filesystems` entries without
+mounting, remounting, unmounting, formatting, or checking filesystem metadata.
+Missing concrete mountpoints keep rescan commands non-ready.
 MD RAID assemble plans render `mdadm --assemble <array> <members...>`, stop
 plans render `mdadm --stop <array>`, and create plans render
 destructive-policy-gated `mdadm --create` commands from explicit `level` and

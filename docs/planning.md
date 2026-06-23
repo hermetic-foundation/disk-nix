@@ -422,6 +422,11 @@ Filesystem `operation = "remount"` actions are online, non-destructive updates
 that render `mount -o remount,<options> <mountpoint>`. Missing concrete
 mountpoints remain non-ready, and long-lived options should be kept in the
 matching NixOS `fileSystems` entry.
+Filesystem `operation = "rescan"` actions are online, read-only refreshes that
+render `findmnt --json <mountpoint>` and `disk-nix inspect <mountpoint>`.
+They refresh modeled mount and graph state without mounting, remounting,
+unmounting, formatting, or checking filesystem metadata. Missing concrete
+mountpoints remain non-ready.
 Filesystem `operation = "mount"` and `operation = "unmount"` actions render
 reviewable `mount [-t <fsType>] [-o <options>] <device> <mountpoint>` and
 `umount <mountpoint>` command plans from the same `fileSystems`-compatible

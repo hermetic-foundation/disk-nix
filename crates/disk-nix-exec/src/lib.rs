@@ -2664,6 +2664,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Rescan if action.context.collection.as_deref() == Some("filesystems") => {
+            let mountpoint = filesystem_mountpoint(action);
+            (
+                vec![
+                    filesystem_findmnt_command(mountpoint),
+                    filesystem_inspect_command(
+                        mountpoint,
+                        true,
+                        "verify filesystem graph state after rescan",
+                    ),
+                ],
+                vec![
+                    "findmnt and disk-nix graph state were refreshed without mounting, remounting, or unmounting"
+                        .to_string(),
+                    "source, filesystem type, options, and consumers match the reviewed inventory"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Format
         | Operation::Shrink
         | Operation::Clone
@@ -2894,6 +2913,28 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "stop services, automount units, and sessions that depend on the mountpoint before unmounting"
                         .to_string(),
                     "verify no open files, bind mounts, or namespaces still reference the mountpoint"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan
+            if collection == Some("filesystems") || action.id.starts_with("filesystems:") =>
+        {
+            let mountpoint = filesystem_mountpoint(action);
+            (
+                vec![
+                    filesystem_findmnt_command(mountpoint),
+                    filesystem_inspect_command(
+                        mountpoint,
+                        false,
+                        "refresh modeled filesystem graph state",
+                    ),
+                ],
+                vec![
+                    "filesystem rescan is read-only and does not mount, remount, unmount, or format storage"
+                        .to_string(),
+                    "use the refreshed inventory before selecting any mutating lifecycle action"
                         .to_string(),
                 ],
                 true,
@@ -9105,6 +9146,45 @@ fn filesystem_findmnt_command(mountpoint: Option<&str>) -> ExecutionCommand {
     }
 }
 
+fn filesystem_inspect_command(
+    mountpoint: Option<&str>,
+    json_output: bool,
+    note: &str,
+) -> ExecutionCommand {
+    match mountpoint {
+        Some(mountpoint) => {
+            if json_output {
+                command(["disk-nix", "inspect", mountpoint, "--json"], false, note)
+            } else {
+                command(["disk-nix", "inspect", mountpoint], false, note)
+            }
+        }
+        None => {
+            let argv = if json_output {
+                vec![
+                    "disk-nix".to_string(),
+                    "inspect".to_string(),
+                    "<mountpoint>".to_string(),
+                    "--json".to_string(),
+                ]
+            } else {
+                vec![
+                    "disk-nix".to_string(),
+                    "inspect".to_string(),
+                    "<mountpoint>".to_string(),
+                ]
+            };
+            command_vec_with_readiness(
+                argv,
+                false,
+                CommandReadiness::NeedsDomainImplementation,
+                ["mountpoint path"],
+                note,
+            )
+        }
+    }
+}
+
 fn filesystem_remount_command(mountpoint: Option<&str>, options: Option<&str>) -> ExecutionCommand {
     let mountpoint_arg = mountpoint.unwrap_or("<mountpoint>");
     let remount_options = options
@@ -12984,6 +13064,87 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["disk-nix", "inspect", "/scratch", "--json"])
+        }));
+    }
+
+    #[test]
+    fn filesystem_rescan_lifecycle_reports_read_only_inventory_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "scratch": {
+                    "mountpoint": "/scratch",
+                    "device": "/dev/disk/by-label/scratch",
+                    "fsType": "xfs",
+                    "operation": "rescan"
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["findmnt", "--json", "/scratch"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/scratch"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "/scratch", "--json"])
+        }));
+    }
+
+    #[test]
+    fn filesystem_rescan_requires_mountpoint_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "scratch": {
+                    "fsType": "xfs",
+                    "operation": "rescan"
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["findmnt", "--json", "<mountpoint>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mountpoint path"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "<mountpoint>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mountpoint path"]
+                })
         }));
     }
 
