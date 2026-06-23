@@ -1890,17 +1890,37 @@ fn usage_details(node: &Node) -> String {
         ("udev.id-bus", "udev-bus"),
         ("lvm.data-percent", "data"),
         ("lvm.metadata-percent", "metadata"),
+        ("lvm.snap-percent", "snap"),
+        ("lvm.copy-percent", "copy"),
+        ("lvm.sync-percent", "sync"),
         ("lvm.attr", "attr"),
+        ("lvm.layout", "layout"),
         ("lvm.origin", "origin"),
         ("lvm.pool", "pool"),
         ("lvm.extent-size", "extent"),
         ("lvm.pv-count", "pvs"),
         ("lvm.lv-count", "lvs"),
         ("lvm.active", "active"),
+        ("lvm.permissions", "permissions"),
+        ("lvm.health", "health"),
+        ("lvm.when-full", "when-full"),
+        ("lvm.metadata-size", "metadata-size"),
+        ("lvm.tags", "tags"),
+        ("lvm.kernel-major", "kernel-major"),
+        ("lvm.kernel-minor", "kernel-minor"),
+        ("lvm.device-open", "device-open"),
+        ("lvm.check-needed", "check-needed"),
         ("lvm.role", "role"),
         ("lvm.time", "time"),
         ("lvm.cache-mode", "cache-mode"),
         ("lvm.cache-policy", "cache-policy"),
+        ("lvm.kernel-cache-mode", "kernel-cache-mode"),
+        ("lvm.kernel-cache-policy", "kernel-cache-policy"),
+        ("lvm.kernel-discards", "kernel-discards"),
+        ("lvm.writecache-total-blocks", "writecache-total"),
+        ("lvm.writecache-free-blocks", "writecache-free"),
+        ("lvm.writecache-writeback-blocks", "writecache-writeback"),
+        ("lvm.writecache-error", "writecache-error"),
         ("btrfs.qgroup-id", "qgroup"),
         ("btrfs.mount-target", "mount-target"),
         ("btrfs.device-id", "device-id"),
@@ -2438,13 +2458,21 @@ mod tests {
             })
             .with_property("lvm.data-percent", "12.50")
             .with_property("lvm.metadata-percent", "3.00")
+            .with_property("lvm.snap-percent", "4.00")
+            .with_property("lvm.copy-percent", "99.00")
             .with_property("lvm.active", "active")
+            .with_property("lvm.layout", "thin")
+            .with_property("lvm.health", "ok")
+            .with_property("lvm.when-full", "queue")
+            .with_property("lvm.metadata-size", "128.00m")
             .with_property("lvm.role", "public")
             .with_property("lvm.cache-mode", "writeback")
-            .with_property("lvm.cache-policy", "smq");
+            .with_property("lvm.cache-policy", "smq")
+            .with_property("lvm.kernel-discards", "passdown")
+            .with_property("lvm.writecache-writeback-blocks", "16");
         assert_eq!(
             usage_details(&lv),
-            "data=12.50 metadata=3.00 active=active role=public cache-mode=writeback cache-policy=smq"
+            "data=12.50 metadata=3.00 snap=4.00 copy=99.00 layout=thin active=active health=ok when-full=queue metadata-size=128.00m role=public cache-mode=writeback cache-policy=smq kernel-discards=passdown writecache-writeback=16"
         );
 
         let pool = Node::new("zpool:tank", NodeKind::ZfsPool, "tank")
@@ -2650,6 +2678,9 @@ mod tests {
                 .with_property("lvm.pool", "thinpool")
                 .with_property("lvm.data-percent", "12.50")
                 .with_property("lvm.active", "active")
+                .with_property("lvm.layout", "snapshot")
+                .with_property("lvm.health", "partial")
+                .with_property("lvm.tags", "backup,snapshot")
                 .with_property("lvm.cache-mode", "writeback")
                 .with_property("lvm.cache-policy", "smq"),
         );
@@ -2679,7 +2710,7 @@ mod tests {
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains(
-            "data=12.50 origin=root pool=thinpool active=active cache-mode=writeback cache-policy=smq"
+            "data=12.50 layout=snapshot origin=root pool=thinpool active=active health=partial tags=backup,snapshot cache-mode=writeback cache-policy=smq"
         ));
         assert!(output.contains("level=raid1 state=clean raid-devices=2"));
         assert!(output.contains("attached-disk=sdb"));

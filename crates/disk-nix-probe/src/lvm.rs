@@ -49,15 +49,35 @@ struct LogicalVolume {
     lv_path: Option<String>,
     lv_size: Option<String>,
     lv_attr: Option<String>,
+    lv_layout: Option<String>,
     lv_active: Option<String>,
+    lv_permissions: Option<String>,
+    lv_health_status: Option<String>,
+    lv_when_full: Option<String>,
+    lv_metadata_size: Option<String>,
+    lv_tags: Option<String>,
+    lv_kernel_major: Option<String>,
+    lv_kernel_minor: Option<String>,
+    lv_device_open: Option<String>,
+    lv_check_needed: Option<String>,
     lv_role: Option<String>,
     lv_time: Option<String>,
     origin: Option<String>,
     pool_lv: Option<String>,
     data_percent: Option<String>,
+    snap_percent: Option<String>,
     metadata_percent: Option<String>,
+    copy_percent: Option<String>,
+    sync_percent: Option<String>,
     cache_mode: Option<String>,
     cache_policy: Option<String>,
+    kernel_cache_mode: Option<String>,
+    kernel_cache_policy: Option<String>,
+    kernel_discards: Option<String>,
+    writecache_total_blocks: Option<String>,
+    writecache_free_blocks: Option<String>,
+    writecache_writeback_blocks: Option<String>,
+    writecache_error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -234,15 +254,44 @@ fn add_logical_volume(graph: &mut StorageGraph, lv: LogicalVolume) {
 
     for (key, value) in [
         ("lvm.attr", lv.lv_attr.clone()),
+        ("lvm.layout", lv.lv_layout.clone()),
         ("lvm.active", lv.lv_active.clone()),
+        ("lvm.permissions", lv.lv_permissions.clone()),
+        ("lvm.health", lv.lv_health_status.clone()),
+        ("lvm.when-full", lv.lv_when_full.clone()),
+        ("lvm.metadata-size", lv.lv_metadata_size.clone()),
+        ("lvm.tags", lv.lv_tags.clone()),
+        ("lvm.kernel-major", lv.lv_kernel_major.clone()),
+        ("lvm.kernel-minor", lv.lv_kernel_minor.clone()),
+        ("lvm.device-open", lv.lv_device_open.clone()),
+        ("lvm.check-needed", lv.lv_check_needed.clone()),
         ("lvm.role", lv.lv_role.clone()),
         ("lvm.time", lv.lv_time.clone()),
         ("lvm.origin", lv.origin.clone()),
         ("lvm.pool", lv.pool_lv.clone()),
         ("lvm.data-percent", lv.data_percent.clone()),
+        ("lvm.snap-percent", lv.snap_percent.clone()),
         ("lvm.metadata-percent", lv.metadata_percent.clone()),
+        ("lvm.copy-percent", lv.copy_percent.clone()),
+        ("lvm.sync-percent", lv.sync_percent.clone()),
         ("lvm.cache-mode", lv.cache_mode.clone()),
         ("lvm.cache-policy", lv.cache_policy.clone()),
+        ("lvm.kernel-cache-mode", lv.kernel_cache_mode.clone()),
+        ("lvm.kernel-cache-policy", lv.kernel_cache_policy.clone()),
+        ("lvm.kernel-discards", lv.kernel_discards.clone()),
+        (
+            "lvm.writecache-total-blocks",
+            lv.writecache_total_blocks.clone(),
+        ),
+        (
+            "lvm.writecache-free-blocks",
+            lv.writecache_free_blocks.clone(),
+        ),
+        (
+            "lvm.writecache-writeback-blocks",
+            lv.writecache_writeback_blocks.clone(),
+        ),
+        ("lvm.writecache-error", lv.writecache_error.clone()),
     ] {
         if let Some(value) = value.filter(|value| !value.is_empty()) {
             node = node.with_property(key, value);
@@ -441,15 +490,35 @@ mod tests {
             "lv_path": "/dev/vg0/root",
             "lv_size": "40.00g",
             "lv_attr": "-wi-ao----",
+            "lv_layout": "linear",
             "lv_active": "active",
+            "lv_permissions": "writeable",
+            "lv_health_status": "",
+            "lv_when_full": "",
+            "lv_metadata_size": "",
+            "lv_tags": "system",
+            "lv_kernel_major": "253",
+            "lv_kernel_minor": "0",
+            "lv_device_open": "open",
+            "lv_check_needed": "",
             "lv_role": "public",
             "lv_time": "2026-06-23 10:00:00 -0500",
             "origin": "",
             "pool_lv": "",
             "data_percent": "",
+            "snap_percent": "",
             "metadata_percent": "",
+            "copy_percent": "",
+            "sync_percent": "",
             "cache_mode": "",
-            "cache_policy": ""
+            "cache_policy": "",
+            "kernel_cache_mode": "",
+            "kernel_cache_policy": "",
+            "kernel_discards": "",
+            "writecache_total_blocks": "",
+            "writecache_free_blocks": "",
+            "writecache_writeback_blocks": "",
+            "writecache_error": ""
           },
           {
             "lv_name": "root-snap",
@@ -458,15 +527,35 @@ mod tests {
             "lv_path": "/dev/vg0/root-snap",
             "lv_size": "10.00g",
             "lv_attr": "swi-a-s---",
+            "lv_layout": "snapshot",
             "lv_active": "active",
+            "lv_permissions": "writeable",
+            "lv_health_status": "partial",
+            "lv_when_full": "queue",
+            "lv_metadata_size": "128.00m",
+            "lv_tags": "backup,snapshot",
+            "lv_kernel_major": "253",
+            "lv_kernel_minor": "1",
+            "lv_device_open": "open",
+            "lv_check_needed": "needed",
             "lv_role": "public",
             "lv_time": "2026-06-23 10:05:00 -0500",
             "origin": "root",
             "pool_lv": "",
             "data_percent": "12.00",
+            "snap_percent": "12.00",
             "metadata_percent": "",
+            "copy_percent": "",
+            "sync_percent": "",
             "cache_mode": "writeback",
-            "cache_policy": "smq"
+            "cache_policy": "smq",
+            "kernel_cache_mode": "writeback",
+            "kernel_cache_policy": "smq",
+            "kernel_discards": "passdown",
+            "writecache_total_blocks": "1024",
+            "writecache_free_blocks": "512",
+            "writecache_writeback_blocks": "16",
+            "writecache_error": "0"
           }
         ]
       }]
@@ -539,6 +628,17 @@ mod tests {
                     .properties
                     .iter()
                     .any(|property| property.key == "lvm.active" && property.value == "active")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.layout" && property.value == "snapshot")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.health" && property.value == "partial")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.tags" && property.value == "backup,snapshot"
+                })
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.cache-mode" && property.value == "writeback"
                 })
@@ -546,6 +646,12 @@ mod tests {
                     .properties
                     .iter()
                     .any(|property| property.key == "lvm.cache-policy" && property.value == "smq")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.kernel-discards" && property.value == "passdown"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.writecache-writeback-blocks" && property.value == "16"
+                })
         }));
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0.starts_with("lvm-seg:vg0/root:")

@@ -176,8 +176,9 @@ Use these commands for:
   geometry, Btrfs Data/Metadata/System allocation profiles and byte counts,
   and ext state/features/block and inode counts when probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
-  exports, including LVM origin/pool/data metadata, activation state, role, and
-  cache mode/policy, MD RAID level/state, iSCSI attached disks, NFS
+  exports, including LVM origin/pool/data metadata, activation state, role,
+  layout, health, tags, thin-pool fullness behavior, metadata size, and cache
+  or writecache status, MD RAID level/state, iSCSI attached disks, NFS
   server/export details, and ZFS zvol `volsize` when reported by `zfs list`
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
   pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays,
@@ -207,10 +208,10 @@ Use these commands for:
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
   metadata detail data, including bcache role/set/state, cache mode,
   replacement policy, dirty data, writeback percentage, `blkid` signature
-  details, ext superblock details, Btrfs allocation class profiles and byte
-  counts, VDO backing and logical/physical size details, NVMe namespace
-  details, loop mapping details, and active swap state/type/priority when
-  probed
+  details, ext superblock details, LVM layout, health, thin/cache/writecache
+  status, Btrfs allocation class profiles and byte counts, VDO backing and
+  logical/physical size details, NVMe namespace details, loop mapping details,
+  and active swap state/type/priority when probed
 
 ## Inspect
 
