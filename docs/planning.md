@@ -391,17 +391,18 @@ LVM cache command plans include read-only `lvs` status refresh for
 replacement work.
 NFS export command plans use `exportfs -i -o <options> <client>:<path>` for
 reviewed `operation = "export"` and option-update operations and
-`exportfs -u <client>:<path>` for reviewed `operation = "unexport"`
-operations, with unresolved-input markers when clients, options, or the local
-export path are missing. Legacy export `create` and `destroy` map to the same
-commands.
+read-only `exportfs -v` plus graph inspection for `operation = "rescan"`, and
+`exportfs -u <client>:<path>` for reviewed `operation = "unexport"` operations,
+with unresolved-input markers when clients, options, or the local export path
+are missing. Legacy export `create` and `destroy` map to the same commands.
 NFS client mount command plans use
 `mount -t <nfs|nfs4> -o <options> <source> <mountpoint>` for reviewed
 `operation = "mount"` actions, `mount -o remount,<options> <mountpoint>` for
-reviewed option updates, and `umount <mountpoint>` for reviewed
-`operation = "unmount"` actions. Legacy NFS mount `create` and `destroy` map
-to the same mount/unmount command plans. Missing sources or concrete
-mountpoint paths keep the command plan non-ready.
+reviewed option updates, read-only `findmnt`, `nfsstat -m`, and graph
+inspection for `operation = "rescan"`, and `umount <mountpoint>` for reviewed
+`operation = "unmount"` actions. Legacy NFS mount `create` and `destroy` map to
+the same mount/unmount command plans. Missing sources or concrete mountpoint
+paths keep the command plan non-ready.
 Disk and partition `operation = "rescan"` actions are online refreshes that
 render `partprobe <disk>` plus `blockdev --rereadpt <disk>` and verify with
 `parted -lm <disk>`. They do not edit partition geometry; use `grow` or

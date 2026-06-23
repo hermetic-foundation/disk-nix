@@ -1353,6 +1353,36 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Rescan if collection == Some("nfs.mounts") => {
+            let mountpoint = nfs_mount_target_path(action);
+            let inspect_target = mountpoint.unwrap_or("<mountpoint>");
+            let inspect_command = match mountpoint {
+                Some(mountpoint) => command(
+                    ["disk-nix", "inspect", mountpoint, "--json"],
+                    false,
+                    "verify modeled NFS mount graph state after rescan",
+                ),
+                None => command_with_readiness(
+                    ["disk-nix", "inspect", inspect_target, "--json"],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["mountpoint path"],
+                    "verify modeled NFS mount graph state after selecting the mountpoint",
+                ),
+            };
+            (
+                vec![
+                    nfs_mount_findmnt_command(mountpoint),
+                    nfs_mount_stats_command(mountpoint),
+                    inspect_command,
+                ],
+                vec![
+                    "findmnt reports the reviewed NFS source and mount options".to_string(),
+                    "NFS client statistics are reviewed before remount or unmount work"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Destroy | Operation::Unmount if collection == Some("nfs.mounts") => {
             let mountpoint = nfs_mount_target_path(action);
             (
@@ -1891,6 +1921,38 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             ],
             vec!["exported path and options match the desired value".to_string()],
         ),
+        Operation::Rescan if collection == Some("exports") => {
+            let target = export_target_path(action);
+            let inspect_target = target.unwrap_or("<export-path>");
+            let inspect_command = match target {
+                Some(target) => command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled NFS export graph state after rescan",
+                ),
+                None => command_with_readiness(
+                    ["disk-nix", "inspect", inspect_target, "--json"],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["NFS export path"],
+                    "verify modeled NFS export graph state after selecting the export path",
+                ),
+            };
+            (
+                vec![
+                    command(
+                        ["exportfs", "-v"],
+                        false,
+                        "verify NFS export inventory after rescan",
+                    ),
+                    inspect_command,
+                ],
+                vec![
+                    "exportfs reports the reviewed path and client options".to_string(),
+                    "modeled NFS export relationships match the refreshed inventory".to_string(),
+                ],
+            )
+        }
         Operation::SetProperty if collection == Some("snapshots") => {
             let snapshot = action.context.name.as_deref().unwrap_or(target);
             (
@@ -4449,6 +4511,39 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Rescan if collection == Some("exports") => {
+            let target = export_target_path(action);
+            let inspect_target = target.unwrap_or("<export-path>");
+            let inspect_command = match target {
+                Some(target) => command(
+                    ["disk-nix", "inspect", target],
+                    false,
+                    "inspect modeled NFS export relationships after refresh",
+                ),
+                None => command_with_readiness(
+                    ["disk-nix", "inspect", inspect_target],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["NFS export path"],
+                    "inspect modeled NFS export relationships after selecting the export path",
+                ),
+            };
+            (
+                vec![
+                    command(
+                        ["exportfs", "-v"],
+                        false,
+                        "refresh NFS export inventory and client options",
+                    ),
+                    inspect_command,
+                ],
+                vec![
+                    "export rescan does not reload exports or change client access".to_string(),
+                    "use option updates only after reviewing active client visibility".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create | Operation::Mount if collection == Some("nfs.mounts") => {
             let mountpoint = nfs_mount_target_path(action);
             (
@@ -4462,6 +4557,37 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "verify the NFS server, export permissions, and network path before mounting"
                         .to_string(),
                     "persist long-lived mounts through the NixOS fileSystems entry".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("nfs.mounts") => {
+            let mountpoint = nfs_mount_target_path(action);
+            let inspect_target = mountpoint.unwrap_or("<mountpoint>");
+            let inspect_command = match mountpoint {
+                Some(mountpoint) => command(
+                    ["disk-nix", "inspect", mountpoint],
+                    false,
+                    "inspect modeled NFS mount relationships after refresh",
+                ),
+                None => command_with_readiness(
+                    ["disk-nix", "inspect", inspect_target],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["mountpoint path"],
+                    "inspect modeled NFS mount relationships after selecting the mountpoint",
+                ),
+            };
+            (
+                vec![
+                    nfs_mount_findmnt_command(mountpoint),
+                    nfs_mount_stats_command(mountpoint),
+                    inspect_command,
+                ],
+                vec![
+                    "mount rescan does not remount, unmount, or change remote data".to_string(),
+                    "use remount only after reviewing active services and desired options"
+                        .to_string(),
                 ],
                 true,
             )
@@ -8536,6 +8662,23 @@ fn nfs_mount_findmnt_command(mountpoint: Option<&str>) -> ExecutionCommand {
             CommandReadiness::NeedsDomainImplementation,
             ["mountpoint path"],
             "inspect the NFS mount after selecting the mountpoint",
+        ),
+    }
+}
+
+fn nfs_mount_stats_command(mountpoint: Option<&str>) -> ExecutionCommand {
+    match mountpoint {
+        Some(mountpoint) => command(
+            ["nfsstat", "-m", mountpoint],
+            false,
+            "inspect NFS client mount statistics and negotiated options",
+        ),
+        None => command_with_readiness(
+            ["nfsstat", "-m", "<mountpoint>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["mountpoint path"],
+            "inspect NFS client mount statistics after selecting the mountpoint",
         ),
     }
 }
@@ -17216,6 +17359,9 @@ mod tests {
                       "options": "ro,sync,no_subtree_check"
                     }
                   },
+                  "/srv/inventory": {
+                    "operation": "rescan"
+                  },
                   "/srv/unresolved": {
                     "properties": {
                       "options": "rw,sync"
@@ -17248,6 +17394,25 @@ mod tests {
                         "192.0.2.0/24:/srv/share",
                     ]
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "exports:/srv/inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["exportfs", "-v"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/srv/inventory"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "exports:/srv/inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/srv/inventory", "--json"]
+                })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
@@ -17298,6 +17463,9 @@ mod tests {
                     "client": "192.0.2.0/24",
                     "options": "rw,sync,no_subtree_check"
                   },
+                  "inventory": {
+                    "operation": "rescan"
+                  },
                   "oldshare": {
                     "destroy": true,
                     "client": "192.0.2.55"
@@ -17331,6 +17499,14 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "exports:inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "<export-path>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["NFS export path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.action_id == "exports:oldshare:destroy"
                 && step.commands.iter().any(|command| {
                     command.argv == ["exportfs", "-u", "192.0.2.55:<export-path>"]
@@ -17357,6 +17533,10 @@ mod tests {
                       "operation": "remount",
                       "source": "nas.example.com:/srv/tuned",
                       "options": ["_netdev", "ro", "vers=4.2"]
+                    },
+                    "/srv/inventory": {
+                      "operation": "rescan",
+                      "source": "nas.example.com:/srv/inventory"
                     },
                     "/srv/old": {
                       "operation": "unmount",
@@ -17398,6 +17578,25 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:/srv/inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["findmnt", "--json", "/srv/inventory"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nfsstat", "-m", "/srv/inventory"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:/srv/inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/srv/inventory", "--json"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.action_id == "nfs.mounts:/srv/old:unmount"
                 && step
                     .commands
@@ -17421,6 +17620,10 @@ mod tests {
                       "operation": "remount",
                       "source": "nas.example.com:/srv/tuned",
                       "options": ["ro"]
+                    },
+                    "inventory": {
+                      "operation": "rescan",
+                      "source": "nas.example.com:/srv/inventory"
                     },
                     "old": {
                       "operation": "unmount",
@@ -17459,6 +17662,14 @@ mod tests {
             step.action_id == "nfs.mounts:tuned:remount"
                 && step.commands.iter().any(|command| {
                     command.argv == ["mount", "-o", "remount,ro", "<mountpoint>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mountpoint path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nfsstat", "-m", "<mountpoint>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["mountpoint path"]
                 })

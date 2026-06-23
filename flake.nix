@@ -220,6 +220,11 @@
                   "vers=4.2"
                 ];
               };
+              nfs.mounts."/srv/inventory" = {
+                source = "nas.example.com:/srv/inventory";
+                fsType = "nfs4";
+                operation = "rescan";
+              };
               nfs.mounts."/srv/old" = {
                 source = "nas.example.com:/srv/old";
                 operation = "unmount";
@@ -453,6 +458,7 @@
                 client = "192.0.2.0/24";
                 options = "rw,sync,no_subtree_check";
               };
+              exports."/srv/inventory".operation = "rescan";
               exports."/srv/old-share" = {
                 operation = "unexport";
                 client = "192.0.2.55";
@@ -728,7 +734,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 90
+              .summary.actionCount == 92
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -799,8 +805,10 @@
               and (.actions | any(.id == "snapshot:tank/home@inventory:rescan" and .risk == "online"))
               and (.actions | any(.id == "snapshot:/mnt/persist/@home-inventory:rescan" and .risk == "online"))
               and (.actions | any(.id == "exports:/srv/share:export" and .risk == "online"))
+              and (.actions | any(.id == "exports:/srv/inventory:rescan" and .risk == "online"))
               and (.actions | any(.id == "exports:/srv/old-share:unexport" and .risk == "offline-required"))
               and (.actions | any(.id == "nfs.mounts:/srv/shared:mount" and .risk == "online"))
+              and (.actions | any(.id == "nfs.mounts:/srv/inventory:rescan" and .risk == "online"))
               and (.actions | any(.id == "nfs.mounts:/srv/tuned:remount" and .risk == "online"))
               and (.actions | any(.id == "nfs.mounts:/srv/old:unmount" and .risk == "offline-required"))
               and (.actions | any(.id == "caches:/dev/bcache0:add-device:cache-set-uuid" and .risk == "online"))
@@ -945,6 +953,8 @@
                   and .spec.nfs.mounts."/srv/shared".operation == "mount"
                   and .spec.nfs.mounts."/srv/tuned".operation == "remount"
                   and (.spec.nfs.mounts."/srv/tuned".options | index("ro") != null)
+                  and .spec.nfs.mounts."/srv/inventory".operation == "rescan"
+                  and .spec.nfs.mounts."/srv/inventory".source == "nas.example.com:/srv/inventory"
                   and .spec.nfs.mounts."/srv/old".source == "nas.example.com:/srv/old"
                   and .spec.nfs.mounts."/srv/old".operation == "unmount"
                   and .spec.iscsi.initiatorName == "iqn.2026-06.example:host"
@@ -982,6 +992,7 @@
                   and .spec.exports."/srv/share".operation == "export"
                   and .spec.exports."/srv/share".client == "192.0.2.0/24"
                   and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
+                  and .spec.exports."/srv/inventory".operation == "rescan"
                   and .spec.exports."/srv/old-share".operation == "unexport"
                   and .spec.exports."/srv/old-share".client == "192.0.2.55"
                   and .spec.partitions.root.operation == "grow"

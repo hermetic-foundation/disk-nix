@@ -478,6 +478,7 @@ Example lifecycle planning through NixOS options:
       client = "192.0.2.0/24";
       options = "rw,sync,no_subtree_check";
     };
+    exports."/srv/inventory".operation = "rescan";
     exports."/srv/old-share" = {
       operation = "unexport";
       client = "192.0.2.55";
@@ -500,6 +501,10 @@ Example lifecycle planning through NixOS options:
       source = "nas.example.com:/srv/tuned";
       operation = "remount";
       options = [ "_netdev" "ro" "vers=4.2" ];
+    };
+    nfs.mounts."/srv/inventory" = {
+      source = "nas.example.com:/srv/inventory";
+      operation = "rescan";
     };
     nfs.mounts."/srv/old" = {
       source = "nas.example.com:/srv/old";

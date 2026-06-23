@@ -3457,6 +3457,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "exports" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "NFS export rescan refreshes exported path and client visibility"
+                    .to_string(),
+                alternatives: vec![
+                    "use option property updates only when client access semantics must change"
+                        .to_string(),
+                    "verify active clients before unexporting or tightening access".to_string(),
+                    "persist long-lived exports through NixOS services.nfs.server.exports"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::Login if collection == "iscsiSessions" => (
             RiskClass::Online,
             false,
@@ -3499,6 +3514,19 @@ fn classify_operation(
                     "use NixOS fileSystems for the steady-state mount options".to_string(),
                     "verify active services tolerate option changes such as ro, rw, or timeouts"
                         .to_string(),
+                ],
+            }),
+        ),
+        Operation::Rescan if collection == "nfs.mounts" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "NFS mount rescan refreshes local mount source, options, and client stats"
+                    .to_string(),
+                alternatives: vec![
+                    "use remount only when local mount options must change".to_string(),
+                    "verify server reachability before unmounting busy client paths".to_string(),
+                    "persist long-lived mounts through NixOS fileSystems".to_string(),
                 ],
             }),
         ),
@@ -4171,7 +4199,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NFS exports/mounts, NVMe namespaces, multipath maps, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4181,6 +4209,10 @@ fn classify_operation(
                     "use luns.<name>.operation = \"rescan\" to refresh reviewed SCSI paths"
                         .to_string(),
                     "use iscsiSessions.<target>.operation = \"rescan\" to refresh existing target sessions"
+                        .to_string(),
+                    "use exports.<path>.operation = \"rescan\" to refresh NFS export inventory"
+                        .to_string(),
+                    "use nfs.mounts.<mountpoint>.operation = \"rescan\" to refresh NFS client mount state"
                         .to_string(),
                     "use nvmeNamespaces.<controller>.operation = \"rescan\" to refresh namespace inventory"
                         .to_string(),
@@ -6176,6 +6208,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::NfsExport,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "NFS export rescan refreshes export inventory without reloading exports"
+                    .to_string(),
+                alternatives: vec![
+                    "use option updates only when access policy must change".to_string(),
+                    "verify active clients before unexporting".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsExport,
             operation: Operation::Destroy,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
@@ -6234,6 +6279,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "remount with reviewed options before unmounting a busy path".to_string(),
                     "persist long-lived option changes through NixOS fileSystems".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsMount,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "NFS mount rescan refreshes mounted source and options without remounting"
+                    .to_string(),
+                alternatives: vec![
+                    "use remount only when local options must change".to_string(),
+                    "verify open files before unmounting busy paths".to_string(),
                 ],
             }),
         },
@@ -6769,6 +6827,13 @@ mod tests {
                     && capability.operation == Operation::Unexport
             })
             .expect("NFS unexport capability should exist");
+        let export_rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NfsExport
+                    && capability.operation == Operation::Rescan
+            })
+            .expect("NFS export rescan capability should exist");
         let mount_create = capabilities
             .iter()
             .find(|capability| {
@@ -6797,12 +6862,21 @@ mod tests {
                     && capability.operation == Operation::Unmount
             })
             .expect("NFS unmount capability should exist");
+        let mount_rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NfsMount
+                    && capability.operation == Operation::Rescan
+            })
+            .expect("NFS mount rescan capability should exist");
 
         assert_eq!(export_create.risk, RiskClass::Online);
         assert_eq!(export.risk, RiskClass::Online);
         assert_eq!(export_destroy.risk, RiskClass::OfflineRequired);
         assert_eq!(unexport.risk, RiskClass::OfflineRequired);
+        assert_eq!(export_rescan.risk, RiskClass::Online);
         assert_eq!(mount_create.risk, RiskClass::Online);
+        assert_eq!(mount_rescan.risk, RiskClass::Online);
         assert_eq!(mount.risk, RiskClass::Online);
         assert_eq!(mount_destroy.risk, RiskClass::OfflineRequired);
         assert_eq!(unmount.risk, RiskClass::OfflineRequired);
@@ -10308,6 +10382,9 @@ mod tests {
                   "client": "192.0.2.0/24",
                   "options": "rw,sync,no_subtree_check"
                 },
+                "/srv/inventory": {
+                  "operation": "rescan"
+                },
                 "/srv/old": {
                   "operation": "unexport",
                   "client": "192.0.2.55"
@@ -10317,7 +10394,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.action_count, 3);
         assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.summary.destructive_count, 0);
         let create = plan
@@ -10332,6 +10409,14 @@ mod tests {
             create.context.options.as_deref(),
             Some("rw,sync,no_subtree_check")
         );
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "exports:/srv/inventory:rescan")
+            .expect("export rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert_eq!(rescan.context.target.as_deref(), Some("/srv/inventory"));
         let destroy = plan
             .actions
             .iter()
@@ -10362,6 +10447,10 @@ mod tests {
                     "operation": "remount",
                     "source": "nas.example.com:/srv/tuned",
                     "options": ["_netdev", "ro", "vers=4.2"]
+                  },
+                  "/srv/inventory": {
+                    "operation": "rescan",
+                    "source": "nas.example.com:/srv/inventory"
                   }
                 }
               }
@@ -10369,7 +10458,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 4);
         assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.summary.destructive_count, 0);
         let create = plan
@@ -10409,6 +10498,15 @@ mod tests {
             remount.context.options.as_deref(),
             Some("_netdev,ro,vers=4.2")
         );
+
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "nfs.mounts:/srv/inventory:rescan")
+            .expect("NFS mount rescan exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert_eq!(rescan.context.mountpoint.as_deref(), Some("/srv/inventory"));
     }
 
     #[test]

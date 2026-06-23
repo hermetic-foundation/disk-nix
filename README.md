@@ -306,14 +306,16 @@ VDO rescan plans render read-only `vdo status`, `vdostats`, and graph
 inspection commands to refresh status and utilization without changing
 activation state or capacity.
 NFS export apply plans render reviewed `operation = "export"`, option update,
-and `operation = "unexport"` commands from explicit client and option
-declarations. Legacy export `create` and `destroy` still map to the same
-command plans. Export mutations require a path-shaped local export target such
-as `/srv/share`.
+read-only `operation = "rescan"`, and `operation = "unexport"` commands from
+explicit client and option declarations. Export rescan refreshes `exportfs -v`
+and modeled graph state without reloading exports. Legacy export `create` and
+`destroy` still map to the same command plans. Export mutations require a
+path-shaped local export target such as `/srv/share`.
 NFS client mount apply plans render reviewed `operation = "mount"` commands,
-`operation = "remount"` option updates, and `operation = "unmount"` commands
-from `nfs.mounts`; legacy NFS mount `create` and `destroy` still map to the
-same command plans. Missing sources or concrete mountpoints remain non-ready.
+`operation = "remount"` option updates, read-only `operation = "rescan"`
+mount inventory/stat probes, and `operation = "unmount"` commands from
+`nfs.mounts`; legacy NFS mount `create` and `destroy` still map to the same
+command plans. Missing sources or concrete mountpoints remain non-ready.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
 and rescan commands from explicit target IQN and portal declarations. Prefer
 `operation = "login"`, `operation = "logout"`, and `operation = "rescan"` for
