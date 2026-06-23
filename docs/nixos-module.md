@@ -165,6 +165,7 @@ Typed lifecycle declarations are available for:
 - `vdoVolumes`
 - `physicalVolumes`
 - `luksKeyslots`
+- `luksTokens`
 - `volumes`
 - `volumeGroups`
 - `thinPools`
@@ -324,6 +325,12 @@ Example lifecycle planning through NixOS options:
       device = "/dev/disk/by-id/root-luks";
       keySlot = "1";
       newKeyFile = "/run/keys/root-new";
+    };
+    luksTokens."cryptroot:0" = {
+      operation = "create";
+      device = "/dev/disk/by-id/root-luks";
+      tokenId = "0";
+      tokenFile = "/run/keys/root-token.json";
     };
     loopDevices."/dev/loop7" = {
       operation = "create";

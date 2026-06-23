@@ -107,6 +107,16 @@
       }
     }
   },
+  "luksTokens": {
+    "cryptroot:0": {
+      "operation": "create",
+      "device": "/dev/disk/by-id/root-luks",
+      "metadata": {
+        "tokenId": "0",
+        "tokenFile": "/run/keys/root-token.json"
+      }
+    }
+  },
   "btrfsSubvolumes": {
     "/mnt/persist/@home": {
       "operation": "create",

@@ -1254,6 +1254,27 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Create | Operation::SetProperty | Operation::Destroy
+            if collection == Some("luksTokens") =>
+        {
+            let device = luks_token_device(action);
+            (
+                vec![
+                    luks_dump_command(device, "verify LUKS header and token metadata"),
+                    command(
+                        ["disk-nix", "inspect", device.unwrap_or("<luks-device>"), "--json"],
+                        false,
+                        "verify modeled LUKS container relationships after token change",
+                    ),
+                ],
+                vec![
+                    "at least one reviewed keyslot or token remains usable after the change"
+                        .to_string(),
+                    "LUKS header backup and token inventory match the desired access policy"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Create
         | Operation::AddDevice
         | Operation::ReplaceDevice
@@ -2588,6 +2609,16 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     action.context.key_file.as_deref(),
                     action.context.property_value.as_deref(),
                 )
+            } else if collection == Some("luksTokens") {
+                luks_token_import_command(
+                    luks_token_device(action),
+                    luks_token_id(action),
+                    action
+                        .context
+                        .property_value
+                        .as_deref()
+                        .or(action.context.token_file.as_deref()),
+                )
             } else {
                 set_property_command(collection, target, property, &property_assignment)
             };
@@ -3075,6 +3106,22 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("luksTokens") => {
+            let device = luks_token_device(action);
+            let token_id = luks_token_id(action);
+            let token_file = luks_token_file(action);
+            (
+                vec![
+                    luks_dump_command(device, "inspect LUKS header before importing token"),
+                    luks_token_import_command(device, token_id, token_file),
+                ],
+                vec![
+                    "back up the LUKS header before importing token metadata".to_string(),
+                    "test the token unlock path before removing any older token".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Destroy if collection == Some("luks.devices") => {
             let mapper = target.unwrap_or("<mapper>");
             (
@@ -3109,6 +3156,22 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 ],
                 vec![
                     "verify another key, token, or recovery passphrase unlocks the device first"
+                        .to_string(),
+                    "keep a LUKS header backup until post-removal unlock testing passes".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("luksTokens") => {
+            let device = luks_token_device(action);
+            let token_id = luks_token_id(action);
+            (
+                vec![
+                    luks_dump_command(device, "inspect LUKS tokens before removal"),
+                    luks_token_remove_command(device, token_id),
+                ],
+                vec![
+                    "verify another keyslot, token, or recovery passphrase unlocks the device first"
                         .to_string(),
                     "keep a LUKS header backup until post-removal unlock testing passes".to_string(),
                 ],
@@ -5925,6 +5988,29 @@ fn luks_new_key_file(action: &PlannedAction) -> Option<&str> {
         .or(action.context.key_file.as_deref())
 }
 
+fn luks_token_device(action: &PlannedAction) -> Option<&str> {
+    action.context.device.as_deref().or(action
+        .context
+        .target
+        .as_deref()
+        .filter(|target| target.starts_with('/')))
+}
+
+fn luks_token_id(action: &PlannedAction) -> Option<&str> {
+    action.context.token_id.as_deref().or_else(|| {
+        action
+            .context
+            .name
+            .as_deref()
+            .and_then(|name| name.rsplit_once(':').map(|(_, token)| token).or(Some(name)))
+            .filter(|token| token.chars().all(|character| character.is_ascii_digit()))
+    })
+}
+
+fn luks_token_file(action: &PlannedAction) -> Option<&str> {
+    action.context.token_file.as_deref()
+}
+
 fn luks_dump_command(device: Option<&str>, note: &'static str) -> ExecutionCommand {
     match device {
         Some(device) => command(["cryptsetup", "luksDump", device], false, note),
@@ -6020,6 +6106,70 @@ fn luks_change_key_command(
     }
 }
 
+fn luks_token_import_command(
+    device: Option<&str>,
+    token_id: Option<&str>,
+    token_file: Option<&str>,
+) -> ExecutionCommand {
+    let mut argv = vec![
+        "cryptsetup".to_string(),
+        "token".to_string(),
+        "import".to_string(),
+    ];
+    if let Some(token_id) = token_id {
+        argv.extend(["--token-id".to_string(), token_id.to_string()]);
+    }
+    argv.extend([
+        "--json-file".to_string(),
+        token_file.unwrap_or("<token-json-file>").to_string(),
+        device.unwrap_or("<luks-device>").to_string(),
+    ]);
+
+    let missing = missing_luks_token_import_inputs(device, token_file);
+    if missing.is_empty() {
+        command_vec(argv, true, "import reviewed LUKS token metadata")
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "import LUKS token after selecting the device and token JSON file",
+        )
+    }
+}
+
+fn luks_token_remove_command(device: Option<&str>, token_id: Option<&str>) -> ExecutionCommand {
+    match (device, token_id) {
+        (Some(device), Some(token_id)) => command(
+            [
+                "cryptsetup",
+                "token",
+                "remove",
+                "--token-id",
+                token_id,
+                device,
+            ],
+            true,
+            "remove the reviewed LUKS token after alternate unlock paths are verified",
+        ),
+        (device, token_id) => command_vec_with_readiness(
+            vec![
+                "cryptsetup".to_string(),
+                "token".to_string(),
+                "remove".to_string(),
+                "--token-id".to_string(),
+                token_id.unwrap_or("<token-id>").to_string(),
+                device.unwrap_or("<luks-device>").to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_luks_token_remove_inputs(device, token_id),
+            "remove LUKS token after selecting the device and token id",
+        ),
+    }
+}
+
 fn missing_luks_add_key_inputs(
     device: Option<&str>,
     new_key_file: Option<&str>,
@@ -6041,6 +6191,34 @@ fn missing_luks_keyslot_inputs(device: Option<&str>, key_slot: Option<&str>) -> 
     }
     if key_slot.is_none() {
         missing.push("LUKS keyslot number");
+    }
+    missing
+}
+
+fn missing_luks_token_import_inputs(
+    device: Option<&str>,
+    token_file: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if device.is_none() {
+        missing.push("LUKS backing device");
+    }
+    if token_file.is_none() {
+        missing.push("token JSON file");
+    }
+    missing
+}
+
+fn missing_luks_token_remove_inputs(
+    device: Option<&str>,
+    token_id: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if device.is_none() {
+        missing.push("LUKS backing device");
+    }
+    if token_id.is_none() {
+        missing.push("LUKS token id");
     }
     missing
 }
@@ -8294,6 +8472,158 @@ mod tests {
                     "luksKillSlot",
                     "/dev/disk/by-id/root-luks",
                     "2",
+                ]
+                && command.readiness == CommandReadiness::Ready
+        }));
+    }
+
+    #[test]
+    fn luks_token_lifecycle_reports_cryptsetup_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "luksTokens": {
+                  "cryptroot:0": {
+                    "operation": "create",
+                    "device": "/dev/disk/by-id/root-luks",
+                    "metadata": {
+                      "tokenId": "0",
+                      "tokenFile": "/run/keys/root-token.json"
+                    }
+                  },
+                  "cryptroot:2": {
+                    "properties": {
+                      "tokenFile": "/run/keys/root-token-new.json"
+                    },
+                    "device": "/dev/disk/by-id/root-luks",
+                    "metadata": {
+                      "tokenId": "2"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lukstokens:cryptroot:0:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "token",
+                            "import",
+                            "--token-id",
+                            "0",
+                            "--json-file",
+                            "/run/keys/root-token.json",
+                            "/dev/disk/by-id/root-luks",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luksTokens:cryptroot:2:set-property:tokenFile"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "token",
+                            "import",
+                            "--token-id",
+                            "2",
+                            "--json-file",
+                            "/run/keys/root-token-new.json",
+                            "/dev/disk/by-id/root-luks",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "lukstokens:cryptroot:0:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
+                })
+        }));
+    }
+
+    #[test]
+    fn luks_token_lifecycle_reports_missing_inputs_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "luksTokens": {
+                  "root-token": {
+                    "operation": "create"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lukstokens:root-token:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "token",
+                            "import",
+                            "--json-file",
+                            "<token-json-file>",
+                            "<luks-device>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["LUKS backing device", "token JSON file"]
+                })
+        }));
+    }
+
+    #[test]
+    fn luks_token_destroy_renderer_uses_cryptsetup_token_remove() {
+        let action = PlannedAction {
+            id: "lukstokens:cryptroot:1:destroy".to_string(),
+            description: "remove LUKS token".to_string(),
+            operation: Operation::Destroy,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("luksTokens".to_string()),
+                name: Some("cryptroot:1".to_string()),
+                device: Some("/dev/disk/by-id/root-luks".to_string()),
+                token_id: Some("1".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+
+        let (commands, _, requires_manual_review) = commands_for_action(&action);
+
+        assert!(requires_manual_review);
+        assert!(commands.iter().any(|command| {
+            command.argv
+                == [
+                    "cryptsetup",
+                    "token",
+                    "remove",
+                    "--token-id",
+                    "1",
+                    "/dev/disk/by-id/root-luks",
                 ]
                 && command.readiness == CommandReadiness::Ready
         }));

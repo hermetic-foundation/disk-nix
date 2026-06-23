@@ -203,6 +203,10 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub new_key_file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
 }
 
@@ -234,6 +238,8 @@ impl ActionContext {
             && self.key_slot.is_none()
             && self.key_file.is_none()
             && self.new_key_file.is_none()
+            && self.token_id.is_none()
+            && self.token_file.is_none()
             && self.read_only.is_none()
     }
 }
@@ -437,6 +443,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "vdoVolumes",
         "physicalVolumes",
         "luksKeyslots",
+        "luksTokens",
         "volumes",
         "volumeGroups",
         "thinPools",
@@ -847,6 +854,8 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         key_slot: metadata_string_field(object, &["keySlot", "key-slot", "slot"]),
         key_file: metadata_string_field(object, &["keyFile", "key-file", "currentKeyFile"]),
         new_key_file: metadata_string_field(object, &["newKeyFile", "new-key-file"]),
+        token_id: metadata_string_field(object, &["tokenId", "token-id", "token"]),
+        token_file: metadata_string_field(object, &["tokenFile", "token-file", "jsonFile"]),
         property_assignments: property_assignments(object),
         ..ActionContext::default()
     }
@@ -1625,18 +1634,19 @@ fn classify_property_change(collection: &str, property: &str) -> (RiskClass, Opt
         );
     }
 
-    if collection == "luksKeyslots" {
+    if collection == "luksKeyslots" || collection == "luksTokens" {
         return (
             RiskClass::OfflineRequired,
             Some(Advice {
                 summary: format!(
-                    "LUKS keyslot property {property} updates encrypted-container access material"
+                    "LUKS access property {property} updates encrypted-container access material"
                 ),
                 alternatives: vec![
                     "verify at least one independent recovery key before changing key material"
                         .to_string(),
-                    "add and test a replacement key before removing the old keyslot".to_string(),
-                    "back up the LUKS header before keyslot changes".to_string(),
+                    "add and test replacement access before removing the old keyslot or token"
+                        .to_string(),
+                    "back up the LUKS header before access changes".to_string(),
                 ],
             }),
         );
@@ -1820,6 +1830,28 @@ fn add_destroy_guard(
                         "take a LUKS header backup before keyslot removal".to_string(),
                         "add and test a replacement keyslot before killing the old slot"
                             .to_string(),
+                    ],
+                }),
+            });
+            return;
+        }
+        if collection == "luksTokens" {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:destroy").to_ascii_lowercase(),
+                description: format!("remove LUKS token {name}"),
+                operation: Operation::Destroy,
+                risk: RiskClass::PotentialDataLoss,
+                destructive: false,
+                context: lifecycle_context(collection, name, object),
+                advice: Some(Advice {
+                    summary:
+                        "removing a LUKS token can lock out automated unlock if no other path works"
+                            .to_string(),
+                    alternatives: vec![
+                        "verify a passphrase, recovery key, or replacement token unlocks the device first"
+                            .to_string(),
+                        "take a LUKS header backup before token removal".to_string(),
+                        "import and test a replacement token before removing the old token".to_string(),
                     ],
                 }),
             });
@@ -2138,6 +2170,19 @@ fn classify_operation(
                     "test the new key before removing any existing recovery key".to_string(),
                     "use an explicit keyslot only when site policy requires stable slot assignment"
                         .to_string(),
+                ],
+            }),
+        ),
+        Operation::Create if collection == "luksTokens" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "importing a LUKS token changes automated unlock access".to_string(),
+                alternatives: vec![
+                    "back up the LUKS header before importing token metadata".to_string(),
+                    "verify a recovery key or passphrase works before relying on the token"
+                        .to_string(),
+                    "test the token unlock path before removing older tokens".to_string(),
                 ],
             }),
         ),
@@ -2566,6 +2611,19 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Destroy if collection == "luksTokens" => (
+            RiskClass::PotentialDataLoss,
+            false,
+            Some(Advice {
+                summary: "removing a LUKS token can lock out automated unlock".to_string(),
+                alternatives: vec![
+                    "verify another token, keyslot, or passphrase unlocks the device first"
+                        .to_string(),
+                    "take a LUKS header backup before token removal".to_string(),
+                    "import and test a replacement token before removing the old token".to_string(),
+                ],
+            }),
+        ),
         Operation::Destroy if collection == "physicalVolumes" => (
             RiskClass::Destructive,
             true,
@@ -2923,10 +2981,11 @@ pub fn default_capabilities() -> Vec<Capability> {
             operation: Operation::Create,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
-                summary: "LUKS keyslot enrollment changes encrypted-container access".to_string(),
+                summary: "LUKS keyslot or token enrollment changes encrypted-container access"
+                    .to_string(),
                 alternatives: vec![
-                    "back up the LUKS header before adding key material".to_string(),
-                    "test the new key before removing any old keyslot".to_string(),
+                    "back up the LUKS header before adding key or token material".to_string(),
+                    "test the new unlock path before removing any old keyslot or token".to_string(),
                 ],
             }),
         },
@@ -2935,10 +2994,10 @@ pub fn default_capabilities() -> Vec<Capability> {
             operation: Operation::SetProperty,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
-                summary: "LUKS key changes update header access material".to_string(),
+                summary: "LUKS key and token changes update header access material".to_string(),
                 alternatives: vec![
                     "verify a recovery key still unlocks the container".to_string(),
-                    "stage replacement key material before deleting old access".to_string(),
+                    "stage replacement access material before deleting old access".to_string(),
                 ],
             }),
         },
@@ -2947,10 +3006,10 @@ pub fn default_capabilities() -> Vec<Capability> {
             operation: Operation::Destroy,
             risk: RiskClass::PotentialDataLoss,
             advice: Some(Advice {
-                summary: "LUKS keyslot removal can lock out encrypted data".to_string(),
+                summary: "LUKS keyslot or token removal can lock out encrypted data".to_string(),
                 alternatives: vec![
                     "verify another key or token unlocks the device first".to_string(),
-                    "take a LUKS header backup before killing a slot".to_string(),
+                    "take a LUKS header backup before removing access material".to_string(),
                 ],
             }),
         },
@@ -5129,6 +5188,80 @@ mod tests {
         assert_eq!(
             change.context.property_value.as_deref(),
             Some("/run/keys/root-rotated")
+        );
+    }
+
+    #[test]
+    fn plan_classifies_luks_token_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luksTokens": {
+                "cryptroot:0": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "tokenId": "0",
+                    "tokenFile": "/run/keys/root-token.json"
+                  }
+                },
+                "cryptroot:1": {
+                  "destroy": true,
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "tokenId": "1"
+                  }
+                },
+                "cryptroot:2": {
+                  "properties": {
+                    "tokenFile": "/run/keys/root-token-new.json"
+                  },
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "tokenId": "2"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.potential_data_loss_count, 1);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lukstokens:cryptroot:0:create")
+            .expect("LUKS token create action exists");
+        assert_eq!(create.risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            create.context.device.as_deref(),
+            Some("/dev/disk/by-id/root-luks")
+        );
+        assert_eq!(create.context.token_id.as_deref(), Some("0"));
+        assert_eq!(
+            create.context.token_file.as_deref(),
+            Some("/run/keys/root-token.json")
+        );
+
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lukstokens:cryptroot:1:destroy")
+            .expect("LUKS token destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::PotentialDataLoss);
+        assert!(!destroy.destructive);
+
+        let change = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luksTokens:cryptroot:2:set-property:tokenFile")
+            .expect("LUKS token change action exists");
+        assert_eq!(change.risk, RiskClass::OfflineRequired);
+        assert_eq!(change.context.token_id.as_deref(), Some("2"));
+        assert_eq!(
+            change.context.property_value.as_deref(),
+            Some("/run/keys/root-token-new.json")
         );
     }
 
