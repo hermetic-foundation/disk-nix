@@ -188,10 +188,11 @@ Use these commands for:
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
   counts, header area/epoch/flag details, data-segment cipher/offset/length
-  details, dm open/segment counters, multipath WWID/path state, VDO mode and
-  data-reduction settings, loop backing/offset/read-only/direct-I/O settings,
-  and bcache role/cache-set/tuning details such as label, state, cache mode,
-  readahead, sequential cutoff, and writeback rate when probes expose them
+  details, dm open/segment counters, multipath WWID/size/path state, VDO mode
+  and data-reduction settings, loop backing/offset/read-only/direct-I/O
+  settings, and bcache role/cache-set/tuning details such as label, state,
+  cache mode, readahead, sequential cutoff, and writeback rate when probes
+  expose them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them

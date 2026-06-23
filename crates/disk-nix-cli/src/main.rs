@@ -1938,6 +1938,7 @@ fn usage_details(node: &Node) -> String {
         ("multipath.dm", "dm"),
         ("multipath.wwid", "wwid"),
         ("multipath.vendor-product", "vendor"),
+        ("multipath.size", "size"),
         ("multipath.features", "features"),
         ("multipath.hwhandler", "handler"),
         ("multipath.write-protect", "wp"),
@@ -2826,6 +2827,7 @@ mod tests {
                 .with_property("multipath.dm", "dm-2")
                 .with_property("multipath.wwid", "3600508b400105e210000900000490000")
                 .with_property("multipath.vendor-product", "IBM,2145")
+                .with_property("multipath.size", "100G")
                 .with_property("multipath.features", "'1 queue_if_no_path'")
                 .with_property("multipath.write-protect", "rw"),
         );
@@ -2861,7 +2863,11 @@ mod tests {
                 "active=true in-use=true cipher=aes-xts-plain64 luks=2 epoch=7 metadata-area=16384 [bytes] keyslots-area=16744448 [bytes] subsystem=(no subsystem) flags=allow-discards keyslots=2 tokens=1 keyslot-ids=0,1 token-ids=0 data-cipher=aes-xts-plain64 data-offset=32768 [bytes] data-length=(whole device) data-sector=4096 [bytes]"
             )
         );
-        assert!(output.contains("dm=dm-2 wwid=3600508b400105e210000900000490000 vendor=IBM,2145"));
+        assert!(
+            output.contains(
+                "dm=dm-2 wwid=3600508b400105e210000900000490000 vendor=IBM,2145 size=100G"
+            )
+        );
         assert!(
             output.contains(
                 "mode=normal write-policy=sync compression=enabled deduplication=disabled"
