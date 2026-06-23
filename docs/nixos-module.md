@@ -457,6 +457,7 @@ Example lifecycle planning through NixOS options:
       operation = "create";
       device = "/var/lib/images/root.img";
     };
+    loopDevices."/dev/loop10".operation = "rescan";
     mdRaids.root = {
       target = "/dev/md/root";
       addDevices = [ "/dev/disk/by-id/nvme-md-spare" ];

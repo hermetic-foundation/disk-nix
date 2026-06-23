@@ -145,6 +145,9 @@
     "/dev/loop7": {
       "operation": "create",
       "device": "/var/lib/images/root.img"
+    },
+    "/dev/loop10": {
+      "operation": "rescan"
     }
   },
   "mdRaids": {

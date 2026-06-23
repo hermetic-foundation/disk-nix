@@ -1114,6 +1114,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent mappings or filesystems see the intended capacity".to_string(),
             ],
         ),
+        Operation::Rescan if collection == Some("loopDevices") => (
+            vec![
+                command(
+                    ["losetup", "--json", "--list", target],
+                    false,
+                    "verify loop device mapping inventory after rescan",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify loop graph node and dependent consumers after rescan",
+                ),
+            ],
+            vec![
+                "loop device backing file, offset, sizelimit, and autoclear state are reviewed"
+                    .to_string(),
+                "dependent mappings or filesystems still resolve the loop device".to_string(),
+            ],
+        ),
         Operation::Create | Operation::Grow if collection == Some("partitions") => (
             vec![
                 command(
@@ -3077,6 +3096,21 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         .to_string(),
                     "resize dependent filesystems only after losetup reports the new size"
                         .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("loopDevices") => {
+            let target = loop_device_target_path(action);
+            (
+                vec![
+                    loop_device_list_command(target, "refresh loop device mapping inventory"),
+                    loop_device_inspect_command(target),
+                ],
+                vec![
+                    "loop rescan does not refresh size; use grow after backing size changes"
+                        .to_string(),
+                    "review dependent filesystems and mappings before detach".to_string(),
                 ],
                 true,
             )
@@ -10472,6 +10506,23 @@ fn loop_device_list_command(target: Option<&str>, description: &'static str) -> 
     }
 }
 
+fn loop_device_inspect_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["disk-nix", "inspect", target],
+            false,
+            "inspect modeled loop device relationships after refresh",
+        ),
+        None => command_with_readiness(
+            ["disk-nix", "inspect", "<loop-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["loop device path"],
+            "inspect modeled loop device relationships after selecting the loop path",
+        ),
+    }
+}
+
 fn loop_device_refresh_command(target: Option<&str>) -> ExecutionCommand {
     match target {
         Some(target) => command(
@@ -16096,6 +16147,9 @@ mod tests {
                   "/dev/loop8": {
                     "operation": "grow"
                   },
+                  "/dev/loop10": {
+                    "operation": "rescan"
+                  },
                   "/dev/loop9": {
                     "operation": "destroy"
                   }
@@ -16121,6 +16175,19 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["losetup", "-c", "/dev/loop8"])
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "loopdevices:/dev/loop10:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["losetup", "--json", "--list", "/dev/loop10"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/loop10"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(
             !report.command_plan.iter().any(|step| {
                 step.commands
@@ -16134,6 +16201,13 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["losetup", "--json", "--list", "/dev/loop8"])
         }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "loopdevices:/dev/loop10:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "/dev/loop10", "--json"])
+        }));
     }
 
     #[test]
@@ -16144,6 +16218,9 @@ mod tests {
                 "loopDevices": {
                   "root-image": {
                     "operation": "grow"
+                  },
+                  "inventory-image": {
+                    "operation": "rescan"
                   },
                   "old-image": {
                     "operation": "destroy"
@@ -16166,6 +16243,14 @@ mod tests {
             step.action_id == "loopdevices:root-image:grow"
                 && step.commands.iter().any(|command| {
                     command.argv == ["losetup", "-c", "<loop-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["loop device path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "loopdevices:inventory-image:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "<loop-device>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["loop device path"]
                 })

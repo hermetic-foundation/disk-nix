@@ -3473,6 +3473,20 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "loopDevices" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "loop device rescan refreshes mapping inventory without changing size"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow only after the backing file or block device size has changed"
+                        .to_string(),
+                    "inspect dependent filesystems and mappings before detach".to_string(),
+                    "keep stable /dev/loop* targets for executable refresh plans".to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::Export if collection == "exports" => (
             RiskClass::Online,
             false,
@@ -4228,7 +4242,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NFS exports/mounts, NVMe namespaces, multipath maps, ZFS datasets/zvols, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NFS exports/mounts, NVMe namespaces, multipath maps, loop devices, ZFS datasets/zvols, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4246,6 +4260,8 @@ fn classify_operation(
                     "use nvmeNamespaces.<controller>.operation = \"rescan\" to refresh namespace inventory"
                         .to_string(),
                     "use multipathMaps.<name>.operation = \"rescan\" to reload reviewed path maps"
+                        .to_string(),
+                    "use loopDevices.<path>.operation = \"rescan\" to refresh loop mapping inventory"
                         .to_string(),
                     "use physicalVolumes or volumeGroups operation = \"rescan\" to refresh LVM metadata"
                         .to_string(),
@@ -5303,6 +5319,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "grow the backing file first".to_string(),
                     "refresh dependent consumers after losetup -c".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LoopDevice,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "loop device rescan refreshes mapping inventory without mutation"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow only when backing size changed".to_string(),
+                    "detach only after consumers are stopped".to_string(),
                 ],
             }),
         },
@@ -7403,6 +7432,7 @@ mod tests {
             ),
             (NodeKind::LvmThinPool, Operation::Rescan, RiskClass::Online),
             (NodeKind::LvmSnapshot, Operation::Rescan, RiskClass::Online),
+            (NodeKind::LoopDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::CacheDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::VdoVolume, Operation::Rescan, RiskClass::Online),
             (NodeKind::ZfsSnapshot, Operation::Rescan, RiskClass::Online),
@@ -9689,6 +9719,9 @@ mod tests {
                 "/dev/loop8": {
                   "operation": "grow"
                 },
+                "/dev/loop10": {
+                  "operation": "rescan"
+                },
                 "/dev/loop9": {
                   "operation": "destroy"
                 }
@@ -9697,7 +9730,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 4);
         assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.summary.destructive_count, 0);
         let create = plan
@@ -9710,6 +9743,14 @@ mod tests {
             create.context.device.as_deref(),
             Some("/var/lib/images/root.img")
         );
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "loopdevices:/dev/loop10:rescan")
+            .expect("loop rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
         let destroy = plan
             .actions
             .iter()

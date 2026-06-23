@@ -373,9 +373,11 @@ LVM rescan plans render `pvscan --cache`, `vgscan`, and
 recreating storage.
 Generic device topology operations stay non-ready until the device to add,
 source device, replacement device, or device to remove is declared explicitly.
-Loop-device refresh and detach commands require `/dev/loop*` targets. Multipath
-map growth requires a concrete map target such as `mpatha` or
-`/dev/mapper/mpatha`; arbitrary logical map names remain non-ready.
+Loop-device refresh, rescan, and detach commands require `/dev/loop*` targets.
+Loop rescan is read-only inventory refresh; grow uses `losetup -c` only after
+backing size changes. Multipath map growth requires a concrete map target such
+as `mpatha` or `/dev/mapper/mpatha`; arbitrary logical map names remain
+non-ready.
 ZFS pool apply plans render gated `zpool create` commands from a single
 `device` or an explicit `devices` vdev list, gated `zpool destroy` commands,
 and reviewed topology updates such as `zpool add`, `zpool replace`, and

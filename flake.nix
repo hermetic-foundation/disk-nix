@@ -389,6 +389,7 @@
                 operation = "create";
                 device = "/var/lib/images/root.img";
               };
+              loopDevices."/dev/loop10".operation = "rescan";
               mdRaids.root = {
                 target = "/dev/md/root";
                 raidLevel = "1";
@@ -740,7 +741,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 94
+              .summary.actionCount == 95
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -785,6 +786,7 @@
               and (.actions | any(.id == "lvmCaches:vg0/root:set-property:lvm.cache-mode" and .risk == "safe"))
               and (.actions | any(.id == "lvmcaches:vg0/archive:rescan" and .risk == "online"))
               and (.actions | any(.id == "loopdevices:/dev/loop7:create" and .risk == "online"))
+              and (.actions | any(.id == "loopdevices:/dev/loop10:rescan" and .risk == "online"))
               and (.actions | any(.id == "mdraids:existing:assemble" and .risk == "offline-required"))
               and (.actions | any(.id == "mdraids:oldroot:stop" and .risk == "offline-required"))
               and (.actions | any(.id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-md-spare" and .risk == "online"))
@@ -1065,6 +1067,7 @@
                   and .spec.volumes."vg0/archive".operation == "deactivate"
                   and .spec.loopDevices."/dev/loop7".operation == "create"
                   and .spec.loopDevices."/dev/loop7".device == "/var/lib/images/root.img"
+                  and .spec.loopDevices."/dev/loop10".operation == "rescan"
                   and .spec.mdRaids.root.target == "/dev/md/root"
                   and .spec.mdRaids.root.raidLevel == "1"
                   and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-a") != null)

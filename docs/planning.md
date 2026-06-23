@@ -194,7 +194,8 @@ Examples:
   point. LVM snapshot `operation = "rescan"` is online and read-only; it
   refreshes origin, COW usage, attributes, size, and graph relationships before
   rollback, activation, or removal decisions.
-- Loop-device creation and capacity refresh are online; detach is
+- Loop-device creation and capacity refresh are online; `operation = "rescan"`
+  is online and read-only for mapping inventory refresh. Detach is
   offline-required because mounts, mappers, and other consumers must be stopped
   before the mapping is removed.
 - Supported `properties = { ... }` declarations are classified as safe
@@ -470,7 +471,9 @@ replacement, and removal command plans require an explicit array path such as
 RAID rescan plans render read-only `mdadm --detail --scan`,
 `mdadm --examine --scan`, and `/proc/mdstat` inventory checks without
 assembling arrays.
-Loop-device refresh and detach command plans require `/dev/loop*` targets.
+Loop-device refresh, rescan, and detach command plans require `/dev/loop*`
+targets. Rescan reads `losetup --json --list` and graph state without changing
+capacity; grow uses `losetup -c` after backing size changes.
 Multipath map growth and path replacement preflight require a concrete map
 target such as `mpatha` or `/dev/mapper/mpatha`; replacement renders separate
 path add and delete steps so each command can be reviewed independently.
