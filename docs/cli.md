@@ -285,9 +285,10 @@ Use these commands for:
   state, size, used bytes, free bytes, utilization, and backing relationship
   when `/proc/swaps` exposes them
 - `iscsi`: iSCSI sessions, targets, and LUNs, including current and persistent
-  portals, connection state, target IQNs, LUN sizes, attached disks, session to
-  target imports, target-contained LUN counts, and LUN-to-block-device backing
-  relationships when `iscsiadm --mode session -P 3` exposes them
+  portals, connection/session state, interface identity, negotiated transfer
+  parameters, target IQNs, LUN sizes, SCSI host/channel/id coordinates,
+  attached disk state, session to target imports, target-contained LUN counts,
+  and LUN-to-block-device backing relationships when `iscsiadm --mode session -P 3` exposes them
 - `nfs`: NFS exports and client mounts, including source, server/export split,
   NFS protocol version, transport protocol, security flavor, client/server
   addresses, read/write transfer sizes, and export-to-client mount relationships
@@ -296,9 +297,11 @@ Use these commands for:
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them
 - `network-storage`: iSCSI sessions, iSCSI targets, LUNs, NFS exports, and NFS
-  mounts, including iSCSI current and persistent portals, connection state,
-  attached disks, plus NFS mount source, server/export, protocol, security,
-  client/server address, and transfer-size details when probes expose them
+  mounts, including iSCSI current and persistent portals, connection/session
+  state, interface identity, negotiated transfer parameters, SCSI coordinates,
+  attached disk state, plus NFS mount source, server/export, protocol,
+  security, client/server address, and transfer-size details when probes expose
+  them
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
   metadata detail data, including bcache role/set/state, cache mode,

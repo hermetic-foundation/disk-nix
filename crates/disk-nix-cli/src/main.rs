@@ -2782,7 +2782,28 @@ fn usage_details(node: &Node) -> String {
         ("iscsi.portal", "portal"),
         ("iscsi.persistent-portal", "persistent-portal"),
         ("iscsi.connection-state", "connection-state"),
+        ("iscsi.session-state", "session-state"),
+        ("iscsi.internal-session-state", "internal-session-state"),
+        ("iscsi.iface-name", "iface"),
+        ("iscsi.iface-transport", "transport"),
+        ("iscsi.iface-initiator-name", "initiator"),
+        ("iscsi.iface-ip-address", "iface-ip"),
+        ("iscsi.iface-netdev", "netdev"),
+        ("iscsi.host-number", "host"),
+        ("iscsi.host-state", "host-state"),
+        ("iscsi.headerdigest", "header-digest"),
+        ("iscsi.datadigest", "data-digest"),
+        ("iscsi.maxrecvdatasegmentlength", "max-recv-data-segment"),
+        ("iscsi.maxxmitdatasegmentlength", "max-xmit-data-segment"),
+        ("iscsi.firstburstlength", "first-burst"),
+        ("iscsi.maxburstlength", "max-burst"),
+        ("iscsi.immediatedata", "immediate-data"),
+        ("iscsi.initialr2t", "initial-r2t"),
+        ("iscsi.maxoutstandingr2t", "max-outstanding-r2t"),
+        ("iscsi.scsi-channel", "scsi-channel"),
+        ("iscsi.scsi-id", "scsi-id"),
         ("iscsi.attached-disk", "attached-disk"),
+        ("iscsi.attached-disk-state", "attached-disk-state"),
         ("nfs.source", "source"),
         ("nfs.server", "server"),
         ("nfs.export", "export"),
@@ -4444,7 +4465,20 @@ mod tests {
             Node::new("iscsi-session:1", NodeKind::IscsiSession, "iscsi-session:1")
                 .with_property("iscsi.portal", "10.0.0.10:3260,1")
                 .with_property("iscsi.persistent-portal", "10.0.0.11:3260,1")
-                .with_property("iscsi.connection-state", "LOGGED IN"),
+                .with_property("iscsi.connection-state", "LOGGED IN")
+                .with_property("iscsi.session-state", "LOGGED_IN")
+                .with_property("iscsi.internal-session-state", "NO CHANGE")
+                .with_property("iscsi.iface-name", "default")
+                .with_property("iscsi.iface-transport", "tcp")
+                .with_property("iscsi.iface-initiator-name", "iqn.2026-06.client:node1")
+                .with_property("iscsi.iface-ip-address", "10.0.0.20")
+                .with_property("iscsi.iface-netdev", "eno1")
+                .with_property("iscsi.host-number", "4")
+                .with_property("iscsi.host-state", "running")
+                .with_property("iscsi.headerdigest", "None")
+                .with_property("iscsi.datadigest", "None")
+                .with_property("iscsi.maxrecvdatasegmentlength", "262144")
+                .with_property("iscsi.maxburstlength", "262144"),
         );
         graph.add_node(Node::new(
             "iscsi-target:iqn.2026-06.example:storage",
@@ -4458,7 +4492,11 @@ mod tests {
                 "0",
             )
             .with_size_bytes(1_073_741_824)
-            .with_property("iscsi.attached-disk", "sdb"),
+            .with_property("iscsi.host-number", "4")
+            .with_property("iscsi.scsi-channel", "00")
+            .with_property("iscsi.scsi-id", "0")
+            .with_property("iscsi.attached-disk", "sdb")
+            .with_property("iscsi.attached-disk-state", "running"),
         );
         graph.add_node(
             Node::new(
@@ -4491,7 +4529,17 @@ mod tests {
         assert!(output.contains("portal=10.0.0.10:3260,1"));
         assert!(output.contains("persistent-portal=10.0.0.11:3260,1"));
         assert!(output.contains("connection-state=LOGGED IN"));
-        assert!(output.contains("attached-disk=sdb"));
+        assert!(output.contains("session-state=LOGGED_IN"));
+        assert!(output.contains("internal-session-state=NO CHANGE"));
+        assert!(output.contains("iface=default transport=tcp"));
+        assert!(output.contains("initiator=iqn.2026-06.client:node1"));
+        assert!(output.contains("iface-ip=10.0.0.20 netdev=eno1"));
+        assert!(output.contains("host=4 host-state=running"));
+        assert!(output.contains("header-digest=None data-digest=None"));
+        assert!(output.contains("max-recv-data-segment=262144"));
+        assert!(output.contains("max-burst=262144"));
+        assert!(output.contains("scsi-channel=00 scsi-id=0"));
+        assert!(output.contains("attached-disk=sdb attached-disk-state=running"));
         assert!(output.contains("server=storage.example export=/export/home"));
         assert!(output.contains(
             "source=storage.example:/export/home server=storage.example export=/export/home vers=4.2"

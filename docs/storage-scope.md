@@ -116,7 +116,9 @@ The current probe layer normalizes:
   cache devices, cache sets, mode, state, dirty data, replacement policy,
   writeback settings, and cache relationships
 - iSCSI sessions through `iscsiadm -m session -P 3` for session ids, target
-  IQNs, portals, LUNs, and attached SCSI disks
+  IQNs, current and persistent portals, interface identity, connection/session
+  state, negotiated transfer parameters, host state, LUN SCSI coordinates, and
+  attached disk state
 - NFS mount metadata through `nfsstat -m` for server, export, protocol,
   version, transfer sizes, locking, client address, and mount options
 - MD RAID arrays through `mdadm --detail --scan` and `mdadm --detail <array>`
