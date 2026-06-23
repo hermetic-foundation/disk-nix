@@ -1,4 +1,8 @@
-use disk_nix_plan::{ApplyPolicy, ApplyReport, Plan, evaluate_apply_policy};
+use std::collections::BTreeSet;
+
+use disk_nix_plan::{
+    ApplyPolicy, ApplyReport, Operation, Plan, PlannedAction, RiskClass, evaluate_apply_policy,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -21,6 +25,7 @@ pub enum ExecutionStatus {
 pub struct ExecutionReport {
     pub apply: ApplyReport,
     pub status: ExecutionStatus,
+    pub command_plan: Vec<ExecutionStep>,
     pub messages: Vec<String>,
 }
 
@@ -35,14 +40,35 @@ impl ExecutionReport {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionStep {
+    pub action_id: String,
+    pub operation: Operation,
+    pub risk: RiskClass,
+    pub requires_manual_review: bool,
+    pub commands: Vec<ExecutionCommand>,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionCommand {
+    pub argv: Vec<String>,
+    pub mutates: bool,
+    pub note: String,
+}
+
 #[must_use]
 pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) -> ExecutionReport {
     let apply = evaluate_apply_policy(plan, policy);
+    let command_plan = command_plan(plan, &apply);
     if !apply.can_execute() {
         let blocked_count = apply.blocked_count;
         return ExecutionReport {
             apply,
             status: ExecutionStatus::Blocked,
+            command_plan,
             messages: vec![format!("apply policy blocked {blocked_count} action(s)")],
         };
     }
@@ -51,16 +77,281 @@ pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) 
         ExecutionMode::DryRun => ExecutionReport {
             apply,
             status: ExecutionStatus::DryRun,
-            messages: vec!["dry run only: no storage commands were run".to_string()],
+            messages: vec![format!(
+                "dry run only: generated {} command plan step(s), no storage commands were run",
+                command_plan.len()
+            )],
+            command_plan,
         },
         ExecutionMode::Execute => ExecutionReport {
             apply,
             status: ExecutionStatus::ExecutorUnavailable,
+            command_plan,
             messages: vec![
                 "executor is not implemented yet; policy validation passed but no storage commands were run"
                     .to_string(),
             ],
         },
+    }
+}
+
+fn command_plan(plan: &Plan, apply: &ApplyReport) -> Vec<ExecutionStep> {
+    let blocked: BTreeSet<&str> = apply
+        .blocked
+        .iter()
+        .map(|blocked| blocked.id.as_str())
+        .collect();
+
+    plan.actions
+        .iter()
+        .filter(|action| !blocked.contains(action.id.as_str()))
+        .map(execution_step)
+        .collect()
+}
+
+fn execution_step(action: &PlannedAction) -> ExecutionStep {
+    let (commands, mut notes, requires_manual_review) = commands_for_action(action);
+    if let Some(advice) = &action.advice {
+        notes.push(format!("advice: {}", advice.summary));
+        notes.extend(
+            advice
+                .alternatives
+                .iter()
+                .map(|alternative| format!("alternative: {alternative}")),
+        );
+    }
+
+    ExecutionStep {
+        action_id: action.id.clone(),
+        operation: action.operation,
+        risk: action.risk,
+        requires_manual_review,
+        commands,
+        notes,
+    }
+}
+
+fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<String>, bool) {
+    let parts: Vec<&str> = action.id.split(':').collect();
+    match action.operation {
+        Operation::Grow if action.id.starts_with("filesystem:") => {
+            let target = parts.get(1).copied().unwrap_or("<filesystem>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "re-read graph state for the filesystem before resizing",
+                    ),
+                    command(
+                        ["<filesystem-grow-tool>", target],
+                        true,
+                        "run the filesystem-specific online grow command after device growth is visible",
+                    ),
+                ],
+                vec![
+                    "select xfs_growfs, resize2fs, btrfs filesystem resize, or zfs set volsize from the probed filesystem type".to_string(),
+                    "verify available backing capacity before running the grow command".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Grow if action.id.starts_with("volumes:") => {
+            let target = parts.get(1).copied().unwrap_or("<volume>");
+            (
+                vec![
+                    command(
+                        ["lvs", "--reportformat", "json", target],
+                        false,
+                        "inspect current LVM logical volume state",
+                    ),
+                    command(
+                        ["lvextend", "--resizefs", "--size", "+<size>", target],
+                        true,
+                        "grow the logical volume and filesystem together",
+                    ),
+                ],
+                vec!["replace <size> after comparing desired state with probed capacity".to_string()],
+                true,
+            )
+        }
+        Operation::Grow if action.id.starts_with("luns:") => {
+            let target = parts.get(1).copied().unwrap_or("<lun>");
+            (
+                vec![
+                    command(
+                        ["iscsiadm", "--mode", "session", "--rescan"],
+                        true,
+                        "rescan iSCSI sessions after target-side LUN growth",
+                    ),
+                    command(
+                        ["multipath", "-r"],
+                        true,
+                        "reload multipath maps when the LUN is multipathed",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "verify that consumers see the new capacity",
+                    ),
+                ],
+                vec!["coordinate the target-side LUN grow before host rescans".to_string()],
+                true,
+            )
+        }
+        Operation::Grow if action.id.starts_with("iscsiSessions:") => (
+            vec![
+                command(
+                    ["iscsiadm", "--mode", "session", "--rescan"],
+                    true,
+                    "rescan iSCSI sessions after target-side changes",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "verify updated iSCSI, LUN, and consumer topology",
+                ),
+            ],
+            vec!["coordinate session rescans with every dependent LUN consumer".to_string()],
+            true,
+        ),
+        Operation::Grow => {
+            let target = parts.get(1).copied().unwrap_or("<target>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect current target state before growth",
+                    ),
+                    command(
+                        ["<grow-storage-object-tool>", target],
+                        true,
+                        "grow the storage object with the target-domain-specific command",
+                    ),
+                ],
+                vec!["select the grow command from the target storage domain and desired size".to_string()],
+                true,
+            )
+        }
+        Operation::AddDevice => {
+            let target = parts.get(1).copied().unwrap_or("<target>");
+            let device = parts.last().copied().unwrap_or("<device>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect target health before adding a device",
+                    ),
+                    command(
+                        ["<pool-or-volume-add-device-tool>", target, device],
+                        true,
+                        "attach the new device with the storage-domain-specific tool",
+                    ),
+                ],
+                vec!["choose zpool add, btrfs device add, vgextend, or an equivalent domain command from the target kind".to_string()],
+                true,
+            )
+        }
+        Operation::ReplaceDevice => {
+            let target = parts.get(1).copied().unwrap_or("<target>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect redundancy and source device health before replacement",
+                    ),
+                    command(
+                        ["<replace-device-tool>", target, "<old-device>", "<new-device>"],
+                        true,
+                        "start the storage-domain replacement operation",
+                    ),
+                ],
+                vec!["keep the old device available until post-apply verification passes".to_string()],
+                true,
+            )
+        }
+        Operation::Rebalance => {
+            let target = parts.get(1).copied().unwrap_or("<target>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect pool or filesystem health before rebalance",
+                    ),
+                    command(
+                        ["<rebalance-tool>", target],
+                        true,
+                        "run the storage-domain rebalance command",
+                    ),
+                ],
+                vec!["choose btrfs balance or the relevant pool-specific balancing operation".to_string()],
+                true,
+            )
+        }
+        Operation::SetProperty => {
+            let target = parts.get(1).copied().unwrap_or("<target>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect current properties before applying changes",
+                    ),
+                    command(
+                        ["<set-property-tool>", target, "<key>=<value>"],
+                        true,
+                        "apply the storage-domain property update",
+                    ),
+                ],
+                vec!["property values must come from the desired spec and target domain".to_string()],
+                true,
+            )
+        }
+        Operation::Snapshot => {
+            let target = parts.get(1).copied().unwrap_or("<snapshot>");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect snapshot target before creation",
+                    ),
+                    command(
+                        ["<snapshot-tool>", target],
+                        true,
+                        "create the snapshot with zfs, btrfs, lvm, or the target-specific tool",
+                    ),
+                ],
+                Vec::new(),
+                true,
+            )
+        }
+        Operation::Create => (
+            vec![command(
+                ["<create-storage-object-tool>", "<target>"],
+                true,
+                "create the requested storage object",
+            )],
+            vec!["creation commands require target-kind-specific arguments from the desired spec".to_string()],
+            true,
+        ),
+        Operation::Format | Operation::Shrink | Operation::RemoveDevice | Operation::Rollback | Operation::Destroy => (
+            Vec::new(),
+            vec!["no command plan is generated for this risk class unless future explicit policy and executor support are added".to_string()],
+            true,
+        ),
+    }
+}
+
+fn command<const N: usize>(argv: [&str; N], mutates: bool, note: &str) -> ExecutionCommand {
+    ExecutionCommand {
+        argv: argv.iter().map(|value| (*value).to_string()).collect(),
+        mutates,
+        note: note.to_string(),
     }
 }
 
@@ -90,6 +381,14 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(report.can_apply());
+        assert_eq!(report.command_plan.len(), 1);
+        assert!(report.command_plan[0].requires_manual_review);
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command
+                .argv
+                .first()
+                .is_some_and(|program| program == "lvextend")
+        }));
     }
 
     #[test]
@@ -112,6 +411,7 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::ExecutorUnavailable);
         assert!(!report.can_apply());
+        assert_eq!(report.command_plan.len(), 1);
     }
 
     #[test]
@@ -134,5 +434,32 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::Blocked);
         assert_eq!(report.apply.blocked_count, 1);
+        assert!(report.command_plan.is_empty());
+    }
+
+    #[test]
+    fn allowed_lun_growth_reports_rescan_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/root:0": {
+                  "operation": "grow"
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_plan.len(), 1);
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["iscsiadm", "--mode", "session", "--rescan"] && command.mutates
+        }));
     }
 }

@@ -102,7 +102,11 @@ action is allowed or blocked. It does not mutate storage yet.
 
 Apply reports include `blockedSummary` counters for offline-required,
 destructive, potential-data-loss, and unsupported blocked actions in addition
-to the detailed blocked action list.
+to the detailed blocked action list. When policy allows an action, the report
+also includes a `commandPlan` with non-executed command argv, mutation markers,
+manual-review flags, and notes. These command plans are intentionally advisory
+until the executor can compare desired state with the live probed graph and
+verify post-apply state.
 
 Policy fields currently supported:
 

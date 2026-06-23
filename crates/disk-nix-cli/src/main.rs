@@ -721,6 +721,31 @@ fn print_execution_report(
         for message in &report.messages {
             writeln!(output, "{message}")?;
         }
+        if !report.command_plan.is_empty() {
+            writeln!(output, "Command plan:")?;
+            for step in &report.command_plan {
+                writeln!(
+                    output,
+                    "- {:?} {:?} {}",
+                    step.risk, step.operation, step.action_id
+                )?;
+                if step.requires_manual_review {
+                    writeln!(output, "  manual review required")?;
+                }
+                for command in &step.commands {
+                    let mutation = if command.mutates {
+                        "mutating"
+                    } else {
+                        "read-only"
+                    };
+                    writeln!(output, "  {mutation}: {}", command.argv.join(" "))?;
+                    writeln!(output, "    {}", command.note)?;
+                }
+                for note in &step.notes {
+                    writeln!(output, "  note: {note}")?;
+                }
+            }
+        }
     } else {
         writeln!(
             output,

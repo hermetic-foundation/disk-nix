@@ -202,6 +202,7 @@ The report includes:
 - `apply.blockedCount`
 - `apply.blockedSummary`
 - `apply.blocked`
+- `commandPlan`
 - `messages`
 
 The default policy allows online grow and property-change intents, but blocks
@@ -217,3 +218,6 @@ disk-nix apply --spec ./examples/lifecycle-update.json --execute
 
 Automation should treat a blocked apply report as a hard stop and surface the
 reported advice before requesting a more permissive policy.
+When policy allows an action, `commandPlan` records the non-executed commands,
+whether each command would mutate system state, and notes that still require
+manual or future executor review.
