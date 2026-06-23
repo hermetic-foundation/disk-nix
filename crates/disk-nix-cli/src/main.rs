@@ -124,6 +124,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List LVM physical volumes, volume groups, logical volumes, and segments.
+    Lvm {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered VDO volumes and LVM VDO segment metadata.
     Vdo {
         /// Emit JSON for matching graph nodes.
@@ -420,6 +426,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_cache_node)?;
             } else {
                 print_cache(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Lvm { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_lvm_node)?;
+            } else {
+                print_lvm(output, &graph)?;
             }
             Ok(())
         }
@@ -1543,6 +1558,29 @@ fn print_cache(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> 
     Ok(())
 }
 
+fn print_lvm(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:<12} {:<12} {:<12} {:>7} DETAILS",
+        "KIND", "NAME", "SIZE", "DATA%", "META%", "ACTIVE", "BACKING"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_lvm_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>12} {:<12} {:<12} {:<12} {:>7} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            property_value(node, "lvm.data-percent").unwrap_or("-"),
+            property_value(node, "lvm.metadata-percent").unwrap_or("-"),
+            property_value(node, "lvm.active").unwrap_or("-"),
+            backing_count(graph, node),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_vdo(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2258,6 +2296,22 @@ fn is_cache_node(node: &Node) -> bool {
     })
 }
 
+fn is_lvm_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::LvmPhysicalVolume
+            | NodeKind::LvmVolumeGroup
+            | NodeKind::LvmLogicalVolume
+            | NodeKind::LvmSegment
+            | NodeKind::LvmThinPool
+            | NodeKind::LvmSnapshot
+            | NodeKind::LvmCache
+    ) || node
+        .properties
+        .iter()
+        .any(|property| property.key.starts_with("lvm."))
+}
+
 fn is_vdo_node(node: &Node) -> bool {
     node.kind == NodeKind::VdoVolume
         || node.properties.iter().any(|property| {
@@ -2752,13 +2806,14 @@ mod tests {
 
     use super::{
         confirmation_file_accepts, is_cache_node, is_complex_filesystem_node, is_device_node,
-        is_encryption_node, is_filesystem_node, is_loop_node, is_mapping_node, is_multipath_node,
-        is_network_storage_node, is_nvme_node, is_partition_node, is_pool_node, is_raid_node,
-        is_snapshot_node, is_swap_node, is_vdo_node, is_volume_node, mount_details, print_cache,
-        print_complex_filesystems, print_devices, print_encryption, print_filesystems, print_loop,
-        print_mappings, print_mounts, print_multipath, print_network_storage, print_nvme,
-        print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
-        print_vdo, print_volumes, snapshot_source, usage_details, usage_percent,
+        is_encryption_node, is_filesystem_node, is_loop_node, is_lvm_node, is_mapping_node,
+        is_multipath_node, is_network_storage_node, is_nvme_node, is_partition_node, is_pool_node,
+        is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node, is_volume_node, mount_details,
+        print_cache, print_complex_filesystems, print_devices, print_encryption, print_filesystems,
+        print_loop, print_lvm, print_mappings, print_mounts, print_multipath,
+        print_network_storage, print_nvme, print_partitions, print_pools, print_raid,
+        print_snapshots, print_swap, print_usage, print_vdo, print_volumes, snapshot_source,
+        usage_details, usage_percent,
     };
 
     #[test]
@@ -2793,6 +2848,19 @@ mod tests {
             NodeKind::LvmVolumeGroup,
             "root"
         )));
+        assert!(is_lvm_node(&Node::new(
+            "lvm-vg:root",
+            NodeKind::LvmVolumeGroup,
+            "root"
+        )));
+        assert!(is_lvm_node(
+            &Node::new(
+                "block:/dev/mapper/vg-root",
+                NodeKind::DeviceMapper,
+                "vg-root"
+            )
+            .with_property("lvm.active", "active")
+        ));
         let bcachefs = Node::new(
             "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
             NodeKind::BcachefsFilesystem,
@@ -3590,6 +3658,100 @@ mod tests {
         assert!(output.contains("level=raid1 state=clean raid-devices=2"));
         assert!(output.contains("attached-disk=sdb"));
         assert!(output.contains("server=storage.example export=/export/home"));
+    }
+
+    #[test]
+    fn lvm_table_includes_volume_group_and_segment_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "lvm-pv:/dev/nvme0n1p3",
+                NodeKind::LvmPhysicalVolume,
+                "/dev/nvme0n1p3",
+            )
+            .with_path("/dev/nvme0n1p3")
+            .with_size_bytes(536_870_912_000)
+            .with_property("lvm.active", "active")
+            .with_property("lvm.tags", "ssd,system"),
+        );
+        graph.add_node(
+            Node::new("lvm-vg:vg0", NodeKind::LvmVolumeGroup, "vg0")
+                .with_size_bytes(1_099_511_627_776)
+                .with_property("lvm.extent-size", "4.00m")
+                .with_property("lvm.pv-count", "2")
+                .with_property("lvm.lv-count", "5"),
+        );
+        graph.add_node(
+            Node::new("lvm-thin-pool:vg0/pool", NodeKind::LvmThinPool, "vg0/pool")
+                .with_size_bytes(858_993_459_200)
+                .with_property("lvm.data-percent", "42.00")
+                .with_property("lvm.metadata-percent", "7.50")
+                .with_property("lvm.active", "active")
+                .with_property("lvm.when-full", "queue")
+                .with_property("lvm.metadata-size", "8.00g"),
+        );
+        graph.add_node(
+            Node::new("lvm-lv:vg0/root", NodeKind::LvmLogicalVolume, "vg0/root")
+                .with_size_bytes(214_748_364_800)
+                .with_property("lvm.active", "active")
+                .with_property("lvm.layout", "thin")
+                .with_property("lvm.pool", "pool")
+                .with_property("lvm.health", "ok"),
+        );
+        graph.add_node(
+            Node::new(
+                "lvm-snapshot:vg0/root-snap",
+                NodeKind::LvmSnapshot,
+                "vg0/root-snap",
+            )
+            .with_property("lvm.origin", "root")
+            .with_property("lvm.snap-percent", "12.50")
+            .with_property("lvm.active", "active"),
+        );
+        graph.add_node(
+            Node::new("lvm-cache:vg0/root", NodeKind::LvmCache, "vg0/root")
+                .with_property("lvm.cache-mode", "writeback")
+                .with_property("lvm.cache-policy", "smq")
+                .with_property("lvm.writecache-writeback-blocks", "16"),
+        );
+        graph.add_node(
+            Node::new("lvm-segment:vg0/root:0", NodeKind::LvmSegment, "vg0/root:0")
+                .with_property("lvm.segment-type", "thin")
+                .with_property("lvm.segment-start", "0")
+                .with_property("lvm.segment-size", "200.00g")
+                .with_property("lvm.devices", "pool(0)"),
+        );
+        graph.add_edge(Edge::new(
+            "lvm-pv:/dev/nvme0n1p3",
+            "lvm-vg:vg0",
+            Relationship::MemberOf,
+        ));
+        graph.add_edge(Edge::new(
+            "lvm-thin-pool:vg0/pool",
+            "lvm-lv:vg0/root",
+            Relationship::Backs,
+        ));
+
+        let mut output = Vec::new();
+        print_lvm(&mut output, &graph).expect("lvm table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DATA%"));
+        assert!(output.contains("META%"));
+        assert!(output.contains("/dev/nvme0n1p3"));
+        assert!(output.contains("active"));
+        assert!(output.contains("tags=ssd,system"));
+        assert!(output.contains("extent=4.00m pvs=2 lvs=5"));
+        assert!(output.contains("42.00"));
+        assert!(output.contains("7.50"));
+        assert!(output.contains("when-full=queue metadata-size=8.00g"));
+        assert!(output.contains("layout=thin pool=pool active=active health=ok"));
+        assert!(output.contains("snap=12.50 origin=root active=active"));
+        assert!(output.contains("cache-mode=writeback cache-policy=smq writecache-writeback=16"));
+        assert!(
+            output
+                .contains("segment-type=thin segment-start=0 segment-size=200.00g devices=pool(0)")
+        );
     }
 
     #[test]

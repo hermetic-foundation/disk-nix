@@ -144,6 +144,7 @@ disk-nix snapshots
 disk-nix mappings
 disk-nix encryption
 disk-nix cache
+disk-nix lvm
 disk-nix vdo
 disk-nix multipath
 disk-nix nvme
@@ -169,6 +170,7 @@ disk-nix snapshots --json
 disk-nix mappings --json
 disk-nix encryption --json
 disk-nix cache --json
+disk-nix lvm --json
 disk-nix vdo --json
 disk-nix multipath --json
 disk-nix nvme --json
@@ -240,6 +242,12 @@ Use these commands for:
 - `cache`: bcache devices/cache sets, LVM cache/writecache metadata, bcachefs
   member-device cache accounting, and ZFS cache vdevs, including cache mode,
   policy, dirty/writeback data, cache-set identity, state, and vdev state
+- `lvm`: LVM physical volumes, volume groups, logical volumes, segments, thin
+  pools, snapshots, and cache/writecache layers, including data and metadata
+  percentages, active state, extent/PV/LV counts, origin/pool relationships,
+  thin-pool fullness behavior, segment device mappings, cache policy, health,
+  tags, and backing/member counts when `pvs`, `vgs`, `lvs`, or `dmsetup`
+  expose them
 - `vdo`: native VDO volumes and LVM VDO segment metadata, including backing
   device, logical and physical size, status/stat counters, operating mode,
   recovery progress, write policy, compression, deduplication, and overhead
