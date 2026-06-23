@@ -2721,7 +2721,10 @@ fn usage_details(node: &Node) -> String {
         ("vdo.compression", "compression"),
         ("vdo.deduplication", "deduplication"),
         ("vdo.overhead-blocks-used", "overhead-blocks"),
+        ("dm.name", "dm-name"),
         ("dm.uuid", "dm-uuid"),
+        ("dm.major", "dm-major"),
+        ("dm.minor", "dm-minor"),
         ("dm.open-count", "open"),
         ("dm.segments", "segments"),
         ("dm.events", "events"),
@@ -5209,8 +5212,13 @@ mod tests {
                 "cryptroot",
             )
             .with_path("/dev/mapper/cryptroot")
+            .with_property("dm.name", "cryptroot")
             .with_property("dm.uuid", "CRYPT-LUKS2-crypt-uuid-cryptroot")
+            .with_property("dm.major", "253")
+            .with_property("dm.minor", "0")
             .with_property("dm.open-count", "1")
+            .with_property("dm.segments", "1")
+            .with_property("dm.events", "0")
             .with_property("cryptsetup.active", "true")
             .with_property("cryptsetup.in-use", "true")
             .with_property("cryptsetup.cipher", "aes-xts-plain64")
@@ -5307,7 +5315,9 @@ mod tests {
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains("cryptroot"));
-        assert!(output.contains("       1 dm-uuid=CRYPT-LUKS2-crypt-uuid-cryptroot"));
+        assert!(output.contains(
+            "dm-name=cryptroot dm-uuid=CRYPT-LUKS2-crypt-uuid-cryptroot dm-major=253 dm-minor=0 open=1 segments=1 events=0"
+        ));
         assert!(
             output.contains(
                 "active=true in-use=true cipher=aes-xts-plain64 luks=2 epoch=7 metadata-area=16384 [bytes] keyslots-area=16744448 [bytes] subsystem=(no subsystem) flags=allow-discards keyslots=2 tokens=1 keyslot-ids=0,1 token-ids=0 data-cipher=aes-xts-plain64 data-offset=32768 [bytes] data-length=(whole device) data-sector=4096 [bytes]"
