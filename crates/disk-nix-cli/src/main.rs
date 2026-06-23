@@ -1979,12 +1979,17 @@ fn usage_details(node: &Node) -> String {
         ("exfat.bytes-per-sector", "sector-bytes"),
         ("exfat.sectors-per-cluster", "sectors-per-cluster"),
         ("bcache.role", "role"),
+        ("bcache.kind", "kind"),
         ("bcache.set-uuid", "set-uuid"),
+        ("bcache.label", "label"),
         ("bcache.state", "state"),
         ("bcache.cache-mode", "cache-mode"),
         ("bcache.cache-replacement-policy", "replacement"),
         ("bcache.dirty-data", "dirty"),
+        ("bcache.readahead", "readahead"),
+        ("bcache.sequential-cutoff", "sequential-cutoff"),
         ("bcache.writeback-percent", "writeback-percent"),
+        ("bcache.writeback-rate", "writeback-rate"),
         ("zfs.health", "health"),
         ("zfs.state", "state"),
         ("zfs.vdev-role", "vdev-role"),
@@ -2471,15 +2476,20 @@ mod tests {
 
         let bcache = Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
             .with_property("bcache.role", "backing")
+            .with_property("bcache.kind", "cache-set")
             .with_property("bcache.set-uuid", "cache-set-uuid")
+            .with_property("bcache.label", "fast-cache")
             .with_property("bcache.state", "clean")
             .with_property("bcache.cache-mode", "writeback")
             .with_property("bcache.cache-replacement-policy", "lru")
             .with_property("bcache.dirty-data", "64.0M")
-            .with_property("bcache.writeback-percent", "10");
+            .with_property("bcache.readahead", "0")
+            .with_property("bcache.sequential-cutoff", "4.0M")
+            .with_property("bcache.writeback-percent", "10")
+            .with_property("bcache.writeback-rate", "1.0M/sec");
         assert_eq!(
             usage_details(&bcache),
-            "role=backing set-uuid=cache-set-uuid state=clean cache-mode=writeback replacement=lru dirty=64.0M writeback-percent=10"
+            "role=backing kind=cache-set set-uuid=cache-set-uuid label=fast-cache state=clean cache-mode=writeback replacement=lru dirty=64.0M readahead=0 sequential-cutoff=4.0M writeback-percent=10 writeback-rate=1.0M/sec"
         );
 
         let swap = Node::new("swap:/dev/zram0", NodeKind::Swap, "/dev/zram0")
@@ -2830,8 +2840,13 @@ mod tests {
             Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
                 .with_path("/dev/bcache0")
                 .with_property("bcache.role", "backing")
+                .with_property("bcache.kind", "cache-set")
+                .with_property("bcache.label", "fast-cache")
                 .with_property("bcache.state", "clean")
-                .with_property("bcache.cache-mode", "writeback"),
+                .with_property("bcache.cache-mode", "writeback")
+                .with_property("bcache.readahead", "0")
+                .with_property("bcache.sequential-cutoff", "4.0M")
+                .with_property("bcache.writeback-rate", "1.0M/sec"),
         );
 
         let mut output = Vec::new();
@@ -2852,7 +2867,9 @@ mod tests {
                 "mode=normal write-policy=sync compression=enabled deduplication=disabled"
             )
         );
-        assert!(output.contains("role=backing state=clean cache-mode=writeback"));
+        assert!(output.contains(
+            "role=backing kind=cache-set label=fast-cache state=clean cache-mode=writeback readahead=0 sequential-cutoff=4.0M writeback-rate=1.0M/sec"
+        ));
     }
 
     #[test]
