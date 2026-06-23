@@ -1023,6 +1023,27 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "no unexpected partitions or consumers remain after initialization".to_string(),
             ],
         ),
+        Operation::Rescan if collection == Some("disks") || collection == Some("partitions") => {
+            let disk = partition_rescan_disk(action);
+            (
+                vec![
+                    disk_parted_machine_list_command(
+                        disk,
+                        "verify partition table after kernel reread",
+                    ),
+                    command(
+                        ["disk-nix", "topology", "--json"],
+                        false,
+                        "verify disk and partition graph after partition-table rescan",
+                    ),
+                ],
+                vec![
+                    "kernel partition inventory matches the reviewed table".to_string(),
+                    "dependent filesystems, mappings, and mounts still resolve stable paths"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Grow | Operation::Rescan
             if collection == Some("luns")
                 || collection == Some("iscsiSessions")
@@ -3072,6 +3093,34 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "pause dependent consumers when the kernel cannot reread an active table"
                         .to_string(),
                     "resize LUKS, LVM, and filesystems only after the partition reports the new size"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("disks") || collection == Some("partitions") => {
+            let disk = partition_rescan_disk(action);
+            (
+                vec![
+                    disk_nix_inspect_command(
+                        disk,
+                        "<disk>",
+                        "disk path",
+                        "inspect disk identity before partition-table rescan",
+                    ),
+                    partition_probe_command(disk),
+                    partition_table_reread_command(disk),
+                    disk_parted_machine_list_command(
+                        disk,
+                        "verify the disk partition table after reread",
+                    ),
+                ],
+                vec![
+                    "use grow or create when partition geometry changes are still required"
+                        .to_string(),
+                    "pause dependent consumers when an active kernel table cannot be reread"
+                        .to_string(),
+                    "verify stable by-id and by-partuuid paths before growing consumers"
                         .to_string(),
                 ],
                 true,
@@ -8083,6 +8132,14 @@ fn disk_target_path(action: &PlannedAction) -> Option<&str> {
     partition_target_path(action)
 }
 
+fn partition_rescan_disk(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .device
+        .as_deref()
+        .or_else(|| disk_target_path(action))
+}
+
 fn partition_create_command(
     disk: Option<&str>,
     partition_type: Option<&str>,
@@ -11893,6 +11950,92 @@ mod tests {
             command.argv == ["blockdev", "--rereadpt", "/dev/disk/by-id/nvme-root"]
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
+        }));
+    }
+
+    #[test]
+    fn partition_table_rescan_reports_partprobe_and_rereadpt_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "disks": {
+                  "/dev/disk/by-id/nvme-data": {
+                    "operation": "rescan"
+                  }
+                },
+                "partitions": {
+                  "data-table": {
+                    "operation": "rescan",
+                    "device": "/dev/disk/by-id/nvme-data"
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_plan.len(), 2);
+        assert!(report.command_summary.all_commands_ready());
+        for action_id in [
+            "disks:/dev/disk/by-id/nvme-data:rescan",
+            "partitions:data-table:rescan",
+        ] {
+            assert!(report.command_plan.iter().any(|step| {
+                step.action_id == action_id
+                    && step.commands.iter().any(|command| {
+                        command.argv == ["partprobe", "/dev/disk/by-id/nvme-data"]
+                            && command.mutates
+                            && command.readiness == CommandReadiness::Ready
+                    })
+                    && step.commands.iter().any(|command| {
+                        command.argv == ["blockdev", "--rereadpt", "/dev/disk/by-id/nvme-data"]
+                            && command.mutates
+                            && command.readiness == CommandReadiness::Ready
+                    })
+            }));
+        }
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "partitions:data-table:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["parted", "-lm", "/dev/disk/by-id/nvme-data"])
+        }));
+    }
+
+    #[test]
+    fn partition_table_rescan_requires_disk_path_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "partitions": {
+                  "data-table": {
+                    "operation": "rescan"
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["partprobe", "<disk>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["disk path"]
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["blockdev", "--rereadpt", "<disk>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["disk path"]
         }));
     }
 

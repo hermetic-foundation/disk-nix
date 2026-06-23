@@ -211,6 +211,9 @@ Btrfs scrub plans render `btrfs scrub start -B`; ZFS pool scrub plans render
 `zpool scrub`.
 Filesystem trim plans render reviewed `fstrim -v <mountpoint>` commands for
 mounted filesystems.
+Disk and partition rescan plans render reviewed `partprobe` and
+`blockdev --rereadpt` commands to refresh kernel partition inventory without
+editing layout.
 Regular Btrfs filesystem label updates render
 `btrfs filesystem label <path> <label>`. Ext filesystem label updates render
 `e2label <device> <label>` when the declaration includes an explicit backing

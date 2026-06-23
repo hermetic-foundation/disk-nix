@@ -2999,6 +2999,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "disks" || collection == "partitions" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary:
+                    "partition-table rescan refreshes kernel disk and partition inventory"
+                        .to_string(),
+                alternatives: vec![
+                    "use grow when partition geometry must change before the reread".to_string(),
+                    "pause dependent consumers when the kernel cannot reread an active table"
+                        .to_string(),
+                    "verify stable by-id and by-partuuid paths after the rescan".to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "btrfsSubvolumes" => (
             RiskClass::Online,
             false,
@@ -3970,9 +3985,13 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for LUNs, iSCSI sessions, NVMe namespaces, and multipath maps"
+                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, and multipath maps"
                     .to_string(),
                 alternatives: vec![
+                    "use disks.<path>.operation = \"rescan\" to reread a partition table"
+                        .to_string(),
+                    "use partitions.<name>.operation = \"rescan\" to refresh a reviewed backing disk"
+                        .to_string(),
                     "use luns.<name>.operation = \"rescan\" to refresh reviewed SCSI paths"
                         .to_string(),
                     "use iscsiSessions.<target>.operation = \"rescan\" to refresh existing target sessions"
@@ -4321,6 +4340,19 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::PhysicalDisk,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "disk rescan rereads the partition table without editing layout"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow or create when partition geometry must change first".to_string(),
+                    "verify stable disk identity before refreshing kernel state".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::Partition,
             operation: Operation::Create,
             risk: RiskClass::OfflineRequired,
@@ -4330,6 +4362,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "verify disk identity and free regions before applying".to_string(),
                     "schedule reboot when active consumers block table reread".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Partition,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "partition rescan refreshes kernel partition inventory".to_string(),
+                alternatives: vec![
+                    "rescan after target-side disk, LUN, or table changes are complete"
+                        .to_string(),
+                    "verify dependent filesystems and mappings after kernel reread".to_string(),
                 ],
             }),
         },
@@ -7762,6 +7807,9 @@ mod tests {
                 "/dev/disk/by-id/nvme-root": {
                   "operation": "create",
                   "partitionType": "gpt"
+                },
+                "/dev/disk/by-id/nvme-data": {
+                  "operation": "rescan"
                 }
               },
               "partitions": {
@@ -7777,13 +7825,17 @@ mod tests {
                   "device": "/dev/disk/by-id/nvme-root",
                   "partitionNumber": 2,
                   "end": "100%"
+                },
+                "data-table": {
+                  "operation": "rescan",
+                  "device": "/dev/disk/by-id/nvme-data"
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 5);
         assert_eq!(plan.summary.offline_required_count, 2);
         assert_eq!(plan.summary.destructive_count, 1);
 
@@ -7821,6 +7873,25 @@ mod tests {
             .expect("disk create action exists");
         assert_eq!(disk.risk, RiskClass::Destructive);
         assert!(disk.destructive);
+
+        let disk_rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "disks:/dev/disk/by-id/nvme-data:rescan")
+            .expect("disk rescan action exists");
+        assert_eq!(disk_rescan.risk, RiskClass::Online);
+        assert!(!disk_rescan.destructive);
+
+        let partition_rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "partitions:data-table:rescan")
+            .expect("partition rescan action exists");
+        assert_eq!(partition_rescan.risk, RiskClass::Online);
+        assert_eq!(
+            partition_rescan.context.device.as_deref(),
+            Some("/dev/disk/by-id/nvme-data")
+        );
     }
 
     #[test]

@@ -269,6 +269,10 @@
                 number = "2";
                 endOffset = "100%";
               };
+              partitions.dataTable = {
+                operation = "rescan";
+                device = "/dev/disk/by-id/nvme-data";
+              };
               vdoVolumes.archive = {
                 operation = "grow";
                 desiredSize = "4TiB";
@@ -692,7 +696,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 76
+              .summary.actionCount == 77
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -736,6 +740,7 @@
               and (.actions | any(.id == "multipathMaps:mpatha:add-device:/dev/sdb" and .risk == "online"))
               and (.actions | any(.id == "multipathmaps:mpathb:rescan" and .risk == "online"))
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
+              and (.actions | any(.id == "partitions:data-table:rescan" and .risk == "online"))
               and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "luks.devices:cryptarchive:open" and .risk == "offline-required"))
@@ -942,6 +947,8 @@
                   and .spec.partitions.root.device == "/dev/disk/by-id/nvme-root"
                   and .spec.partitions.root.number == "2"
                   and .spec.partitions.root.endOffset == "100%"
+                  and .spec.partitions.dataTable.operation == "rescan"
+                  and .spec.partitions.dataTable.device == "/dev/disk/by-id/nvme-data"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".operation == "create"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".path == "/mnt/persist/@home"
                   and .spec.btrfsQgroups."0/257".target == "/mnt/persist"

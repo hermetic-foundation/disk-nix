@@ -361,6 +361,9 @@ and `blockdev --rereadpt` commands when `device`, `partitionType`, `start`, and
 Partition grow command plans render concrete `parted resizepart`, `partprobe`,
 and `blockdev --rereadpt` commands when `device`, `partitionNumber`, and `end`
 or `desiredSize` are declared.
+Disk and partition `operation = "rescan"` command plans rerun `partprobe` and
+`blockdev --rereadpt` against the reviewed backing disk without editing
+partition geometry, then verify the refreshed table with `parted -lm`.
 Filesystem shrink command plans render Btrfs allocation checks and
 `btrfs filesystem resize <size> <path>` for declared target sizes. Ext shrink
 plans render `findmnt`, `umount`, `e2fsck`, and `resize2fs` review steps. Ext

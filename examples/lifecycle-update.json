@@ -234,6 +234,10 @@
       "operation": "grow",
       "device": "/dev/disk/by-id/nvme-root-part2",
       "desiredSize": "100%"
+    },
+    "data-table": {
+      "operation": "rescan",
+      "device": "/dev/disk/by-id/nvme-data"
     }
   },
   "swaps": {

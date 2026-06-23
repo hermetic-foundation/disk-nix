@@ -381,6 +381,10 @@ reviewed option updates, and `umount <mountpoint>` for reviewed
 `operation = "unmount"` actions. Legacy NFS mount `create` and `destroy` map
 to the same mount/unmount command plans. Missing sources or concrete
 mountpoint paths keep the command plan non-ready.
+Disk and partition `operation = "rescan"` actions are online refreshes that
+render `partprobe <disk>` plus `blockdev --rereadpt <disk>` and verify with
+`parted -lm <disk>`. They do not edit partition geometry; use `grow` or
+`create` when the table itself must change.
 Filesystem `operation = "remount"` actions are online, non-destructive updates
 that render `mount -o remount,<options> <mountpoint>`. Missing concrete
 mountpoints remain non-ready, and long-lived options should be kept in the
