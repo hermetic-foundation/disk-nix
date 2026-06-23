@@ -11,8 +11,8 @@ storage stacks:
 - LUKS headers, keyslots, tokens, and device-mapper mappings
 - LVM PVs, VGs, LVs, thin pools, snapshots, cache, and VDO
 - Btrfs filesystems, devices, subvolumes, snapshots, qgroups, and usage
-- ZFS pools, vdevs, datasets, zvols, snapshots, properties, cache, log, and
-  special vdevs
+- ZFS pools, vdevs, datasets, zvols, snapshots, snapshot hold reference counts,
+  properties, cache, log, and special vdevs
 - MD RAID, multipath, NVMe namespaces, iSCSI sessions/targets/LUNs, and NFS
 - safe lifecycle operations such as grow, replace, rebalance, property updates,
   and migration advice

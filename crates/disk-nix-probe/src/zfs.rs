@@ -40,6 +40,7 @@ struct ZfsRow {
     referenced: Option<u64>,
     mountpoint: Option<String>,
     origin: Option<String>,
+    userrefs: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,6 +218,7 @@ fn parse_datasets(bytes: &[u8]) -> Result<Vec<ZfsRow>, ProbeError> {
             referenced: parse_u64_field(fields[4]),
             mountpoint: nonempty_dash(fields[5]),
             origin: nonempty_dash(fields[6]),
+            userrefs: fields.get(7).and_then(|value| nonempty_dash(value)),
         });
     }
 
@@ -331,11 +333,16 @@ fn add_dataset(graph: &mut StorageGraph, dataset: ZfsRow) {
     }
 
     if let Some(origin) = dataset.origin {
+        node = node.with_property("zfs.origin", origin.clone());
         graph.add_edge(Edge::new(
             id.clone(),
             dataset_id(&origin, NodeKind::ZfsSnapshot),
             Relationship::SnapshotOf,
         ));
+    }
+
+    if let Some(userrefs) = dataset.userrefs {
+        node = node.with_property("zfs.userrefs", userrefs);
     }
 
     if let Some(pool) = dataset
@@ -397,10 +404,10 @@ mod tests {
     use super::*;
 
     const ZPOOL: &[u8] = b"tank\t1000\t400\t600\tONLINE\n";
-    const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\n\
-tank/home\tfilesystem\t200\t800\t200\t/home\t-\n\
-tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\n\
-tank/vm\tvolume\t50\t950\t50\t-\t-\n";
+    const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\t-\n\
+tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\n\
+tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\n\
+tank/vm\tvolume\t50\t950\t50\t-\t-\t-\n";
     const ZPOOL_STATUS: &[u8] = br#"
   pool: tank
  state: ONLINE
@@ -440,6 +447,17 @@ errors: No known data errors
                 .nodes
                 .iter()
                 .any(|node| node.kind == NodeKind::ZfsSnapshot && node.name == "tank/home@daily")
+        );
+        let snapshot = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::ZfsSnapshot && node.name == "tank/home@daily")
+            .expect("snapshot node exists");
+        assert!(
+            snapshot
+                .properties
+                .iter()
+                .any(|property| property.key == "zfs.userrefs" && property.value == "2")
         );
         assert!(
             graph

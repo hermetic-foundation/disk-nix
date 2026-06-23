@@ -947,7 +947,7 @@ fn collect_zfs(result: &mut ProbeResult) {
             "-t",
             "filesystem,volume,snapshot",
             "-o",
-            "name,type,used,available,referenced,mountpoint,origin",
+            "name,type,used,available,referenced,mountpoint,origin,userrefs",
         ],
     );
     let zpool_status = run_report("zpool", &["status", "-P"]);

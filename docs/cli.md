@@ -164,7 +164,7 @@ Use these commands for:
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
   pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
-  source relationships
+  source relationships and ZFS user-reference counts for held snapshots
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache
   layers

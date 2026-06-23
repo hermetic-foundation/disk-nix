@@ -71,7 +71,8 @@ The current probe layer normalizes:
   utilization percentage, and space-saving percentage
 - ZFS `zpool list -H -p`, `zpool status -P`, and `zfs list -H -p` output for
   pool capacity, health, vdev topology, data/log/cache/special/dedup roles,
-  backing devices, datasets, snapshots, zvols, mountpoints, and clone origins
+  backing devices, datasets, snapshots, zvols, mountpoints, clone origins, and
+  snapshot user-reference counts that indicate active holds
 - Btrfs mounted filesystems through `btrfs filesystem show`, `btrfs filesystem usage -b`, `btrfs subvolume list -u`, and `btrfs qgroup show --raw -reF` for
   filesystem identity, member devices, usage, subvolumes, snapshot-like
   subvolume relationships, and qgroup referenced/exclusive usage and limits

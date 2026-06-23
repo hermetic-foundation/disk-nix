@@ -1640,6 +1640,7 @@ fn usage_details(node: &Node) -> String {
         ("zfs.vdev-role", "vdev-role"),
         ("zfs.vdev-state", "vdev-state"),
         ("zfs.origin", "origin"),
+        ("zfs.userrefs", "userrefs"),
     ];
 
     let details = DETAIL_KEYS
@@ -1864,6 +1865,14 @@ mod tests {
             .with_size_bytes(100)
             .with_property("zfs.health", "ONLINE");
         assert_eq!(usage_details(&pool), "health=ONLINE");
+
+        let snapshot = Node::new(
+            "zfs-snapshot:tank/home@daily",
+            NodeKind::ZfsSnapshot,
+            "tank/home@daily",
+        )
+        .with_property("zfs.userrefs", "2");
+        assert_eq!(usage_details(&snapshot), "userrefs=2");
     }
 
     #[test]
