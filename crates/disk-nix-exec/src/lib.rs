@@ -740,19 +740,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 || action.id.starts_with("luns:")
                 || action.id.starts_with("iscsiSessions:") =>
         {
+            let mut commands = vec![command(
+                ["lsblk", "--json", "--bytes", "--output-all"],
+                false,
+                "verify kernel block-device capacity after host rescan",
+            )];
+            for device in lun_rescan_devices(action) {
+                commands.push(command_vec(
+                    vec!["blockdev", "--getsize64", device.as_str()],
+                    false,
+                    "verify the reviewed LUN path reports its post-rescan byte size",
+                ));
+            }
+            commands.push(command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify LUN, iSCSI session, multipath, and consumers in the graph",
+            ));
             (
-                vec![
-                    command(
-                        ["lsblk", "--json", "--bytes", "--output-all"],
-                        false,
-                        "verify kernel block-device capacity after host rescan",
-                    ),
-                    command(
-                        ["disk-nix", "inspect", target, "--json"],
-                        false,
-                        "verify LUN, iSCSI session, multipath, and consumers in the graph",
-                    ),
-                ],
+                commands,
                 vec![
                     desired_size
                         .map(|size| format!("every expected path reports capacity {size}"))
@@ -1568,25 +1574,39 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Grow if collection == Some("luns") || action.id.starts_with("luns:") => {
             let target = target.unwrap_or("<lun>");
+            let mut commands = vec![
+                command(
+                    ["iscsiadm", "--mode", "session", "--rescan"],
+                    true,
+                    "rescan iSCSI sessions after target-side LUN growth",
+                ),
+                command(
+                    ["disk-nix", "inspect", target],
+                    false,
+                    "inspect current LUN paths before per-device rescans",
+                ),
+            ];
+            for device in lun_rescan_devices(action) {
+                commands.push(scsi_device_rescan_command(&device));
+            }
+            commands.extend([
+                command(
+                    ["multipath", "-r"],
+                    true,
+                    "reload multipath maps when the LUN is multipathed",
+                ),
+                command(
+                    ["disk-nix", "inspect", target],
+                    false,
+                    "verify that consumers see the new capacity",
+                ),
+            ]);
             (
+                commands,
                 vec![
-                    command(
-                        ["iscsiadm", "--mode", "session", "--rescan"],
-                        true,
-                        "rescan iSCSI sessions after target-side LUN growth",
-                    ),
-                    command(
-                        ["multipath", "-r"],
-                        true,
-                        "reload multipath maps when the LUN is multipathed",
-                    ),
-                    command(
-                        ["disk-nix", "inspect", target],
-                        false,
-                        "verify that consumers see the new capacity",
-                    ),
+                    "coordinate the target-side LUN grow before host rescans".to_string(),
+                    "declare stable LUN path devices to render per-path SCSI rescans".to_string(),
                 ],
-                vec!["coordinate the target-side LUN grow before host rescans".to_string()],
                 true,
             )
         }
@@ -3491,6 +3511,30 @@ fn bcache_sysfs_key(property: &str) -> String {
         .strip_prefix("bcache.")
         .unwrap_or(property)
         .replace('-', "_")
+}
+
+fn lun_rescan_devices(action: &PlannedAction) -> Vec<String> {
+    let mut devices = BTreeSet::new();
+    if let Some(device) = action.context.device.as_deref() {
+        devices.insert(device.to_string());
+    }
+    devices.extend(action.context.devices.iter().cloned());
+    devices.into_iter().collect()
+}
+
+fn scsi_device_rescan_command(device: &str) -> ExecutionCommand {
+    command_vec(
+        vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            "block=$(basename \"$(readlink -f \"$1\")\"); printf '1\\n' > \"/sys/class/block/${block}/device/rescan\""
+                .to_string(),
+            "disk-nix-scsi-rescan".to_string(),
+            device.to_string(),
+        ],
+        true,
+        "rescan the reviewed SCSI block path after target-side LUN growth",
+    )
 }
 
 fn nfs_export_create_command(
@@ -5783,7 +5827,11 @@ mod tests {
             br#"{
               "luns": {
                 "iqn.2026-06.example:storage/root:0": {
-                  "operation": "grow"
+                  "operation": "grow",
+                  "device": "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+                  "devices": [
+                    "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                  ]
                 }
               },
               "apply": {
@@ -5800,6 +5848,39 @@ mod tests {
         assert_eq!(report.command_plan.len(), 1);
         assert!(report.command_plan[0].commands.iter().any(|command| {
             command.argv == ["iscsiadm", "--mode", "session", "--rescan"] && command.mutates
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv
+                == [
+                    "sh",
+                    "-c",
+                    "block=$(basename \"$(readlink -f \"$1\")\"); printf '1\\n' > \"/sys/class/block/${block}/device/rescan\"",
+                    "disk-nix-scsi-rescan",
+                    "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv
+                == [
+                    "sh",
+                    "-c",
+                    "block=$(basename \"$(readlink -f \"$1\")\"); printf '1\\n' > \"/sys/class/block/${block}/device/rescan\"",
+                    "disk-nix-scsi-rescan",
+                    "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(report.verification_plan[0].commands.iter().any(|command| {
+            command.argv
+                == [
+                    "blockdev",
+                    "--getsize64",
+                    "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+                ]
+                && !command.mutates
         }));
     }
 

@@ -190,7 +190,9 @@ online `vdo growLogical` and physical growth review steps.
 NFS export apply plans render reviewed `exportfs` create/unexport commands
 from explicit client and option declarations.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
-and rescan commands from explicit target IQN and portal declarations.
+and rescan commands from explicit target IQN and portal declarations. LUN grow
+plans additionally render per-path SCSI rescans when stable LUN `device` or
+`devices` paths are declared.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain. Btrfs snapshot declarations with `readOnly = true` render

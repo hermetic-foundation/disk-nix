@@ -138,6 +138,8 @@ Examples:
   may need to be drained, but it is not treated as data destruction.
 - LUN `operation = "grow"` is classified as offline-required because the
   storage target, host rescan, multipath, and consumers must be coordinated.
+  When stable `device` or `devices` paths are declared, apply plans render
+  per-path SCSI rescans in addition to broad iSCSI session rescans.
 - iSCSI session `operation = "grow"` is classified as offline-required because
   target growth, session/path rescan, and dependent consumers must be
   coordinated.
@@ -201,7 +203,9 @@ Lifecycle objects may use:
   or create plans
 - `target`, `path`, or `mountpoint`: explicit target path or object identity
   when it differs from the attribute name
-- `device` or `disk`: backing device path for disk and partition operations
+- `device` or `disk`: backing device path for disk, partition, and LUN operations
+- `devices`: member devices for arrays, pools, or explicit LUN paths that
+  should receive per-path host rescans
 - `level` or `raidLevel`: MD RAID level for reviewed array creation
 - `client`: NFS export client or network selector
 - `portal`: iSCSI target portal such as `192.0.2.10:3260`; `metadata.portal`

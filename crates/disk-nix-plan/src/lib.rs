@@ -3802,7 +3802,12 @@ mod tests {
             br#"{
               "luns": {
                 "iqn.2026-06.example:storage/root:0": {
-                  "operation": "grow"
+                  "operation": "grow",
+                  "desiredSize": "2TiB",
+                  "device": "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+                  "devices": [
+                    "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                  ]
                 }
               }
             }"#,
@@ -3813,6 +3818,21 @@ mod tests {
         assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Grow);
         assert_eq!(plan.actions[0].risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            plan.actions[0].context.desired_size.as_deref(),
+            Some("2TiB")
+        );
+        assert_eq!(
+            plan.actions[0].context.device.as_deref(),
+            Some("/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0")
+        );
+        assert_eq!(
+            plan.actions[0].context.devices,
+            vec![
+                "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                    .to_string()
+            ]
+        );
         assert!(plan.actions[0].advice.as_ref().is_some_and(|advice| {
             advice
                 .alternatives

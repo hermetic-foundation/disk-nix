@@ -122,7 +122,12 @@
   },
   "luns": {
     "iqn.2026-06.example:storage/root:0": {
-      "operation": "grow"
+      "operation": "grow",
+      "desiredSize": "2TiB",
+      "device": "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+      "devices": [
+        "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+      ]
     }
   },
   "exports": {
