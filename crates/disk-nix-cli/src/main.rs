@@ -1180,17 +1180,18 @@ fn print_devices(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()
 fn print_partitions(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<38} {:>12} {:<24} PATH",
-        "KIND", "NAME", "SIZE", "PARTUUID"
+        "{:<22} {:<38} {:>12} {:<24} {:<36} PATH",
+        "KIND", "NAME", "SIZE", "PARTUUID", "DETAILS"
     )?;
     for node in graph.nodes.iter().filter(|node| is_partition_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<38} {:>12} {:<24} {}",
+            "{:<22} {:<38} {:>12} {:<24} {:<36} {}",
             node.kind,
             node.name,
             human_bytes(node.size_bytes),
             node.identity.partuuid.as_deref().unwrap_or("-"),
+            usage_details(node),
             node.path.as_deref().unwrap_or("-")
         )?;
     }
@@ -1851,7 +1852,15 @@ fn usage_details(node: &Node) -> String {
         ("filesystem.type", "fstype"),
         ("partition.table", "ptable"),
         ("partition.number", "partno"),
+        ("partition.start", "start"),
+        ("partition.end", "end"),
+        ("partition.type", "type"),
+        ("partition.name", "part-name"),
+        ("partition.flags", "flags"),
+        ("partition.disk-flags", "disk-flags"),
         ("parted.transport", "parted-transport"),
+        ("parted.logical-sector-size", "logical-sector"),
+        ("parted.physical-sector-size", "physical-sector"),
         ("udev.symlink", "udev-link"),
         ("udev.devpath", "udev-devpath"),
         ("udev.id-fs-type", "udev-fstype"),
@@ -2074,13 +2083,14 @@ fn human_bytes(value: Option<u64>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use disk_nix_model::{Edge, Node, NodeKind, Relationship, StorageGraph, Usage};
+    use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 
     use super::{
         confirmation_file_accepts, is_device_node, is_mapping_node, is_network_storage_node,
         is_partition_node, is_pool_node, is_snapshot_node, mount_details, print_devices,
-        print_filesystems, print_mappings, print_mounts, print_network_storage, print_pools,
-        print_snapshots, print_usage, print_volumes, snapshot_source, usage_details, usage_percent,
+        print_filesystems, print_mappings, print_mounts, print_network_storage, print_partitions,
+        print_pools, print_snapshots, print_usage, print_volumes, snapshot_source, usage_details,
+        usage_percent,
     };
 
     #[test]
@@ -2222,6 +2232,41 @@ mod tests {
         assert!(output.contains("lsblk-type=part fstype=vfat partno=1 udev-fstype=vfat"));
         assert!(output.contains("lsblk-type=loop"));
         assert!(output.contains("/var/lib/images/root.img"));
+    }
+
+    #[test]
+    fn partitions_table_includes_geometry_metadata_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/nvme0n1p1",
+                NodeKind::Partition,
+                "/dev/nvme0n1p1",
+            )
+            .with_path("/dev/nvme0n1p1")
+            .with_size_bytes(536_870_912)
+            .with_identity(Identity {
+                partuuid: Some("1111-2222".to_string()),
+                ..Default::default()
+            })
+            .with_property("partition.number", "1")
+            .with_property("partition.start", "1049kB")
+            .with_property("partition.end", "538MB")
+            .with_property("partition.type", "fat32")
+            .with_property("partition.name", "ESP")
+            .with_property("partition.flags", "boot, esp")
+            .with_property("filesystem.type", "vfat"),
+        );
+
+        let mut output = Vec::new();
+        print_partitions(&mut output, &graph).expect("partitions table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DETAILS"));
+        assert!(output.contains("1111-2222"));
+        assert!(output.contains(
+            "fstype=vfat partno=1 start=1049kB end=538MB type=fat32 part-name=ESP flags=boot, esp"
+        ));
     }
 
     #[test]
