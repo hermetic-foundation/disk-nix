@@ -832,6 +832,13 @@
                   and ."/srv/shared".device == "nas.example.com:/srv/shared"
                   and (has("/srv/old") | not)
                 ' file-systems
+                supportedFilesystems=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleTest.config.boot.supportedFilesystems)}
+                printf '%s\n' "$supportedFilesystems" > supported-filesystems
+                jq -e '
+                  .xfs == true
+                  and .btrfs == true
+                  and .nfs4 == true
+                ' supported-filesystems
                 printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
                 grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
                 touch "$out"

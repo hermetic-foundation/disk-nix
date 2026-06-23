@@ -584,6 +584,10 @@ let
           export.client != null && export.options != null && !export.destroy && export.operation != "destroy"
         ) cfg.exports
       );
+  supportedFilesystemTypes = lib.unique (
+    (map (filesystem: filesystem.fsType) (lib.attrValues cfg.filesystems))
+    ++ (map (mount: mount.fsType) (lib.attrValues activeNfsMounts))
+  );
 in
 {
   options.services.disk-nix = {
@@ -1403,6 +1407,8 @@ in
         bypassWorkqueues
         ;
     }) activeLuksDevices;
+
+    boot.supportedFilesystems = supportedFilesystemTypes;
 
     services.openiscsi = lib.mkIf (cfg.iscsi.initiatorName != null) {
       enable = true;
