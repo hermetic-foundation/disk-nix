@@ -114,14 +114,14 @@ disk-nix schema
 The schema describes both direct planner specs and the NixOS module wrapper
 shape with top-level `spec` and `apply` objects. It includes the planner's
 filesystem fields, including filesystem `operation`, `device`, mount
-`options`, `properties`, and Btrfs device-membership update fields. It also
-includes disk and partition lifecycle collections, swap, LUKS, LUKS keyslots/tokens, NFS mount
-wrappers, iSCSI discovery/session/boot wrappers, Btrfs subvolume, VDO, LVM
-physical volume, LVM thin pool, LVM snapshot, LVM cache, loop-device, MD RAID,
-multipath, NVMe namespace, and zvol lifecycle declarations, higher-layer lifecycle
-collections, snapshot declarations including Btrfs `readOnly` snapshot intent,
-supported operation names, apply policy fields, and NixOS activation helper
-fields such as
+`options`, `properties`, `metadata`, `neededForBoot`, `destroy`, and Btrfs
+device-membership update fields. It also includes disk and partition lifecycle
+collections, swap, LUKS, LUKS keyslots/tokens, NFS mount wrappers, iSCSI
+discovery/session/boot wrappers, Btrfs subvolume, VDO, LVM physical volume,
+LVM thin pool, LVM snapshot, LVM cache, loop-device, MD RAID, multipath, NVMe
+namespace, and zvol lifecycle declarations, higher-layer lifecycle collections,
+snapshot declarations including Btrfs `readOnly` snapshot intent, supported
+operation names, apply policy fields, and NixOS activation helper fields such as
 `probeCurrent`, `failOnBlocked`, `scriptOut`,
 and `reportOut`.
 Planner-compatible aliases such as `number`, `startOffset`, `endOffset`, and

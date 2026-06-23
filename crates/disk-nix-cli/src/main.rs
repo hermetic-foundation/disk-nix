@@ -671,6 +671,8 @@ fn spec_schema() -> serde_json::Value {
                     "type": { "type": "string" },
                     "operation": { "$ref": "#/$defs/operation" },
                     "action": { "$ref": "#/$defs/operation" },
+                    "neededForBoot": { "type": "boolean" },
+                    "destroy": { "type": "boolean" },
                     "resizePolicy": {
                         "type": "string",
                         "enum": ["none", "grow-only", "shrink-allowed"]
@@ -698,6 +700,10 @@ fn spec_schema() -> serde_json::Value {
                     "renameTarget": { "type": "string" },
                     "newName": { "type": "string" },
                     "properties": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "metadata": {
                         "type": "object",
                         "additionalProperties": true
                     },
