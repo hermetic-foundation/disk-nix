@@ -163,6 +163,8 @@ dataset, and zvol updates, volume updates, network LUN growth, snapshots, and
 cache replacement.
 Cache apply plans include bcache-aware attach, cache-mode, dirty-data, and
 replacement review steps instead of a generic cache placeholder.
+Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
+and `swapon` steps while keeping block-device backing growth explicit.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
 online `vdo growLogical` and physical growth review steps.
 NFS export apply plans render reviewed `exportfs` create/unexport commands

@@ -68,7 +68,8 @@ Examples:
   kernel partition table reread and dependent consumers must be coordinated.
 - swap signature creation is classified as destructive; swap growth is
   offline-required because active swap must be disabled before backing storage
-  and signatures are changed.
+  and signatures are changed. Swapfile growth can render a concrete file resize
+  command; block-device swap growth must use the backing storage layer first.
 - LUKS format/create is destructive; LUKS growth is offline-required because
   backing capacity, mapper state, and dependent consumers must be coordinated.
 - Btrfs subvolume creation is online, while destruction is destructive and

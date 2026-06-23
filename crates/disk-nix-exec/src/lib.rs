@@ -2905,6 +2905,23 @@ fn partition_grow_command(target: &str, desired_size: Option<&str>) -> Execution
 }
 
 fn swap_resize_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    if !target.starts_with("/dev/") {
+        return match desired_size {
+            Some(size) => command(
+                ["fallocate", "--length", size, target],
+                true,
+                "resize the swap file to the desired length before recreating the signature",
+            ),
+            None => command_with_readiness(
+                ["fallocate", "--length", "<size>", target],
+                true,
+                CommandReadiness::NeedsDesiredSize,
+                ["desired swap file size"],
+                "resize the swap file after selecting the desired size",
+            ),
+        };
+    }
+
     match desired_size {
         Some(size) => command_vec_with_readiness(
             vec!["<resize-swap-backing-storage>", target, size],
@@ -3493,6 +3510,11 @@ mod tests {
                   "primary": {
                     "device": "/dev/disk/by-label/swap",
                     "preserveData": false
+                  },
+                  "scratch": {
+                    "device": "/swapfile",
+                    "operation": "grow",
+                    "desiredSize": "16GiB"
                   }
                 },
                 "luks": {
@@ -3518,16 +3540,29 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_plan.len(), 2);
+        assert_eq!(report.command_plan.len(), 3);
         assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["mkswap", "/dev/disk/by-label/swap"])
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["fallocate", "--length", "16GiB", "/swapfile"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["cryptsetup", "resize", "cryptroot"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "swaps:scratch:grow"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["swapon", "--show", "--bytes", "--raw"])
         }));
     }
 
