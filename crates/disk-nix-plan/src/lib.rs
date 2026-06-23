@@ -7509,6 +7509,7 @@ mod tests {
     fn btrfs_filesystem_capabilities_cover_device_topology_updates() {
         let capabilities = default_capabilities();
         for (operation, risk) in [
+            (Operation::Rescan, RiskClass::Online),
             (Operation::AddDevice, RiskClass::Online),
             (Operation::ReplaceDevice, RiskClass::OfflineRequired),
             (Operation::RemoveDevice, RiskClass::PotentialDataLoss),
