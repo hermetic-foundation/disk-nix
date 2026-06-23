@@ -2199,15 +2199,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             let target = target.unwrap_or("<zfs-pool>");
             let device = action.context.device.as_deref();
             let devices = pool_create_devices(device, &action.context.devices);
+            let mut commands = zfs_pool_preflight_commands(&devices);
+            commands.push(zfs_pool_create_command(target, &devices));
             (
-                vec![
-                    command(
-                        ["disk-nix", "inspect", devices.first().map_or("<vdev-device>", String::as_str)],
-                        false,
-                        "inspect vdev device identity before creating the ZFS pool",
-                    ),
-                    zfs_pool_create_command(target, &devices),
-                ],
+                commands,
                 vec![
                     "verify every vdev device is empty or fully backed up before pool creation"
                         .to_string(),
@@ -3856,6 +3851,34 @@ fn zfs_pool_create_command(target: &str, devices: &[String]) -> ExecutionCommand
             true,
             "create a ZFS pool on the reviewed vdev device set",
         )
+    }
+}
+
+fn zfs_pool_preflight_commands(devices: &[String]) -> Vec<ExecutionCommand> {
+    let inspect_targets: Vec<&str> = devices
+        .iter()
+        .map(String::as_str)
+        .filter(|device| device.starts_with('/'))
+        .collect();
+    if inspect_targets.is_empty() {
+        vec![command_with_readiness(
+            ["disk-nix", "inspect", "<vdev-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["vdev device or topology"],
+            "inspect vdev device identity before creating the ZFS pool",
+        )]
+    } else {
+        inspect_targets
+            .into_iter()
+            .map(|device| {
+                command_vec(
+                    vec!["disk-nix", "inspect", device],
+                    false,
+                    "inspect vdev device identity before creating the ZFS pool",
+                )
+            })
+            .collect()
     }
 }
 
@@ -6535,6 +6558,19 @@ mod tests {
                     ]
                     && command.readiness == CommandReadiness::Ready
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "pools:mirrorpool:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/disk/by-id/mirror-a"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/disk/by-id/mirror-b"]
+                })
+                && !step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "mirror"])
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {

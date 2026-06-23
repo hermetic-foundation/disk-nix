@@ -222,7 +222,8 @@ explicit physical-volume removal.
 ZFS pool apply plans render gated `zpool create` commands from a single
 `device` or an explicit `devices` vdev list, gated `zpool destroy` commands,
 and reviewed topology updates such as `zpool add`, `zpool replace`, and
-`zpool remove`.
+`zpool remove`. Pool create preflight inspects path-like vdev entries before
+rendering the mutating command.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
 Use `--report-out` with either command to persist the JSON report for review

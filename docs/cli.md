@@ -355,7 +355,8 @@ commands for grow operations with an explicit physical volume, and reviewed
 ZFS pool command plans render policy-gated `zpool create` from a single
 `device` or explicit `devices` vdev list, policy-gated `zpool destroy`, plus
 online topology commands such as `zpool add`, `zpool replace`, `zpool remove`,
-and scrub.
+and scrub. Pool create preflight inspects declared path-like vdev entries
+instead of topology keywords such as `mirror`.
 ZFS dataset command plans render reviewed `zfs create` and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations.
 Zvol command plans render `zfs create -V`, `zfs set volsize=...`, policy-gated

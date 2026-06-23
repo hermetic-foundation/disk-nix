@@ -105,7 +105,9 @@ Examples:
 - ZFS pool creation and destruction are destructive because they write labels
   to vdev devices or remove all contained datasets and zvols; create command
   plans accept either a single `device` or an explicit `devices` vdev list.
-  Import/export is preferred when moving an existing pool.
+  Preflight inspection targets path-like vdev entries, while topology keywords
+  such as `mirror` stay in the rendered `zpool create` command. Import/export
+  is preferred when moving an existing pool.
 - ZFS dataset creation is online, with advice to review inherited mountpoint,
   quota, reservation, and encryption policy; dataset destruction remains
   destructive and recommends snapshots or rename-first validation.
