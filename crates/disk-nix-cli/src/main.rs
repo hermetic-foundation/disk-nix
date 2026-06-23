@@ -856,6 +856,9 @@ fn spec_schema() -> serde_json::Value {
                 "additionalProperties": true,
                 "properties": {
                     "target": { "type": "string" },
+                    "path": { "type": "string" },
+                    "snapshotPath": { "type": "string" },
+                    "snapshot-path": { "type": "string" },
                     "operation": { "$ref": "#/$defs/operation" },
                     "action": { "$ref": "#/$defs/operation" },
                     "destroy": { "type": "boolean" },

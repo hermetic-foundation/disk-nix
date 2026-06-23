@@ -2137,7 +2137,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             )
         }
         Operation::Rescan if collection == Some("snapshots") => {
-            let snapshot = action.context.name.as_deref().unwrap_or(target);
+            let snapshot = snapshot_rescan_identity(action, target);
             let mut commands = vec![command(
                 ["disk-nix", "inspect", snapshot, "--json"],
                 false,
@@ -4175,7 +4175,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Rescan if collection == Some("snapshots") => {
-            let snapshot = action.context.name.as_deref().unwrap_or("<snapshot>");
+            let snapshot = snapshot_rescan_identity(action, "<snapshot>");
             let mut commands = vec![command(
                 ["disk-nix", "inspect", snapshot],
                 false,
@@ -9286,6 +9286,15 @@ fn snapshot_property_command(
     }
 }
 
+fn snapshot_rescan_identity<'a>(action: &'a PlannedAction, fallback: &'a str) -> &'a str {
+    action
+        .context
+        .snapshot_path
+        .as_deref()
+        .or(action.context.name.as_deref())
+        .unwrap_or(fallback)
+}
+
 fn snapshot_hold_list_command(snapshot: &str) -> ExecutionCommand {
     if is_zfs_snapshot_name(snapshot) {
         command(
@@ -13288,6 +13297,11 @@ mod tests {
                   "operation": "rescan",
                   "target": "/mnt/persist/@home",
                   "readOnly": true
+                },
+                "home-before-friendly": {
+                  "operation": "rescan",
+                  "target": "/mnt/persist/@home",
+                  "snapshotPath": "/mnt/persist/@home-before-friendly"
                 }
               }
             }"#,
@@ -13297,7 +13311,7 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_plan.len(), 2);
+        assert_eq!(report.command_plan.len(), 3);
         let zfs_step = report
             .command_plan
             .iter()
@@ -13354,6 +13368,38 @@ mod tests {
                 ]
         }));
 
+        let friendly_btrfs_step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "snapshot:home-before-friendly:rescan")
+            .expect("friendly-key Btrfs snapshot rescan step exists");
+        assert!(
+            friendly_btrfs_step
+                .commands
+                .iter()
+                .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+        );
+        assert!(friendly_btrfs_step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "btrfs",
+                    "subvolume",
+                    "show",
+                    "/mnt/persist/@home-before-friendly",
+                ]
+        }));
+        assert!(friendly_btrfs_step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "btrfs",
+                    "property",
+                    "get",
+                    "-ts",
+                    "/mnt/persist/@home-before-friendly",
+                    "ro",
+                ]
+        }));
+
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "snapshot:tank/home@before:rescan"
                 && step
@@ -13371,6 +13417,20 @@ mod tests {
                             "get",
                             "-ts",
                             "/mnt/persist/@home-before",
+                            "ro",
+                        ]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "snapshot:home-before-friendly:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "property",
+                            "get",
+                            "-ts",
+                            "/mnt/persist/@home-before-friendly",
                             "ro",
                         ]
                 })

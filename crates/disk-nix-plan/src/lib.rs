@@ -188,6 +188,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub devices: Vec<String>,
@@ -249,6 +251,7 @@ impl ActionContext {
         self.collection.is_none()
             && self.name.is_none()
             && self.target.is_none()
+            && self.snapshot_path.is_none()
             && self.device.is_none()
             && self.devices.is_empty()
             && self.replacement.is_none()
@@ -2595,6 +2598,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
         .get("target")
         .and_then(Value::as_str)
         .unwrap_or(name);
+    let snapshot_path = string_field(snapshot, &["path", "snapshotPath", "snapshot-path"]);
     let hold = string_field(snapshot, &["hold", "holdTag"]);
     let release_hold = string_field(snapshot, &["releaseHold", "release-hold"]);
     let clone_to = string_field(snapshot, &["cloneTo", "cloneTarget", "clone"]);
@@ -2633,6 +2637,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
                 collection: Some("snapshots".to_string()),
                 name: Some(name.to_string()),
                 target: Some(target.to_string()),
+                snapshot_path: snapshot_path.clone(),
                 read_only,
                 ..ActionContext::default()
             },
@@ -10363,13 +10368,18 @@ mod tests {
                   "operation": "rescan",
                   "target": "/mnt/persist/@home",
                   "readOnly": true
+                },
+                "home-before-friendly": {
+                  "operation": "rescan",
+                  "target": "/mnt/persist/@home",
+                  "snapshotPath": "/mnt/persist/@home-before-friendly"
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.action_count, 3);
         assert_eq!(plan.summary.destructive_count, 0);
         assert_eq!(plan.summary.offline_required_count, 0);
         let zfs_rescan = plan
@@ -10393,6 +10403,19 @@ mod tests {
                 .advice
                 .as_ref()
                 .is_some_and(|advice| { advice.summary.contains("without mutating data") })
+        );
+        let friendly_btrfs_rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:home-before-friendly:rescan")
+            .expect("friendly-key Btrfs snapshot rescan action exists");
+        assert_eq!(
+            friendly_btrfs_rescan.context.target.as_deref(),
+            Some("/mnt/persist/@home")
+        );
+        assert_eq!(
+            friendly_btrfs_rescan.context.snapshot_path.as_deref(),
+            Some("/mnt/persist/@home-before-friendly")
         );
     }
 

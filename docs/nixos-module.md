@@ -298,6 +298,8 @@ Each lifecycle declaration includes:
 Typed snapshot declarations include:
 
 - `target`
+- `path`
+- `snapshotPath`
 - `operation`
 - `destroy`
 - `rollback`
@@ -317,7 +319,10 @@ Address fields have domain-specific meaning:
   arrays, `/dev/bcache*` for bcache, and `mpath*` or `/dev/mapper/*` for
   multipath maps
 - `path`: local filesystem path for Btrfs subvolumes, Btrfs qgroups, and NFS
-  exports
+  exports; in snapshot declarations it is also accepted as the concrete
+  snapshot path when the attribute name is a friendly key
+- `snapshotPath`: explicit snapshot identity alias for `path`, useful for
+  Btrfs snapshot rescans with non-path attribute names
 - `device`: backing block device or image path used by formats, LUKS, swap,
   filesystems, partitions, and loop-device setup
 - `portal`: iSCSI target portal; `metadata.portal` is accepted for
@@ -597,6 +602,11 @@ Example lifecycle planning through NixOS options:
       operation = "rescan";
       target = "/mnt/persist/@home";
       readOnly = true;
+    };
+    snapshots.home-before-friendly = {
+      operation = "rescan";
+      target = "/mnt/persist/@home";
+      snapshotPath = "/mnt/persist/@home-before-friendly";
     };
   };
 }

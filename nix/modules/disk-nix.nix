@@ -390,6 +390,20 @@ let
           example = "tank/home";
         };
 
+        path = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Concrete snapshot path when the attribute name is a friendly key, especially for Btrfs snapshot rescans.";
+          example = "/mnt/persist/@home-before-upgrade";
+        };
+
+        snapshotPath = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias for path, copied into the planner spec for explicit snapshot identity.";
+          example = "/mnt/persist/@home-before-upgrade";
+        };
+
         operation = lib.mkOption {
           type = operationType;
           default = null;
@@ -522,6 +536,8 @@ let
     // cleanSpecAttrs {
       inherit (snapshot)
         target
+        path
+        snapshotPath
         operation
         destroy
         rollback

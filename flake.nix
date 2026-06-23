@@ -541,6 +541,11 @@
                 target = "/mnt/persist/@home";
                 readOnly = true;
               };
+              snapshots.home-before-friendly = {
+                operation = "rescan";
+                target = "/mnt/persist/@home";
+                snapshotPath = "/mnt/persist/@home-before-friendly";
+              };
             };
           }
         ];
@@ -696,6 +701,8 @@
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
               and ."$defs".snapshot.properties.operation["$ref"] == "#/$defs/operation"
               and ."$defs".snapshot.properties.action["$ref"] == "#/$defs/operation"
+              and ."$defs".snapshot.properties.path.type == "string"
+              and ."$defs".snapshot.properties.snapshotPath.type == "string"
               and ."$defs".snapshot.properties.readOnly.type == "boolean"
               and ."$defs".snapshot.properties.readonly.type == "boolean"
               and ."$defs".snapshot.properties.cloneTo.type == "string"
@@ -1161,6 +1168,9 @@
                   and .spec.snapshots."tank/home@inventory".operation == "rescan"
                   and .spec.snapshots."/mnt/persist/@home-inventory".operation == "rescan"
                   and .spec.snapshots."/mnt/persist/@home-inventory".readOnly == true
+                  and .spec.snapshots."home-before-friendly".operation == "rescan"
+                  and .spec.snapshots."home-before-friendly".target == "/mnt/persist/@home"
+                  and .spec.snapshots."home-before-friendly".snapshotPath == "/mnt/persist/@home-before-friendly"
                   and .apply.mode == "activation"
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false

@@ -269,7 +269,9 @@ Examples:
   `zfs hold <tag> <snapshot>` and `zfs release <tag> <snapshot>`. ZFS snapshot
   `operation = "rescan"` and absolute Btrfs snapshot rescan declarations are
   online read-only refreshes for snapshot metadata, holds, read-only state, and
-  graph relationships. ZFS snapshot
+  graph relationships. Btrfs snapshot rescans can also use `path`,
+  `snapshotPath`, or `snapshot-path` to provide the concrete snapshot path when
+  the snapshot map key is a friendly name. ZFS snapshot
   clone declarations with `cloneTo`, `cloneTarget`, or `clone` render
   reversible `zfs clone <snapshot> <dataset>` plans. ZFS rollback command
   rendering is available for review, and `recursiveRollback`, `recursive`, or
