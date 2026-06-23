@@ -106,6 +106,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered disk encryption mappings and header metadata.
+    Encryption {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -339,6 +345,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_mapping_node)?;
             } else {
                 print_mappings(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Encryption { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_encryption_node)?;
+            } else {
+                print_encryption(output, &graph)?;
             }
             Ok(())
         }
@@ -1328,6 +1343,29 @@ fn print_mappings(output: &mut impl Write, graph: &StorageGraph) -> io::Result<(
     Ok(())
 }
 
+fn print_encryption(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:<12} {:<10} {:<10} DETAILS",
+        "KIND", "NAME", "CIPHER", "KEYSLOTS", "TOKENS"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_encryption_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<38} {:<12} {:<10} {:<10} {}",
+            node.kind,
+            node.name,
+            property_value(node, "cryptsetup.cipher")
+                .or_else(|| property_value(node, "cryptsetup.luks-data-cipher"))
+                .unwrap_or("-"),
+            property_value(node, "cryptsetup.luks-keyslot-count").unwrap_or("-"),
+            property_value(node, "cryptsetup.luks-token-count").unwrap_or("-"),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -1851,6 +1889,14 @@ fn is_mapping_node(node: &Node) -> bool {
     )
 }
 
+fn is_encryption_node(node: &Node) -> bool {
+    node.kind == NodeKind::LuksContainer
+        || node
+            .properties
+            .iter()
+            .any(|property| property.key.starts_with("cryptsetup."))
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
@@ -2287,11 +2333,12 @@ mod tests {
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 
     use super::{
-        confirmation_file_accepts, is_device_node, is_filesystem_node, is_mapping_node,
-        is_network_storage_node, is_partition_node, is_pool_node, is_snapshot_node, is_volume_node,
-        mount_details, print_devices, print_filesystems, print_mappings, print_mounts,
-        print_network_storage, print_partitions, print_pools, print_snapshots, print_usage,
-        print_volumes, snapshot_source, usage_details, usage_percent,
+        confirmation_file_accepts, is_device_node, is_encryption_node, is_filesystem_node,
+        is_mapping_node, is_network_storage_node, is_partition_node, is_pool_node,
+        is_snapshot_node, is_volume_node, mount_details, print_devices, print_encryption,
+        print_filesystems, print_mappings, print_mounts, print_network_storage, print_partitions,
+        print_pools, print_snapshots, print_usage, print_volumes, snapshot_source, usage_details,
+        usage_percent,
     };
 
     #[test]
@@ -2364,6 +2411,15 @@ mod tests {
             NodeKind::LoopDevice,
             "/dev/loop0"
         )));
+        assert!(is_encryption_node(&Node::new(
+            "block:/dev/mapper/cryptroot",
+            NodeKind::LuksContainer,
+            "cryptroot"
+        )));
+        assert!(is_encryption_node(
+            &Node::new("dm:cryptroot", NodeKind::DeviceMapper, "cryptroot")
+                .with_property("cryptsetup.active", "true")
+        ));
     }
 
     #[test]
@@ -3109,6 +3165,45 @@ mod tests {
         assert!(output.contains(
             "md-version=1.2 level=raid1 state=clean raid-devices=2 total-devices=2 md-name=host:root events=17"
         ));
+    }
+
+    #[test]
+    fn encryption_table_includes_luks_header_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/mapper/cryptroot",
+                NodeKind::LuksContainer,
+                "cryptroot",
+            )
+            .with_path("/dev/mapper/cryptroot")
+            .with_property("cryptsetup.active", "true")
+            .with_property("cryptsetup.in-use", "true")
+            .with_property("cryptsetup.cipher", "aes-xts-plain64")
+            .with_property("cryptsetup.luks-version", "2")
+            .with_property("cryptsetup.luks-epoch", "7")
+            .with_property("cryptsetup.luks-metadata-area", "16384 [bytes]")
+            .with_property("cryptsetup.luks-keyslots-area", "16744448 [bytes]")
+            .with_property("cryptsetup.luks-keyslot-count", "2")
+            .with_property("cryptsetup.luks-token-count", "1")
+            .with_property("cryptsetup.luks-keyslots", "0,1")
+            .with_property("cryptsetup.luks-tokens", "0"),
+        );
+
+        let mut output = Vec::new();
+        print_encryption(&mut output, &graph).expect("encryption table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("CIPHER"));
+        assert!(output.contains("KEYSLOTS"));
+        assert!(output.contains("TOKENS"));
+        assert!(output.contains("cryptroot"));
+        assert!(output.contains("aes-xts-plain64"));
+        assert!(output.contains(" 2         "));
+        assert!(output.contains(" 1         "));
+        assert!(output.contains("active=true in-use=true cipher=aes-xts-plain64"));
+        assert!(output.contains("luks=2 epoch=7 metadata-area=16384 [bytes]"));
+        assert!(output.contains("keyslot-ids=0,1 token-ids=0"));
     }
 
     #[test]

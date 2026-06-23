@@ -141,6 +141,7 @@ disk-nix volumes
 disk-nix pools
 disk-nix snapshots
 disk-nix mappings
+disk-nix encryption
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -157,6 +158,7 @@ disk-nix volumes --json
 disk-nix pools --json
 disk-nix snapshots --json
 disk-nix mappings --json
+disk-nix encryption --json
 disk-nix mounts --json
 disk-nix network-storage --json
 disk-nix ids --json
@@ -211,6 +213,9 @@ Use these commands for:
   role/cache-set/tuning details such as label, state,
   cache mode, readahead, sequential cutoff, and writeback rate when probes
   expose them
+- `encryption`: LUKS/dm-crypt mappings and header metadata, including cipher,
+  active/in-use state, keyslot/token counts and ids, LUKS version, epoch,
+  metadata/keyslot area sizes, flags, subsystem, and data-segment details
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them
