@@ -90,6 +90,7 @@ pub struct ApplyPolicy {
     pub allow_format: bool,
     pub allow_shrink: bool,
     pub allow_grow: bool,
+    pub allow_offline: bool,
     pub allow_property_changes: bool,
 }
 
@@ -101,6 +102,7 @@ impl Default for ApplyPolicy {
             allow_format: false,
             allow_shrink: false,
             allow_grow: true,
+            allow_offline: false,
             allow_property_changes: true,
         }
     }
@@ -235,6 +237,8 @@ pub fn plan_from_value(value: &Value) -> Plan {
 fn blocked_action(action: &PlannedAction, policy: &ApplyPolicy) -> Option<BlockedAction> {
     let reason = if action.risk == RiskClass::Unsupported {
         Some("unsupported actions cannot be applied")
+    } else if action.risk == RiskClass::OfflineRequired && !policy.allow_offline {
+        Some("offline-required actions require allowOffline=true")
     } else if action.operation == Operation::Format && !policy.allow_format {
         Some("format actions require allowFormat=true")
     } else if action.operation == Operation::Shrink {
@@ -1035,6 +1039,7 @@ mod tests {
                 "allowFormat": false,
                 "allowShrink": false,
                 "allowGrow": true,
+                "allowOffline": false,
                 "allowPropertyChanges": true
               }
             }"#,
@@ -1063,6 +1068,7 @@ mod tests {
                 "allowFormat": true,
                 "allowShrink": true,
                 "allowGrow": true,
+                "allowOffline": true,
                 "allowPropertyChanges": true
               }
             }"#,
@@ -1097,6 +1103,37 @@ mod tests {
 
         let report = evaluate_apply_policy(&plan, policy);
 
+        assert_eq!(report.blocked_count, 0);
+        assert!(report.can_execute());
+    }
+
+    #[test]
+    fn apply_policy_requires_offline_permission_for_offline_required_actions() {
+        let (plan, mut policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/root:0": {
+                  "operation": "grow"
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": false
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        let report = evaluate_apply_policy(&plan, policy.clone());
+        assert_eq!(report.blocked_count, 1);
+        assert_eq!(report.blocked[0].risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            report.blocked[0].reason,
+            "offline-required actions require allowOffline=true"
+        );
+
+        policy.allow_offline = true;
+        let report = evaluate_apply_policy(&plan, policy);
         assert_eq!(report.blocked_count, 0);
         assert!(report.can_execute());
     }

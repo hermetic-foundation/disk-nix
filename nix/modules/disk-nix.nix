@@ -450,6 +450,12 @@ in
         description = "Allow non-destructive grow operations.";
       };
 
+      allowOffline = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Allow storage operations that require offline coordination.";
+      };
+
       allowPropertyChanges = lib.mkOption {
         type = lib.types.bool;
         default = true;

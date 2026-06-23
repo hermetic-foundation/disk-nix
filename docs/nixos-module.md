@@ -137,12 +137,12 @@ Mutation policy should remain explicit:
 - `allowFormat`
 - `allowShrink`
 - `allowGrow`
+- `allowOffline`
 - `allowPropertyChanges`
 
 Future policies should include:
 
 - `allowDeviceReplacement`
 - `allowRebalance`
-- `allowOfflineOperations`
 - `requireBackup`
 - `requireConfirmationFile`

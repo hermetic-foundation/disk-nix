@@ -99,10 +99,12 @@ Policy fields currently supported:
 - `allowFormat`
 - `allowShrink`
 - `allowGrow`
+- `allowOffline`
 - `allowPropertyChanges`
 
-The default policy allows grow and property-change intents, but blocks
-destructive, irreversible, format, shrink, and potential-data-loss actions.
+The default policy allows online grow and property-change intents, but blocks
+offline-required, destructive, irreversible, format, shrink, and
+potential-data-loss actions.
 Unsupported actions are always blocked, even if permissive destructive or
 shrink policy flags are enabled.
 `--execute` is reserved for the future executor and is refused after policy
