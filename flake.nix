@@ -315,6 +315,8 @@
               and .properties.apply["$ref"] == "#/$defs/applyPolicy"
               and .properties.swaps["$ref"] == "#/$defs/lifecycleMap"
               and .properties.luks["$ref"] == "#/$defs/luksSpec"
+              and .properties.nfs["$ref"] == "#/$defs/nfsSpec"
+              and .properties.iscsi["$ref"] == "#/$defs/iscsiSpec"
               and .properties.partitions["$ref"] == "#/$defs/lifecycleMap"
               and .properties.btrfsSubvolumes["$ref"] == "#/$defs/lifecycleMap"
               and .properties.btrfsQgroups["$ref"] == "#/$defs/lifecycleMap"
@@ -328,6 +330,8 @@
               and (."$defs".operation.enum | index("grow") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
               and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
+              and (."$defs".specBody.properties.nfs["$ref"] == "#/$defs/nfsSpec")
+              and (."$defs".specBody.properties.iscsi["$ref"] == "#/$defs/iscsiSpec")
               and (."$defs".specBody.properties.disks["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.btrfsSubvolumes["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.btrfsQgroups["$ref"] == "#/$defs/lifecycleMap")
@@ -348,6 +352,13 @@
               and ."$defs".filesystem.properties.removeDevices.type == "array"
               and ."$defs".filesystem.properties.replaceDevices.type == "object"
               and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
+              and ."$defs".nfsSpec.properties.mounts["$ref"] == "#/$defs/nfsMountMap"
+              and ."$defs".nfsMount.properties.source.type == "string"
+              and ."$defs".nfsMount.properties.options.type == "array"
+              and ."$defs".iscsiSpec.properties.sessions["$ref"] == "#/$defs/lifecycleMap"
+              and ."$defs".iscsiSpec.properties.boot["$ref"] == "#/$defs/iscsiBoot"
+              and ."$defs".iscsiBoot.properties.loginAll.type == "boolean"
+              and (."$defs".iscsiBoot.properties.extraConfig.type | index("null") != null)
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
               and (."$defs".lifecycleObject.properties.partitionNumber.type | index("string") != null)
               and (."$defs".lifecycleObject.properties.partitionNumber.type | index("number") != null)

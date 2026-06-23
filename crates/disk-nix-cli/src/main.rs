@@ -538,6 +538,12 @@ fn spec_schema() -> serde_json::Value {
             "luks": {
                 "$ref": "#/$defs/luksSpec"
             },
+            "nfs": {
+                "$ref": "#/$defs/nfsSpec"
+            },
+            "iscsi": {
+                "$ref": "#/$defs/iscsiSpec"
+            },
             "disks": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -607,6 +613,8 @@ fn spec_schema() -> serde_json::Value {
                     "filesystems": { "$ref": "#/$defs/filesystemMap" },
                     "swaps": { "$ref": "#/$defs/lifecycleMap" },
                     "luks": { "$ref": "#/$defs/luksSpec" },
+                    "nfs": { "$ref": "#/$defs/nfsSpec" },
+                    "iscsi": { "$ref": "#/$defs/iscsiSpec" },
                     "disks": { "$ref": "#/$defs/lifecycleMap" },
                     "partitions": { "$ref": "#/$defs/lifecycleMap" },
                     "btrfsSubvolumes": { "$ref": "#/$defs/lifecycleMap" },
@@ -682,6 +690,61 @@ fn spec_schema() -> serde_json::Value {
                 "additionalProperties": true,
                 "properties": {
                     "devices": { "$ref": "#/$defs/lifecycleMap" }
+                }
+            },
+            "nfsSpec": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "mounts": { "$ref": "#/$defs/nfsMountMap" }
+                }
+            },
+            "nfsMountMap": {
+                "type": "object",
+                "additionalProperties": { "$ref": "#/$defs/nfsMount" }
+            },
+            "nfsMount": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "source": { "type": "string" },
+                    "device": { "type": "string" },
+                    "fsType": {
+                        "type": "string",
+                        "enum": ["nfs", "nfs4"]
+                    },
+                    "mountpoint": { "type": "string" },
+                    "options": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "neededForBoot": { "type": "boolean" },
+                    "preserveData": { "type": "boolean", "default": true }
+                }
+            },
+            "iscsiSpec": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "initiatorName": { "type": ["string", "null"] },
+                    "discoverPortal": { "type": ["string", "null"] },
+                    "enableAutoLoginOut": { "type": "boolean" },
+                    "extraConfig": { "type": "string" },
+                    "sessions": { "$ref": "#/$defs/lifecycleMap" },
+                    "boot": { "$ref": "#/$defs/iscsiBoot" }
+                }
+            },
+            "iscsiBoot": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "enable": { "type": "boolean" },
+                    "discoverPortal": { "type": ["string", "null"] },
+                    "target": { "type": ["string", "null"] },
+                    "loginAll": { "type": "boolean" },
+                    "logLevel": { "type": "integer" },
+                    "extraIscsiCommands": { "type": "string" },
+                    "extraConfig": { "type": ["string", "null"] }
                 }
             },
             "lifecycleObject": {
