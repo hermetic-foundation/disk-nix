@@ -509,6 +509,9 @@ physical-volume removal. Volume group import/export declarations render
 reviewed `vgimport <vg>` and `vgexport <vg>` commands. LVM logical volume,
 thin-pool, snapshot, and volume-group activation declarations render reviewed
 `lvchange --activate y|n <vg/lv>` or `vgchange --activate y|n <vg>` commands.
+LVM snapshot `operation = "rescan"` renders read-only `lvs` snapshot origin,
+COW usage, attribute, size, and graph inspection commands before rollback or
+removal decisions.
 Volume group `operation = "rescan"` renders `pvscan --cache`, `vgscan`, and
 `vgchange --refresh <vg>` so LVM metadata and active LV tables can be refreshed
 after lower-layer path changes without recreating the VG.

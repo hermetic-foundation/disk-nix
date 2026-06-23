@@ -414,6 +414,7 @@ Example lifecycle planning through NixOS options:
       target = "vg0/root";
       desiredSize = "20GiB";
     };
+    lvmSnapshots."vg0/root-inspect".operation = "rescan";
     lvmCaches."vg0/root" = {
       operation = "create";
       device = "vg0/root-cache";

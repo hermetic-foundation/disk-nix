@@ -359,6 +359,7 @@
                 target = "vg0/root";
                 desiredSize = "20GiB";
               };
+              lvmSnapshots."vg0/root-inspect".operation = "rescan";
               lvmCaches."vg0/root" = {
                 operation = "create";
                 device = "vg0/root-cache";
@@ -719,7 +720,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 87
+              .summary.actionCount == 88
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -756,6 +757,7 @@
               and (.actions | any(.id == "thinpools:vg0/newthin:create" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/reporting:rescan" and .risk == "online"))
               and (.actions | any(.id == "lvmsnapshots:vg0/root-snap:snapshot" and .risk == "reversible"))
+              and (.actions | any(.id == "lvmsnapshots:vg0/root-inspect:rescan" and .risk == "online"))
               and (.actions | any(.id == "lvmcaches:vg0/root:create" and .risk == "offline-required"))
               and (.actions | any(.id == "lvmCaches:vg0/root:set-property:lvm.cache-mode" and .risk == "safe"))
               and (.actions | any(.id == "lvmcaches:vg0/archive:rescan" and .risk == "online"))
@@ -1020,6 +1022,7 @@
                   and .spec.lvmSnapshots."vg0/root-snap".operation == "snapshot"
                   and .spec.lvmSnapshots."vg0/root-snap".target == "vg0/root"
                   and .spec.lvmSnapshots."vg0/root-snap".desiredSize == "20GiB"
+                  and .spec.lvmSnapshots."vg0/root-inspect".operation == "rescan"
                   and .spec.lvmCaches."vg0/root".operation == "create"
                   and .spec.lvmCaches."vg0/root".device == "vg0/root-cache"
                   and .spec.lvmCaches."vg0/root".properties."lvm.cache-mode" == "writethrough"

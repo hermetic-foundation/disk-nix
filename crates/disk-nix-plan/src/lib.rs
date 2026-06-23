@@ -3622,6 +3622,22 @@ fn classify_operation(
                 }),
             )
         }
+        Operation::Rescan if collection == "lvmSnapshots" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "LVM snapshot rescan refreshes origin, COW usage, and graph status"
+                    .to_string(),
+                alternatives: vec![
+                    "merge only after inspecting the snapshot contents and origin state"
+                        .to_string(),
+                    "activate the snapshot for recovery inspection instead of removing it"
+                        .to_string(),
+                    "verify snapshot fullness before relying on it as a recovery point"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Rename => (
             RiskClass::OfflineRequired,
             false,
@@ -4122,7 +4138,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG/LV/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4144,6 +4160,8 @@ fn classify_operation(
                     "use lvmCaches.<origin>.operation = \"rescan\" to refresh LVM cache status and utilization"
                         .to_string(),
                     "use thinPools.<pool>.operation = \"rescan\" to refresh LVM thin-pool utilization"
+                        .to_string(),
+                    "use lvmSnapshots.<vg/lv>.operation = \"rescan\" to refresh LVM snapshot status"
                         .to_string(),
                     "use snapshots.<name>.operation = \"rescan\" to refresh snapshot metadata and holds"
                         .to_string(),
@@ -4968,6 +4986,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "take a fresh snapshot before merge".to_string(),
                     "inspect the snapshot before rollback".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmSnapshot,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "LVM snapshot rescan refreshes origin and COW usage metadata"
+                    .to_string(),
+                alternatives: vec![
+                    "activate snapshots for read-only recovery inspection".to_string(),
+                    "merge only after reviewing origin and snapshot state".to_string(),
+                    "verify snapshot fullness before depending on rollback".to_string(),
                 ],
             }),
         },
@@ -7154,6 +7186,7 @@ mod tests {
                 RiskClass::PotentialDataLoss,
             ),
             (NodeKind::LvmThinPool, Operation::Rescan, RiskClass::Online),
+            (NodeKind::LvmSnapshot, Operation::Rescan, RiskClass::Online),
             (NodeKind::CacheDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::VdoVolume, Operation::Rescan, RiskClass::Online),
             (NodeKind::ZfsSnapshot, Operation::Rescan, RiskClass::Online),
@@ -9304,6 +9337,9 @@ mod tests {
                 "vg0/root-rollback": {
                   "operation": "rollback"
                 },
+                "vg0/root-inspect": {
+                  "operation": "rescan"
+                },
                 "vg0/old-snap": {
                   "destroy": true
                 }
@@ -9312,7 +9348,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 4);
         assert_eq!(plan.summary.potential_data_loss_count, 1);
         assert_eq!(plan.summary.destructive_count, 1);
         let snapshot = plan
@@ -9334,6 +9370,20 @@ mod tests {
                 .advice
                 .as_ref()
                 .is_some_and(|advice| advice.summary.contains("rolls the origin back"))
+        );
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lvmsnapshots:vg0/root-inspect:rescan")
+            .expect("rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
+        assert!(
+            rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("LVM snapshot rescan refreshes") })
         );
     }
 

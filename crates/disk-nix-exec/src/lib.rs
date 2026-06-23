@@ -701,6 +701,26 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Rescan if collection == Some("lvmSnapshots") => (
+            vec![
+                command(
+                    ["lvs", "--reportformat", "json", target],
+                    false,
+                    "verify LVM snapshot origin, attributes, and COW usage after rescan",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled LVM snapshot graph relationships after rescan",
+                ),
+            ],
+            vec![
+                "snapshot origin, activation state, and COW usage match the refreshed topology"
+                    .to_string(),
+                "dependent filesystems or recovery mounts still resolve after snapshot status refresh"
+                    .to_string(),
+            ],
+        ),
         Operation::Create if collection == Some("volumeGroups") => (
             vec![
                 command(
@@ -5059,6 +5079,29 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         "{verb} only after filesystem, mapping, mount, and service consumers are reviewed"
                     ),
                     "activation state changes do not create or delete LV data".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("lvmSnapshots") => {
+            let target = lvm_volume_target_path(target);
+            (
+                vec![
+                    lvm_lvs_report_command(
+                        target,
+                        Some("lv_name,origin,lv_attr,data_percent,metadata_percent,lv_size"),
+                        "refresh LVM snapshot origin, attributes, and COW usage",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target.unwrap_or("<lvm-snapshot>")],
+                        false,
+                        "inspect modeled LVM snapshot graph relationships after status refresh",
+                    ),
+                ],
+                vec![
+                    "use rollback only after reviewing origin and snapshot state".to_string(),
+                    "activate the snapshot for recovery inspection before destructive removal"
+                        .to_string(),
                 ],
                 true,
             )
@@ -15403,6 +15446,9 @@ mod tests {
                   "vg0/root-rollback": {
                     "operation": "rollback"
                   },
+                  "vg0/root-inspect": {
+                    "operation": "rescan"
+                  },
                   "vg0/old-snap": {
                     "destroy": true
                   }
@@ -15437,6 +15483,24 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["lvremove", "--yes", "vg0/old-snap"])
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lvmsnapshots:vg0/root-inspect:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvs",
+                            "--reportformat",
+                            "json",
+                            "-o",
+                            "lv_name,origin,lv_attr,data_percent,metadata_percent,lv_size",
+                            "vg0/root-inspect",
+                        ]
+                })
+        }));
         assert!(
             !report.command_plan.iter().any(|step| {
                 step.commands
@@ -15449,6 +15513,12 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["lvs", "--reportformat", "json", "vg0/root-snap"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "lvmsnapshots:vg0/root-inspect:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvs", "--reportformat", "json", "vg0/root-inspect"]
+                })
         }));
     }
 

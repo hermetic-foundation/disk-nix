@@ -118,6 +118,9 @@
       "operation": "snapshot",
       "target": "vg0/root",
       "desiredSize": "20GiB"
+    },
+    "vg0/root-inspect": {
+      "operation": "rescan"
     }
   },
   "lvmCaches": {

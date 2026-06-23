@@ -188,7 +188,9 @@ Examples:
   metadata, monitoring, and graph status before later allocation or growth.
 - LVM snapshot creation is reversible; snapshot merge rollback is potential
   data loss; snapshot removal is destructive because it deletes a recovery
-  point.
+  point. LVM snapshot `operation = "rescan"` is online and read-only; it
+  refreshes origin, COW usage, attributes, size, and graph relationships before
+  rollback, activation, or removal decisions.
 - Loop-device creation and capacity refresh are online; detach is
   offline-required because mounts, mappers, and other consumers must be stopped
   before the mapping is removed.

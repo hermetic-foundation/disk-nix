@@ -188,7 +188,7 @@ format/resize/open/close/keyslot/token workflows, Btrfs subvolume
 creation/deletion, VDO create/grow/rescan/remove, LVM
 physical-volume create/grow/rescan/remove, logical-volume growth/removal,
 LVM volume-group extension/device removal, LVM thin-pool create/grow/rescan/remove,
-LVM snapshot create/merge/remove, LVM cache attach/detach/property updates,
+LVM snapshot create/rescan/merge/remove, LVM cache attach/detach/property updates,
 loop-device mapping updates, MD RAID lifecycle/member updates, multipath map
 updates, NVMe namespace create/attach/rescan/detach/delete workflows, ZFS pool
 topology updates, dataset and zvol updates including zvol property changes,
