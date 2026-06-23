@@ -62,7 +62,8 @@ Examples:
 - `removeDevices = [ ... ]` is classified as potential data loss and recommends
   replacement capacity, evacuation, and health verification. Btrfs filesystem
   device removal also verifies allocation state with `btrfs filesystem usage`
-  before any future `btrfs device remove` workflow is reviewed.
+  before rendering the reviewed `btrfs device remove <device> <mountpoint>`
+  command.
 - Btrfs filesystem `operation = "rebalance"` renders `btrfs balance start`.
   Optional `properties.balance.data`, `properties.balance.metadata`, and
   `properties.balance.system` values become `-d`, `-m`, and `-s` balance
