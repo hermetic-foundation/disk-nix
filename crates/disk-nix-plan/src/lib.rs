@@ -1071,6 +1071,25 @@ fn add_luks_actions(actions: &mut Vec<PlannedAction>, name: &str, luks: &Value) 
                 ],
             }),
         }),
+        Some(Operation::Destroy) => actions.push(PlannedAction {
+            id: format!("luks.devices:{name}:destroy"),
+            description: format!("close LUKS mapping {mapper_name} without formatting {device}"),
+            operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context,
+            advice: Some(Advice {
+                summary: "closing a LUKS mapper requires dependent layers to be stopped"
+                    .to_string(),
+                alternatives: vec![
+                    "unmount filesystems and deactivate LVM volumes before closing the mapper"
+                        .to_string(),
+                    "leave the LUKS header and backing device intact for later reopen".to_string(),
+                    "use preserveData=false only when reformatting is explicitly intended"
+                        .to_string(),
+                ],
+            }),
+        }),
         Some(Operation::Create | Operation::Format) => actions.push(luks_format_action(
             name,
             &device,
@@ -2977,6 +2996,11 @@ mod tests {
                     "name": "cryptscratch",
                     "device": "/dev/disk/by-id/scratch",
                     "preserveData": false
+                  },
+                  "cryptold": {
+                    "name": "cryptold",
+                    "device": "/dev/disk/by-id/old-luks",
+                    "operation": "destroy"
                   }
                 }
               }
@@ -2984,8 +3008,8 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 4);
-        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.action_count, 5);
+        assert_eq!(plan.summary.offline_required_count, 3);
         assert_eq!(plan.summary.destructive_count, 2);
 
         let swap = plan
@@ -3009,6 +3033,19 @@ mod tests {
         assert_eq!(
             luks.context.device.as_deref(),
             Some("/dev/disk/by-partuuid/root")
+        );
+
+        let close = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:cryptold:destroy")
+            .expect("luks close action exists");
+        assert_eq!(close.risk, RiskClass::OfflineRequired);
+        assert!(!close.destructive);
+        assert_eq!(close.context.target.as_deref(), Some("cryptold"));
+        assert_eq!(
+            close.context.device.as_deref(),
+            Some("/dev/disk/by-id/old-luks")
         );
     }
 

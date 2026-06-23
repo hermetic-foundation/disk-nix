@@ -155,7 +155,7 @@ emits advisory command and verification plans, and can write those plans to a
 reviewable shell script with `--script-out`. The `--execute` flag is
 intentionally refused until a direct mutating executor exists.
 Planner coverage includes filesystem resize intent, disk and partition
-lifecycle declarations, swap signature/resize workflows, LUKS format/resize
+lifecycle declarations, swap signature/resize workflows, LUKS format/resize/close
 workflows, Btrfs subvolume creation/deletion, VDO create/grow/remove, LVM
 thin-pool create/grow/remove, LVM snapshot create/merge/remove, loop-device
 mapping updates, MD RAID member updates, multipath map updates, ZFS pool,
@@ -168,6 +168,8 @@ domain-specific `btrfs device remove` rendering for review, while remaining
 blocked by the current potential-data-loss policy gate.
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit.
+LUKS close plans render offline-policy-gated `cryptsetup close` commands and
+verify the topology without erasing the backing LUKS header or encrypted data.
 Disk initialization plans render destructive-policy-gated `parted mklabel` and
 partition table reread steps after disk identity inspection.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands

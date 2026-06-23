@@ -315,6 +315,8 @@ blocked while potential-data-loss actions have no explicit apply override.
 Swapfile growth command plans render `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon`; block-device swap growth keeps the backing resize command
 non-ready until the partition, LV, LUN, or other backing layer is selected.
+LUKS close command plans render offline-policy-gated `cryptsetup close` steps
+and keep the backing LUKS container intact for later reopen.
 Disk initialization plans render policy-gated `parted mklabel` and partition
 table reread commands after inspecting the target disk.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands

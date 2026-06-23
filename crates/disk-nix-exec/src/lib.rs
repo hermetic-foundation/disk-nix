@@ -1258,6 +1258,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "mapper name and backing device match the desired declaration".to_string(),
             ],
         ),
+        Operation::Destroy if collection == Some("luks.devices") => (
+            vec![
+                command(
+                    ["cryptsetup", "status", target],
+                    false,
+                    "confirm LUKS mapper is closed or absent after close",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "verify dependent graph no longer references the mapper",
+                ),
+            ],
+            vec![
+                "mapper is inactive or absent after close".to_string(),
+                "backing LUKS device remains intact unless a separate format action was requested"
+                    .to_string(),
+            ],
+        ),
         Operation::Destroy if collection == Some("btrfsSubvolumes") => (
             vec![command(
                 ["disk-nix", "topology", "--json"],
@@ -2255,6 +2274,30 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "verify header backups and key enrollment policy before formatting"
                         .to_string(),
                     "create filesystems or LVM layers only after the mapper is open".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("luks.devices") => {
+            let mapper = target.unwrap_or("<mapper>");
+            (
+                vec![
+                    command(
+                        ["cryptsetup", "status", mapper],
+                        false,
+                        "inspect open LUKS mapper before close",
+                    ),
+                    command(
+                        ["cryptsetup", "close", mapper],
+                        true,
+                        "close the reviewed LUKS mapper without erasing backing data",
+                    ),
+                ],
+                vec![
+                    "unmount filesystems and deactivate LVM volumes before closing the mapper"
+                        .to_string(),
+                    "verify no services still depend on the mapper path".to_string(),
+                    "keep the backing LUKS header intact for later reopen".to_string(),
                 ],
                 true,
             )
@@ -4001,6 +4044,11 @@ mod tests {
                       "name": "cryptroot",
                       "device": "/dev/disk/by-partuuid/root",
                       "operation": "grow"
+                    },
+                    "cryptold": {
+                      "name": "cryptold",
+                      "device": "/dev/disk/by-id/old-luks",
+                      "operation": "destroy"
                     }
                   }
                 }
@@ -4018,7 +4066,7 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_plan.len(), 3);
+        assert_eq!(report.command_plan.len(), 4);
         assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
@@ -4035,12 +4083,27 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["cryptsetup", "resize", "cryptroot"])
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptold:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "close", "cryptold"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "swaps:scratch:grow"
                 && step
                     .commands
                     .iter()
                     .any(|command| command.argv == ["swapon", "--show", "--bytes", "--raw"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "luks.devices:cryptold:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
         }));
     }
 

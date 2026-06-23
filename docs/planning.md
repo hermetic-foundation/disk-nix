@@ -73,8 +73,10 @@ Examples:
   offline-required because active swap must be disabled before backing storage
   and signatures are changed. Swapfile growth can render a concrete file resize
   command; block-device swap growth must use the backing storage layer first.
-- LUKS format/create is destructive; LUKS growth is offline-required because
-  backing capacity, mapper state, and dependent consumers must be coordinated.
+- LUKS format/create is destructive; LUKS growth and mapper close are
+  offline-required because backing capacity, mapper state, and dependent
+  consumers must be coordinated. Mapper close keeps the LUKS header and backing
+  data intact unless a separate format action is requested.
 - Btrfs subvolume creation is online, while destruction is destructive and
   suggests read-only snapshots or rename-first validation.
 - VDO creation and removal are destructive because they write or remove VDO
