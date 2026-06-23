@@ -1125,6 +1125,23 @@ fn classify_filesystem_property_change(
     fs_type: &str,
     property: &str,
 ) -> (RiskClass, Option<Advice>) {
+    if is_filesystem_uuid_property_supported(fs_type, property) {
+        return (
+            RiskClass::OfflineRequired,
+            Some(Advice {
+                summary: format!(
+                    "{fs_type} filesystem UUID updates mutate filesystem identity metadata"
+                ),
+                alternatives: vec![
+                    "prefer updating references to the current UUID when possible".to_string(),
+                    "update NixOS fileSystems, initrd, bootloader, and dependent mount references before changing the UUID"
+                        .to_string(),
+                    "perform UUID changes with the filesystem unmounted and a recovery path available"
+                        .to_string(),
+                ],
+            }),
+        );
+    }
     if is_filesystem_property_supported(fs_type, property) {
         return (RiskClass::Safe, None);
     }
@@ -1138,6 +1155,8 @@ fn classify_filesystem_property_change(
             alternatives: vec![
                 "use label, filesystem.label, btrfs.label, ext.label, or xfs.label when changing filesystem labels"
                     .to_string(),
+                "use uuid, filesystem.uuid, ext.uuid, or xfs.uuid when changing supported filesystem UUIDs"
+                    .to_string(),
                 "use ZFS dataset declarations for arbitrary zfs set property updates".to_string(),
                 "apply unsupported filesystem property changes manually after reviewing filesystem-specific tooling"
                     .to_string(),
@@ -1150,12 +1169,33 @@ fn is_filesystem_property_supported(fs_type: &str, property: &str) -> bool {
     match fs_type {
         "btrfs" => matches!(property, "label" | "btrfs.label" | "filesystem.label"),
         "ext2" | "ext3" | "ext4" => {
-            matches!(property, "label" | "ext.label" | "filesystem.label")
+            matches!(
+                property,
+                "label"
+                    | "ext.label"
+                    | "filesystem.label"
+                    | "uuid"
+                    | "ext.uuid"
+                    | "filesystem.uuid"
+            )
         }
-        "xfs" => matches!(property, "label" | "xfs.label" | "filesystem.label"),
+        "xfs" => matches!(
+            property,
+            "label" | "xfs.label" | "filesystem.label" | "uuid" | "xfs.uuid" | "filesystem.uuid"
+        ),
         "zfs" => true,
         _ => false,
     }
+}
+
+fn is_filesystem_uuid_property_supported(fs_type: &str, property: &str) -> bool {
+    matches!(
+        (fs_type, property),
+        (
+            "ext2" | "ext3" | "ext4",
+            "uuid" | "ext.uuid" | "filesystem.uuid"
+        ) | ("xfs", "uuid" | "xfs.uuid" | "filesystem.uuid")
+    )
 }
 
 fn is_btrfs_balance_filter_property(property: &str) -> bool {
@@ -3175,10 +3215,12 @@ pub fn default_capabilities() -> Vec<Capability> {
             operation: Operation::SetProperty,
             risk: RiskClass::Safe,
             advice: Some(Advice {
-                summary: "supported filesystem property updates reconcile labels and ZFS filesystem properties"
+                summary: "supported filesystem property updates reconcile labels, selected UUIDs, and ZFS filesystem properties"
                     .to_string(),
                 alternatives: vec![
-                    "use filesystem label aliases for Btrfs and ext filesystems".to_string(),
+                    "use filesystem label aliases for Btrfs, ext, and XFS filesystems"
+                        .to_string(),
+                    "treat ext and XFS UUID changes as offline identity changes".to_string(),
                     "model arbitrary ZFS filesystem properties through ZFS dataset declarations"
                         .to_string(),
                 ],
@@ -4946,6 +4988,63 @@ mod tests {
             .find(|action| action.id == "filesystems:scratch:set-property:xfs.reflink")
             .expect("unsupported XFS property action should exist");
         assert_eq!(unsupported.risk, RiskClass::Unsupported);
+    }
+
+    #[test]
+    fn plan_classifies_ext_and_xfs_uuid_updates_as_offline_required() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "home": {
+                  "mountpoint": "/home",
+                  "device": "/dev/disk/by-label/home",
+                  "fsType": "ext4",
+                  "properties": {
+                    "ext.uuid": "11111111-2222-3333-4444-555555555555"
+                  }
+                },
+                "scratch": {
+                  "mountpoint": "/scratch",
+                  "device": "/dev/disk/by-label/scratch",
+                  "fsType": "xfs",
+                  "properties": {
+                    "filesystem.uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.unsupported_count, 0);
+        let ext_uuid = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:home:set-property:ext.uuid")
+            .expect("Ext UUID property action should exist");
+        assert_eq!(ext_uuid.operation, Operation::SetProperty);
+        assert_eq!(ext_uuid.risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            ext_uuid.context.property_value.as_deref(),
+            Some("11111111-2222-3333-4444-555555555555")
+        );
+        assert!(ext_uuid.advice.as_ref().is_some_and(|advice| {
+            advice.summary.contains("UUID")
+                && advice
+                    .alternatives
+                    .iter()
+                    .any(|alternative| alternative.contains("NixOS fileSystems"))
+        }));
+
+        let xfs_uuid = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:scratch:set-property:filesystem.uuid")
+            .expect("XFS UUID property action should exist");
+        assert_eq!(xfs_uuid.risk, RiskClass::OfflineRequired);
+        assert_eq!(xfs_uuid.context.fs_type.as_deref(), Some("xfs"));
     }
 
     #[test]

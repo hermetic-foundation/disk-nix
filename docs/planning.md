@@ -379,8 +379,11 @@ Btrfs filesystem label property updates render
 `btrfs filesystem label <path> <label>`. Ext filesystem label updates render
 `e2label <device> <label>` when the filesystem declaration includes a backing
 device. XFS filesystem label updates render `xfs_admin -L <label> <device>`.
-Missing devices stay marked `needs-domain-implementation`, while unsupported
-filesystem property keys are classified as unsupported before execution.
+Ext and XFS filesystem UUID updates render `tune2fs -U <uuid> <device>` and
+`xfs_admin -U <uuid> <device>` and are offline-required because they mutate
+filesystem identity used by mounts and boot paths. Missing devices stay marked
+`needs-domain-implementation`, while unsupported filesystem property keys are
+classified as unsupported before execution.
 Btrfs subvolume property updates only treat read-only aliases (`readOnly`,
 `readonly`, `ro`, `btrfs.readonly`, and `btrfs.ro`) as safe planned property
 changes. Other Btrfs subvolume property keys are classified as unsupported so

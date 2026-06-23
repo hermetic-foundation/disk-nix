@@ -5087,6 +5087,18 @@ fn xfs_filesystem_property_command(
             ["filesystem source device"],
             "set the XFS filesystem label after resolving the backing device",
         ),
+        ("uuid" | "xfs.uuid" | "filesystem.uuid", Some(device)) => command(
+            ["xfs_admin", "-U", value, device],
+            true,
+            "set the XFS filesystem UUID on the reviewed unmounted backing device",
+        ),
+        ("uuid" | "xfs.uuid" | "filesystem.uuid", None) => command_with_readiness(
+            ["xfs_admin", "-U", value, "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "set the XFS filesystem UUID after resolving the backing device",
+        ),
         _ => command_with_readiness(
             ["<xfs-filesystem-property-tool>", target, property],
             true,
@@ -5124,6 +5136,18 @@ fn ext_filesystem_property_command(
             CommandReadiness::NeedsDomainImplementation,
             ["filesystem source device"],
             "set the Ext filesystem label after resolving the backing device",
+        ),
+        ("uuid" | "ext.uuid" | "filesystem.uuid", Some(device)) => command(
+            ["tune2fs", "-U", value, device],
+            true,
+            "set the Ext filesystem UUID on the reviewed unmounted backing device",
+        ),
+        ("uuid" | "ext.uuid" | "filesystem.uuid", None) => command_with_readiness(
+            ["tune2fs", "-U", value, "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "set the Ext filesystem UUID after resolving the backing device",
         ),
         _ => command_with_readiness(
             ["<ext-filesystem-property-tool>", target, property],
@@ -8295,6 +8319,89 @@ mod tests {
             step.action_id == "filesystems:missing-device:set-property:xfs.label"
                 && step.commands.iter().any(|command| {
                     command.argv == ["xfs_admin", "-L", "archive-new", "<filesystem-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+    }
+
+    #[test]
+    fn filesystem_uuid_updates_render_domain_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "home": {
+                    "mountpoint": "/home",
+                    "device": "/dev/disk/by-label/home",
+                    "fsType": "ext4",
+                    "properties": {
+                      "ext.uuid": "11111111-2222-3333-4444-555555555555"
+                    }
+                  },
+                  "scratch": {
+                    "mountpoint": "/scratch",
+                    "device": "/dev/disk/by-label/scratch",
+                    "fsType": "xfs",
+                    "properties": {
+                      "filesystem.uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+                    }
+                  },
+                  "missing-device": {
+                    "mountpoint": "/archive",
+                    "fsType": "xfs",
+                    "properties": {
+                      "uuid": "ffffffff-1111-2222-3333-444444444444"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:home:set-property:ext.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "tune2fs",
+                            "-U",
+                            "11111111-2222-3333-4444-555555555555",
+                            "/dev/disk/by-label/home",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:set-property:filesystem.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "xfs_admin",
+                            "-U",
+                            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                            "/dev/disk/by-label/scratch",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:missing-device:set-property:uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "xfs_admin",
+                            "-U",
+                            "ffffffff-1111-2222-3333-444444444444",
+                            "<filesystem-device>",
+                        ]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["filesystem source device"]
                 })

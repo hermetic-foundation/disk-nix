@@ -200,9 +200,11 @@ Regular Btrfs filesystem label updates render
 `btrfs filesystem label <path> <label>`. Ext filesystem label updates render
 `e2label <device> <label>` when the declaration includes an explicit backing
 device. XFS filesystem label updates render `xfs_admin -L <label> <device>`.
-Missing backing devices keep the command non-ready until the source device is
-resolved. Unsupported filesystem properties are classified as unsupported so
-apply policy blocks them until a domain-specific command mapping exists.
+Ext and XFS filesystem UUID updates render `tune2fs -U <uuid> <device>` and
+`xfs_admin -U <uuid> <device>` as offline-required identity changes. Missing
+backing devices keep the command non-ready until the source device is resolved.
+Unsupported filesystem properties are classified as unsupported so apply policy
+blocks them until a domain-specific command mapping exists.
 Filesystem shrink plans render Btrfs usage checks and `btrfs filesystem resize`
 commands when a desired size is declared. Ext shrink plans render source
 resolution, unmount, `e2fsck`, and `resize2fs` steps. Ext grow and shrink
