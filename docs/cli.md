@@ -398,19 +398,19 @@ and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
 ZFS snapshot rollback declarations render reviewed `zfs rollback` command
 details internally, but apply remains blocked as potential data loss.
 `verificationSummary` and `verificationPlan` record read-only commands and
-state checks that should run after a future mutating executor or manual apply
-finishes. These checks re-probe the relevant graph node and include
-domain-specific commands such as `findmnt`, `lvs`, `zpool status`,
-`zfs list`, `btrfs filesystem usage`, `lsblk`, or `exportfs` when the
-planned action has enough context.
+state checks that run after a successful `--execute` command phase or can be
+used for manual review after applying a generated script. These checks re-probe
+the relevant graph node and include domain-specific commands such as `findmnt`,
+`lvs`, `zpool status`, `zfs list`, `btrfs filesystem usage`, `lsblk`, or
+`exportfs` when the planned action has enough context.
 
 `--script-out <path>` writes an executable bash script after policy validation
 passes. The script contains the allowed command plan, manual-review notes,
 unresolved-input comments for non-ready commands, and post-apply verification
-commands. `disk-nix` still does not run mutating storage commands directly.
+commands.
 `--report-out <path>` writes the JSON report before returning blocked-policy or
-executor-unavailable failures, so automation can archive the exact decision
-record even when `apply` exits nonzero.
+not-ready or failed-execution results, so automation can archive the exact
+decision record even when `apply` exits nonzero.
 
 ## Validation
 

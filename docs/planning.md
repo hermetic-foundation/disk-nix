@@ -262,18 +262,20 @@ does not remove actions from the plan.
 
 `disk-nix apply --spec <path>` reads the same document as `plan`, evaluates the
 planned actions against the top-level `apply` policy, and reports whether each
-action is allowed or blocked. It does not mutate storage yet.
+action is allowed or blocked. By default it is a dry run. With `--execute`, it
+requires a fully ready command plan before running any storage command.
 
 Apply reports include `blockedSummary` counters for offline-required,
 destructive, potential-data-loss, and unsupported blocked actions in addition
 to the detailed blocked action list. When policy allows an action, the report
-also includes a `commandSummary` plus a `commandPlan` with non-executed command
+also includes a `commandSummary` plus a `commandPlan` with planned command
 argv, mutation markers, manual-review flags, readiness, unresolved inputs, and
 notes. If `--probe-current` is set, the report also includes the same
 `topologyComparison` emitted by `plan`. It also includes a
 `verificationSummary` plus a `verificationPlan` with read-only post-apply
-commands and checks for the relevant storage domain. These plans are
-intentionally advisory until the executor can run mutating commands directly.
+commands and checks for the relevant storage domain. Executed reports also
+include `executionResults` with command phase, argv, success, exit status,
+stdout, and stderr for each command that ran.
 Cache command plans include bcache-aware sysfs updates for existing cache-set
 attachment, cache-mode property changes, dirty-data checks, and replacement
 scaffolding that remains marked as needing domain implementation until the
@@ -298,8 +300,8 @@ declared data, metadata, and system filters from lifecycle properties.
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.
 `disk-nix apply --report-out <path>` writes the JSON report before returning a
-blocked-policy or executor-unavailable error, preserving the decision record
-for automation and review.
+blocked-policy, not-ready, or failed-execution error, preserving the decision
+record for automation and review.
 `disk-nix validate --spec <path>` emits the same dry-run report but treats
 blocked policy as a successful command result, making it the better fit for
 CI, preflight checks, and NixOS validation paths that need to inspect blocked

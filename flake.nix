@@ -279,10 +279,16 @@
             lifecycleValidate=$(mktemp)
             lifecycleApplyReport=$(mktemp)
             lifecycleValidateReport=$(mktemp)
+            emptySpec=$(mktemp)
+            emptyExecute=$(mktemp)
             schema=$(mktemp)
             scriptOut=$(mktemp)
 
             ${diskNix}/bin/disk-nix --help | grep -- 'usage'
+            if grep -R -E 'executor-unavailable|does not mutate storage yet|future mutating executor|does not run mutating storage commands directly|non-executed command' ${./README.md} ${./docs}; then
+              echo "stale executor documentation found" >&2
+              exit 1
+            fi
             ${diskNix}/bin/disk-nix schema > "$schema"
             cmp "$schema" ${diskNix}/share/disk-nix/schema/disk-nix-spec.schema.json
             jq -e '
@@ -390,6 +396,16 @@
             test -x "$scriptOut"
             grep -- 'xfs_growfs /' "$scriptOut"
             grep -- 'Post-apply verification commands' "$scriptOut"
+
+            printf '%s\n' '{"spec":{},"apply":{}}' > "$emptySpec"
+            ${diskNix}/bin/disk-nix apply --spec "$emptySpec" --execute --json > "$emptyExecute"
+            jq -e '
+              .status == "succeeded"
+              and .apply.blockedCount == 0
+              and .commandSummary.commandCount == 0
+              and .verificationSummary.commandCount == 0
+              and (.executionResults | length) == 0
+            ' "$emptyExecute"
 
             if ${diskNix}/bin/disk-nix apply --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleApplyReport" --json > "$lifecycleApply"; then
               echo "expected lifecycle example apply to be blocked" >&2

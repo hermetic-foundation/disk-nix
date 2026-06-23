@@ -84,7 +84,7 @@ The planner classifies every action:
 Dangerous or unsupported requests should return actionable alternatives instead
 of only failing.
 
-The execution boundary must remain policy-gated. Until a real command runner
-exists, `disk-nix-exec` only emits dry-run, blocked, or executor-unavailable
-reports with advisory topology comparison, command, verification, and shell
-script plans.
+The execution boundary must remain policy-gated. `disk-nix-exec` emits dry-run
+reports by default, refuses blocked or not-ready plans, and can run fully ready
+command plans with `--execute`. Execution records command and verification
+results so automation can audit what ran and where failures stopped the plan.
