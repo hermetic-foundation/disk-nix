@@ -179,9 +179,10 @@ Cache apply plans include bcache-aware attach, detach, cache-mode, dirty-data,
 and replacement review steps instead of a generic cache placeholder. bcache
 sysfs commands require a concrete `/dev/bcache*` target; logical cache names
 remain non-ready until the backing bcache device path is declared.
-Btrfs filesystem device-removal plans include allocation inspection and
-domain-specific `btrfs device remove` rendering for review, while remaining
-blocked by the current potential-data-loss policy gate.
+Btrfs filesystem device topology plans render `btrfs device add`,
+`btrfs replace start`, and allocation-inspected `btrfs device remove` commands
+for review. Removal remains blocked by the current potential-data-loss policy
+gate.
 Btrfs filesystem rebalance plans render `btrfs balance start` and use declared
 data, metadata, and system balance filters from lifecycle properties when set.
 Regular Btrfs filesystem label updates render

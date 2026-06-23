@@ -316,8 +316,10 @@ when the pool layout supports evacuation. LVM volume group device removal
 renders reviewed `pvmove <pv>` then `vgreduce <vg> <pv>` steps so allocated
 extents are evacuated before the physical volume is reduced. These remain
 potential-data-loss intents unless a safer explicit workflow is selected.
-Btrfs filesystem rebalance plans render `btrfs balance start` with optional
-declared data, metadata, and system filters from lifecycle properties.
+Btrfs filesystem device topology plans support add, replace, and remove
+operations. Removal stays potential-data-loss, while rebalance plans render
+`btrfs balance start` with optional declared data, metadata, and system filters
+from lifecycle properties.
 Btrfs filesystem label property updates render
 `btrfs filesystem label <path> <label>`. Ext filesystem label updates render
 `e2label <device> <label>` when the filesystem declaration includes a backing

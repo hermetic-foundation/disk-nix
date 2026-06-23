@@ -2890,6 +2890,33 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::BtrfsFilesystem,
+            operation: Operation::AddDevice,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "adding a Btrfs device expands the mounted filesystem device set"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the new block device identity before adding it".to_string(),
+                    "run a filtered balance after adding capacity when profiles need reshaping"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsFilesystem,
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "Btrfs device replacement must preserve live filesystem availability"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement capacity before removing a failing device".to_string(),
+                    "monitor btrfs replace status until the operation completes".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsFilesystem,
             operation: Operation::RemoveDevice,
             risk: RiskClass::PotentialDataLoss,
             advice: Some(Advice {
@@ -3641,6 +3668,37 @@ mod tests {
             assert_eq!(capability.risk, RiskClass::Safe);
             assert!(capability.advice.is_some());
         }
+    }
+
+    #[test]
+    fn btrfs_filesystem_capabilities_cover_device_topology_updates() {
+        let capabilities = default_capabilities();
+        let add = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsFilesystem
+                    && capability.operation == Operation::AddDevice
+            })
+            .expect("Btrfs filesystem add-device capability should exist");
+        let replace = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsFilesystem
+                    && capability.operation == Operation::ReplaceDevice
+            })
+            .expect("Btrfs filesystem replace-device capability should exist");
+        let remove = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsFilesystem
+                    && capability.operation == Operation::RemoveDevice
+            })
+            .expect("Btrfs filesystem remove-device capability should exist");
+
+        assert_eq!(add.risk, RiskClass::Online);
+        assert_eq!(replace.risk, RiskClass::OfflineRequired);
+        assert_eq!(remove.risk, RiskClass::PotentialDataLoss);
+        assert!(replace.advice.is_some());
     }
 
     #[test]
