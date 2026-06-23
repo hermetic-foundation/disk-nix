@@ -2730,7 +2730,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Create if collection == Some("exports") => {
-            let target = target.unwrap_or("<export-path>");
+            let target = export_target_path(action);
             (
                 vec![nfs_export_create_command(
                     target,
@@ -3477,7 +3477,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Destroy if collection == Some("exports") => {
-            let target = target.unwrap_or("<export-path>");
+            let target = export_target_path(action);
             (
                 vec![nfs_export_destroy_command(
                     target,
@@ -4515,61 +4515,51 @@ fn scsi_device_delete_command(device: &str) -> ExecutionCommand {
 }
 
 fn nfs_export_create_command(
-    target: &str,
+    target: Option<&str>,
     client: Option<&str>,
     options: Option<&str>,
 ) -> ExecutionCommand {
-    match (client, options) {
-        (Some(client), Some(options)) => command_vec(
+    let target_arg = target.unwrap_or("<export-path>");
+    let mut missing = Vec::new();
+    if target.is_none() {
+        missing.push("NFS export path");
+    }
+    if client.is_none() {
+        missing.push("NFS client selector");
+    }
+    if options.is_none() {
+        missing.push("NFS export options");
+    }
+
+    match (target, client, options) {
+        (Some(_), Some(client), Some(options)) => command_vec(
             vec![
                 "exportfs".to_string(),
                 "-i".to_string(),
                 "-o".to_string(),
                 options.to_string(),
-                format!("{client}:{target}"),
+                format!("{client}:{target_arg}"),
             ],
             true,
             "export an existing path to the selected NFS client set with reviewed options",
         ),
-        (Some(client), None) => command_vec_with_readiness(
-            vec![
-                "exportfs".to_string(),
-                "-i".to_string(),
-                "-o".to_string(),
-                "<options>".to_string(),
-                format!("{client}:{target}"),
-            ],
-            true,
-            CommandReadiness::NeedsDomainImplementation,
-            ["NFS export options"],
-            "export the path after selecting explicit NFS options",
-        ),
-        (None, Some(options)) => command_vec_with_readiness(
-            vec![
-                "exportfs".to_string(),
-                "-i".to_string(),
-                "-o".to_string(),
-                options.to_string(),
-                format!("<client>:{target}"),
-            ],
-            true,
-            CommandReadiness::NeedsDomainImplementation,
-            ["NFS client selector"],
-            "export the path after selecting the client or network selector",
-        ),
-        (None, None) => command_vec_with_readiness(
-            vec![
-                "exportfs".to_string(),
-                "-i".to_string(),
-                "-o".to_string(),
-                "<options>".to_string(),
-                format!("<client>:{target}"),
-            ],
-            true,
-            CommandReadiness::NeedsDomainImplementation,
-            ["NFS client selector", "NFS export options"],
-            "export the path after selecting clients and options",
-        ),
+        _ => {
+            let client_arg = client.unwrap_or("<client>");
+            let options_arg = options.unwrap_or("<options>");
+            command_vec_with_readiness(
+                vec![
+                    "exportfs".to_string(),
+                    "-i".to_string(),
+                    "-o".to_string(),
+                    options_arg.to_string(),
+                    format!("{client_arg}:{target_arg}"),
+                ],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                missing,
+                "export the path after selecting clients, options, and a local export path",
+            )
+        }
     }
 }
 
@@ -4582,7 +4572,11 @@ fn nfs_export_property_command(
 ) -> ExecutionCommand {
     match property {
         "options" | "nfs.options" | "exportOptions" | "export-options" => {
-            nfs_export_create_command(target, client, property_value.or(existing_options))
+            nfs_export_create_command(
+                path_like_target(target),
+                client,
+                property_value.or(existing_options),
+            )
         }
         _ => command_with_readiness(
             ["exportfs", "-ra"],
@@ -4594,28 +4588,53 @@ fn nfs_export_property_command(
     }
 }
 
-fn nfs_export_destroy_command(target: &str, client: Option<&str>) -> ExecutionCommand {
-    match client {
-        Some(client) => command_vec(
+fn export_target_path(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .target
+        .as_deref()
+        .and_then(path_like_target)
+        .or_else(|| action.context.name.as_deref().and_then(path_like_target))
+}
+
+fn path_like_target(target: &str) -> Option<&str> {
+    target.starts_with('/').then_some(target)
+}
+
+fn nfs_export_destroy_command(target: Option<&str>, client: Option<&str>) -> ExecutionCommand {
+    let target_arg = target.unwrap_or("<export-path>");
+    let mut missing = Vec::new();
+    if target.is_none() {
+        missing.push("NFS export path");
+    }
+    if client.is_none() {
+        missing.push("NFS client selector");
+    }
+
+    match (target, client) {
+        (Some(_), Some(client)) => command_vec(
             vec![
                 "exportfs".to_string(),
                 "-u".to_string(),
-                format!("{client}:{target}"),
+                format!("{client}:{target_arg}"),
             ],
             true,
             "unexport the reviewed NFS path for the selected client set",
         ),
-        None => command_vec_with_readiness(
-            vec![
-                "exportfs".to_string(),
-                "-u".to_string(),
-                format!("<client>:{target}"),
-            ],
-            true,
-            CommandReadiness::NeedsDomainImplementation,
-            ["NFS client selector"],
-            "unexport the path after selecting the client or network selector",
-        ),
+        _ => {
+            let client_arg = client.unwrap_or("<client>");
+            command_vec_with_readiness(
+                vec![
+                    "exportfs".to_string(),
+                    "-u".to_string(),
+                    format!("{client_arg}:{target_arg}"),
+                ],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                missing,
+                "unexport the path after selecting the client and local export path",
+            )
+        }
     }
 }
 
@@ -8949,6 +8968,59 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["exportfs", "-v"])
+        }));
+    }
+
+    #[test]
+    fn nfs_export_lifecycle_requires_path_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "exports": {
+                  "share": {
+                    "operation": "create",
+                    "client": "192.0.2.0/24",
+                    "options": "rw,sync,no_subtree_check"
+                  },
+                  "oldshare": {
+                    "destroy": true,
+                    "client": "192.0.2.55"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "exports:share:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "exportfs",
+                            "-i",
+                            "-o",
+                            "rw,sync,no_subtree_check",
+                            "192.0.2.0/24:<export-path>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["NFS export path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "exports:oldshare:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["exportfs", "-u", "192.0.2.55:<export-path>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["NFS export path"]
+                })
         }));
     }
 }
