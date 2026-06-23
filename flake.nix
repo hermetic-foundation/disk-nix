@@ -120,6 +120,21 @@
                 resizePolicy = "grow-only";
                 desiredSize = "100%";
               };
+              filesystems.data = {
+                device = "/dev/disk/by-label/data";
+                fsType = "btrfs";
+                mountpoint = "/data";
+                operation = "rebalance";
+                addDevices = [ "/dev/disk/by-id/nvme-btrfs-new" ];
+                removeDevices = [ "/dev/disk/by-id/nvme-btrfs-old" ];
+                replaceDevices = {
+                  "/dev/disk/by-id/nvme-btrfs-aging" = "/dev/disk/by-id/nvme-btrfs-replacement";
+                };
+                properties = {
+                  label = "bulk-data";
+                  "btrfs.balance.data" = "usage=50";
+                };
+              };
               swaps.primary = {
                 device = "/dev/disk/by-label/swap";
                 operation = "format";
@@ -519,6 +534,14 @@
                   .spec.filesystems.root.device == "/dev/disk/by-label/nixos-root"
                   and .spec.filesystems.root.resizePolicy == "grow-only"
                   and .spec.filesystems.root.desiredSize == "100%"
+                  and .spec.filesystems.data.device == "/dev/disk/by-label/data"
+                  and .spec.filesystems.data.fsType == "btrfs"
+                  and .spec.filesystems.data.operation == "rebalance"
+                  and (.spec.filesystems.data.addDevices | index("/dev/disk/by-id/nvme-btrfs-new") != null)
+                  and (.spec.filesystems.data.removeDevices | index("/dev/disk/by-id/nvme-btrfs-old") != null)
+                  and .spec.filesystems.data.replaceDevices."/dev/disk/by-id/nvme-btrfs-aging" == "/dev/disk/by-id/nvme-btrfs-replacement"
+                  and .spec.filesystems.data.properties.label == "bulk-data"
+                  and .spec.filesystems.data.properties."btrfs.balance.data" == "usage=50"
                   and .spec.swaps.primary.device == "/dev/disk/by-label/swap"
                   and .spec.swaps.primary.operation == "format"
                   and .spec.swaps.primary.desiredSize == "8GiB"

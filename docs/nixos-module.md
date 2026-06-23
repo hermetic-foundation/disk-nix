@@ -87,6 +87,11 @@ Typed filesystem declarations include:
 - `mountpoint`
 - `options`
 - `neededForBoot`
+- `operation`
+- `addDevices`
+- `removeDevices`
+- `replaceDevices`
+- `properties`
 - `resizePolicy`
 - `desiredSize`
 - `preserveData`
@@ -95,6 +100,9 @@ For ext filesystems, `device` is also used by disk-nix grow and shrink command
 plans for `resize2fs` and `e2fsck`. If only `mountpoint` is declared, those
 source-device mutations remain non-ready until the backing block device is
 selected explicitly.
+For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, device add/remove/replace operations, and filesystem property
+updates such as labels or balance filters while still deriving the regular
+NixOS `fileSystems` entry from the same declaration.
 
 Typed swap declarations include:
 
@@ -246,6 +254,18 @@ Example lifecycle planning through NixOS options:
     vdoVolumes.archive = {
       operation = "grow";
       desiredSize = "4TiB";
+    };
+    filesystems.data = {
+      device = "/dev/disk/by-label/data";
+      fsType = "btrfs";
+      mountpoint = "/data";
+      operation = "rebalance";
+      addDevices = [ "/dev/disk/by-id/nvme-btrfs-new" ];
+      removeDevices = [ "/dev/disk/by-id/nvme-btrfs-old" ];
+      properties = {
+        label = "bulk-data";
+        "btrfs.balance.data" = "usage=50";
+      };
     };
     btrfsSubvolumes."/mnt/persist/@home" = {
       operation = "create";

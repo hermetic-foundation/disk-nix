@@ -398,6 +398,11 @@ let
       mountpoint
       options
       neededForBoot
+      operation
+      addDevices
+      removeDevices
+      replaceDevices
+      properties
       resizePolicy
       preserveData
       desiredSize
@@ -583,6 +588,45 @@ in
                 type = lib.types.bool;
                 default = false;
                 description = "Whether this filesystem is required in the initrd or early boot.";
+              };
+
+              operation = lib.mkOption {
+                type = operationType;
+                default = null;
+                description = "Requested filesystem lifecycle operation for disk-nix planning, such as rebalance.";
+                example = "rebalance";
+              };
+
+              addDevices = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+                description = "Devices to add to this filesystem through disk-nix lifecycle planning.";
+                example = [ "/dev/disk/by-id/nvme-btrfs-new" ];
+              };
+
+              removeDevices = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+                description = "Devices to remove from this filesystem through disk-nix lifecycle planning.";
+                example = [ "/dev/disk/by-id/nvme-btrfs-old" ];
+              };
+
+              replaceDevices = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+                description = "Filesystem device replacements from old device path to new device path.";
+                example = {
+                  "/dev/disk/by-id/nvme-btrfs-old" = "/dev/disk/by-id/nvme-btrfs-new";
+                };
+              };
+
+              properties = lib.mkOption {
+                type = lib.types.attrsOf json.type;
+                default = { };
+                description = "Filesystem properties to set through disk-nix lifecycle planning.";
+                example = {
+                  label = "bulk-data";
+                };
               };
 
               resizePolicy = lib.mkOption {
