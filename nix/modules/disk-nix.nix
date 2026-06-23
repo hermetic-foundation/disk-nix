@@ -721,6 +721,12 @@ in
       description = "Typed volume-group lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    mdRaids = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed MD RAID lifecycle declarations emitted into the disk-nix planner spec.";
+    };
+
     pools = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -902,6 +908,7 @@ in
         vdoVolumes = (cfg.spec.vdoVolumes or { }) // normalizeLifecycleSpec cfg.vdoVolumes;
         volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
+        mdRaids = (cfg.spec.mdRaids or { }) // normalizeLifecycleSpec cfg.mdRaids;
         pools = (cfg.spec.pools or { }) // normalizeLifecycleSpec cfg.pools;
         datasets = (cfg.spec.datasets or { }) // normalizeLifecycleSpec cfg.datasets;
         zvols = (cfg.spec.zvols or { }) // normalizeLifecycleSpec cfg.zvols;

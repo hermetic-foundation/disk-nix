@@ -31,6 +31,14 @@
       "preserveData": true
     }
   },
+  "mdRaids": {
+    "root": {
+      "target": "/dev/md/root",
+      "addDevices": [
+        "/dev/disk/by-id/nvme-md-spare"
+      ]
+    }
+  },
   "vdoVolumes": {
     "archive": {
       "operation": "grow",

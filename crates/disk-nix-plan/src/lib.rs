@@ -388,6 +388,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "vdoVolumes",
         "volumes",
         "volumeGroups",
+        "mdRaids",
         "pools",
         "datasets",
         "zvols",
@@ -1469,7 +1470,37 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "mdRaids" => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: "creating an MD RAID array writes array metadata to every member device"
+                    .to_string(),
+                alternatives: vec![
+                    "verify every member device is empty or fully backed up before creation"
+                        .to_string(),
+                    "assemble and inspect an existing array instead of recreating it".to_string(),
+                    "add replacement members to an existing redundant array when preserving data"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
+        Operation::Grow if collection == "mdRaids" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "MD RAID grow or reshape requires redundancy, bitmap, and resync coordination"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement members and wait for sync before reshaping".to_string(),
+                    "verify backups and array health before changing size or member count"
+                        .to_string(),
+                    "monitor /proc/mdstat until reshape and filesystem growth are complete"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Grow if collection == "zvols" => (
             RiskClass::Online,
             false,
@@ -1578,6 +1609,21 @@ fn classify_replace_device(collection: &str) -> (RiskClass, Advice) {
                 ],
             },
         )
+    } else if collection == "mdRaids" {
+        (
+            RiskClass::OfflineRequired,
+            Advice {
+                summary:
+                    "MD RAID replacement must preserve redundancy through fail, add, and resync"
+                        .to_string(),
+                alternatives: vec![
+                    "add a spare and wait for sync before failing the old member".to_string(),
+                    "replace one member at a time while the array is healthy".to_string(),
+                    "verify /proc/mdstat and mdadm --detail before removing the old device"
+                        .to_string(),
+                ],
+            },
+        )
     } else {
         (
             RiskClass::Reversible,
@@ -1613,7 +1659,7 @@ fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
             alternatives
                 .push("rename the subvolume and validate consumers before removal".to_string());
         }
-        "volumes" | "volumeGroups" | "luns" => {
+        "volumes" | "volumeGroups" | "luns" | "mdRaids" => {
             alternatives
                 .push("grow or attach replacement capacity instead of reformatting".to_string());
         }
@@ -1891,6 +1937,43 @@ pub fn default_capabilities() -> Vec<Capability> {
             operation: Operation::Rebalance,
             risk: RiskClass::Online,
             advice: None,
+        },
+        Capability {
+            node_kind: NodeKind::MdRaid,
+            operation: Operation::AddDevice,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "adding an MD RAID member starts array resync or spare activation"
+                    .to_string(),
+                alternatives: vec![
+                    "verify member identity before adding it".to_string(),
+                    "monitor /proc/mdstat until sync completes".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MdRaid,
+            operation: Operation::ReplaceDevice,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "MD RAID replacement must maintain redundancy through resync".to_string(),
+                alternatives: vec![
+                    "replace one member at a time".to_string(),
+                    "keep the old member available until mdadm reports the array clean".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MdRaid,
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "removing an MD RAID member can degrade or break redundancy".to_string(),
+                alternatives: vec![
+                    "add replacement capacity before removal".to_string(),
+                    "verify the array remains redundant after removal".to_string(),
+                ],
+            }),
         },
         Capability {
             node_kind: NodeKind::Lun,
@@ -2259,6 +2342,54 @@ mod tests {
             .find(|action| action.id == "zvols:tank/vm/tmp:create")
             .expect("zvol create action exists");
         assert_eq!(create.risk, RiskClass::Online);
+    }
+
+    #[test]
+    fn plan_classifies_md_raid_lifecycle_with_redundancy_advice() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "mdRaids": {
+                "root": {
+                  "target": "/dev/md/root",
+                  "operation": "grow",
+                  "desiredSize": "max",
+                  "addDevices": ["/dev/disk/by-id/nvme-spare"],
+                  "replaceDevices": {
+                    "/dev/disk/by-id/old-md-member": "/dev/disk/by-id/new-md-member"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 2);
+        let grow = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "mdraids:root:grow")
+            .expect("md grow action exists");
+        assert_eq!(grow.risk, RiskClass::OfflineRequired);
+        assert_eq!(grow.context.target.as_deref(), Some("/dev/md/root"));
+        assert!(grow.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("/proc/mdstat"))
+        }));
+        let add = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-spare")
+            .expect("md add action exists");
+        assert_eq!(add.risk, RiskClass::Online);
+        let replace = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "mdRaids:root:replace-device:/dev/disk/by-id/old-md-member")
+            .expect("md replace action exists");
+        assert_eq!(replace.risk, RiskClass::OfflineRequired);
     }
 
     #[test]

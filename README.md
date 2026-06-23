@@ -156,8 +156,9 @@ reviewable shell script with `--script-out`. The `--execute` flag is
 intentionally refused until a direct mutating executor exists.
 Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS format/resize
-workflows, Btrfs subvolume creation/deletion, VDO growth, zvol updates, volume
-and pool updates, network LUN growth, snapshots, and cache replacement.
+workflows, Btrfs subvolume creation/deletion, VDO growth, MD RAID member
+updates, zvol updates, volume and pool updates, network LUN growth, snapshots,
+and cache replacement.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
 Use `--report-out` with either command to persist the JSON report for review

@@ -121,6 +121,7 @@ Typed lifecycle declarations are available for:
 - `vdoVolumes`
 - `volumes`
 - `volumeGroups`
+- `mdRaids`
 - `pools`
 - `datasets`
 - `zvols`
@@ -200,6 +201,10 @@ Example lifecycle planning through NixOS options:
     zvols."tank/vm/root" = {
       operation = "grow";
       desiredSize = "80GiB";
+    };
+    mdRaids.root = {
+      target = "/dev/md/root";
+      addDevices = [ "/dev/disk/by-id/nvme-md-spare" ];
     };
     nfs.mounts."/srv/shared" = {
       source = "nas.example.com:/srv/shared";

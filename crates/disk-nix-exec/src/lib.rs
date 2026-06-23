@@ -632,6 +632,37 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::AddDevice
+        | Operation::ReplaceDevice
+        | Operation::RemoveDevice
+        | Operation::Grow
+            if collection == Some("mdRaids") =>
+        {
+            (
+                vec![
+                    command(
+                        ["mdadm", "--detail", target],
+                        false,
+                        "verify MD RAID array health and member topology",
+                    ),
+                    command(
+                        ["cat", "/proc/mdstat"],
+                        false,
+                        "verify MD RAID sync, recovery, or reshape state",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify MD RAID graph relationships after topology change",
+                    ),
+                ],
+                vec![
+                    "array is clean or intentionally syncing, recovering, or reshaping".to_string(),
+                    "member list and redundancy match the desired topology".to_string(),
+                    "dependent filesystems or mappings see the expected capacity".to_string(),
+                ],
+            )
+        }
         Operation::AddDevice | Operation::ReplaceDevice | Operation::Rebalance => (
             vec![command(
                 ["disk-nix", "inspect", target, "--json"],
@@ -1041,6 +1072,31 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Grow if collection == Some("mdRaids") => {
+            let target = target.unwrap_or("<md-array>");
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    command(
+                        ["mdadm", "--detail", target],
+                        false,
+                        "inspect MD RAID array health before grow or reshape",
+                    ),
+                    md_raid_grow_command(target, desired_size),
+                    command(
+                        ["cat", "/proc/mdstat"],
+                        false,
+                        "monitor MD RAID reshape, recovery, or resync state",
+                    ),
+                ],
+                vec![
+                    "verify backups and redundancy before reshape".to_string(),
+                    "do not grow dependent filesystems until mdadm reports the new array size"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Grow if collection == Some("partitions") => {
             let target = target.unwrap_or("<partition>");
             let desired_size = action.context.desired_size.as_deref();
@@ -1389,6 +1445,40 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::RemoveDevice if collection == Some("mdRaids") => {
+            let target = target.unwrap_or("<md-array>");
+            let device = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| parts.last().copied())
+                .unwrap_or("<device>");
+            (
+                vec![
+                    command(
+                        ["mdadm", "--detail", target],
+                        false,
+                        "inspect MD RAID redundancy before member removal",
+                    ),
+                    command(
+                        ["mdadm", target, "--fail", device],
+                        true,
+                        "mark the MD RAID member failed before removal",
+                    ),
+                    command(
+                        ["mdadm", target, "--remove", device],
+                        true,
+                        "remove the reviewed MD RAID member",
+                    ),
+                ],
+                vec![
+                    "remove a member only when redundancy and free capacity remain sufficient"
+                        .to_string(),
+                    "monitor /proc/mdstat until recovery or reshape completes".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Format | Operation::Shrink | Operation::RemoveDevice | Operation::Rollback | Operation::Destroy => (
             Vec::new(),
             vec!["no command plan is generated for this risk class unless future explicit policy and executor support are added".to_string()],
@@ -1531,6 +1621,11 @@ fn add_device_command(collection: Option<&str>, target: &str, device: &str) -> E
             true,
             "add a physical volume to an LVM volume group",
         ),
+        Some("mdRaids") => command(
+            ["mdadm", target, "--add", device],
+            true,
+            "add a member or spare to an MD RAID array",
+        ),
         Some("filesystems") => command(
             ["btrfs", "device", "add", device, target],
             true,
@@ -1562,6 +1657,11 @@ fn replace_device_command(
             ["btrfs", "replace", "start", from, to, target],
             true,
             "replace a Btrfs filesystem device",
+        ),
+        Some("mdRaids") => command(
+            ["mdadm", target, "--replace", from, "--with", to],
+            true,
+            "replace an MD RAID member while preserving array redundancy",
         ),
         Some("caches") => command_with_readiness(
             ["<cache-replace-tool>", target, from, to],
@@ -1768,6 +1868,23 @@ fn zvol_set_volsize_command(target: &str, desired_size: Option<&str>) -> Executi
             CommandReadiness::NeedsDesiredSize,
             ["desired zvol size"],
             "grow the zvol after selecting the desired volume size",
+        ),
+    }
+}
+
+fn md_raid_grow_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    match desired_size {
+        Some(size) => command_vec(
+            vec!["mdadm", "--grow", target, "--size", size],
+            true,
+            "grow or reshape the MD RAID array to the desired component size",
+        ),
+        None => command_with_readiness(
+            ["mdadm", "--grow", target, "--size", "<size-or-max>"],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired MD RAID component size or max"],
+            "grow or reshape the MD RAID array after selecting the desired size",
         ),
     }
 }
@@ -2171,6 +2288,85 @@ mod tests {
             step.commands.iter().any(|command| {
                 command.argv == ["zfs", "list", "-H", "-p", "-t", "volume", "tank/vm/root"]
             })
+        }));
+    }
+
+    #[test]
+    fn md_raid_lifecycle_reports_mdadm_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "mdRaids": {
+                  "root": {
+                    "target": "/dev/md/root",
+                    "operation": "grow",
+                    "desiredSize": "max",
+                    "addDevices": ["/dev/disk/by-id/nvme-spare"],
+                    "replaceDevices": {
+                      "/dev/disk/by-id/old-md-member": "/dev/disk/by-id/new-md-member"
+                    },
+                    "removeDevices": ["/dev/disk/by-id/failed-md-member"]
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::Blocked);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "mdadm",
+                        "/dev/md/root",
+                        "--add",
+                        "/dev/disk/by-id/nvme-spare",
+                    ]
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["mdadm", "--grow", "/dev/md/root", "--size", "max"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "mdadm",
+                        "/dev/md/root",
+                        "--replace",
+                        "/dev/disk/by-id/old-md-member",
+                        "--with",
+                        "/dev/disk/by-id/new-md-member",
+                    ]
+            })
+        }));
+        assert!(
+            !report.command_plan.iter().any(|step| {
+                step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mdadm",
+                            "/dev/md/root",
+                            "--remove",
+                            "/dev/disk/by-id/failed-md-member",
+                        ]
+                })
+            }),
+            "potential-data-loss remove action remains blocked by apply policy"
+        );
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["cat", "/proc/mdstat"])
         }));
     }
 
