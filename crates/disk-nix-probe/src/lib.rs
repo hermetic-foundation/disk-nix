@@ -11,6 +11,7 @@ mod cryptsetup;
 mod dmsetup;
 mod exfat;
 mod ext;
+mod f2fs;
 mod findmnt;
 mod iscsi;
 mod loopdev;
@@ -99,6 +100,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_ext(&mut result);
         collect_exfat(&mut result);
         collect_ntfs(&mut result);
+        collect_f2fs(&mut result);
         collect_xfs(&mut result);
         collect_swaps(&mut result);
         collect_loopdev(&mut result);
@@ -460,6 +462,65 @@ fn collect_ntfs(result: &mut ProbeResult) {
             adapter: "ntfs".to_string(),
             status: ProbeStatus::Available,
             message: Some(format!("normalized {collected} graph nodes from ntfsinfo")),
+        }),
+    }
+}
+
+fn collect_f2fs(result: &mut ProbeResult) {
+    let targets = filesystem_targets(&result.graph, |filesystem_type| filesystem_type == "f2fs");
+    if targets.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "f2fs".to_string(),
+            status: if command_exists("dump.f2fs") {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Unavailable
+            },
+            message: Some("no F2FS filesystems discovered".to_string()),
+        });
+        return;
+    }
+
+    let mut collected = 0usize;
+    let mut failures = Vec::new();
+    for target in targets {
+        match run_report("dump.f2fs", &[&target]) {
+            Ok(output) => match f2fs::normalize_dump_f2fs(&target, &output) {
+                Ok(graph) => {
+                    collected += graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                }
+                Err(error) => failures.push(format!("{target}: {error}")),
+            },
+            Err(message) => failures.push(format!("{target}: {message}")),
+        }
+    }
+
+    match (collected, failures.is_empty()) {
+        (0, false) => result.reports.push(ProbeReport {
+            adapter: "f2fs".to_string(),
+            status: if failures
+                .iter()
+                .any(|message| message.contains("not found") || message.contains("No such file"))
+            {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(failures.join("; ")),
+        }),
+        (_, false) => result.reports.push(ProbeReport {
+            adapter: "f2fs".to_string(),
+            status: ProbeStatus::Partial,
+            message: Some(format!(
+                "normalized {collected} graph nodes from dump.f2fs; failed targets: {}",
+                failures.join("; ")
+            )),
+        }),
+        _ => result.reports.push(ProbeReport {
+            adapter: "f2fs".to_string(),
+            status: ProbeStatus::Available,
+            message: Some(format!("normalized {collected} graph nodes from dump.f2fs")),
         }),
     }
 }

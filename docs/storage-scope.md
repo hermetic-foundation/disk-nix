@@ -65,6 +65,8 @@ The current probe layer normalizes:
   and bigtime
 - `ntfsinfo -m` for NTFS volume identity, serial, state, version, sector and
   cluster sizing, index block size, MFT record size, and allocated size
+- `dump.f2fs` for F2FS volume identity, UUID, block counts, valid block usage,
+  segment counts, section/zone geometry, and overprovisioning metadata
 - `/proc/swaps` for active swap devices/files, active size, used/free bytes,
   swap type, and priority
 - `losetup --json --list` for loop device mappings, backing files or block

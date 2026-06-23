@@ -48,7 +48,9 @@ exFAT probing uses `tune.exfat` and `dump.exfat` when available to add label,
 GUID, serial, sector, cluster, size, and free-space metadata beyond generic
 `blkid` fields. NTFS probing uses `ntfsinfo -m` when available to add volume
 name/state/version, serial, sector/cluster sizing, index block size, MFT record
-size, and allocated size.
+size, and allocated size. F2FS probing uses `dump.f2fs` when available to add
+volume name, UUID, block counts, segment counts, overprovisioning, and computed
+usage.
 
 ## Probe Status
 
@@ -177,8 +179,9 @@ Use these commands for:
   ZFS datasets/snapshots, and NFS exports, with selected filesystem metadata
   details such as `blkid` version/block-size/usage, exFAT GUID/serial/cluster
   geometry, NTFS volume identity, version, cluster sizing, and MFT record
-  sizing, Btrfs Data/Metadata/System allocation profiles and byte counts, and
-  ext state/features/block and inode counts when probes expose them
+  sizing, F2FS block/segment/overprovisioning metadata, Btrfs
+  Data/Metadata/System allocation profiles and byte counts, and ext
+  state/features/block and inode counts when probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
   exports, including LVM origin/pool/data metadata, activation state, role,
   layout, health, tags, thin-pool fullness behavior, metadata size, and cache
@@ -215,10 +218,10 @@ Use these commands for:
   metadata detail data, including bcache role/set/state, cache mode,
   replacement policy, dirty data, writeback percentage, `blkid` signature
   details, ext superblock details, LVM layout, health, thin/cache/writecache
-  status, NTFS volume geometry and MFT record sizing, Btrfs allocation class
-  profiles and byte counts, VDO backing and logical/physical size details,
-  NVMe namespace details, loop mapping details, and active swap
-  state/type/priority when probed
+  status, NTFS volume geometry and MFT record sizing, F2FS block/segment usage,
+  Btrfs allocation class profiles and byte counts, VDO backing and
+  logical/physical size details, NVMe namespace details, loop mapping details,
+  and active swap state/type/priority when probed
 
 ## Inspect
 

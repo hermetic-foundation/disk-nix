@@ -2062,6 +2062,17 @@ fn usage_details(node: &Node) -> String {
         ("ntfs.volume-size-clusters", "ntfs-clusters"),
         ("ntfs.index-block-size", "ntfs-index-block"),
         ("ntfs.mft-record-size", "ntfs-mft-record"),
+        ("f2fs.filesystem-uuid", "f2fs-uuid"),
+        ("f2fs.filesystem-volume-name", "f2fs-name"),
+        ("f2fs.block-size", "f2fs-block-size"),
+        ("f2fs.block-count", "f2fs-blocks"),
+        ("f2fs.user-block-count", "f2fs-user-blocks"),
+        ("f2fs.valid-block-count", "f2fs-valid-blocks"),
+        ("f2fs.segment-count", "f2fs-segments"),
+        ("f2fs.segment-count-main", "f2fs-main-segments"),
+        ("f2fs.overprov-segment-count", "f2fs-overprov"),
+        ("f2fs.segs-per-sec", "f2fs-segs-per-sec"),
+        ("f2fs.secs-per-zone", "f2fs-secs-per-zone"),
         ("bcache.role", "role"),
         ("bcache.kind", "kind"),
         ("bcache.set-uuid", "set-uuid"),
@@ -2587,6 +2598,22 @@ mod tests {
             "ntfs-name=Windows ntfs-serial=01234567-89abcdef ntfs-version=3.1 ntfs-sector=512 ntfs-cluster=4096 ntfs-clusters=262144 ntfs-mft-record=1024"
         );
 
+        let f2fs = Node::new("fs:/dev/sdb2", NodeKind::Filesystem, "f2fs")
+            .with_property("f2fs.filesystem-volume-name", "mobile")
+            .with_property(
+                "f2fs.filesystem-uuid",
+                "01234567-89ab-cdef-0123-456789abcdef",
+            )
+            .with_property("f2fs.block-size", "4096")
+            .with_property("f2fs.block-count", "262144")
+            .with_property("f2fs.valid-block-count", "65536")
+            .with_property("f2fs.segment-count", "2048")
+            .with_property("f2fs.overprov-segment-count", "64");
+        assert_eq!(
+            usage_details(&f2fs),
+            "f2fs-uuid=01234567-89ab-cdef-0123-456789abcdef f2fs-name=mobile f2fs-block-size=4096 f2fs-blocks=262144 f2fs-valid-blocks=65536 f2fs-segments=2048 f2fs-overprov=64"
+        );
+
         let bcache = Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
             .with_property("bcache.role", "backing")
             .with_property("bcache.kind", "cache-set")
@@ -2707,6 +2734,13 @@ mod tests {
                 .with_property("ntfs.cluster-size", "4096")
                 .with_property("ntfs.mft-record-size", "1024"),
         );
+        graph.add_node(
+            Node::new("fs:/dev/sdb2", NodeKind::Filesystem, "f2fs")
+                .with_property("f2fs.filesystem-volume-name", "mobile")
+                .with_property("f2fs.block-size", "4096")
+                .with_property("f2fs.block-count", "262144")
+                .with_property("f2fs.segment-count", "2048"),
+        );
 
         let mut output = Vec::new();
         print_filesystems(&mut output, &graph).expect("filesystems table renders");
@@ -2725,6 +2759,9 @@ mod tests {
                 "ntfs-name=Windows ntfs-serial=01234567-89abcdef ntfs-version=3.1 ntfs-cluster=4096 ntfs-mft-record=1024"
             )
         );
+        assert!(output.contains(
+            "f2fs-name=mobile f2fs-block-size=4096 f2fs-blocks=262144 f2fs-segments=2048"
+        ));
     }
 
     #[test]
