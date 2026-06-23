@@ -1511,6 +1511,20 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "volumes" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "logical volume creation allocates a new volume inside an existing volume group"
+                    .to_string(),
+                alternatives: vec![
+                    "verify volume group free extents before creating the logical volume"
+                        .to_string(),
+                    "use an explicit desired size and stable LV name".to_string(),
+                    "create filesystems or mappings only after the LV path appears".to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "mdRaids" => (
             RiskClass::Destructive,
             true,
@@ -2178,6 +2192,31 @@ pub fn default_capabilities() -> Vec<Capability> {
             advice: None,
         },
         Capability {
+            node_kind: NodeKind::LvmLogicalVolume,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "logical volume creation consumes free extents in a volume group"
+                    .to_string(),
+                alternatives: vec![
+                    "verify VG free space before allocation".to_string(),
+                    "choose explicit LV size and naming before formatting consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmLogicalVolume,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "removing a logical volume destroys its contents".to_string(),
+                alternatives: vec![
+                    "snapshot the LV before removal".to_string(),
+                    "rename or deactivate the LV while validating consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::ZfsDataset,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
@@ -2476,6 +2515,41 @@ mod tests {
             .find(|action| action.id == "volumes:vg/home:grow")
             .expect("volume grow action exists");
         assert_eq!(volume.context.desired_size.as_deref(), Some("800GiB"));
+    }
+
+    #[test]
+    fn plan_classifies_lvm_logical_volume_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg0/scratch": {
+                  "operation": "create",
+                  "desiredSize": "10GiB"
+                },
+                "vg0/old": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.destructive_count, 1);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumes:vg0/scratch:create")
+            .expect("LV create action exists");
+        assert_eq!(create.risk, RiskClass::Online);
+        assert_eq!(create.context.desired_size.as_deref(), Some("10GiB"));
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumes:vg0/old:destroy")
+            .expect("LV destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::Destructive);
+        assert!(destroy.destructive);
     }
 
     #[test]

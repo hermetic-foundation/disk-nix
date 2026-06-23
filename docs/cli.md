@@ -311,6 +311,8 @@ existing cache-set UUID, changing cache mode, checking dirty data, and staging
 replacement cache media without silently formatting unknown devices.
 NFS export command plans use explicit `client` and `options` lifecycle fields
 to render reviewed `exportfs` create and unexport commands.
+LVM logical volume command plans render concrete `lvcreate` commands when a
+`volumes` create action has a `vg/lv` target and `desiredSize`.
 `verificationSummary` and `verificationPlan` record read-only commands and
 state checks that should run after a future mutating executor or manual apply
 finishes. These checks re-probe the relevant graph node and include

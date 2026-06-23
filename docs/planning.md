@@ -75,6 +75,9 @@ Examples:
   suggests read-only snapshots or rename-first validation.
 - VDO growth is classified as online, with advice to distinguish logical
   growth from physical backing growth and verify `vdostats`.
+- LVM logical volume creation is online when it allocates from existing volume
+  group free extents; LV removal is destructive because it deletes the volume
+  contents.
 - zvol creation and growth are online operations, with advice to verify pool
   capacity, reservation policy, and downstream block consumers.
 - MD RAID member add is online; replacement and grow/reshape are
@@ -200,6 +203,9 @@ NFS export command plans use `exportfs -i -o <options> <client>:<path>` for
 reviewed create operations and `exportfs -u <client>:<path>` for reviewed
 unexport operations, with unresolved-input markers when clients or options are
 missing.
+LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
+for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
+destructive policy gates allow removal.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.

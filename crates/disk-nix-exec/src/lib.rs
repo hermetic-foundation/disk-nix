@@ -448,6 +448,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent filesystem capacity reflects the grown backing volume".to_string(),
             ],
         ),
+        Operation::Create if collection == Some("volumes") => (
+            vec![
+                command(
+                    ["lvs", "--reportformat", "json", target],
+                    false,
+                    "verify LVM logical volume exists after creation",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled LV graph relationships after creation",
+                ),
+            ],
+            vec![
+                "logical volume path exists by stable mapper or /dev/<vg>/<lv> name".to_string(),
+                "LV size and VG free space match the desired allocation".to_string(),
+            ],
+        ),
         Operation::Grow if collection == Some("thinPools") => (
             vec![
                 command(
@@ -907,6 +925,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             vec![
                 "removed snapshot no longer appears in LVM reports".to_string(),
                 "origin logical volume remains active and healthy".to_string(),
+            ],
+        ),
+        Operation::Destroy if collection == Some("volumes") => (
+            vec![
+                command(
+                    ["lvs", "--reportformat", "json"],
+                    false,
+                    "verify logical volume no longer appears in LVM inventory",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "re-probe topology after logical volume removal",
+                ),
+            ],
+            vec![
+                "removed logical volume is absent from LVM reports".to_string(),
+                "dependent filesystems, mappings, and mounts no longer reference the LV"
+                    .to_string(),
             ],
         ),
         Operation::Destroy if collection == Some("loopDevices") => (
@@ -1541,6 +1578,26 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("volumes") => {
+            let target = target.unwrap_or("<logical-volume>");
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    command(
+                        ["vgs", "--reportformat", "json"],
+                        false,
+                        "inspect volume group free space before creating the logical volume",
+                    ),
+                    lvm_logical_volume_create_command(target, desired_size),
+                ],
+                vec![
+                    "verify the target volume group has enough free extents".to_string(),
+                    "create filesystems, LUKS mappings, or exports only after the LV appears"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create if collection == Some("loopDevices") => {
             let target = target.unwrap_or("<loop-device>");
             let backing = action.context.device.as_deref();
@@ -1740,6 +1797,29 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "verify the snapshot is no longer needed as a recovery point".to_string(),
                     "prefer a fresh snapshot or backup before deleting old snapshots".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("volumes") => {
+            let target = target.unwrap_or("<logical-volume>");
+            (
+                vec![
+                    command(
+                        ["lvs", "--reportformat", "json", target],
+                        false,
+                        "inspect logical volume before removal",
+                    ),
+                    command(
+                        ["lvremove", "--yes", target],
+                        true,
+                        "remove the reviewed logical volume after backups and consumers are verified",
+                    ),
+                ],
+                vec![
+                    "snapshot or migrate data before removing the logical volume".to_string(),
+                    "unmount filesystems and deactivate dependent mappings before lvremove"
+                        .to_string(),
                 ],
                 true,
             )
@@ -2480,6 +2560,54 @@ fn lvm_snapshot_create_command(
     }
 }
 
+fn lvm_logical_volume_create_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
+    let Some((volume_group, logical_volume)) = target.split_once('/') else {
+        return command_vec_with_readiness(
+            vec![
+                "lvcreate".to_string(),
+                "--size".to_string(),
+                desired_size.unwrap_or("<size>").to_string(),
+                "--name".to_string(),
+                "<logical-volume>".to_string(),
+                "<volume-group>".to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["target in volume-group/logical-volume form"],
+            "create an LVM logical volume after resolving volume group and LV name",
+        );
+    };
+
+    match desired_size {
+        Some(size) => command_vec(
+            vec![
+                "lvcreate".to_string(),
+                "--size".to_string(),
+                size.to_string(),
+                "--name".to_string(),
+                logical_volume.to_string(),
+                volume_group.to_string(),
+            ],
+            true,
+            "create an LVM logical volume with the desired size",
+        ),
+        None => command_vec_with_readiness(
+            vec![
+                "lvcreate".to_string(),
+                "--size".to_string(),
+                "<size>".to_string(),
+                "--name".to_string(),
+                logical_volume.to_string(),
+                volume_group.to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired logical volume size"],
+            "create an LVM logical volume after selecting the desired size",
+        ),
+    }
+}
+
 fn loop_device_create_command(target: &str, backing: Option<&str>) -> ExecutionCommand {
     match backing {
         Some(backing) if target.starts_with("/dev/loop") => command(
@@ -3137,6 +3265,51 @@ mod tests {
                         "vg0/pool",
                     ]
             })
+        }));
+    }
+
+    #[test]
+    fn lvm_logical_volume_lifecycle_reports_lvm_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "volumes": {
+                  "vg0/scratch": {
+                    "operation": "create",
+                    "desiredSize": "10GiB"
+                  },
+                  "vg0/old": {
+                    "destroy": true
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": false
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::Blocked);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["lvcreate", "--size", "10GiB", "--name", "scratch", "vg0"]
+            })
+        }));
+        assert!(
+            !report.command_plan.iter().any(|step| {
+                step.commands
+                    .iter()
+                    .any(|command| command.argv == ["lvremove", "--yes", "vg0/old"])
+            }),
+            "destructive LV removal remains blocked by default policy"
+        );
+        assert!(report.verification_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["lvs", "--reportformat", "json", "vg0/scratch"])
         }));
     }
 

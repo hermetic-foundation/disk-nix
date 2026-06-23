@@ -195,6 +195,10 @@ Example lifecycle planning through NixOS options:
       operation = "create";
       path = "/mnt/persist/@home";
     };
+    volumes."vg0/scratch" = {
+      operation = "create";
+      desiredSize = "10GiB";
+    };
     pools.tank = {
       operation = "rebalance";
       addDevices = [ "/dev/disk/by-id/nvme-replacement" ];

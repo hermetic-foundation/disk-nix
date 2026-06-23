@@ -166,6 +166,10 @@
                 operation = "create";
                 path = "/mnt/persist/@home";
               };
+              volumes."vg0/scratch" = {
+                operation = "create";
+                desiredSize = "10GiB";
+              };
               datasets."tank/archive" = {
                 destroy = true;
               };
@@ -305,12 +309,13 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 25
+              .summary.actionCount == 26
               and .summary.offlineRequiredCount == 5
               and .summary.destructiveCount == 2
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@home:create" and .risk == "online"))
+              and (.actions | any(.id == "volumes:vg0/scratch:create" and .risk == "online"))
               and (.actions | any(.id == "vdovolumes:archive:grow" and .risk == "online"))
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
@@ -417,6 +422,8 @@
                   and .spec.partitions.root.desiredSize == "100%"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".operation == "create"
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".path == "/mnt/persist/@home"
+                  and .spec.volumes."vg0/scratch".operation == "create"
+                  and .spec.volumes."vg0/scratch".desiredSize == "10GiB"
                   and .spec.vdoVolumes.archive.operation == "grow"
                   and .spec.vdoVolumes.archive.desiredSize == "4TiB"
                   and .spec.zvols."tank/vm/root".operation == "grow"

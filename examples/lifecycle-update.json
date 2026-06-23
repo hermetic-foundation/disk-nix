@@ -29,6 +29,10 @@
     "vg0/home": {
       "operation": "grow",
       "preserveData": true
+    },
+    "vg0/scratch": {
+      "operation": "create",
+      "desiredSize": "10GiB"
     }
   },
   "thinPools": {
