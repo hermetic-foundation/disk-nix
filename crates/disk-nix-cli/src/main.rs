@@ -62,6 +62,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered partition nodes.
+    Partitions {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered filesystems.
     Filesystems {
         /// Emit JSON for matching graph nodes.
@@ -74,6 +80,18 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered storage pools and volume groups.
+    Pools {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List discovered snapshots across LVM, Btrfs, and ZFS.
+    Snapshots {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mapping layers such as LUKS, dm, LVM, VDO, and multipath.
     Mappings {
         /// Emit JSON for matching graph nodes.
@@ -82,6 +100,12 @@ enum Command {
     },
     /// List discovered mountpoints.
     Mounts {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List discovered iSCSI, LUN, and NFS nodes.
+    NetworkStorage {
         /// Emit JSON for matching graph nodes.
         #[arg(long)]
         json: bool,
@@ -220,6 +244,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             }
             Ok(())
         }
+        Command::Partitions { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_partition_node)?;
+            } else {
+                print_partitions(output, &graph)?;
+            }
+            Ok(())
+        }
         Command::Filesystems { json } => {
             let graph = collect_graph()?;
             if json {
@@ -238,6 +271,24 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             }
             Ok(())
         }
+        Command::Pools { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_pool_node)?;
+            } else {
+                print_pools(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Snapshots { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_snapshot_node)?;
+            } else {
+                print_snapshots(output, &graph)?;
+            }
+            Ok(())
+        }
         Command::Mappings { json } => {
             let graph = collect_graph()?;
             if json {
@@ -253,6 +304,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_mount_node)?;
             } else {
                 print_mounts(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::NetworkStorage { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_network_storage_node)?;
+            } else {
+                print_network_storage(output, &graph)?;
             }
             Ok(())
         }
@@ -523,6 +583,26 @@ fn print_devices(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()
     Ok(())
 }
 
+fn print_partitions(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:<24} PATH",
+        "KIND", "NAME", "SIZE", "PARTUUID"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_partition_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>12} {:<24} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            node.identity.partuuid.as_deref().unwrap_or("-"),
+            node.path.as_deref().unwrap_or("-")
+        )?;
+    }
+    Ok(())
+}
+
 fn print_filesystems(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -563,6 +643,46 @@ fn print_volumes(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()
     Ok(())
 }
 
+fn print_pools(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:>12} {:>12} {:>8}",
+        "KIND", "NAME", "SIZE", "USED", "FREE", "BACKING"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_pool_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>12} {:>12} {:>12} {:>8}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            human_bytes(node.usage.as_ref().and_then(|usage| usage.used_bytes)),
+            human_bytes(node.usage.as_ref().and_then(|usage| usage.free_bytes)),
+            backing_count(graph, node)
+        )?;
+    }
+    Ok(())
+}
+
+fn print_snapshots(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<48} {:>12} {:<32}",
+        "KIND", "NAME", "SIZE", "SOURCE"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_snapshot_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<48} {:>12} {:<32}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            snapshot_source(graph, node).unwrap_or("-")
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mappings(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -591,6 +711,25 @@ fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()>
             node.kind,
             node.name,
             property_value(node, "filesystem.type").unwrap_or("-")
+        )?;
+    }
+    Ok(())
+}
+
+fn print_network_storage(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(output, "{:<22} {:<48} {:>12} PATH", "KIND", "NAME", "SIZE")?;
+    for node in graph
+        .nodes
+        .iter()
+        .filter(|node| is_network_storage_node(node))
+    {
+        writeln!(
+            output,
+            "{:<22} {:<48} {:>12} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            node.path.as_deref().unwrap_or("-")
         )?;
     }
     Ok(())
@@ -935,6 +1074,10 @@ fn is_device_node(node: &Node) -> bool {
     )
 }
 
+fn is_partition_node(node: &Node) -> bool {
+    node.kind == NodeKind::Partition
+}
+
 fn is_filesystem_node(node: &Node) -> bool {
     matches!(
         node.kind,
@@ -972,6 +1115,26 @@ fn is_volume_node(node: &Node) -> bool {
     )
 }
 
+fn is_pool_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::LvmVolumeGroup
+            | NodeKind::LvmThinPool
+            | NodeKind::BtrfsFilesystem
+            | NodeKind::BtrfsQgroup
+            | NodeKind::ZfsPool
+            | NodeKind::ZfsVdev
+            | NodeKind::MdRaid
+    )
+}
+
+fn is_snapshot_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::LvmSnapshot | NodeKind::BtrfsSnapshot | NodeKind::ZfsSnapshot
+    )
+}
+
 fn is_mapping_node(node: &Node) -> bool {
     matches!(
         node.kind,
@@ -992,6 +1155,17 @@ fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
 
+fn is_network_storage_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::IscsiSession
+            | NodeKind::IscsiTarget
+            | NodeKind::Lun
+            | NodeKind::NfsExport
+            | NodeKind::NfsMount
+    )
+}
+
 fn backing_count(graph: &StorageGraph, node: &Node) -> usize {
     graph
         .edges
@@ -1006,6 +1180,17 @@ fn backing_count(graph: &StorageGraph, node: &Node) -> usize {
                 )
         })
         .count()
+}
+
+fn snapshot_source<'a>(graph: &'a StorageGraph, node: &Node) -> Option<&'a str> {
+    graph
+        .edges
+        .iter()
+        .find(|edge| {
+            edge.from == node.id && edge.relationship == disk_nix_model::Relationship::SnapshotOf
+        })
+        .and_then(|edge| graph.nodes.iter().find(|candidate| candidate.id == edge.to))
+        .map(|source| source.name.as_str())
 }
 
 fn property_value<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
@@ -1040,7 +1225,12 @@ fn human_bytes(value: Option<u64>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::confirmation_file_accepts;
+    use disk_nix_model::{Edge, Node, NodeKind, Relationship, StorageGraph};
+
+    use super::{
+        confirmation_file_accepts, is_network_storage_node, is_partition_node, is_pool_node,
+        is_snapshot_node, snapshot_source,
+    };
 
     #[test]
     fn confirmation_file_accepts_exact_token_line() {
@@ -1055,5 +1245,66 @@ mod tests {
         assert!(!confirmation_file_accepts("disk-nix"));
         assert!(!confirmation_file_accepts("disk-nix confirm now"));
         assert!(!confirmation_file_accepts("prefix disk-nix confirm"));
+    }
+
+    #[test]
+    fn focused_view_predicates_cover_storage_domains() {
+        assert!(is_partition_node(&Node::new(
+            "partition:sda1",
+            NodeKind::Partition,
+            "sda1"
+        )));
+        assert!(is_pool_node(&Node::new(
+            "zpool:tank",
+            NodeKind::ZfsPool,
+            "tank"
+        )));
+        assert!(is_pool_node(&Node::new(
+            "vg:root",
+            NodeKind::LvmVolumeGroup,
+            "root"
+        )));
+        assert!(is_snapshot_node(&Node::new(
+            "snapshot:tank/home@before",
+            NodeKind::ZfsSnapshot,
+            "tank/home@before"
+        )));
+        assert!(is_network_storage_node(&Node::new(
+            "lun:iqn.example:0",
+            NodeKind::Lun,
+            "iqn.example:0"
+        )));
+        assert!(is_network_storage_node(&Node::new(
+            "nfs:server:/export",
+            NodeKind::NfsExport,
+            "server:/export"
+        )));
+    }
+
+    #[test]
+    fn snapshot_source_follows_snapshot_relationships() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "dataset:tank/home",
+            NodeKind::ZfsDataset,
+            "tank/home",
+        ));
+        graph.add_node(Node::new(
+            "snapshot:tank/home@before",
+            NodeKind::ZfsSnapshot,
+            "tank/home@before",
+        ));
+        graph.add_edge(Edge::new(
+            "snapshot:tank/home@before",
+            "dataset:tank/home",
+            Relationship::SnapshotOf,
+        ));
+
+        let snapshot = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::ZfsSnapshot)
+            .expect("snapshot exists");
+        assert_eq!(snapshot_source(&graph, snapshot), Some("tank/home"));
     }
 }

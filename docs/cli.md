@@ -72,10 +72,14 @@ Focused commands filter the graph for common workflows:
 
 ```sh
 disk-nix devices
+disk-nix partitions
 disk-nix filesystems
 disk-nix volumes
+disk-nix pools
+disk-nix snapshots
 disk-nix mappings
 disk-nix mounts
+disk-nix network-storage
 disk-nix ids
 ```
 
@@ -83,10 +87,14 @@ Every focused view accepts `--json`:
 
 ```sh
 disk-nix devices --json
+disk-nix partitions --json
 disk-nix filesystems --json
 disk-nix volumes --json
+disk-nix pools --json
+disk-nix snapshots --json
 disk-nix mappings --json
 disk-nix mounts --json
+disk-nix network-storage --json
 disk-nix ids --json
 ```
 
@@ -97,13 +105,20 @@ Use these commands for:
 
 - `devices`: disks, partitions, dm devices, LVM objects, VDO, RAID, zvols,
   cache devices, multipath devices, NVMe namespaces, loop devices, and swap
+- `partitions`: partition nodes with size, PARTUUID, and path
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
   ZFS datasets/snapshots, and NFS exports
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
   exports
+- `pools`: storage pools and grouping layers such as LVM volume groups, thin
+  pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays
+- `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
+  source relationships
 - `mappings`: encryption, device-mapper, LVM, VDO, RAID, multipath, and cache
   layers
 - `mounts`: local mountpoints and NFS mounts
+- `network-storage`: iSCSI sessions, iSCSI targets, LUNs, NFS exports, and NFS
+  mounts
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 
 ## Inspect

@@ -53,10 +53,14 @@ disk-nix probe-status --json
 disk-nix capabilities
 disk-nix capabilities --json
 disk-nix devices
+disk-nix partitions
 disk-nix filesystems
 disk-nix volumes
+disk-nix pools
+disk-nix snapshots
 disk-nix mappings
 disk-nix mounts
+disk-nix network-storage
 disk-nix ids
 disk-nix ids --json
 disk-nix inspect /dev/nvme0n1
@@ -74,9 +78,12 @@ disk-nix apply --spec ./examples/simple-root.json --script-out ./disk-nix-apply.
 
 The canonical interface is intended to be stable JSON. Human tables and tree
 views are presentation layers over the same model. Focused JSON commands such
-as `devices --json`, `filesystems --json`, and `ids --json` return subgraphs
-and preserve relationships between nodes included in the result. `inspect --json` returns matched nodes plus their direct neighbors and relationship
-edges. `capabilities --json` returns the modeled operation/risk matrix.
+as `devices --json`, `partitions --json`, `pools --json`,
+`snapshots --json`, `network-storage --json`, and `ids --json` return
+subgraphs and preserve relationships between nodes included in the result.
+`inspect --json` returns matched nodes plus their direct neighbors and
+relationship edges. `capabilities --json` returns the modeled operation/risk
+matrix.
 
 See [docs/cli.md](docs/cli.md) for the command reference and JSON contracts.
 
