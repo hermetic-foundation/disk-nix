@@ -1278,16 +1278,17 @@ fn print_snapshots(output: &mut impl Write, graph: &StorageGraph) -> io::Result<
 fn print_mappings(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<38} {:>8} PATH",
-        "KIND", "NAME", "BACKING"
+        "{:<22} {:<38} {:>8} {:<44} PATH",
+        "KIND", "NAME", "BACKING", "DETAILS"
     )?;
     for node in graph.nodes.iter().filter(|node| is_mapping_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<38} {:>8} {}",
+            "{:<22} {:<38} {:>8} {:<44} {}",
             node.kind,
             node.name,
             backing_count(graph, node),
+            usage_details(node),
             node.path.as_deref().unwrap_or("-")
         )?;
     }
@@ -1849,7 +1850,30 @@ fn usage_details(node: &Node) -> String {
         ("vdo.operating-mode", "mode"),
         ("vdo.recovery-percentage", "recovery"),
         ("vdo.write-policy", "write-policy"),
+        ("vdo.compression", "compression"),
+        ("vdo.deduplication", "deduplication"),
         ("vdo.overhead-blocks-used", "overhead-blocks"),
+        ("dm.uuid", "dm-uuid"),
+        ("dm.open-count", "open"),
+        ("dm.segments", "segments"),
+        ("dm.events", "events"),
+        ("cryptsetup.active", "active"),
+        ("cryptsetup.in-use", "in-use"),
+        ("cryptsetup.cipher", "cipher"),
+        ("cryptsetup.mode", "mode"),
+        ("cryptsetup.sector-size", "sector-size"),
+        ("cryptsetup.sector-count", "sectors"),
+        ("cryptsetup.luks-version", "luks"),
+        ("cryptsetup.luks-keyslot-count", "keyslots"),
+        ("cryptsetup.luks-token-count", "tokens"),
+        ("cryptsetup.luks-data-sector", "data-sector"),
+        ("multipath.dm", "dm"),
+        ("multipath.wwid", "wwid"),
+        ("multipath.vendor-product", "vendor"),
+        ("multipath.features", "features"),
+        ("multipath.hwhandler", "handler"),
+        ("multipath.write-protect", "wp"),
+        ("multipath.path-state", "path-state"),
         ("md.level", "level"),
         ("md.state", "state"),
         ("md.raid-devices", "raid-devices"),
@@ -2021,8 +2045,8 @@ mod tests {
     use super::{
         confirmation_file_accepts, is_device_node, is_mapping_node, is_network_storage_node,
         is_partition_node, is_pool_node, is_snapshot_node, mount_details, print_filesystems,
-        print_mounts, print_pools, print_usage, print_volumes, snapshot_source, usage_details,
-        usage_percent,
+        print_mappings, print_mounts, print_pools, print_usage, print_volumes, snapshot_source,
+        usage_details, usage_percent,
     };
 
     #[test]
@@ -2340,6 +2364,80 @@ mod tests {
         assert!(output.contains("extent=4.00m pvs=2 lvs=8"));
         assert!(output.contains("qgroup=0/257 max-rfer=25GiB"));
         assert!(output.contains("level=raid1 state=clean"));
+    }
+
+    #[test]
+    fn mappings_table_includes_domain_metadata_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "block:/dev/nvme0n1p2",
+            NodeKind::Partition,
+            "/dev/nvme0n1p2",
+        ));
+        graph.add_node(
+            Node::new(
+                "block:/dev/mapper/cryptroot",
+                NodeKind::LuksContainer,
+                "cryptroot",
+            )
+            .with_path("/dev/mapper/cryptroot")
+            .with_property("dm.uuid", "CRYPT-LUKS2-crypt-uuid-cryptroot")
+            .with_property("dm.open-count", "1")
+            .with_property("cryptsetup.active", "true")
+            .with_property("cryptsetup.in-use", "true")
+            .with_property("cryptsetup.cipher", "aes-xts-plain64")
+            .with_property("cryptsetup.luks-version", "2")
+            .with_property("cryptsetup.luks-keyslot-count", "2")
+            .with_property("cryptsetup.luks-token-count", "1"),
+        );
+        graph.add_edge(Edge::new(
+            "block:/dev/nvme0n1p2",
+            "block:/dev/mapper/cryptroot",
+            Relationship::Backs,
+        ));
+        graph.add_node(
+            Node::new("multipath:mpatha", NodeKind::MultipathDevice, "mpatha")
+                .with_path("/dev/mapper/mpatha")
+                .with_property("multipath.dm", "dm-2")
+                .with_property("multipath.wwid", "3600508b400105e210000900000490000")
+                .with_property("multipath.vendor-product", "IBM,2145")
+                .with_property("multipath.features", "'1 queue_if_no_path'")
+                .with_property("multipath.write-protect", "rw"),
+        );
+        graph.add_node(
+            Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_property("vdo.operating-mode", "normal")
+                .with_property("vdo.write-policy", "sync")
+                .with_property("vdo.compression", "enabled")
+                .with_property("vdo.deduplication", "disabled"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
+                .with_path("/dev/bcache0")
+                .with_property("bcache.role", "backing")
+                .with_property("bcache.state", "clean")
+                .with_property("bcache.cache-mode", "writeback"),
+        );
+
+        let mut output = Vec::new();
+        print_mappings(&mut output, &graph).expect("mappings table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DETAILS"));
+        assert!(output.contains("cryptroot"));
+        assert!(output.contains("       1 dm-uuid=CRYPT-LUKS2-crypt-uuid-cryptroot"));
+        assert!(
+            output.contains(
+                "active=true in-use=true cipher=aes-xts-plain64 luks=2 keyslots=2 tokens=1"
+            )
+        );
+        assert!(output.contains("dm=dm-2 wwid=3600508b400105e210000900000490000 vendor=IBM,2145"));
+        assert!(
+            output.contains(
+                "mode=normal write-policy=sync compression=enabled deduplication=disabled"
+            )
+        );
+        assert!(output.contains("role=backing state=clean cache-mode=writeback"));
     }
 
     #[test]

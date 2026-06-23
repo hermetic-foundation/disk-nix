@@ -177,8 +177,10 @@ Use these commands for:
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
   source relationships and ZFS user-reference counts for held snapshots
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
-  RAID, multipath, and cache
-  layers
+  RAID, multipath, and cache layers, including LUKS active/keyslot/token
+  counts, dm open/segment counters, multipath WWID/path state, VDO mode and
+  data-reduction settings, and bcache role/state/cache mode when probes expose
+  them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them
