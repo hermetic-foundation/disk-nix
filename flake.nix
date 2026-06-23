@@ -77,6 +77,7 @@
             services.disk-nix = {
               enable = true;
               apply = {
+                mode = "activation";
                 probeCurrent = true;
                 allowDeviceReplacement = true;
                 allowRebalance = true;
@@ -85,6 +86,7 @@
                 requireConfirmation = false;
                 confirmation = false;
                 requireConfirmationFile = "/run/disk-nix/confirm";
+                scriptOut = "/run/disk-nix/apply.sh";
               };
               luks.devices.cryptroot = {
                 device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
@@ -205,6 +207,7 @@
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
                   and .spec.iscsiSessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
                   and .spec.luns."iqn.2026-06.example:storage/root:0".lun == 0
+                  and .apply.mode == "activation"
                   and .apply.allowGrow == true
                   and .apply.allowOffline == false
                   and .apply.probeCurrent == true
@@ -215,8 +218,12 @@
                   and .apply.requireConfirmation == false
                   and .apply.confirmation == false
                   and .apply.requireConfirmationFile == "/run/disk-nix/confirm"
+                  and .apply.scriptOut == "/run/disk-nix/apply.sh"
                 ' "$spec"
-                printf '%s\n' '${nixosModuleTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}' | grep -- --probe-current
+                applyScript='${nixosModuleTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'
+                grep -- '--probe-current' "$applyScript"
+                grep -- '--script-out' "$applyScript"
+                grep -- '/run/disk-nix/apply.sh' "$applyScript"
                 touch "$out"
               '';
         };

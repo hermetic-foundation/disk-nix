@@ -8,7 +8,25 @@ self:
 let
   cfg = config.services.disk-nix;
   json = pkgs.formats.json { };
-  applyProbeFlag = lib.optionalString cfg.apply.probeCurrent " --probe-current";
+  applyScriptOutDir = lib.optionalString (cfg.apply.scriptOut != null) (
+    builtins.dirOf cfg.apply.scriptOut
+  );
+  applyArgs = [
+    "apply"
+    "--spec"
+    "/etc/disk-nix/spec.json"
+  ]
+  ++ lib.optional cfg.apply.probeCurrent "--probe-current"
+  ++ lib.optionals (cfg.apply.scriptOut != null) [
+    "--script-out"
+    cfg.apply.scriptOut
+  ];
+  applyValidationScript = pkgs.writeShellScript "disk-nix-apply-validation" ''
+    ${lib.optionalString (cfg.apply.scriptOut != null) ''
+      mkdir -p ${lib.escapeShellArg applyScriptOutDir}
+    ''}
+    exec ${lib.escapeShellArgs ([ (lib.getExe cfg.package) ] ++ applyArgs)}
+  '';
   operationType = lib.types.nullOr (
     lib.types.enum [
       "create"
@@ -711,6 +729,13 @@ in
         default = false;
         description = "Probe current topology during disk-nix apply-policy validation.";
       };
+
+      scriptOut = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "/run/disk-nix/apply.sh";
+        description = "Write the allowed command and verification plan to this reviewable shell script path during apply-policy validation.";
+      };
     };
   };
 
@@ -811,7 +836,7 @@ in
       wantedBy = lib.mkIf (cfg.apply.mode == "activation") [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${lib.getExe cfg.package} apply --spec /etc/disk-nix/spec.json${applyProbeFlag}";
+        ExecStart = applyValidationScript;
       };
     };
 
@@ -819,6 +844,10 @@ in
       {
         assertion = !(cfg.apply.allowDestructive && cfg.apply.mode == "activation");
         message = "disk-nix refuses destructive activation-mode storage changes.";
+      }
+      {
+        assertion = cfg.apply.scriptOut != null -> lib.hasPrefix "/" cfg.apply.scriptOut;
+        message = "services.disk-nix.apply.scriptOut must be an absolute path.";
       }
       {
         assertion = cfg.iscsi.boot.enable -> cfg.iscsi.initiatorName != null;

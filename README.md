@@ -90,7 +90,9 @@ The flake exposes a NixOS module:
 
   services.disk-nix = {
     enable = true;
-    apply.mode = "manual";
+    apply.mode = "activation";
+    apply.probeCurrent = true;
+    apply.scriptOut = "/run/disk-nix/apply.sh";
   };
 }
 ```
@@ -98,7 +100,9 @@ The flake exposes a NixOS module:
 The module installs the CLI, writes a normalized storage spec to
 `/etc/disk-nix/spec.json`, derives typed NixOS `fileSystems`, `swapDevices`,
 and initrd LUKS options, and keeps lifecycle domains available in the same
-planner spec.
+planner spec. When `apply.scriptOut` is set, activation validation asks the CLI
+to write the allowed command plan and post-apply verification plan to that
+reviewable shell script path.
 
 ## Safety model
 

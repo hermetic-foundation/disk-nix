@@ -145,6 +145,11 @@ Example lifecycle planning through NixOS options:
 ```nix
 {
   services.disk-nix = {
+    apply = {
+      mode = "activation";
+      probeCurrent = true;
+      scriptOut = "/run/disk-nix/apply.sh";
+    };
     pools.tank = {
       operation = "rebalance";
       addDevices = [ "/dev/disk/by-id/nvme-replacement" ];
@@ -181,7 +186,9 @@ Example lifecycle planning through NixOS options:
 - `manual`: only install the spec and CLI
 - `activation`: run apply-policy validation during activation; destructive and
   potential-data-loss actions are refused by default. Set `probeCurrent = true`
-  to include current topology comparison in that validation report.
+  to include current topology comparison in that validation report. Set
+  `scriptOut` to emit the allowed command and verification plan as a reviewable
+  shell script during validation.
 - `boot`: reserved for boot-time lifecycle work
 - `install`: reserved for installer workflows
 
@@ -203,8 +210,11 @@ Mutation policy should remain explicit:
 - `confirmation`
 - `requireConfirmationFile`
 - `probeCurrent`
+- `scriptOut`
 
 `requireBackup` and `requireConfirmation` are additional safety gates for
 high-risk actions. `requireConfirmationFile` stores the expected file path in
 the generated policy; `disk-nix apply` only treats it as confirmed when the file
 contains a standalone line equal to `disk-nix confirm`.
+`scriptOut` must be an absolute path. The activation service creates its parent
+directory before asking the CLI to write the review script.
