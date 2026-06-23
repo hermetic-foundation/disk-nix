@@ -251,6 +251,10 @@
         "limit": "25GiB",
         "maxExclusive": "10GiB"
       }
+    },
+    "0/258": {
+      "operation": "rescan",
+      "target": "/mnt/persist"
     }
   },
   "partitions": {

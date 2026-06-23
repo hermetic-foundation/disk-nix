@@ -546,10 +546,12 @@ Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
 declarations.
 Btrfs qgroup command plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` for referenced and exclusive
-limit declarations in `btrfsQgroups`. Qgroup create, destroy, and limit plans
-remain non-ready until the mounted filesystem `target` path is declared.
-The capability inventory advertises qgroup create, limit-property updates, and
-destroy risks so quota lifecycle changes show up in machine-readable
+limit declarations in `btrfsQgroups`. Qgroup `operation = "rescan"` renders
+read-only quota hierarchy, referenced/exclusive usage, limits, and graph
+inspection. Qgroup create, destroy, limit, and rescan plans remain non-ready
+until the mounted filesystem `target` path is declared.
+The capability inventory advertises qgroup create, limit-property updates,
+rescan, and destroy risks so quota lifecycle changes show up in machine-readable
 `capabilities --json` output.
 Generic snapshot declarations render concrete `zfs snapshot` commands for
 `dataset@snapshot` names and Btrfs `subvolume snapshot` commands when both the

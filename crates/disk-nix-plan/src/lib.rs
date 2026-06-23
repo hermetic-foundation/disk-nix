@@ -3059,6 +3059,23 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "btrfsQgroups" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary:
+                    "Btrfs qgroup rescan refreshes quota hierarchy, limits, and usage"
+                        .to_string(),
+                alternatives: vec![
+                    "use limit property updates only when quota enforcement must change"
+                        .to_string(),
+                    "inspect qgroup usage before tightening referenced or exclusive limits"
+                        .to_string(),
+                    "verify quota accounting and subvolume relationships before qgroup removal"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "zvols" => (
             RiskClass::Online,
             false,
@@ -4138,7 +4155,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for disks, partitions, snapshots, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, Btrfs qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4170,6 +4187,8 @@ fn classify_operation(
                     "use vdoVolumes.<name>.operation = \"rescan\" to refresh VDO status and utilization"
                         .to_string(),
                     "use caches.<device>.operation = \"rescan\" to refresh bcache state and dirty-data counters"
+                        .to_string(),
+                    "use btrfsQgroups.<id>.operation = \"rescan\" with target = <mountpoint> to refresh quota hierarchy and usage"
                         .to_string(),
                 ],
             }),
@@ -5426,6 +5445,21 @@ pub fn default_capabilities() -> Vec<Capability> {
                     "inspect current referenced and exclusive usage before tightening limits"
                         .to_string(),
                     "raise limits temporarily before migrations or balance operations".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsQgroup,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "Btrfs qgroup rescan refreshes quota usage and hierarchy"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect referenced and exclusive usage before tightening limits"
+                        .to_string(),
+                    "use property updates only when quota enforcement must change".to_string(),
+                    "verify quota accounting before deleting or replacing qgroups".to_string(),
                 ],
             }),
         },
@@ -6761,6 +6795,13 @@ mod tests {
                     && capability.operation == Operation::SetProperty
             })
             .expect("Btrfs qgroup property capability should exist");
+        let rescan = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsQgroup
+                    && capability.operation == Operation::Rescan
+            })
+            .expect("Btrfs qgroup rescan capability should exist");
         let destroy = capabilities
             .iter()
             .find(|capability| {
@@ -6771,6 +6812,7 @@ mod tests {
 
         assert_eq!(create.risk, RiskClass::Online);
         assert_eq!(update_limit.risk, RiskClass::Safe);
+        assert_eq!(rescan.risk, RiskClass::Online);
         assert_eq!(destroy.risk, RiskClass::Destructive);
         assert!(destroy.advice.is_some());
     }
@@ -7174,6 +7216,7 @@ mod tests {
                 Operation::Rescan,
                 RiskClass::Online,
             ),
+            (NodeKind::BtrfsQgroup, Operation::Rescan, RiskClass::Online),
             (NodeKind::LvmVolumeGroup, Operation::Grow, RiskClass::Online),
             (
                 NodeKind::LvmVolumeGroup,
@@ -8932,6 +8975,40 @@ mod tests {
                 .iter()
                 .any(|alternative| alternative.contains("read-only snapshot"))
         }));
+    }
+
+    #[test]
+    fn plan_accepts_btrfs_qgroup_rescan_as_online_refresh() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsQgroups": {
+                "0/257": {
+                  "operation": "rescan",
+                  "target": "/mnt/persist"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        assert_eq!(plan.summary.destructive_count, 0);
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "btrfsqgroups:0/257:rescan")
+            .expect("Btrfs qgroup rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
+        assert_eq!(rescan.context.target.as_deref(), Some("/mnt/persist"));
+        assert!(
+            rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("Btrfs qgroup rescan refreshes") })
+        );
     }
 
     #[test]

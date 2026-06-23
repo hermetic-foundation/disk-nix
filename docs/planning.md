@@ -203,9 +203,11 @@ Examples:
   `btrfs qgroup limit <size|none> <qgroupid> <path>`;
   `properties.maxExclusive` renders the exclusive limit form with `-e`.
   `operation = "create"` and `destroy = true` render Btrfs qgroup create and
-  destroy commands when a filesystem `target` path is declared. Qgroup create,
-  destroy, and limit plans remain non-ready until that mounted filesystem path
-  is declared.
+  destroy commands when a filesystem `target` path is declared.
+  `operation = "rescan"` is online and read-only; it refreshes qgroup hierarchy,
+  referenced/exclusive usage, limits, and graph relationships. Qgroup create,
+  destroy, limit, and rescan plans remain non-ready until that mounted
+  filesystem path is declared.
 - Cache attach and cache-mode updates are online or safe when they use an
   existing cache-set identity; cache replacement remains offline-required and
   cache removal is potential-data-loss because dirty writeback data must be

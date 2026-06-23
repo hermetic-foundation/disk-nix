@@ -322,6 +322,10 @@
                 target = "/mnt/persist";
                 properties.limit = "25GiB";
               };
+              btrfsQgroups."0/258" = {
+                operation = "rescan";
+                target = "/mnt/persist";
+              };
               volumes."vg0/scratch" = {
                 operation = "create";
                 desiredSize = "10GiB";
@@ -720,7 +724,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 88
+              .summary.actionCount == 89
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -732,6 +736,7 @@
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@home:create" and .risk == "online"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:limit" and .risk == "safe"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
+              and (.actions | any(.id == "btrfsqgroups:0/258:rescan" and .risk == "online"))
               and (.actions | any(.id == "volumes:vg0/scratch:create" and .risk == "online"))
               and (.actions | any(.id == "volumes:vg0/archive:deactivate" and .risk == "offline-required"))
               and (.actions | any(.id == "volumes:vg0/reporting:rescan" and .risk == "online"))
@@ -984,6 +989,8 @@
                   and .spec.btrfsSubvolumes."/mnt/persist/@home".path == "/mnt/persist/@home"
                   and .spec.btrfsQgroups."0/257".target == "/mnt/persist"
                   and .spec.btrfsQgroups."0/257".properties.limit == "25GiB"
+                  and .spec.btrfsQgroups."0/258".operation == "rescan"
+                  and .spec.btrfsQgroups."0/258".target == "/mnt/persist"
                   and .spec.volumes."vg0/scratch".operation == "create"
                   and .spec.volumes."vg0/scratch".desiredSize == "10GiB"
                   and .spec.volumes."vg0/reporting".operation == "rescan"

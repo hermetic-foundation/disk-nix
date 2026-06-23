@@ -378,6 +378,10 @@ Example lifecycle planning through NixOS options:
       target = "/mnt/persist";
       properties.limit = "25GiB";
     };
+    btrfsQgroups."0/258" = {
+      operation = "rescan";
+      target = "/mnt/persist";
+    };
     volumes."vg0/scratch" = {
       operation = "create";
       desiredSize = "10GiB";

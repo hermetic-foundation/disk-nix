@@ -1831,6 +1831,26 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             ],
             vec!["Btrfs qgroup hierarchy and limits match desired state".to_string()],
         ),
+        Operation::Rescan if collection == Some("btrfsQgroups") => (
+            vec![
+                command(
+                    ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                    false,
+                    "verify Btrfs qgroup usage and hierarchy after rescan",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled Btrfs qgroup relationships after re-probe",
+                ),
+            ],
+            vec![
+                "Btrfs qgroup referenced and exclusive usage match refreshed topology"
+                    .to_string(),
+                "qgroup limits and hierarchy are reviewed before later enforcement changes"
+                    .to_string(),
+            ],
+        ),
         Operation::SetProperty if collection == Some("exports") => (
             vec![
                 command(
@@ -4047,6 +4067,47 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "verify qgroup quota accounting is enabled on the filesystem".to_string(),
                     "select the qgroup id intentionally to avoid hierarchy collisions".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("btrfsQgroups") => {
+            let qgroup_id = action.context.name.as_deref().unwrap_or("<qgroupid>");
+            let target_path = btrfs_qgroup_target_path(action.context.target.as_deref(), qgroup_id);
+            let target = target_path.unwrap_or("<btrfs-filesystem-path>");
+            let show_command = match target_path {
+                Some(target) => command(
+                    ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                    false,
+                    "refresh Btrfs qgroup hierarchy, limits, and usage",
+                ),
+                None => command_with_readiness(
+                    ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["mounted Btrfs filesystem path"],
+                    "refresh Btrfs qgroups after selecting the mounted filesystem path",
+                ),
+            };
+            let inspect_command = match target_path {
+                Some(target) => command(
+                    ["disk-nix", "inspect", target],
+                    false,
+                    "inspect modeled Btrfs qgroup graph relationships after refresh",
+                ),
+                None => command_with_readiness(
+                    ["disk-nix", "inspect", target],
+                    false,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["mounted Btrfs filesystem path"],
+                    "inspect modeled Btrfs qgroup relationships after selecting the mounted filesystem path",
+                ),
+            };
+            (
+                vec![show_command, inspect_command],
+                vec![
+                    format!("review qgroup {qgroup_id} usage before limit or removal changes"),
+                    "qgroup rescan does not change quota enforcement or delete policy".to_string(),
                 ],
                 true,
             )
@@ -13890,6 +13951,10 @@ mod tests {
                       "maxExclusive": "10GiB"
                     }
                   },
+                  "0/263": {
+                    "target": "/mnt/persist",
+                    "operation": "rescan"
+                  },
                   "0/259": {
                     "target": "/mnt/persist",
                     "destroy": true
@@ -13943,8 +14008,24 @@ mod tests {
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsqgroups:0/263:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "qgroup", "show", "--raw", "-reF", "/mnt/persist"]
+                })
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "btrfsQgroups:0/257:set-property:limit"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "qgroup", "show", "--raw", "-reF", "/mnt/persist"]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "btrfsqgroups:0/263:rescan"
                 && step.commands.iter().any(|command| {
                     command.argv == ["btrfs", "qgroup", "show", "--raw", "-reF", "/mnt/persist"]
                 })
@@ -13966,6 +14047,9 @@ mod tests {
                     "properties": {
                       "limit": "5GiB"
                     }
+                  },
+                  "0/263": {
+                    "operation": "rescan"
                   },
                   "0/262": {
                     "destroy": true
@@ -14006,6 +14090,22 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsqgroups:0/263:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "qgroup",
+                            "show",
+                            "--raw",
+                            "-reF",
+                            "<btrfs-filesystem-path>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mounted Btrfs filesystem path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.action_id == "btrfsqgroups:0/262:destroy"
                 && step.commands.iter().any(|command| {
                     command.argv
@@ -14020,7 +14120,7 @@ mod tests {
                         && command.unresolved_inputs == ["mounted Btrfs filesystem path"]
                 })
         }));
-        assert_eq!(report.command_summary.needs_domain_implementation_count, 5);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 7);
         assert!(!report.command_summary.all_commands_ready());
     }
 

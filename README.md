@@ -255,8 +255,10 @@ Btrfs subvolume property updates render read-only toggles with
 properties are classified as unsupported with manual-review alternatives.
 Btrfs qgroup lifecycle plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` updates for referenced and
-exclusive byte limits from `btrfsQgroups` declarations. Executable qgroup
-create, destroy, and limit plans require a mounted filesystem `target` path.
+exclusive byte limits from `btrfsQgroups` declarations. Qgroup
+`operation = "rescan"` renders read-only quota hierarchy, limit, usage, and
+graph inspection commands. Executable qgroup create, destroy, limit, and rescan
+plans require a mounted filesystem `target` path.
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit. Swap
 grow and format commands require a path-shaped swap target such as `/swapfile`
