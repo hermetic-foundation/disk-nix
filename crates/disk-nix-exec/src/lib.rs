@@ -4450,6 +4450,30 @@ fn filesystem_check_command(fs_type: &str, target: &str, device: Option<&str>) -
             ["filesystem source device"],
             "run NTFS consistency probe after resolving the source device",
         ),
+        ("f2fs", Some(source)) => command(
+            ["fsck.f2fs", "--dry-run", source],
+            false,
+            "run a dry-run F2FS filesystem consistency check",
+        ),
+        ("f2fs", None) => command_with_readiness(
+            ["fsck.f2fs", "--dry-run", "<filesystem-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "run F2FS filesystem check after resolving the source device",
+        ),
+        ("bcachefs", Some(source)) => command(
+            ["bcachefs", "fsck", "-n", source],
+            false,
+            "run a no-repair bcachefs filesystem consistency check",
+        ),
+        ("bcachefs", None) => command_with_readiness(
+            ["bcachefs", "fsck", "-n", "<filesystem-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "run bcachefs filesystem check after resolving the source device",
+        ),
         (_, Some(source)) => command_vec_with_readiness(
             vec!["<filesystem-check-tool>", source],
             false,
@@ -4545,6 +4569,30 @@ fn filesystem_repair_command(
             CommandReadiness::NeedsDomainImplementation,
             ["filesystem source device"],
             "run limited NTFS repair after resolving the source device",
+        ),
+        ("f2fs", Some(source)) => command(
+            ["fsck.f2fs", "-f", "-y", source],
+            true,
+            "repair F2FS filesystem metadata after offline review",
+        ),
+        ("f2fs", None) => command_with_readiness(
+            ["fsck.f2fs", "-f", "-y", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "repair F2FS filesystem after resolving the source device",
+        ),
+        ("bcachefs", Some(source)) => command(
+            ["bcachefs", "fsck", "-y", source],
+            true,
+            "repair bcachefs metadata after offline review",
+        ),
+        ("bcachefs", None) => command_with_readiness(
+            ["bcachefs", "fsck", "-y", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "repair bcachefs after resolving the source device",
         ),
         (_, Some(source)) => command_vec_with_readiness(
             vec!["<filesystem-repair-tool>", source],
@@ -8683,6 +8731,18 @@ mod tests {
                     "device": "/dev/disk/by-label/Windows",
                     "fsType": "ntfs",
                     "operation": "repair"
+                  },
+                  "mobile": {
+                    "mountpoint": "/mnt/mobile",
+                    "device": "/dev/disk/by-label/Mobile",
+                    "fsType": "f2fs",
+                    "operation": "check"
+                  },
+                  "bulk": {
+                    "mountpoint": "/bulk",
+                    "device": "/dev/disk/by-label/Bulk",
+                    "fsType": "bcachefs",
+                    "operation": "repair"
                   }
                 }
               },
@@ -8744,6 +8804,22 @@ mod tests {
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:mobile:check"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["fsck.f2fs", "--dry-run", "/dev/disk/by-label/Mobile"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:bulk:repair"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["bcachefs", "fsck", "-y", "/dev/disk/by-label/Bulk"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "filesystems:home:check"
                 && step
@@ -8773,6 +8849,16 @@ mod tests {
                     "mountpoint": "/mnt/shared",
                     "fsType": "exfat",
                     "operation": "check"
+                  },
+                  "mobile": {
+                    "mountpoint": "/mnt/mobile",
+                    "fsType": "f2fs",
+                    "operation": "check"
+                  },
+                  "bulk": {
+                    "mountpoint": "/bulk",
+                    "fsType": "bcachefs",
+                    "operation": "repair"
                   }
                 }
               },
@@ -8807,6 +8893,22 @@ mod tests {
             step.action_id == "filesystems:shared:check"
                 && step.commands.iter().any(|command| {
                     command.argv == ["fsck.exfat", "-n", "<filesystem-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:mobile:check"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["fsck.f2fs", "--dry-run", "<filesystem-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:bulk:repair"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["bcachefs", "fsck", "-y", "<filesystem-device>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["filesystem source device"]
                 })

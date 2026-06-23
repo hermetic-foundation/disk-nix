@@ -413,9 +413,10 @@ device is explicitly selected.
 Filesystem check and repair actions carry the declared `device` or `disk` into
 read-only and mutating maintenance command plans. Ext uses `e2fsck`, XFS uses
 `xfs_repair`, Btrfs uses `btrfs check`, FAT/vfat uses `fsck.fat`, exFAT uses
-`fsck.exfat`, and NTFS uses `ntfsfix`; repair variants remain offline-required
-and should be reviewed after a read-only check. NTFS repair is limited
-Linux-side remediation and not a replacement for Windows `chkdsk`.
+`fsck.exfat`, F2FS uses `fsck.f2fs`, bcachefs uses `bcachefs fsck`, and NTFS
+uses `ntfsfix`; repair variants remain offline-required and should be reviewed
+after a read-only check. NTFS repair is limited Linux-side remediation and not a
+replacement for Windows `chkdsk`.
 Btrfs scrub actions use the mounted path and render `btrfs scrub start -B`;
 ZFS pool scrub actions render `zpool scrub`.
 Filesystem trim actions render `fstrim -v` against the mounted target and remain

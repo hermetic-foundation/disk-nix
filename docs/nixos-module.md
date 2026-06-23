@@ -59,11 +59,11 @@ Raw `spec` remains available for storage domains whose typed NixOS options have
 not been implemented yet.
 
 `toolPackages` defaults to the storage tools used by the probe and executor
-adapters, including Btrfs, ext, XFS, exFAT, LVM, cryptsetup, MD RAID,
-multipath, NFS, iSCSI, NVMe, VDO, bcache, ZFS, partitioning, and util-linux
-tooling. The apply service adds these packages to `PATH`, and the same packages
-are installed in `environment.systemPackages`. Override the list to pin
-site-specific tool builds or to trim unused storage domains.
+adapters, including Btrfs, bcachefs, ext, XFS, F2FS, exFAT, LVM, cryptsetup,
+MD RAID, multipath, NFS, iSCSI, NVMe, VDO, bcache, ZFS, partitioning, and
+util-linux tooling. The apply service adds these packages to `PATH`, and the
+same packages are installed in `environment.systemPackages`. Override the list
+to pin site-specific tool builds or to trim unused storage domains.
 
 Typed NFS export declarations derive regular NixOS NFS server export lines
 only when they are non-destroy declarations with explicit `client` and

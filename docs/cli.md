@@ -366,11 +366,13 @@ declaration only names a mountpoint. XFS shrink renders manual-only migration
 guidance.
 Filesystem check and repair command plans render `e2fsck -n`/`e2fsck -f -y`,
 `xfs_repair -n`/`xfs_repair`, `btrfs check --readonly`/`--repair`,
-`fsck.fat -n`/`-a`, `fsck.exfat -n`/`-p`, and `ntfsfix --no-action`/`ntfsfix`
-for ext, XFS, Btrfs, FAT/vfat, exFAT, and NTFS declarations. Repair commands
-mutate metadata and remain offline-required; NTFS repair is limited Linux-side
-remediation and not a replacement for Windows `chkdsk`. Check commands are
-read-only but still require a stable source device.
+`fsck.fat -n`/`-a`, `fsck.exfat -n`/`-p`,
+`fsck.f2fs --dry-run`/`-f -y`, `bcachefs fsck -n`/`-y`, and
+`ntfsfix --no-action`/`ntfsfix` for ext, XFS, Btrfs, FAT/vfat, exFAT, F2FS,
+bcachefs, and NTFS declarations. Repair commands mutate metadata and remain
+offline-required; NTFS repair is limited Linux-side remediation and not a
+replacement for Windows `chkdsk`. Check commands are read-only but still require
+a stable source device.
 Btrfs filesystem rebalance plans render `btrfs balance start`; declared
 `properties.balance.data`, `properties.balance.metadata`, and
 `properties.balance.system` values render as `-d`, `-m`, and `-s` filters for

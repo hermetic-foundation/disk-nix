@@ -17,12 +17,14 @@ let
   applyCommand = if cfg.apply.failOnBlocked then "apply" else "validate";
   applyPolicy = builtins.removeAttrs cfg.apply [ "execute" ];
   defaultToolPackages = with pkgs; [
+    bcachefs-tools
     bcache-tools
     btrfs-progs
     cryptsetup
     dosfstools
     e2fsprogs
     exfatprogs
+    f2fs-tools
     lvm2
     mdadm
     multipath-tools
@@ -660,12 +662,14 @@ in
       default = defaultToolPackages;
       defaultText = lib.literalExpression ''
         with pkgs; [
+          bcachefs-tools
           bcache-tools
           btrfs-progs
           cryptsetup
           dosfstools
           e2fsprogs
           exfatprogs
+          f2fs-tools
           lvm2
           mdadm
           multipath-tools
