@@ -1259,17 +1259,18 @@ fn print_pools(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> 
 fn print_snapshots(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<48} {:>12} {:<32}",
+        "{:<22} {:<48} {:>12} {:<32} DETAILS",
         "KIND", "NAME", "SIZE", "SOURCE"
     )?;
     for node in graph.nodes.iter().filter(|node| is_snapshot_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<48} {:>12} {:<32}",
+            "{:<22} {:<48} {:>12} {:<32} {}",
             node.kind,
             node.name,
             human_bytes(node.size_bytes),
-            snapshot_source(graph, node).unwrap_or("-")
+            snapshot_source(graph, node).unwrap_or("-"),
+            usage_details(node)
         )?;
     }
     Ok(())
@@ -1848,6 +1849,8 @@ fn usage_details(node: &Node) -> String {
         ("btrfs.qgroup-id", "qgroup"),
         ("btrfs.mount-target", "mount-target"),
         ("btrfs.device-id", "device-id"),
+        ("btrfs.id", "subvol-id"),
+        ("btrfs.parent-uuid", "parent-uuid"),
         ("btrfs.max-referenced", "max-rfer"),
         ("btrfs.max-exclusive", "max-excl"),
         ("vdo.use-percent", "vdo-use"),
@@ -2058,8 +2061,8 @@ mod tests {
     use super::{
         confirmation_file_accepts, is_device_node, is_mapping_node, is_network_storage_node,
         is_partition_node, is_pool_node, is_snapshot_node, mount_details, print_filesystems,
-        print_mappings, print_mounts, print_network_storage, print_pools, print_usage,
-        print_volumes, snapshot_source, usage_details, usage_percent,
+        print_mappings, print_mounts, print_network_storage, print_pools, print_snapshots,
+        print_usage, print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2387,6 +2390,61 @@ mod tests {
             "server=storage.example vers=4.2 proto=tcp sec=sys clientaddr=10.0.0.20 addr=10.0.0.10"
         ));
         assert!(output.contains("rsize=1048576 wsize=1048576"));
+    }
+
+    #[test]
+    fn snapshots_table_includes_domain_metadata_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "dataset:tank/home",
+            NodeKind::ZfsDataset,
+            "tank/home",
+        ));
+        graph.add_node(
+            Node::new(
+                "zfs-snapshot:tank/home@daily",
+                NodeKind::ZfsSnapshot,
+                "tank/home@daily",
+            )
+            .with_size_bytes(1_073_741_824)
+            .with_property("zfs.userrefs", "2")
+            .with_property("zfs.compression", "zstd")
+            .with_property("zfs.encryption", "aes-256-gcm")
+            .with_property("zfs.keystatus", "available"),
+        );
+        graph.add_edge(Edge::new(
+            "zfs-snapshot:tank/home@daily",
+            "dataset:tank/home",
+            Relationship::SnapshotOf,
+        ));
+        graph.add_node(
+            Node::new("lvm-lv:vg/root-snap", NodeKind::LvmSnapshot, "vg/root-snap")
+                .with_property("lvm.origin", "root")
+                .with_property("lvm.pool", "thinpool")
+                .with_property("lvm.data-percent", "12.50"),
+        );
+        graph.add_node(
+            Node::new(
+                "btrfs-subvolume:fs:@/.snapshots/1/snapshot",
+                NodeKind::BtrfsSnapshot,
+                "@/.snapshots/1/snapshot",
+            )
+            .with_property("btrfs.id", "257")
+            .with_property("btrfs.parent-uuid", "subvol-root"),
+        );
+
+        let mut output = Vec::new();
+        print_snapshots(&mut output, &graph).expect("snapshots table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DETAILS"));
+        assert!(output.contains("tank/home"));
+        assert!(
+            output
+                .contains("userrefs=2 compression=zstd encryption=aes-256-gcm keystatus=available")
+        );
+        assert!(output.contains("data=12.50 origin=root pool=thinpool"));
+        assert!(output.contains("subvol-id=257 parent-uuid=subvol-root"));
     }
 
     #[test]

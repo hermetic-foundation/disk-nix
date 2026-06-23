@@ -175,7 +175,8 @@ Use these commands for:
   including ZFS health/vdev role/state, LVM extent and PV/LV counts, Btrfs
   qgroup limits, and RAID level/state where probes expose them
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
-  source relationships and ZFS user-reference counts for held snapshots
+  source relationships, LVM origin/pool/data metadata, Btrfs subvolume IDs and
+  parent UUIDs, and ZFS user-reference, compression, and encryption details
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
   counts, dm open/segment counters, multipath WWID/path state, VDO mode and
