@@ -1511,6 +1511,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "pools" => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: "ZFS pool creation writes pool labels to every selected device"
+                    .to_string(),
+                alternatives: vec![
+                    "verify every vdev device is empty or fully backed up before creation"
+                        .to_string(),
+                    "import an existing pool instead of recreating it".to_string(),
+                    "use stable /dev/disk/by-id paths and review redundancy layout before zpool create"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "datasets" => (
             RiskClass::Online,
             false,
@@ -2191,9 +2206,34 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::ZfsPool,
+            operation: Operation::Create,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "creating a ZFS pool writes labels to member devices".to_string(),
+                alternatives: vec![
+                    "verify devices are empty before zpool create".to_string(),
+                    "import an existing pool instead of recreating it".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsPool,
             operation: Operation::AddDevice,
             risk: RiskClass::Online,
             advice: None,
+        },
+        Capability {
+            node_kind: NodeKind::ZfsPool,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "destroying a ZFS pool removes the pool and all contained datasets"
+                    .to_string(),
+                alternatives: vec![
+                    "export the pool when moving it between systems".to_string(),
+                    "take recursive snapshots and verify backups before destruction".to_string(),
+                ],
+            }),
         },
         Capability {
             node_kind: NodeKind::BtrfsFilesystem,
@@ -3400,6 +3440,50 @@ mod tests {
                 && action.context.device.as_deref() == Some("/dev/sdb")
                 && action.advice.is_some()
         }));
+    }
+
+    #[test]
+    fn plan_classifies_zfs_pool_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "pools": {
+                "tank": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/pool-vdev0"
+                },
+                "oldtank": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.destructive_count, 2);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "pools:tank:create")
+            .expect("pool create action exists");
+        assert_eq!(create.risk, RiskClass::Destructive);
+        assert!(create.destructive);
+        assert_eq!(
+            create.context.device.as_deref(),
+            Some("/dev/disk/by-id/pool-vdev0")
+        );
+        assert!(create.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("zpool create"))
+        }));
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "pools:oldtank:destroy")
+            .expect("pool destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::Destructive);
     }
 
     #[test]

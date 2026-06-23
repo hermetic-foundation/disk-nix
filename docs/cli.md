@@ -319,6 +319,8 @@ LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
 and policy-gated `lvremove` commands for `thinPools` lifecycle declarations.
 LVM volume group command plans render policy-gated `vgcreate` and `vgremove`
 commands for `volumeGroups` lifecycle declarations.
+ZFS pool command plans render policy-gated `zpool create` and `zpool destroy`,
+plus online topology commands such as `zpool add`, `zpool replace`, and scrub.
 ZFS dataset command plans render reviewed `zfs create` and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations.
 `verificationSummary` and `verificationPlan` record read-only commands and

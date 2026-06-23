@@ -86,6 +86,9 @@ Examples:
 - LVM volume group creation and removal are destructive because they write or
   remove VG metadata on member physical volumes; prefer `vgextend` when
   preserving an existing group is possible.
+- ZFS pool creation and destruction are destructive because they write labels
+  to vdev devices or remove all contained datasets and zvols; import/export is
+  preferred when moving an existing pool.
 - ZFS dataset creation is online, with advice to review inherited mountpoint,
   quota, reservation, and encryption policy; dataset destruction remains
   destructive and recommends snapshots or rename-first validation.

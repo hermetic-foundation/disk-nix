@@ -157,10 +157,10 @@ intentionally refused until a direct mutating executor exists.
 Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS format/resize
 workflows, Btrfs subvolume creation/deletion, VDO create/grow/remove, LVM
-thin-pool create/grow/remove, LVM snapshot create/merge/remove, loop-device mapping
-updates, MD RAID member updates, multipath map updates, ZFS dataset and zvol
-updates, volume and pool updates, network LUN growth, snapshots, and cache
-replacement.
+thin-pool create/grow/remove, LVM snapshot create/merge/remove, loop-device
+mapping updates, MD RAID member updates, multipath map updates, ZFS pool,
+dataset, and zvol updates, volume updates, network LUN growth, snapshots, and
+cache replacement.
 Cache apply plans include bcache-aware attach, cache-mode, dirty-data, and
 replacement review steps instead of a generic cache placeholder.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
@@ -175,6 +175,8 @@ LVM thin-pool apply plans render reviewed `lvcreate --type thin-pool`,
 `lvextend`, and gated `lvremove` steps.
 LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
 volume group lifecycle declarations.
+ZFS pool apply plans render gated `zpool create` and `zpool destroy` commands,
+plus reviewed topology updates such as `zpool add` and `zpool replace`.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
 Use `--report-out` with either command to persist the JSON report for review

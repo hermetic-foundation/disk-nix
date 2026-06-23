@@ -764,6 +764,30 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Create if collection == Some("pools") => (
+            vec![
+                command(
+                    ["zpool", "status", "-P", target],
+                    false,
+                    "verify ZFS pool health and vdev topology after creation",
+                ),
+                command(
+                    ["zpool", "list", "-H", "-p", target],
+                    false,
+                    "verify ZFS pool size, allocation, and free capacity after creation",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled pool graph relationships after creation",
+                ),
+            ],
+            vec![
+                "pool exists with expected vdev devices and health state".to_string(),
+                "pool free space and allocation policy are reviewed before creating datasets"
+                    .to_string(),
+            ],
+        ),
         Operation::AddDevice | Operation::ReplaceDevice | Operation::Rebalance
             if collection == Some("filesystems") =>
         {
@@ -1102,6 +1126,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "removed VDO volume no longer appears in VDO status output".to_string(),
                 "dependent filesystems, mappings, and mounts no longer reference the VDO device"
                     .to_string(),
+            ],
+        ),
+        Operation::Destroy if collection == Some("pools") => (
+            vec![
+                command(
+                    ["zpool", "list", "-H", "-p"],
+                    false,
+                    "verify ZFS pool inventory after destruction",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "re-probe topology after pool destruction",
+                ),
+            ],
+            vec![
+                "destroyed pool no longer appears in ZFS pool listings".to_string(),
+                "datasets, zvols, exports, and mounts have been migrated or removed".to_string(),
             ],
         ),
         Operation::Destroy if collection == Some("loopDevices") => (
@@ -1738,6 +1780,27 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("pools") => {
+            let target = target.unwrap_or("<zfs-pool>");
+            let device = action.context.device.as_deref();
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", device.unwrap_or("<vdev-device>")],
+                        false,
+                        "inspect vdev device identity before creating the ZFS pool",
+                    ),
+                    zfs_pool_create_command(target, device),
+                ],
+                vec![
+                    "verify every vdev device is empty or fully backed up before pool creation"
+                        .to_string(),
+                    "choose redundancy, ashift, feature, and autotrim policy before creating datasets"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create if collection == Some("zvols") => {
             let target = target.unwrap_or("<zvol>");
             let desired_size = action.context.desired_size.as_deref();
@@ -2020,6 +2083,30 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "take a snapshot or clone before destruction when rollback is required"
                         .to_string(),
                     "detach LUN, VM, or filesystem consumers before destroying the zvol".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("pools") => {
+            let target = target.unwrap_or("<zfs-pool>");
+            (
+                vec![
+                    command(
+                        ["zpool", "status", "-P", target],
+                        false,
+                        "inspect pool health and dependent vdevs before destruction",
+                    ),
+                    command(
+                        ["zpool", "destroy", target],
+                        true,
+                        "destroy the reviewed ZFS pool after datasets and consumers are migrated",
+                    ),
+                ],
+                vec![
+                    "take recursive snapshots or verified backups before destroying the pool"
+                        .to_string(),
+                    "export the pool instead of destroying it when moving it to another host"
+                        .to_string(),
                 ],
                 true,
             )
@@ -2779,6 +2866,23 @@ fn partition_create_command(
         ["verified free region", "partition number and flags"],
         "create a partition in the reviewed free region",
     )
+}
+
+fn zfs_pool_create_command(target: &str, device: Option<&str>) -> ExecutionCommand {
+    match device {
+        Some(device) => command(
+            ["zpool", "create", target, device],
+            true,
+            "create a ZFS pool on the reviewed vdev device",
+        ),
+        None => command_with_readiness(
+            ["zpool", "create", target, "<vdev-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["vdev device or topology"],
+            "create a ZFS pool after selecting the vdev topology",
+        ),
+    }
 }
 
 fn partition_grow_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
@@ -4247,12 +4351,19 @@ mod tests {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
               "pools": {
+                "newtank": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/new-pool-vdev"
+                },
                 "tank": {
                   "operation": "rebalance",
                   "addDevices": ["/dev/disk/by-id/new"],
                   "properties": {
                     "autotrim": "on"
                   }
+                },
+                "oldtank": {
+                  "destroy": true
                 }
               },
               "snapshots": {
@@ -4262,6 +4373,7 @@ mod tests {
               },
               "apply": {
                 "allowGrow": true,
+                "allowDestructive": true,
                 "allowPropertyChanges": true
               }
             }"#,
@@ -4271,6 +4383,18 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "zpool",
+                        "create",
+                        "newtank",
+                        "/dev/disk/by-id/new-pool-vdev",
+                    ]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
                 command.argv == ["zpool", "add", "tank", "/dev/disk/by-id/new"]
@@ -4287,10 +4411,29 @@ mod tests {
                 .iter()
                 .any(|command| command.argv == ["zfs", "snapshot", "tank/home@before"])
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["zpool", "destroy", "oldtank"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "pools:newtank:create"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zpool", "list", "-H", "-p", "newtank"])
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["zpool", "status", "-P", "tank"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "pools:oldtank:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
