@@ -162,9 +162,10 @@ Use these commands for:
 
 - `devices`: disks, partitions, dm devices, LVM objects, VDO, RAID, zvols,
   cache devices, multipath devices, NVMe namespaces, loop devices, and swap,
-  including model/vendor, transport, rotational, partition table/number,
-  filesystem type, loop backing/offset/autoclear metadata, active swap
-  state/type/priority, and udev link details when probes expose them
+  including model/vendor, transport, rotational, NVMe model/firmware/namespace
+  geometry, partition table/number, filesystem type, loop
+  backing/offset/autoclear metadata, active swap state/type/priority, and udev
+  link details when probes expose them
 - `partitions`: partition nodes with size, PARTUUID, path, filesystem type,
   partition number, start/end geometry, type/name, and flags when probes expose
   them
@@ -197,8 +198,8 @@ Use these commands for:
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
   metadata detail data, including bcache role/set/state, cache mode,
-  replacement policy, dirty data, writeback percentage, loop mapping details,
-  and active swap state/type/priority when probed
+  replacement policy, dirty data, writeback percentage, NVMe namespace details,
+  loop mapping details, and active swap state/type/priority when probed
 
 ## Inspect
 

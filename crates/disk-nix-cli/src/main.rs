@@ -1848,6 +1848,11 @@ fn usage_details(node: &Node) -> String {
         ("vendor", "vendor"),
         ("transport", "transport"),
         ("rotational", "rotational"),
+        ("nvme.model", "nvme-model"),
+        ("nvme.firmware", "firmware"),
+        ("nvme.index", "ns-index"),
+        ("nvme.maximum-lba", "max-lba"),
+        ("nvme.sector-size", "sector-size"),
         ("lsblk.type", "lsblk-type"),
         ("filesystem.type", "fstype"),
         ("partition.table", "ptable"),
@@ -2202,6 +2207,11 @@ mod tests {
                 .with_property("vendor", "Acme")
                 .with_property("transport", "nvme")
                 .with_property("rotational", "false")
+                .with_property("nvme.model", "Example NVMe")
+                .with_property("nvme.firmware", "1.0")
+                .with_property("nvme.index", "0")
+                .with_property("nvme.maximum-lba", "1953125")
+                .with_property("nvme.sector-size", "512")
                 .with_property("partition.table", "gpt")
                 .with_property("udev.symlink", "disk/by-id/nvme-Acme_FastDisk"),
         );
@@ -2250,7 +2260,7 @@ mod tests {
         assert!(output.contains("DETAILS"));
         assert!(
             output
-                .contains("model=FastDisk vendor=Acme transport=nvme rotational=false ptable=gpt")
+                .contains("model=FastDisk vendor=Acme transport=nvme rotational=false nvme-model=Example NVMe firmware=1.0 ns-index=0 max-lba=1953125 sector-size=512 ptable=gpt")
         );
         assert!(output.contains("udev-link=disk/by-id/nvme-Acme_FastDisk"));
         assert!(output.contains("lsblk-type=part fstype=vfat partno=1 udev-fstype=vfat"));
@@ -2415,6 +2425,21 @@ mod tests {
         assert_eq!(
             usage_details(&loop_device),
             "back-file=/var/lib/images/root.img major-minor=7:0 offset=1048576 sizelimit=1073741824 logical-sector=512 autoclear=true ro=false dio=true"
+        );
+
+        let nvme = Node::new(
+            "block:/dev/nvme0n1",
+            NodeKind::NvmeNamespace,
+            "/dev/nvme0n1",
+        )
+        .with_property("nvme.model", "Example NVMe")
+        .with_property("nvme.firmware", "1.0")
+        .with_property("nvme.index", "0")
+        .with_property("nvme.maximum-lba", "1953125")
+        .with_property("nvme.sector-size", "512");
+        assert_eq!(
+            usage_details(&nvme),
+            "nvme-model=Example NVMe firmware=1.0 ns-index=0 max-lba=1953125 sector-size=512"
         );
     }
 
