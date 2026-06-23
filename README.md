@@ -170,6 +170,8 @@ Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit.
 Disk initialization plans render destructive-policy-gated `parted mklabel` and
 partition table reread steps after disk identity inspection.
+MD RAID create plans render destructive-policy-gated `mdadm --create` commands
+from explicit member devices and RAID level declarations.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
 online `vdo growLogical` and physical growth review steps.
 NFS export apply plans render reviewed `exportfs` create/unexport commands

@@ -857,6 +857,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         Operation::AddDevice
         | Operation::ReplaceDevice
         | Operation::RemoveDevice
+        | Operation::Create
         | Operation::Grow
             if collection == Some("mdRaids") =>
         {
@@ -1963,6 +1964,31 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         .to_string(),
                     "choose redundancy, ashift, feature, and autotrim policy before creating datasets"
                         .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Create if collection == Some("mdRaids") => {
+            let target = target.unwrap_or("<md-array>");
+            (
+                vec![
+                    command(
+                        ["cat", "/proc/mdstat"],
+                        false,
+                        "inspect existing MD RAID state before array creation",
+                    ),
+                    md_raid_create_command(
+                        target,
+                        action.context.level.as_deref(),
+                        &action.context.devices,
+                    ),
+                ],
+                vec![
+                    "verify every member device is empty or fully backed up before array creation"
+                        .to_string(),
+                    "choose metadata, bitmap, and spare policy before creating production arrays"
+                        .to_string(),
+                    "monitor /proc/mdstat until initial sync completes".to_string(),
                 ],
                 true,
             )
@@ -3521,6 +3547,51 @@ fn zvol_set_volsize_command(target: &str, desired_size: Option<&str>) -> Executi
     }
 }
 
+fn md_raid_create_command(
+    target: &str,
+    level: Option<&str>,
+    devices: &[String],
+) -> ExecutionCommand {
+    let missing_level = level.is_none();
+    let missing_devices = devices.is_empty();
+    let level = level.unwrap_or("<level>");
+    let raid_devices = if missing_devices {
+        "<member-count>".to_string()
+    } else {
+        devices.len().to_string()
+    };
+    let mut argv = vec![
+        "mdadm".to_string(),
+        "--create".to_string(),
+        target.to_string(),
+        "--level".to_string(),
+        level.to_string(),
+        "--raid-devices".to_string(),
+        raid_devices,
+    ];
+    if missing_devices {
+        argv.push("<member-device>".to_string());
+    } else {
+        argv.extend(devices.iter().cloned());
+    }
+
+    if missing_level || missing_devices {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["RAID level", "member devices"],
+            "create the MD RAID array after selecting level and reviewed member devices",
+        )
+    } else {
+        command_vec(
+            argv,
+            true,
+            "create the reviewed MD RAID array from explicit member devices",
+        )
+    }
+}
+
 fn md_raid_grow_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
     match desired_size {
         Some(size) => command_vec(
@@ -4286,6 +4357,84 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["cat", "/proc/mdstat"])
+        }));
+    }
+
+    #[test]
+    fn md_raid_create_requires_destructive_policy_and_renders_mdadm_create() {
+        let (blocked_plan, blocked_policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "mdRaids": {
+                  "newroot": {
+                    "target": "/dev/md/newroot",
+                    "operation": "create",
+                    "level": "1",
+                    "devices": [
+                      "/dev/disk/by-id/nvme-a",
+                      "/dev/disk/by-id/nvme-b"
+                    ]
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let blocked = prepare_execution(&blocked_plan, blocked_policy, ExecutionMode::DryRun);
+
+        assert_eq!(blocked.status, ExecutionStatus::Blocked);
+        assert!(blocked.command_plan.is_empty());
+
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "mdRaids": {
+                  "newroot": {
+                    "target": "/dev/md/newroot",
+                    "operation": "create",
+                    "level": "1",
+                    "devices": [
+                      "/dev/disk/by-id/nvme-a",
+                      "/dev/disk/by-id/nvme-b"
+                    ]
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "mdadm",
+                        "--create",
+                        "/dev/md/newroot",
+                        "--level",
+                        "1",
+                        "--raid-devices",
+                        "2",
+                        "/dev/disk/by-id/nvme-a",
+                        "/dev/disk/by-id/nvme-b",
+                    ]
+                    && command.readiness == CommandReadiness::Ready
+                    && command.mutates
+            })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "mdraids:newroot:create"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["mdadm", "--detail", "/dev/md/newroot"])
         }));
     }
 

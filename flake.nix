@@ -294,6 +294,8 @@
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
               and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
+              and ."$defs".lifecycleObject.properties.level.type == "string"
+              and ."$defs".lifecycleObject.properties.devices.type == "array"
               and ."$defs".lifecycleObject.properties.path.type == "string"
               and ."$defs".lifecycleObject.properties.client.type == "string"
               and ."$defs".lifecycleObject.properties.portal.type == "string"

@@ -98,7 +98,8 @@ Examples:
   destructive and recommends snapshots or rename-first validation.
 - zvol creation and growth are online operations, with advice to verify pool
   capacity, reservation policy, and downstream block consumers.
-- MD RAID member add is online; replacement and grow/reshape are
+- MD RAID creation is destructive because it writes array metadata to member
+  devices. Member add is online; replacement and grow/reshape are
   offline-required because redundancy, resync, and dependent consumers must be
   coordinated.
 - Multipath map growth and path add are online; path replacement is
@@ -170,6 +171,7 @@ Lifecycle objects may use:
   `replace-device`, `add-device`, `remove-device`, `set-property`, `snapshot`,
   `rebalance`, `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
+- `devices`: list of member devices for create operations such as MD RAID
 - `removeDevices`: list of devices to remove
 - `replaceDevices`: object mapping old device to replacement device
 - `properties`: object of properties to set
@@ -178,6 +180,7 @@ Lifecycle objects may use:
 - `target`, `path`, or `mountpoint`: explicit target path or object identity
   when it differs from the attribute name
 - `device` or `disk`: backing device path for disk and partition operations
+- `level` or `raidLevel`: MD RAID level for reviewed array creation
 - `client`: NFS export client or network selector
 - `portal`: iSCSI target portal such as `192.0.2.10:3260`; `metadata.portal`
   is also accepted for NixOS-module-derived session declarations

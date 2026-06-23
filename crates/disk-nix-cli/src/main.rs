@@ -664,6 +664,10 @@ fn spec_schema() -> serde_json::Value {
                         "type": "array",
                         "items": { "type": "string" }
                     },
+                    "devices": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
                     "removeDevices": {
                         "type": "array",
                         "items": { "type": "string" }
@@ -696,6 +700,7 @@ fn spec_schema() -> serde_json::Value {
                     "start": { "type": ["string", "number"] },
                     "end": { "type": ["string", "number"] },
                     "partitionType": { "type": "string" },
+                    "level": { "type": "string" },
                     "type": { "type": "string" },
                     "destroy": { "type": "boolean" },
                     "preserveData": { "type": "boolean", "default": true },

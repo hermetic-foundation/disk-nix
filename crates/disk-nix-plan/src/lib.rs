@@ -160,6 +160,8 @@ pub struct ActionContext {
     pub target: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub devices: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replacement: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -179,6 +181,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub partition_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub level: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub client: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub portal: Option<String>,
@@ -193,6 +197,7 @@ impl ActionContext {
             && self.name.is_none()
             && self.target.is_none()
             && self.device.is_none()
+            && self.devices.is_empty()
             && self.replacement.is_none()
             && self.property.is_none()
             && self.property_value.is_none()
@@ -202,6 +207,7 @@ impl ActionContext {
             && self.start.is_none()
             && self.end.is_none()
             && self.partition_type.is_none()
+            && self.level.is_none()
             && self.client.is_none()
             && self.portal.is_none()
             && self.options.is_none()
@@ -783,10 +789,12 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         name: Some(name.to_string()),
         target: string_field(object, &["target", "path", "mountpoint"]).or(Some(name.to_string())),
         device: string_field(object, &["device", "disk"]),
+        devices: string_array_field(object, &["devices", "addDevices"]),
         desired_size: desired_size(object),
         start: string_field(object, &["start", "startOffset"]),
         end: string_field(object, &["end", "endOffset"]),
         partition_type: string_field(object, &["partitionType", "type"]),
+        level: string_field(object, &["level", "raidLevel"]),
         client: string_field(object, &["client"]),
         portal: lifecycle_portal(object),
         options: lifecycle_options(object),
@@ -802,6 +810,21 @@ fn string_field(object: &Value, keys: &[&str]) -> Option<String> {
             _ => None,
         })
     })
+}
+
+fn string_array_field(object: &Value, keys: &[&str]) -> Vec<String> {
+    keys.iter()
+        .find_map(|key| {
+            object.get(*key).and_then(|value| {
+                value.as_array().map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(ToString::to_string))
+                        .collect::<Vec<_>>()
+                })
+            })
+        })
+        .unwrap_or_default()
 }
 
 fn desired_size(object: &Value) -> Option<String> {
@@ -3181,6 +3204,15 @@ mod tests {
         let plan = plan_from_json_bytes(
             br#"{
               "mdRaids": {
+                "newroot": {
+                  "target": "/dev/md/newroot",
+                  "operation": "create",
+                  "level": "1",
+                  "devices": [
+                    "/dev/disk/by-id/nvme-a",
+                    "/dev/disk/by-id/nvme-b"
+                  ]
+                },
                 "root": {
                   "target": "/dev/md/root",
                   "operation": "grow",
@@ -3195,8 +3227,23 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.destructive_count, 1);
         assert_eq!(plan.summary.offline_required_count, 2);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "mdraids:newroot:create")
+            .expect("md create action exists");
+        assert_eq!(create.risk, RiskClass::Destructive);
+        assert_eq!(create.context.level.as_deref(), Some("1"));
+        assert_eq!(
+            create.context.devices,
+            vec![
+                "/dev/disk/by-id/nvme-a".to_string(),
+                "/dev/disk/by-id/nvme-b".to_string(),
+            ]
+        );
         let grow = plan
             .actions
             .iter()
