@@ -172,8 +172,9 @@ Use these commands for:
   and flags when probes expose them
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
   ZFS datasets/snapshots, and NFS exports, with selected filesystem metadata
-  details such as `blkid` version/block-size/usage and ext
-  state/features/block and inode counts when probes expose them
+  details such as `blkid` version/block-size/usage, exFAT GUID/serial/cluster
+  geometry, and ext state/features/block and inode counts when probes expose
+  them
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
   exports, including LVM origin/pool/data metadata, MD RAID level/state, iSCSI
   attached disks, NFS server/export details, and ZFS zvol `volsize` when

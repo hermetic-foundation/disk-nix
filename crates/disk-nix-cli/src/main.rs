@@ -1973,6 +1973,7 @@ fn usage_details(node: &Node) -> String {
         ("ext.last-checked", "last-checked"),
         ("ext.lifetime-writes", "lifetime-writes"),
         ("ext.journal-size", "journal-size"),
+        ("exfat.guid", "guid"),
         ("exfat.volume-serial", "serial"),
         ("exfat.volume-length-sectors", "sectors"),
         ("exfat.cluster-count", "clusters"),
@@ -2465,6 +2466,7 @@ mod tests {
         );
 
         let exfat = Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
+            .with_property("exfat.guid", "01234567-89ab-cdef-0123-456789abcdef")
             .with_property("exfat.volume-serial", "0x6eef953b")
             .with_property("exfat.cluster-count", "49984")
             .with_property("exfat.free-clusters", "1024")
@@ -2472,7 +2474,7 @@ mod tests {
             .with_property("exfat.sectors-per-cluster", "64");
         assert_eq!(
             usage_details(&exfat),
-            "serial=0x6eef953b clusters=49984 free-clusters=1024 sector-bytes=512 sectors-per-cluster=64"
+            "guid=01234567-89ab-cdef-0123-456789abcdef serial=0x6eef953b clusters=49984 free-clusters=1024 sector-bytes=512 sectors-per-cluster=64"
         );
 
         let bcache = Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
