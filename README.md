@@ -251,6 +251,8 @@ LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
 volume group lifecycle declarations, reviewed `vgextend` steps for grow
 operations with an explicit physical volume, and reviewed `pvmove` then
 `vgreduce` steps for explicit physical-volume removal.
+Generic add-device and replace-device operations stay non-ready until the
+device to add, source device, and replacement device are declared explicitly.
 ZFS pool apply plans render gated `zpool create` commands from a single
 `device` or an explicit `devices` vdev list, gated `zpool destroy` commands,
 and reviewed topology updates such as `zpool add`, `zpool replace`, and

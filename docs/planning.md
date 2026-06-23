@@ -293,6 +293,9 @@ for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
 destructive policy gates allow removal.
 LVM volume group grow command plans use `vgextend <vg> <pv>` when a physical
 volume device is declared, and mark the command unresolved when it is missing.
+Generic add-device and replace-device lifecycle operations remain unresolved
+until the device to add, the source device, and the replacement device are
+declared explicitly.
 ZFS pool device removal renders reviewed `zpool remove <pool> <device>` steps
 when the pool layout supports evacuation. LVM volume group device removal
 renders reviewed `pvmove <pv>` then `vgreduce <vg> <pv>` steps so allocated
