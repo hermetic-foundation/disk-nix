@@ -23,6 +23,7 @@ The NixOS module is the primary declarative interface.
       mode = "manual";
       allowGrow = true;
       allowShrink = false;
+      allowPotentialDataLoss = false;
       allowDestructive = false;
       probeCurrent = true;
       requireBackup = false;
@@ -462,6 +463,7 @@ Mutation policy should remain explicit:
 - `allowDestructive`
 - `allowFormat`
 - `allowShrink`
+- `allowPotentialDataLoss`
 - `allowGrow`
 - `allowOffline`
 - `allowPropertyChanges`
@@ -479,9 +481,11 @@ Mutation policy should remain explicit:
 - `reportOut`
 
 `requireBackup` and `requireConfirmation` are additional safety gates for
-high-risk actions. `requireConfirmationFile` stores the expected file path in
-the generated policy; `disk-nix apply` only treats it as confirmed when the file
-contains a standalone line equal to `disk-nix confirm`.
+high-risk actions. `allowPotentialDataLoss` is the explicit opt-in for reviewed
+rollback, shrink, and device-removal workflows, and backup or confirmation
+requirements still apply when enabled. `requireConfirmationFile` stores the
+expected file path in the generated policy; `disk-nix apply` only treats it as
+confirmed when the file contains a standalone line equal to `disk-nix confirm`.
 `failOnBlocked` defaults to true. When false, activation keeps writing the same
 report data but uses `disk-nix validate`, which exits successfully even when
 policy blocks planned actions.

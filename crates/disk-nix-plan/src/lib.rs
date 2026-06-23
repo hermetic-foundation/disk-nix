@@ -259,6 +259,7 @@ pub struct ApplyPolicy {
     pub allow_destructive: bool,
     pub allow_format: bool,
     pub allow_shrink: bool,
+    pub allow_potential_data_loss: bool,
     #[serde(default = "default_true")]
     pub allow_grow: bool,
     pub allow_offline: bool,
@@ -286,6 +287,7 @@ impl Default for ApplyPolicy {
             allow_destructive: false,
             allow_format: false,
             allow_shrink: false,
+            allow_potential_data_loss: false,
             allow_grow: true,
             allow_offline: false,
             allow_property_changes: true,
@@ -768,6 +770,8 @@ fn blocked_action(action: &PlannedAction, policy: &ApplyPolicy) -> Option<Blocke
         Some("format actions require allowFormat=true")
     } else if action.operation == Operation::Shrink && !policy.allow_shrink {
         Some("shrink actions require allowShrink=true")
+    } else if action.risk == RiskClass::PotentialDataLoss && !policy.allow_potential_data_loss {
+        Some("potential-data-loss actions require allowPotentialDataLoss=true")
     } else if action.operation == Operation::Grow && !policy.allow_grow {
         Some("grow actions require allowGrow=true")
     } else if matches!(
@@ -788,8 +792,6 @@ fn blocked_action(action: &PlannedAction, policy: &ApplyPolicy) -> Option<Blocke
     {
         (!policy.allow_destructive)
             .then_some("destructive or irreversible actions require allowDestructive=true")
-    } else if action.risk == RiskClass::PotentialDataLoss {
-        Some("potential data loss actions require a safer workflow or future explicit policy")
     } else {
         None
     }?;
@@ -7951,7 +7953,7 @@ mod tests {
 
     #[test]
     fn apply_policy_blocks_destructive_and_potential_data_loss_actions() {
-        let (plan, policy) = plan_and_policy_from_json_bytes(
+        let (plan, mut policy) = plan_and_policy_from_json_bytes(
             br#"{
               "spec": {
                 "datasets": {
@@ -7966,6 +7968,7 @@ mod tests {
                 "allowDestructive": false,
                 "allowFormat": false,
                 "allowShrink": false,
+                "allowPotentialDataLoss": false,
                 "allowGrow": true,
                 "allowOffline": false,
                 "allowPropertyChanges": true
@@ -7974,12 +7977,65 @@ mod tests {
         )
         .expect("document should parse");
 
-        let report = evaluate_apply_policy(&plan, policy);
+        let report = evaluate_apply_policy(&plan, policy.clone());
 
         assert_eq!(report.blocked_count, 2);
         assert_eq!(report.blocked_summary.destructive_count, 1);
         assert_eq!(report.blocked_summary.potential_data_loss_count, 1);
+        assert!(report.blocked.iter().any(|blocked| {
+            blocked.reason == "potential-data-loss actions require allowPotentialDataLoss=true"
+        }));
         assert!(!report.can_execute());
+
+        policy.allow_destructive = true;
+        policy.allow_potential_data_loss = true;
+        let report = evaluate_apply_policy(&plan, policy);
+        assert_eq!(report.blocked_count, 0);
+        assert!(report.can_execute());
+    }
+
+    #[test]
+    fn apply_policy_requires_backup_and_confirmation_for_allowed_potential_data_loss() {
+        let (plan, mut policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "home": {
+                  "mountpoint": "/home",
+                  "fsType": "ext4",
+                  "resizePolicy": "shrink-allowed"
+                }
+              },
+              "apply": {
+                "allowShrink": true,
+                "allowPotentialDataLoss": true,
+                "requireBackup": true,
+                "backupVerified": false,
+                "requireConfirmation": true,
+                "confirmation": false
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        let report = evaluate_apply_policy(&plan, policy.clone());
+        assert_eq!(report.blocked_count, 1);
+        assert_eq!(
+            report.blocked[0].reason,
+            "backup-required actions require backupVerified=true"
+        );
+
+        policy.backup_verified = true;
+        let report = evaluate_apply_policy(&plan, policy.clone());
+        assert_eq!(report.blocked_count, 1);
+        assert_eq!(
+            report.blocked[0].reason,
+            "confirmation-required actions require confirmation=true"
+        );
+
+        policy.confirmation = true;
+        let report = evaluate_apply_policy(&plan, policy);
+        assert_eq!(report.blocked_count, 0);
+        assert!(report.can_execute());
     }
 
     #[test]

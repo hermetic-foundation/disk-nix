@@ -303,7 +303,10 @@ The report includes:
 
 The default policy allows online grow and property-change intents, but blocks
 offline-required, destructive, irreversible, format, shrink, and
-potential-data-loss actions. Unsupported actions are always blocked.
+potential-data-loss actions. Set `allowPotentialDataLoss = true` only for
+reviewed rollback, shrink, or device-removal workflows; `requireBackup` and
+`requireConfirmation` still gate those actions when enabled. Unsupported
+actions are always blocked.
 
 `--execute` runs storage commands only after policy validation passes and every
 planned command reports `ready`. It refuses plans with unresolved desired sizes,
@@ -334,8 +337,8 @@ and staging replacement cache media without silently formatting unknown devices.
 bcache sysfs operations require a concrete `/dev/bcache*` target; logical cache
 names remain marked `needs-domain-implementation`.
 Btrfs filesystem device-removal plans use Btrfs allocation inspection and
-domain-specific `btrfs device remove` rendering, but the mutating command stays
-blocked while potential-data-loss actions have no explicit apply override.
+domain-specific `btrfs device remove` rendering, but the mutating command is
+blocked by default until `allowPotentialDataLoss=true` is set.
 Swapfile growth command plans render `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon`; block-device swap growth keeps the backing resize command
 non-ready until the partition, LV, LUN, or other backing layer is selected.
@@ -494,8 +497,8 @@ ZFS snapshot retention declarations render safe `zfs hold <tag> <snapshot>`
 and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
 ZFS snapshot rollback declarations render reviewed `zfs rollback` command
 details internally, and `recursiveRollback`, `recursive`, or
-`zfs.rollbackRecursive` render reviewed `zfs rollback -r` details. Apply
-remains blocked as potential data loss.
+`zfs.rollbackRecursive` render reviewed `zfs rollback -r` details. Apply blocks
+rollback by default and requires `allowPotentialDataLoss=true` before execution.
 The capability inventory advertises ZFS snapshot create, hold/release,
 rollback including recursive rollback review, and destroy risks plus Btrfs
 snapshot create and destroy risks.

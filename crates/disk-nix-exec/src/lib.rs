@@ -1729,12 +1729,16 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "origin logical volume contents and consumers are verified after merge".to_string(),
             ],
         ),
-        Operation::Rollback if collection == Some("snapshots") && is_zfs_snapshot_name(target) => {
-            let dataset = zfs_snapshot_dataset(target).unwrap_or("<dataset>");
+        Operation::Rollback if collection == Some("snapshots") => {
+            let snapshot = action.context.name.as_deref().unwrap_or(target);
+            if !is_zfs_snapshot_name(snapshot) {
+                return (Vec::new(), Vec::new());
+            }
+            let dataset = zfs_snapshot_dataset(snapshot).unwrap_or("<dataset>");
             (
                 vec![
                     command(
-                        ["zfs", "list", "-t", "snapshot", "-H", "-p", target],
+                        ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
                         false,
                         "verify the ZFS snapshot still exists after rollback",
                     ),
@@ -1907,9 +1911,15 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         .or(action.context.name.as_deref())
         .or_else(|| parts.get(1).copied());
     match action.operation {
-        Operation::Grow if collection == Some("filesystems") || action.id.starts_with("filesystem:") => {
+        Operation::Grow
+            if collection == Some("filesystems") || action.id.starts_with("filesystem:") =>
+        {
             let target = target.unwrap_or("<filesystem>");
-            let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
+            let fs_type = action
+                .context
+                .fs_type
+                .as_deref()
+                .unwrap_or("<filesystem-type>");
             let device = action.context.device.as_deref();
             let desired_size = action.context.desired_size.as_deref();
             let grow_command = filesystem_grow_command(fs_type, target, device, desired_size);
@@ -1935,7 +1945,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             if collection == Some("filesystems") || action.id.starts_with("filesystem:") =>
         {
             let target = target.unwrap_or("<filesystem>");
-            let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
+            let fs_type = action
+                .context
+                .fs_type
+                .as_deref()
+                .unwrap_or("<filesystem-type>");
             let device = action.context.device.as_deref();
             let desired_size = action.context.desired_size.as_deref();
             (
@@ -1954,7 +1968,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             if collection == Some("filesystems") || action.id.starts_with("filesystems:") =>
         {
             let target = target.unwrap_or("<filesystem>");
-            let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
+            let fs_type = action
+                .context
+                .fs_type
+                .as_deref()
+                .unwrap_or("<filesystem-type>");
             let device = action.context.device.as_deref();
             (
                 filesystem_check_commands(fs_type, target, device),
@@ -1970,7 +1988,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             if collection == Some("filesystems") || action.id.starts_with("filesystems:") =>
         {
             let target = target.unwrap_or("<filesystem>");
-            let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
+            let fs_type = action
+                .context
+                .fs_type
+                .as_deref()
+                .unwrap_or("<filesystem-type>");
             let device = action.context.device.as_deref();
             (
                 filesystem_repair_commands(fs_type, target, device),
@@ -1989,7 +2011,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             let desired_size = action.context.desired_size.as_deref();
             let note = desired_size
                 .map(|size| format!("desired size from spec: {size}"))
-                .unwrap_or_else(|| "replace <size> after comparing desired state with probed capacity".to_string());
+                .unwrap_or_else(|| {
+                    "replace <size> after comparing desired state with probed capacity".to_string()
+                });
             (
                 vec![
                     lvm_lvs_report_command(
@@ -2032,8 +2056,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 ],
                 vec![
                     "grow the backing partition, LUN, or disk before pvresize".to_string(),
-                    "verify volume group free extents before extending logical volumes"
-                        .to_string(),
+                    "verify volume group free extents before extending logical volumes".to_string(),
                 ],
                 true,
             )
@@ -2090,7 +2113,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     lvm_lvs_report_command(
                         target,
-                        Some("lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent"),
+                        Some(
+                            "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent",
+                        ),
                         "inspect origin LV and cache state before attaching LVM cache",
                     ),
                     lvm_cache_attach_command(target, cache_pool),
@@ -2389,9 +2414,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect active swap state before resizing",
                     ),
-                    swap_command("swapoff", target, "disable swap before changing backing storage or signature"),
+                    swap_command(
+                        "swapoff",
+                        target,
+                        "disable swap before changing backing storage or signature",
+                    ),
                     swap_resize_command(target, desired_size),
-                    swap_command("mkswap", target, "recreate the swap signature after backing storage resize"),
+                    swap_command(
+                        "mkswap",
+                        target,
+                        "recreate the swap signature after backing storage resize",
+                    ),
                     swap_command("swapon", target, "reactivate swap after verification"),
                 ],
                 vec![
@@ -2484,7 +2517,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             let desired_size = action.context.desired_size.as_deref();
             (
                 vec![
-                    md_raid_detail_command(target, "inspect MD RAID array health before grow or reshape"),
+                    md_raid_detail_command(
+                        target,
+                        "inspect MD RAID array health before grow or reshape",
+                    ),
                     md_raid_grow_command(target, desired_size),
                     command(
                         ["cat", "/proc/mdstat"],
@@ -2591,7 +2627,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         "grow the storage object with the target-domain-specific command",
                     ),
                 ],
-                vec!["select the grow command from the target storage domain and desired size".to_string()],
+                vec![
+                    "select the grow command from the target storage domain and desired size"
+                        .to_string(),
+                ],
                 true,
             )
         }
@@ -2611,7 +2650,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ),
                     volume_group_extend_command(target, device),
                 ],
-                vec!["initialize or verify the physical volume before extending the VG".to_string()],
+                vec![
+                    "initialize or verify the physical volume before extending the VG".to_string(),
+                ],
                 true,
             )
         }
@@ -2624,7 +2665,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .or_else(|| action_id_suffix(&action.id, "add-device"));
             (
                 vec![
-                    md_raid_detail_command(target, "inspect MD RAID redundancy before adding a member"),
+                    md_raid_detail_command(
+                        target,
+                        "inspect MD RAID redundancy before adding a member",
+                    ),
                     md_raid_add_member_command(target, device),
                 ],
                 vec![
@@ -2644,7 +2688,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .or_else(|| action_id_suffix(&action.id, "add-device"));
             (
                 vec![
-                    multipath_list_command(target, "inspect live multipath paths before adding a path"),
+                    multipath_list_command(
+                        target,
+                        "inspect live multipath paths before adding a path",
+                    ),
                     multipath_add_path_command(path),
                 ],
                 vec![
@@ -2671,7 +2718,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ),
                     add_device_command(collection, target, device),
                 ],
-                vec!["verify the new device identity and redundancy policy before attaching it".to_string()],
+                vec![
+                    "verify the new device identity and redundancy policy before attaching it"
+                        .to_string(),
+                ],
                 true,
             )
         }
@@ -2685,7 +2735,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             let to = action.context.replacement.as_deref();
             (
                 vec![
-                    md_raid_detail_command(target, "inspect MD RAID redundancy before member replacement"),
+                    md_raid_detail_command(
+                        target,
+                        "inspect MD RAID redundancy before member replacement",
+                    ),
                     md_raid_replace_member_command(target, from, to),
                 ],
                 vec![
@@ -2705,7 +2758,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             let to = action.context.replacement.as_deref();
             (
                 vec![
-                    multipath_list_command(target, "inspect live multipath paths before replacement"),
+                    multipath_list_command(
+                        target,
+                        "inspect live multipath paths before replacement",
+                    ),
                     multipath_add_path_command(to),
                     multipath_delete_path_command(from),
                 ],
@@ -2736,7 +2792,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "add the replacement physical volume before moving extents".to_string(),
                     "keep the old PV online until pvmove completes and no allocated extents remain"
                         .to_string(),
-                    "verify logical volumes, thin pools, and filesystems before vgreduce".to_string(),
+                    "verify logical volumes, thin pools, and filesystems before vgreduce"
+                        .to_string(),
                 ],
                 true,
             )
@@ -2758,17 +2815,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ),
                     replace_device_command(collection, target, from, to),
                 ],
-                vec!["keep the old device available until post-apply verification passes".to_string()],
+                vec![
+                    "keep the old device available until post-apply verification passes"
+                        .to_string(),
+                ],
                 true,
             )
         }
         Operation::Rebalance => {
             let target = target.unwrap_or("<target>");
-            let rebalance = rebalance_command(
-                collection,
-                target,
-                &action.context.property_assignments,
-            );
+            let rebalance =
+                rebalance_command(collection, target, &action.context.property_assignments);
             (
                 vec![
                     command(
@@ -2778,7 +2835,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ),
                     rebalance,
                 ],
-                vec!["monitor progress and health until the rebalance operation completes".to_string()],
+                vec![
+                    "monitor progress and health until the rebalance operation completes"
+                        .to_string(),
+                ],
                 true,
             )
         }
@@ -2905,7 +2965,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ),
                     property_command,
                 ],
-                vec!["property values must come from the desired spec and target domain".to_string()],
+                vec![
+                    "property values must come from the desired spec and target domain".to_string(),
+                ],
                 true,
             )
         }
@@ -2913,7 +2975,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             let target = target.unwrap_or("<snapshot>");
             let snapshot = action.context.name.as_deref().unwrap_or(target);
             let snapshot_command = if collection == Some("lvmSnapshots") {
-                lvm_snapshot_create_command(target, snapshot, action.context.desired_size.as_deref())
+                lvm_snapshot_create_command(
+                    target,
+                    snapshot,
+                    action.context.desired_size.as_deref(),
+                )
             } else {
                 snapshot_command(
                     collection,
@@ -3086,11 +3152,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect ZFS pool free space before creating the zvol",
                     ),
-                    zvol_create_command(
-                        target,
-                        desired_size,
-                        &action.context.property_assignments,
-                    ),
+                    zvol_create_command(target, desired_size, &action.context.property_assignments),
                 ],
                 vec![
                     "decide sparse versus reserved allocation before creation".to_string(),
@@ -3226,11 +3288,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Create if collection == Some("disks") => {
             let disk = disk_target_path(action);
-            let label = action
-                .context
-                .partition_type
-                .as_deref()
-                .unwrap_or("gpt");
+            let label = action.context.partition_type.as_deref().unwrap_or("gpt");
             (
                 vec![
                     disk_nix_inspect_command(
@@ -3300,7 +3358,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         "swap target path",
                         "inspect target before creating a swap signature",
                     ),
-                    swap_command("swapoff", target, "disable active swap before replacing its signature"),
+                    swap_command(
+                        "swapoff",
+                        target,
+                        "disable active swap before replacing its signature",
+                    ),
                     swap_command("mkswap", target, "create a swap signature on the target"),
                 ],
                 vec![
@@ -3327,8 +3389,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ),
                 ],
                 vec![
-                    "verify header backups and key enrollment policy before formatting"
-                        .to_string(),
+                    "verify header backups and key enrollment policy before formatting".to_string(),
                     "create filesystems or LVM layers only after the mapper is open".to_string(),
                 ],
                 true,
@@ -3426,7 +3487,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "verify another key, token, or recovery passphrase unlocks the device first"
                         .to_string(),
-                    "keep a LUKS header backup until post-removal unlock testing passes".to_string(),
+                    "keep a LUKS header backup until post-removal unlock testing passes"
+                        .to_string(),
                 ],
                 true,
             )
@@ -3455,7 +3517,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 ["create tool", "target"],
                 "create the requested storage object",
             )],
-            vec!["creation commands require target-kind-specific arguments from the desired spec".to_string()],
+            vec![
+                "creation commands require target-kind-specific arguments from the desired spec"
+                    .to_string(),
+            ],
             true,
         ),
         Operation::Destroy if collection == Some("btrfsSubvolumes") => {
@@ -3552,7 +3617,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "take a snapshot or clone before destruction when rollback is required"
                         .to_string(),
-                    "detach LUN, VM, or filesystem consumers before destroying the zvol".to_string(),
+                    "detach LUN, VM, or filesystem consumers before destroying the zvol"
+                        .to_string(),
                 ],
                 true,
             )
@@ -3607,7 +3673,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Destroy if collection == Some("snapshots") => {
             let snapshot = action.context.name.as_deref().unwrap_or("<snapshot>");
-            let source = action.context.target.as_deref().unwrap_or("<snapshot-source>");
+            let source = action
+                .context
+                .target
+                .as_deref()
+                .unwrap_or("<snapshot-source>");
             if is_zfs_snapshot_name(snapshot) {
                 (
                     vec![
@@ -3749,8 +3819,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ),
                 ],
                 vec![
-                    "remove or migrate logical volumes before removing the volume group".to_string(),
-                    "verify no filesystems, mappings, or services still reference the VG".to_string(),
+                    "remove or migrate logical volumes before removing the volume group"
+                        .to_string(),
+                    "verify no filesystems, mappings, or services still reference the VG"
+                        .to_string(),
                 ],
                 true,
             )
@@ -3875,16 +3947,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Rollback if collection == Some("snapshots") => {
             let target = target.unwrap_or("<snapshot>");
-            if is_zfs_snapshot_name(target) {
+            let snapshot = action.context.name.as_deref().unwrap_or(target);
+            if is_zfs_snapshot_name(snapshot) {
                 (
                     vec![
                         command(
-                            ["zfs", "list", "-t", "snapshot", "-H", "-p", target],
+                            ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
                             false,
                             "inspect ZFS snapshot before rollback",
                         ),
                         zfs_snapshot_rollback_command(
-                            target,
+                            snapshot,
                             action.context.recursive_rollback.unwrap_or(false),
                         ),
                     ],
@@ -3967,7 +4040,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .or_else(|| action_id_suffix(&action.id, "remove-device"));
             (
                 vec![
-                    md_raid_detail_command(target, "inspect MD RAID redundancy before member removal"),
+                    md_raid_detail_command(
+                        target,
+                        "inspect MD RAID redundancy before member removal",
+                    ),
                     md_raid_fail_member_command(target, device),
                     md_raid_remove_member_command(target, device),
                 ],
@@ -4140,7 +4216,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Rollback
         | Operation::Destroy => (
             Vec::new(),
-            vec!["no command plan is generated for this risk class unless future explicit policy and executor support are added".to_string()],
+            vec!["no domain-specific command plan is generated for this action yet".to_string()],
             true,
         ),
     }
@@ -10107,6 +10183,30 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::Blocked);
         assert!(report.command_plan.is_empty());
         assert_eq!(report.command_summary.step_count, 0);
+
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home",
+                  "rollback": true
+                }
+              },
+              "apply": {
+                "allowPotentialDataLoss": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["zfs", "rollback", "tank/home@before"])
+        }));
     }
 
     #[test]

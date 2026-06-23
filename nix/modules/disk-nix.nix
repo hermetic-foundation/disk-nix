@@ -1291,6 +1291,12 @@ in
         description = "Allow shrink operations.";
       };
 
+      allowPotentialDataLoss = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Allow explicitly reviewed potential-data-loss actions such as shrink, rollback, and device removal after any configured backup or confirmation gates pass.";
+      };
+
       allowGrow = lib.mkOption {
         type = lib.types.bool;
         default = true;

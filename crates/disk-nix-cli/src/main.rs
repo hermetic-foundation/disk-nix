@@ -901,6 +901,7 @@ fn spec_schema() -> serde_json::Value {
                     "allowDestructive": { "type": "boolean", "default": false },
                     "allowFormat": { "type": "boolean", "default": false },
                     "allowShrink": { "type": "boolean", "default": false },
+                    "allowPotentialDataLoss": { "type": "boolean", "default": false },
                     "allowGrow": { "type": "boolean", "default": true },
                     "allowOffline": { "type": "boolean", "default": false },
                     "allowPropertyChanges": { "type": "boolean", "default": true },

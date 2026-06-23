@@ -94,6 +94,7 @@
                 probeCurrent = true;
                 allowDeviceReplacement = true;
                 allowRebalance = true;
+                allowPotentialDataLoss = false;
                 requireBackup = false;
                 backupVerified = false;
                 requireConfirmation = false;
@@ -539,6 +540,7 @@
               and ."$defs".lifecycleObject.properties.jsonFile.type == "string"
               and ."$defs".lifecycleObject.properties.options.type == "string"
               and ."$defs".applyPolicy.properties.failOnBlocked.default == true
+              and ."$defs".applyPolicy.properties.allowPotentialDataLoss.default == false
               and (."$defs".applyPolicy.properties.reportOut.type | index("string") != null)
             ' "$schema"
 
@@ -787,6 +789,7 @@
                   and .apply.probeCurrent == true
                   and .apply.allowDeviceReplacement == true
                   and .apply.allowRebalance == true
+                  and .apply.allowPotentialDataLoss == false
                   and .apply.requireBackup == false
                   and .apply.backupVerified == false
                   and .apply.requireConfirmation == false

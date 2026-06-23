@@ -222,8 +222,8 @@ Examples:
   `zfs hold <tag> <snapshot>` and `zfs release <tag> <snapshot>`. ZFS rollback
   command rendering is available for review, and `recursiveRollback`,
   `recursive`, or `zfs.rollbackRecursive` render explicit `zfs rollback -r`
-  details for recursive rollback review. Apply remains blocked until a safer
-  explicit potential-data-loss policy exists.
+  details for recursive rollback review. Apply blocks rollback by default and
+  requires explicit `allowPotentialDataLoss=true` policy before execution.
 
 The checked-in specs under `examples/` are part of `nix flake check`. The
 flake validates stable plan summaries, selected action ids, allowed simple
@@ -440,6 +440,7 @@ Policy fields currently supported:
 - `allowDestructive`
 - `allowFormat`
 - `allowShrink`
+- `allowPotentialDataLoss`
 - `allowGrow`
 - `allowOffline`
 - `allowPropertyChanges`
@@ -453,7 +454,9 @@ Policy fields currently supported:
 
 The default policy allows online grow and property-change intents, but blocks
 offline-required, destructive, irreversible, format, shrink, and
-potential-data-loss actions.
+potential-data-loss actions. `allowPotentialDataLoss=true` is the explicit
+policy override for reviewed rollback, shrink, device removal, and similar
+actions.
 Unsupported actions are always blocked, even if permissive destructive or
 shrink policy flags are enabled.
 `allowDeviceReplacement=false` blocks device add, replacement, and removal

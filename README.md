@@ -122,6 +122,7 @@ The flake exposes a NixOS module:
     enable = true;
     apply.mode = "activation";
     apply.probeCurrent = true;
+    apply.allowPotentialDataLoss = false;
     apply.failOnBlocked = true;
     apply.execute = false;
     apply.scriptOut = "/run/disk-nix/apply.sh";
@@ -155,6 +156,9 @@ blocked actions are still reported, but the unit exits successfully. Set
 `apply.execute = true` only when activation should run ready, policy-allowed
 commands through `disk-nix apply --execute`; this requires
 `apply.failOnBlocked = true` and still writes the requested review artifacts.
+Potential-data-loss updates such as rollback, shrink, and device removal remain
+blocked unless `apply.allowPotentialDataLoss = true`; backup and confirmation
+gates still apply when configured.
 
 ## Safety model
 
@@ -197,8 +201,8 @@ LVM cache apply plans use separate `lvmCaches` declarations and render
 `--cachepolicy` commands when an origin `vg/lv` and cache-pool LV are declared.
 Btrfs filesystem device topology plans render `btrfs device add`,
 `btrfs replace start`, and allocation-inspected `btrfs device remove` commands
-for review. Removal remains blocked by the current potential-data-loss policy
-gate.
+for review. Removal is blocked by default and requires explicit
+`allowPotentialDataLoss` policy before execution.
 Btrfs filesystem rebalance plans render `btrfs balance start` and use declared
 data, metadata, and system balance filters from lifecycle properties when set.
 Btrfs scrub plans render `btrfs scrub start -B`; ZFS pool scrub plans render
