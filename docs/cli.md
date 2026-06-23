@@ -167,12 +167,12 @@ Use these commands for:
   backing/offset/autoclear metadata, active swap state/type/priority, and udev
   link details when probes expose them
 - `partitions`: partition nodes with size, PARTUUID, path, filesystem type,
-  partition number, start/end geometry, type/name, and flags when probes expose
-  them
+  `blkid` signature details, partition number, start/end geometry, type/name,
+  and flags when probes expose them
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
   ZFS datasets/snapshots, and NFS exports, with selected filesystem metadata
-  details such as ext state/features/block and inode counts when probes expose
-  them
+  details such as `blkid` version/block-size/usage and ext
+  state/features/block and inode counts when probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
   exports, including LVM origin/pool/data metadata, MD RAID level/state, iSCSI
   attached disks, NFS server/export details, and ZFS zvol `volsize` when
@@ -199,9 +199,9 @@ Use these commands for:
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
   metadata detail data, including bcache role/set/state, cache mode,
-  replacement policy, dirty data, writeback percentage, ext superblock details,
-  NVMe namespace details, loop mapping details, and active swap
-  state/type/priority when probed
+  replacement policy, dirty data, writeback percentage, `blkid` signature
+  details, ext superblock details, NVMe namespace details, loop mapping
+  details, and active swap state/type/priority when probed
 
 ## Inspect
 

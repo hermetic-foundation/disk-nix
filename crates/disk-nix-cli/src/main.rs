@@ -1855,6 +1855,12 @@ fn usage_details(node: &Node) -> String {
         ("nvme.sector-size", "sector-size"),
         ("lsblk.type", "lsblk-type"),
         ("filesystem.type", "fstype"),
+        ("blkid.type", "blkid-type"),
+        ("blkid.version", "version"),
+        ("blkid.block-size", "blkid-block-size"),
+        ("blkid.usage", "usage"),
+        ("blkid.uuid-sub", "uuid-sub"),
+        ("blkid.partlabel", "partlabel"),
         ("partition.table", "ptable"),
         ("partition.number", "partno"),
         ("partition.start", "start"),
@@ -2305,7 +2311,12 @@ mod tests {
             .with_property("partition.type", "fat32")
             .with_property("partition.name", "ESP")
             .with_property("partition.flags", "boot, esp")
-            .with_property("filesystem.type", "vfat"),
+            .with_property("filesystem.type", "vfat")
+            .with_property("blkid.type", "vfat")
+            .with_property("blkid.version", "FAT32")
+            .with_property("blkid.block-size", "512")
+            .with_property("blkid.usage", "filesystem")
+            .with_property("blkid.partlabel", "EFI System Partition"),
         );
 
         let mut output = Vec::new();
@@ -2315,7 +2326,7 @@ mod tests {
         assert!(output.contains("DETAILS"));
         assert!(output.contains("1111-2222"));
         assert!(output.contains(
-            "fstype=vfat partno=1 start=1049kB end=538MB type=fat32 part-name=ESP flags=boot, esp"
+            "fstype=vfat blkid-type=vfat version=FAT32 blkid-block-size=512 usage=filesystem partlabel=EFI System Partition partno=1 start=1049kB end=538MB type=fat32 part-name=ESP flags=boot, esp"
         ));
     }
 
@@ -2394,6 +2405,10 @@ mod tests {
 
         let ext = Node::new("fs:/dev/sda2", NodeKind::Filesystem, "ext4")
             .with_property("filesystem.type", "ext4")
+            .with_property("blkid.version", "1.0")
+            .with_property("blkid.block-size", "4096")
+            .with_property("blkid.usage", "filesystem")
+            .with_property("blkid.uuid-sub", "subvol-uuid")
             .with_property("ext.state", "clean")
             .with_property("ext.errors-behavior", "Continue")
             .with_property("ext.block-count", "122096646")
@@ -2408,7 +2423,7 @@ mod tests {
             .with_property("ext.journal-size", "1024M");
         assert_eq!(
             usage_details(&ext),
-            "fstype=ext4 ext-state=clean errors=Continue blocks=122096646 free-blocks=73328197 block-size=4096 inodes=30531584 free-inodes=27187554 features=has_journal extent metadata_csum mount-count=12 last-checked=Mon Jan 01 00:00:00 2024 lifetime-writes=189 GB journal-size=1024M"
+            "fstype=ext4 version=1.0 blkid-block-size=4096 usage=filesystem uuid-sub=subvol-uuid ext-state=clean errors=Continue blocks=122096646 free-blocks=73328197 block-size=4096 inodes=30531584 free-inodes=27187554 features=has_journal extent metadata_csum mount-count=12 last-checked=Mon Jan 01 00:00:00 2024 lifetime-writes=189 GB journal-size=1024M"
         );
 
         let exfat = Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
