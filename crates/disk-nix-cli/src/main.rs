@@ -1804,6 +1804,11 @@ fn usage_details(node: &Node) -> String {
         ("zfs.encryption", "encryption"),
         ("zfs.keystatus", "keystatus"),
         ("zfs.volsize", "volsize"),
+        ("xfs.data.blocks", "xfs-blocks"),
+        ("xfs.data.bsize", "xfs-bsize"),
+        ("xfs.meta-data.reflink", "reflink"),
+        ("xfs.meta-data.bigtime", "bigtime"),
+        ("xfs.log.blocks", "log-blocks"),
     ];
 
     let details = DETAIL_KEYS
@@ -2044,6 +2049,16 @@ mod tests {
         assert_eq!(
             usage_details(&dataset),
             "compression=zstd encryption=aes-256-gcm keystatus=available"
+        );
+
+        let xfs = Node::new("mount:/", NodeKind::Mountpoint, "/")
+            .with_property("xfs.data.blocks", "262144")
+            .with_property("xfs.data.bsize", "4096")
+            .with_property("xfs.meta-data.reflink", "1")
+            .with_property("xfs.meta-data.bigtime", "1");
+        assert_eq!(
+            usage_details(&xfs),
+            "xfs-blocks=262144 xfs-bsize=4096 reflink=1 bigtime=1"
         );
     }
 

@@ -22,6 +22,7 @@ mod parted;
 mod swaps;
 mod udev;
 mod vdo;
+mod xfs;
 mod zfs;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -93,6 +94,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_udev(&mut result);
         collect_findmnt(&mut result);
         collect_ext(&mut result);
+        collect_xfs(&mut result);
         collect_swaps(&mut result);
         collect_cryptsetup(&mut result);
         collect_dmsetup(&mut result);
@@ -333,6 +335,72 @@ fn ext_targets(graph: &StorageGraph) -> Vec<String> {
     }
 
     targets.into_iter().collect()
+}
+
+fn collect_xfs(result: &mut ProbeResult) {
+    match run_findmnt_targets("xfs") {
+        Ok(targets) if targets.is_empty() => result.reports.push(ProbeReport {
+            adapter: "xfs".to_string(),
+            status: if command_exists("xfs_info") {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Unavailable
+            },
+            message: Some("no mounted XFS filesystems discovered".to_string()),
+        }),
+        Ok(targets) => {
+            let mut collected = 0usize;
+            let mut failures = Vec::new();
+            for target in targets {
+                match run_report("xfs_info", &[&target]) {
+                    Ok(output) => match xfs::normalize_xfs_info(&target, &output) {
+                        Ok(graph) => {
+                            collected += graph.nodes.len();
+                            merge_graph(&mut result.graph, graph);
+                        }
+                        Err(error) => failures.push(format!("{target}: {error}")),
+                    },
+                    Err(message) => failures.push(format!("{target}: {message}")),
+                }
+            }
+
+            match (collected, failures.is_empty()) {
+                (0, false) => result.reports.push(ProbeReport {
+                    adapter: "xfs".to_string(),
+                    status: if failures.iter().any(|message| {
+                        message.contains("not found") || message.contains("No such file")
+                    }) {
+                        ProbeStatus::Unavailable
+                    } else {
+                        ProbeStatus::Partial
+                    },
+                    message: Some(failures.join("; ")),
+                }),
+                (_, false) => result.reports.push(ProbeReport {
+                    adapter: "xfs".to_string(),
+                    status: ProbeStatus::Partial,
+                    message: Some(format!(
+                        "normalized {collected} graph nodes from xfs_info; failed targets: {}",
+                        failures.join("; ")
+                    )),
+                }),
+                _ => result.reports.push(ProbeReport {
+                    adapter: "xfs".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!("normalized {collected} graph nodes from xfs_info")),
+                }),
+            }
+        }
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "xfs".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
+    }
 }
 
 fn collect_swaps(result: &mut ProbeResult) {

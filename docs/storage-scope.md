@@ -50,6 +50,9 @@ The current probe layer normalizes:
 - `tune2fs -l` for ext2/ext3/ext4 superblock metadata, feature flags,
   filesystem state, mount/check counters, inode and block counts, UUIDs, labels,
   and computed capacity/usage where device access is permitted
+- `xfs_info` for mounted XFS filesystem geometry, allocation group layout,
+  data/log/realtime block sizing, and metadata feature flags such as reflink
+  and bigtime
 - `/proc/swaps` for active swap devices/files, active size, used/free bytes,
   swap type, and priority
 - LUKS mapper status through `cryptsetup status` for active/in-use state,
