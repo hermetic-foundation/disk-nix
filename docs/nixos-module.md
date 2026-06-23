@@ -297,9 +297,14 @@ Each lifecycle declaration includes:
 - `devices`
 - `removeDevices`
 - `replaceDevices`
+- `renameTo`
+- `renameTarget`
+- `newName`
 - `properties`
 - `destroy`
 - `preserveData`
+- `readOnly`
+- `readonly`
 - `desiredSize`
 - `targetSize`
 - `size`

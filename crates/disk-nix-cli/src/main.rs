@@ -804,6 +804,9 @@ fn spec_schema() -> serde_json::Value {
                     "desiredSize": { "type": ["string", "number"] },
                     "targetSize": { "type": ["string", "number"] },
                     "size": { "type": ["string", "number"] },
+                    "renameTo": { "type": "string" },
+                    "renameTarget": { "type": "string" },
+                    "newName": { "type": "string" },
                     "name": { "type": "string" },
                     "target": { "type": "string" },
                     "path": { "type": "string" },
@@ -840,6 +843,8 @@ fn spec_schema() -> serde_json::Value {
                     "raidLevel": { "type": "string" },
                     "type": { "type": "string" },
                     "destroy": { "type": "boolean" },
+                    "readOnly": { "type": "boolean" },
+                    "readonly": { "type": "boolean" },
                     "preserveData": { "type": "boolean", "default": true },
                     "metadata": {
                         "type": "object",

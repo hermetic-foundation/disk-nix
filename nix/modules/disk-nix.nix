@@ -166,6 +166,20 @@ let
           example = "tank/home-staged";
         };
 
+        renameTarget = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias accepted by disk-nix for rename lifecycle operations.";
+          example = "tank/home-staged";
+        };
+
+        newName = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Short alias accepted by disk-nix for rename lifecycle operations.";
+          example = "tank/home-staged";
+        };
+
         properties = lib.mkOption {
           type = lib.types.attrsOf json.type;
           default = { };
@@ -191,6 +205,13 @@ let
           type = lib.types.nullOr lib.types.bool;
           default = null;
           description = "Request a read-only lifecycle action when the storage domain supports it, such as ZFS pool import.";
+          example = true;
+        };
+
+        readonly = lib.mkOption {
+          type = lib.types.nullOr lib.types.bool;
+          default = null;
+          description = "Short alias accepted by disk-nix for read-only lifecycle actions.";
           example = true;
         };
 
@@ -582,10 +603,13 @@ let
         removeDevices
         replaceDevices
         renameTo
+        renameTarget
+        newName
         properties
         destroy
         preserveData
         readOnly
+        readonly
         desiredSize
         targetSize
         size

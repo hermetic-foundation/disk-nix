@@ -365,6 +365,10 @@
                 operation = "import";
                 readOnly = true;
               };
+              pools.archiveImport = {
+                operation = "import";
+                readonly = true;
+              };
               pools.moveme.operation = "export";
               volumeGroups.importvg.operation = "import";
               volumeGroups.exportvg.operation = "export";
@@ -456,6 +460,14 @@
               datasets."tank/legacy" = {
                 operation = "rename";
                 renameTo = "tank/legacy-staged";
+              };
+              datasets."tank/legacy-alias" = {
+                operation = "rename";
+                renameTarget = "tank/legacy-alias-staged";
+              };
+              datasets."tank/legacy-short" = {
+                operation = "rename";
+                newName = "tank/legacy-short-staged";
               };
               datasets."tank/home-review" = {
                 operation = "promote";
@@ -838,6 +850,11 @@
               and ."$defs".iscsiBoot.properties.loginAll.type == "boolean"
               and (."$defs".iscsiBoot.properties.extraConfig.type | index("null") != null)
               and ."$defs".lifecycleObject.properties.action["$ref"] == "#/$defs/operation"
+              and ."$defs".lifecycleObject.properties.renameTo.type == "string"
+              and ."$defs".lifecycleObject.properties.renameTarget.type == "string"
+              and ."$defs".lifecycleObject.properties.newName.type == "string"
+              and ."$defs".lifecycleObject.properties.readOnly.type == "boolean"
+              and ."$defs".lifecycleObject.properties.readonly.type == "boolean"
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
               and (."$defs".lifecycleObject.properties.partitionNumber.type | index("string") != null)
               and (."$defs".lifecycleObject.properties.partitionNumber.type | index("number") != null)
@@ -1267,6 +1284,7 @@
                     and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
                     and .spec.pools.vault.operation == "import"
                     and .spec.pools.vault.readOnly == true
+                    and .spec.pools.archiveImport.readonly == true
                     and .spec.pools.moveme.operation == "export"
                     and .spec.volumeGroups.importvg.operation == "import"
                     and .spec.volumeGroups.exportvg.operation == "export"
@@ -1274,6 +1292,8 @@
                     and .spec.volumeGroups.refreshvg.operation == "rescan"
                     and .spec.volumeGroups.actionvg.action == "rescan"
                     and .spec.datasets."tank/home-review".operation == "promote"
+                    and .spec.datasets."tank/legacy-alias".renameTarget == "tank/legacy-alias-staged"
+                    and .spec.datasets."tank/legacy-short".newName == "tank/legacy-short-staged"
                     and .spec.snapshots."tank/home@before-upgrade".target == "tank/home"
                     and .spec.snapshots."tank/home@before-upgrade".hold == "disk-nix-retain"
                     and .spec.snapshots."tank/home@before-upgrade".rollback == true
