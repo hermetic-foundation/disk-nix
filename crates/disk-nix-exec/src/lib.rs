@@ -639,6 +639,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent filesystem capacity reflects the grown backing volume".to_string(),
             ],
         ),
+        Operation::Rescan if collection == Some("volumes") || action.id.starts_with("volumes:") => (
+            vec![
+                command(
+                    ["lvs", "--reportformat", "json", target],
+                    false,
+                    "verify LVM logical volume attributes after status refresh",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled LV graph relationships after status refresh",
+                ),
+            ],
+            vec![
+                "logical volume size, attributes, and activation state are reviewed".to_string(),
+                "dependent filesystems, mappings, or mounts still resolve the LV".to_string(),
+            ],
+        ),
         Operation::Create if collection == Some("volumes") => (
             vec![
                 command(
@@ -2547,6 +2565,28 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     lvm_logical_volume_extend_command(target, desired_size),
                 ],
                 vec![note],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("volumes") || action.id.starts_with("volumes:") => {
+            let target = lvm_volume_target_path(target);
+            (
+                vec![
+                    lvm_lvs_report_command(
+                        target,
+                        None,
+                        "refresh LVM logical volume attributes and activation state",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target.unwrap_or("<logical-volume>")],
+                        false,
+                        "inspect modeled LV graph relationships after status refresh",
+                    ),
+                ],
+                vec![
+                    "use grow when LV capacity must change".to_string(),
+                    "use activate or deactivate when LV availability must change".to_string(),
+                ],
                 true,
             )
         }
@@ -14626,6 +14666,9 @@ mod tests {
                   "vg0/archive": {
                     "operation": "deactivate"
                   },
+                  "vg0/reporting": {
+                    "operation": "rescan"
+                  },
                   "vg0/old": {
                     "destroy": true
                   }
@@ -14681,6 +14724,20 @@ mod tests {
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumes:vg0/reporting:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvs", "--reportformat", "json", "vg0/reporting"]
+                })
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "vg0/reporting"])
+        }));
         assert!(
             !report.command_plan.iter().any(|step| {
                 step.commands
@@ -14700,6 +14757,15 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["lvs", "--reportformat", "json", "vg0/home"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "volumes:vg0/reporting:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvs", "--reportformat", "json", "vg0/reporting"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "vg0/reporting", "--json"]
+                })
         }));
     }
 

@@ -473,6 +473,8 @@ LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`, and report
 missing target form and size separately when either is absent. LV grow and
 remove commands also require the canonical `vg/lv` target form.
+`operation = "rescan"` renders read-only `lvs` and graph inspection commands
+for LV size, attributes, and dependent mappings.
 LVM physical volume command plans render `pvcreate`, `pvresize`, explicit
 `operation = "rescan"` plans through `pvscan --cache`, and policy-gated
 `pvremove` for `physicalVolumes` lifecycle declarations. Create, grow, and

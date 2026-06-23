@@ -81,6 +81,9 @@
     },
     "vg0/archive": {
       "operation": "deactivate"
+    },
+    "vg0/reporting": {
+      "operation": "rescan"
     }
   },
   "thinPools": {

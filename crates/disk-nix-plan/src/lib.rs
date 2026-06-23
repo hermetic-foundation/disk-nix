@@ -3085,6 +3085,19 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "volumes" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "logical volume rescan refreshes LV attributes, size, and graph relationships"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow only when logical volume capacity must change".to_string(),
+                    "use activate or deactivate only when LV visibility must change".to_string(),
+                    "verify dependent filesystems or mappings after status refresh".to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "physicalVolumes" => (
             RiskClass::Destructive,
             true,
@@ -4077,7 +4090,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG/LV/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4093,6 +4106,8 @@ fn classify_operation(
                     "use multipathMaps.<name>.operation = \"rescan\" to reload reviewed path maps"
                         .to_string(),
                     "use physicalVolumes or volumeGroups operation = \"rescan\" to refresh LVM metadata"
+                        .to_string(),
+                    "use volumes.<vg/lv>.operation = \"rescan\" to refresh LVM logical volume status"
                         .to_string(),
                     "use lvmCaches.<origin>.operation = \"rescan\" to refresh LVM cache status and utilization"
                         .to_string(),
@@ -5570,6 +5585,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::LvmLogicalVolume,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "logical volume status refresh reads LV attributes and graph relationships"
+                    .to_string(),
+                alternatives: vec![
+                    "grow only when capacity must change".to_string(),
+                    "activate or deactivate only when availability must change".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmLogicalVolume,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             advice: Some(Advice {
@@ -7030,6 +7058,11 @@ mod tests {
                 Operation::Grow,
                 RiskClass::Online,
             ),
+            (
+                NodeKind::LvmLogicalVolume,
+                Operation::Rescan,
+                RiskClass::Online,
+            ),
             (NodeKind::LvmVolumeGroup, Operation::Grow, RiskClass::Online),
             (
                 NodeKind::LvmVolumeGroup,
@@ -7823,6 +7856,9 @@ mod tests {
                 "vg0/archive": {
                   "operation": "deactivate"
                 },
+                "vg0/reporting": {
+                  "operation": "rescan"
+                },
                 "vg0/old": {
                   "destroy": true
                 }
@@ -7831,7 +7867,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.action_count, 5);
         assert_eq!(plan.summary.offline_required_count, 2);
         assert_eq!(plan.summary.destructive_count, 1);
         let create = plan
@@ -7862,6 +7898,14 @@ mod tests {
             .expect("LV deactivate action exists");
         assert_eq!(deactivate.risk, RiskClass::OfflineRequired);
         assert!(!deactivate.destructive);
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "volumes:vg0/reporting:rescan")
+            .expect("LV rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
     }
 
     #[test]

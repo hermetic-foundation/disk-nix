@@ -130,8 +130,9 @@ Examples:
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV growth is also online when the volume group has free
   extents; LV removal is destructive because it deletes the volume contents.
-  Create command plans report missing `vg/lv` target form and size inputs
-  separately.
+  LV `operation = "rescan"` is online and read-only; it refreshes LV size,
+  attributes, activation state, and graph relationships. Create command plans
+  report missing `vg/lv` target form and size inputs separately.
 - LVM thin-pool creation and growth are online allocations inside an existing
   volume group; thin-pool removal is destructive because it removes contained
   thin volumes and their data. LVM logical volume, thin-pool, snapshot, and VG
