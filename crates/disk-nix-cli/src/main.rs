@@ -1173,8 +1173,8 @@ fn print_ids(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
 fn print_usage(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<38} {:>12} {:>12} {:>12} {:>12} {:>7} PATH",
-        "KIND", "NAME", "SIZE", "USED", "FREE", "ALLOC", "USE%"
+        "{:<22} {:<38} {:>12} {:>12} {:>12} {:>12} {:>7} {:<28} PATH",
+        "KIND", "NAME", "SIZE", "USED", "FREE", "ALLOC", "USE%", "DETAILS"
     )?;
     for node in graph
         .nodes
@@ -1184,7 +1184,7 @@ fn print_usage(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> 
         let usage = node.usage.as_ref();
         writeln!(
             output,
-            "{:<22} {:<38} {:>12} {:>12} {:>12} {:>12} {:>7} {}",
+            "{:<22} {:<38} {:>12} {:>12} {:>12} {:>12} {:>7} {:<28} {}",
             node.kind,
             node.name,
             human_bytes(node.size_bytes),
@@ -1192,6 +1192,7 @@ fn print_usage(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> 
             human_bytes(usage.and_then(|usage| usage.free_bytes)),
             human_bytes(usage.and_then(|usage| usage.allocated_bytes)),
             usage_percent(node),
+            usage_details(node),
             node.path.as_deref().unwrap_or("-")
         )?;
     }
@@ -1610,6 +1611,38 @@ fn has_capacity_or_usage(node: &Node) -> bool {
         })
 }
 
+fn usage_details(node: &Node) -> String {
+    const DETAIL_KEYS: &[(&str, &str)] = &[
+        ("lvm.data-percent", "data"),
+        ("lvm.metadata-percent", "metadata"),
+        ("btrfs.qgroup-id", "qgroup"),
+        ("btrfs.max-referenced", "max-rfer"),
+        ("btrfs.max-exclusive", "max-excl"),
+        ("vdo.use-percent", "vdo-use"),
+        ("vdo.space-saving-percent", "saving"),
+        ("bcache.cache_mode", "cache-mode"),
+        ("bcache.dirty_data", "dirty"),
+        ("zfs.health", "health"),
+        ("zfs.state", "state"),
+        ("zfs.vdev-role", "vdev-role"),
+        ("zfs.vdev-state", "vdev-state"),
+        ("zfs.origin", "origin"),
+    ];
+
+    let details = DETAIL_KEYS
+        .iter()
+        .filter_map(|(key, label)| {
+            property_value(node, key).map(|value| format!("{label}={value}"))
+        })
+        .collect::<Vec<_>>();
+
+    if details.is_empty() {
+        "-".to_string()
+    } else {
+        details.join(" ")
+    }
+}
+
 fn backing_count(graph: &StorageGraph, node: &Node) -> usize {
     graph
         .edges
@@ -1694,7 +1727,7 @@ mod tests {
 
     use super::{
         confirmation_file_accepts, is_network_storage_node, is_partition_node, is_pool_node,
-        is_snapshot_node, snapshot_source, usage_percent,
+        is_snapshot_node, print_usage, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -1799,5 +1832,47 @@ mod tests {
                 allocated_bytes: None,
             });
         assert_eq!(usage_percent(&used_free), "25.0%");
+    }
+
+    #[test]
+    fn usage_details_surfaces_storage_metadata() {
+        let lv = Node::new("lv:vg/thin", NodeKind::LvmLogicalVolume, "vg/thin")
+            .with_size_bytes(100)
+            .with_usage(Usage {
+                used_bytes: Some(25),
+                free_bytes: Some(75),
+                allocated_bytes: None,
+            })
+            .with_property("lvm.data-percent", "12.50")
+            .with_property("lvm.metadata-percent", "3.00");
+        assert_eq!(usage_details(&lv), "data=12.50 metadata=3.00");
+
+        let pool = Node::new("zpool:tank", NodeKind::ZfsPool, "tank")
+            .with_size_bytes(100)
+            .with_property("zfs.health", "ONLINE");
+        assert_eq!(usage_details(&pool), "health=ONLINE");
+    }
+
+    #[test]
+    fn usage_table_includes_details_column() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_size_bytes(100)
+                .with_usage(Usage {
+                    used_bytes: Some(50),
+                    free_bytes: Some(50),
+                    allocated_bytes: None,
+                })
+                .with_property("vdo.use-percent", "50%")
+                .with_property("vdo.space-saving-percent", "20%"),
+        );
+
+        let mut output = Vec::new();
+        print_usage(&mut output, &graph).expect("usage table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DETAILS"));
+        assert!(output.contains("vdo-use=50% saving=20%"));
     }
 }

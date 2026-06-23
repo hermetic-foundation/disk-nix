@@ -168,7 +168,8 @@ Use these commands for:
 - `network-storage`: iSCSI sessions, iSCSI targets, LUNs, NFS exports, and NFS
   mounts
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
-- `usage`: nodes with size, used, free, allocated, or utilization data
+- `usage`: nodes with size, used, free, allocated, utilization, or selected
+  metadata detail data
 
 ## Inspect
 

@@ -92,8 +92,9 @@ views are presentation layers over the same model. Focused JSON commands such
 as `devices --json`, `partitions --json`, `pools --json`,
 `snapshots --json`, `network-storage --json`, `ids --json`, and
 `usage --json` return subgraphs and preserve relationships between nodes
-included in the result. `usage` summarizes size, used, free, allocated, and
-utilization fields across graph nodes that expose capacity data.
+included in the result. `usage` summarizes size, used, free, allocated,
+utilization, and selected metadata details across graph nodes that expose
+capacity data.
 `inspect --json` returns matched nodes plus their direct neighbors and
 relationship edges. `capabilities --json` returns the modeled operation/risk
 matrix.
