@@ -97,7 +97,9 @@ bcache udev support by default, so `/dev/bcache*` mappings are assembled before
 early consumers try to mount or inspect them.
 Typed active VDO declarations enable the NixOS VDO-capable LVM stack and initrd
 LVM support by default. Upstream NixOS requires a kernel with `dm-vdo` support
-for `services.lvm.boot.vdo.enable`.
+for `services.lvm.boot.vdo.enable`. VDO `start` and `stop` declarations remain
+in the generated planner spec as imperative lifecycle actions; they do not
+rewrite or remove VDO metadata.
 Typed active iSCSI session declarations with `portal` metadata derive both
 regular `services.openiscsi.discoverPortal` and
 `boot.iscsi-initiator.discoverPortal` when the corresponding global or boot
@@ -345,6 +347,8 @@ Example lifecycle planning through NixOS options:
       operation = "grow";
       desiredSize = "4TiB";
     };
+    vdoVolumes.warmArchive.operation = "start";
+    vdoVolumes.coldArchive.operation = "stop";
     filesystems.data = {
       device = "/dev/disk/by-label/data";
       fsType = "btrfs";

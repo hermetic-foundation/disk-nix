@@ -54,6 +54,7 @@ pub enum Operation {
     Activate,
     Deactivate,
     Assemble,
+    Start,
     Stop,
     Open,
     Close,
@@ -2781,6 +2782,7 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "activate" => Some(Operation::Activate),
         "deactivate" => Some(Operation::Deactivate),
         "assemble" => Some(Operation::Assemble),
+        "start" => Some(Operation::Start),
         "stop" => Some(Operation::Stop),
         "open" => Some(Operation::Open),
         "close" => Some(Operation::Close),
@@ -2815,6 +2817,7 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Activate => "activate",
         Operation::Deactivate => "deactivate",
         Operation::Assemble => "assemble",
+        Operation::Start => "start",
         Operation::Stop => "stop",
         Operation::Open => "open",
         Operation::Close => "close",
@@ -3164,6 +3167,34 @@ fn classify_operation(
                     "unmount filesystems and deactivate mappings before stopping the array"
                         .to_string(),
                     "prefer stop over destroy when preserving member metadata for later assembly"
+                        .to_string(),
+                    "verify no open consumers remain with lsblk, findmnt, and dmsetup before stopping"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Start if collection == "vdoVolumes" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "VDO start activates an existing VDO volume without rewriting metadata"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the VDO backing device is present before starting".to_string(),
+                    "start dependent filesystems, LVM layers, or mounts only after VDO status is healthy"
+                        .to_string(),
+                    "use create only when intentionally initializing new VDO metadata".to_string(),
+                ],
+            }),
+        ),
+        Operation::Stop if collection == "vdoVolumes" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "VDO stop deactivates the volume while preserving VDO metadata".to_string(),
+                alternatives: vec![
+                    "unmount filesystems and deactivate mappings before stopping VDO".to_string(),
+                    "prefer stop over remove when the VDO volume should be started again later"
                         .to_string(),
                     "verify no open consumers remain with lsblk, findmnt, and dmsetup before stopping"
                         .to_string(),
@@ -3750,7 +3781,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Assemble | Operation::Stop => (
+        Operation::Assemble | Operation::Start | Operation::Stop => (
             RiskClass::Unsupported,
             false,
             Some(Advice {
@@ -3759,7 +3790,8 @@ fn classify_operation(
                     operation_label(operation)
                 ),
                 alternatives: vec![
-                    "use operation = \"assemble\" or \"stop\" only on mdRaids declarations for now"
+                    "use operation = \"assemble\" only on mdRaids declarations for now".to_string(),
+                    "use operation = \"start\" or \"stop\" on vdoVolumes declarations for VDO activation lifecycle"
                         .to_string(),
                     "use subsystem-specific import, export, activate, or deactivate operations where supported"
                         .to_string(),
@@ -4044,6 +4076,7 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Activate => "activate",
         Operation::Deactivate => "deactivate",
         Operation::Assemble => "assemble",
+        Operation::Start => "start",
         Operation::Stop => "stop",
         Operation::Open => "open",
         Operation::Close => "close",
@@ -4224,6 +4257,30 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "confirm vdostats utilization before increasing logical size".to_string(),
                     "grow backing storage before physical VDO growth".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::VdoVolume,
+            operation: Operation::Start,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "starting a VDO volume activates existing VDO metadata".to_string(),
+                alternatives: vec![
+                    "verify backing storage and consumers before activation".to_string(),
+                    "use create only when initializing new VDO metadata".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::VdoVolume,
+            operation: Operation::Stop,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "stopping a VDO volume deactivates it without removing metadata".to_string(),
+                alternatives: vec![
+                    "unmount and deactivate all consumers before stopping".to_string(),
+                    "use remove only when destroying the VDO volume metadata".to_string(),
                 ],
             }),
         },
@@ -7619,6 +7676,12 @@ mod tests {
                     "deduplication": "disabled"
                   }
                 },
+                "warmArchive": {
+                  "operation": "start"
+                },
+                "coldArchive": {
+                  "operation": "stop"
+                },
                 "old-cache": {
                   "destroy": true
                 }
@@ -7627,8 +7690,8 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 6);
-        assert_eq!(plan.summary.offline_required_count, 0);
+        assert_eq!(plan.summary.action_count, 8);
+        assert_eq!(plan.summary.offline_required_count, 2);
         assert_eq!(plan.summary.destructive_count, 2);
         let create = plan
             .actions
@@ -7669,6 +7732,36 @@ mod tests {
         assert!(plan.actions.iter().any(|action| {
             action.id == "vdoVolumes:archive:set-property:deduplication"
                 && action.risk == RiskClass::Safe
+        }));
+        let start = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "vdovolumes:warmarchive:start")
+            .expect("VDO start action exists");
+        assert_eq!(start.operation, Operation::Start);
+        assert_eq!(start.risk, RiskClass::OfflineRequired);
+        assert!(!start.destructive);
+        assert!(start.advice.as_ref().is_some_and(|advice| {
+            advice.summary.contains("activates")
+                && advice
+                    .alternatives
+                    .iter()
+                    .any(|alternative| alternative.contains("backing device"))
+        }));
+        let stop = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "vdovolumes:coldarchive:stop")
+            .expect("VDO stop action exists");
+        assert_eq!(stop.operation, Operation::Stop);
+        assert_eq!(stop.risk, RiskClass::OfflineRequired);
+        assert!(!stop.destructive);
+        assert!(stop.advice.as_ref().is_some_and(|advice| {
+            advice.summary.contains("preserving VDO metadata")
+                && advice
+                    .alternatives
+                    .iter()
+                    .any(|alternative| alternative.contains("stop over remove"))
         }));
         let destroy = plan
             .actions

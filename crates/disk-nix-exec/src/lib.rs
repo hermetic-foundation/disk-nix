@@ -912,6 +912,29 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "deduplication, compression, and write policy are reviewed before use".to_string(),
             ],
         ),
+        Operation::Start if collection == Some("vdoVolumes") => (
+            vec![
+                command(
+                    ["vdo", "status", "--name", target],
+                    false,
+                    "verify VDO volume configuration after start",
+                ),
+                command(
+                    ["vdostats", "--human-readable", target],
+                    false,
+                    "verify VDO runtime counters after start",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify VDO graph node and active consumers after start",
+                ),
+            ],
+            vec![
+                "VDO volume is started and reports healthy runtime counters".to_string(),
+                "dependent filesystems or mappings see the VDO device before use".to_string(),
+            ],
+        ),
         Operation::Grow if collection == Some("zvols") => (
             vec![
                 command(
@@ -1778,6 +1801,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Stop if collection == Some("vdoVolumes") => (
+            vec![
+                command(
+                    ["vdo", "status"],
+                    false,
+                    "verify VDO volume inventory after stop",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "re-probe topology after VDO volume stop",
+                ),
+            ],
+            vec![
+                "stopped VDO volume is no longer active in VDO status output".to_string(),
+                "dependent filesystems, mappings, and mounts no longer reference the stopped VDO device"
+                    .to_string(),
+            ],
+        ),
         Operation::Destroy if collection == Some("pools") => (
             vec![
                 command(
@@ -2031,6 +2073,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Activate
         | Operation::Deactivate
         | Operation::Assemble
+        | Operation::Start
         | Operation::Stop
         | Operation::Open
         | Operation::Close
@@ -2672,6 +2715,29 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         .to_string(),
                     "confirm backing storage capacity before physical VDO growth".to_string(),
                     "review deduplication, compression, and slab utilization before increasing logical size"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Start if collection == Some("vdoVolumes") => {
+            let target = target.unwrap_or("<vdo-volume>");
+            (
+                vec![
+                    command(
+                        ["vdo", "status", "--name", target],
+                        false,
+                        "inspect VDO volume before start",
+                    ),
+                    command(
+                        ["vdo", "start", "--name", target],
+                        true,
+                        "start the existing VDO volume after backing storage is present",
+                    ),
+                ],
+                vec![
+                    "verify the backing device is present and stable before starting VDO".to_string(),
+                    "activate dependent filesystems, LVM layers, or mounts only after VDO status is healthy"
                         .to_string(),
                 ],
                 true,
@@ -4483,6 +4549,30 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Stop if collection == Some("vdoVolumes") => {
+            let target = target.unwrap_or("<vdo-volume>");
+            (
+                vec![
+                    command(
+                        ["vdo", "status", "--name", target],
+                        false,
+                        "inspect VDO volume before stop",
+                    ),
+                    command(
+                        ["vdo", "stop", "--name", target],
+                        true,
+                        "stop the existing VDO volume after consumers are inactive",
+                    ),
+                ],
+                vec![
+                    "unmount filesystems and deactivate mappings that reference the VDO device"
+                        .to_string(),
+                    "prefer stop over remove when preserving VDO metadata for later restart"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Destroy if collection == Some("nvmeNamespaces") => {
             let controller = nvme_controller_target(action);
             let namespace_id = action.context.namespace_id.as_deref();
@@ -4854,6 +4944,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Activate
         | Operation::Deactivate
         | Operation::Assemble
+        | Operation::Start
         | Operation::Stop
         | Operation::Open
         | Operation::Close
@@ -12150,6 +12241,12 @@ mod tests {
                       "deduplication": "disabled"
                     }
                   },
+                  "warmArchive": {
+                    "operation": "start"
+                  },
+                  "coldArchive": {
+                    "operation": "stop"
+                  },
                   "missing-backing": {
                     "operation": "create",
                     "desiredSize": "1TiB"
@@ -12161,6 +12258,7 @@ mod tests {
               },
               "apply": {
                 "allowGrow": true,
+                "allowOffline": true,
                 "allowDestructive": true
               }
             }"#,
@@ -12254,6 +12352,18 @@ mod tests {
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
+                command.argv == ["vdo", "start", "--name", "warmArchive"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["vdo", "stop", "--name", "coldArchive"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
                 command.argv == ["vdo", "remove", "--name", "old-cache"]
                     && command.readiness == CommandReadiness::Ready
             })
@@ -12269,6 +12379,20 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["vdostats", "--human-readable", "archive"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:warmarchive:start"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["vdo", "status", "--name", "warmArchive"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:coldarchive:stop"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["vdo", "status"])
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "vdoVolumes:archive:set-property:writePolicy"

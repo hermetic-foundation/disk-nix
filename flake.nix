@@ -254,6 +254,8 @@
                   deduplication = "disabled";
                 };
               };
+              vdoVolumes.warmArchive.operation = "start";
+              vdoVolumes.coldArchive.operation = "stop";
               physicalVolumes."/dev/disk/by-id/nvme-pv-grow" = {
                 operation = "grow";
               };
@@ -557,6 +559,7 @@
               and (."$defs".operation.enum | index("activate") != null)
               and (."$defs".operation.enum | index("deactivate") != null)
               and (."$defs".operation.enum | index("assemble") != null)
+              and (."$defs".operation.enum | index("start") != null)
               and (."$defs".operation.enum | index("stop") != null)
               and (."$defs".operation.enum | index("open") != null)
               and (."$defs".operation.enum | index("close") != null)
@@ -618,8 +621,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 59
-              and .summary.offlineRequiredCount == 22
+              .summary.actionCount == 61
+              and .summary.offlineRequiredCount == 24
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -632,6 +635,8 @@
               and (.actions | any(.id == "volumes:vg0/scratch:create" and .risk == "online"))
               and (.actions | any(.id == "volumes:vg0/archive:deactivate" and .risk == "offline-required"))
               and (.actions | any(.id == "vdovolumes:archive:grow" and .risk == "online"))
+              and (.actions | any(.id == "vdovolumes:warmarchive:start" and .risk == "offline-required"))
+              and (.actions | any(.id == "vdovolumes:coldarchive:stop" and .risk == "offline-required"))
               and (.actions | any(.id == "vdoVolumes:archive:set-property:writePolicy" and .risk == "safe"))
               and (.actions | any(.id == "vdoVolumes:archive:set-property:compression" and .risk == "safe"))
               and (.actions | any(.id == "vdoVolumes:archive:set-property:deduplication" and .risk == "safe"))
@@ -701,8 +706,8 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 27
-              and .apply.blockedSummary.offlineRequiredCount == 22
+              and .apply.blockedCount == 29
+              and .apply.blockedSummary.offlineRequiredCount == 24
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
@@ -714,6 +719,8 @@
               and (.apply.blocked | any(.id == "volumegroups:exportvg:export"))
               and (.apply.blocked | any(.id == "volumegroups:activevg:activate"))
               and (.apply.blocked | any(.id == "volumes:vg0/archive:deactivate"))
+              and (.apply.blocked | any(.id == "vdovolumes:warmarchive:start"))
+              and (.apply.blocked | any(.id == "vdovolumes:coldarchive:stop"))
               and (.apply.blocked | any(.id == "luks.devices:cryptarchive:open"))
               and (.apply.blocked | any(.id == "luks.devices:cryptclosed:close"))
               and (.apply.blocked | any(.id == "mdraids:existing:assemble"))
@@ -722,14 +729,14 @@
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 27
+              and .apply.blockedCount == 29
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 27
-              and .messages[0] == "apply policy blocked 27 action(s)"
+              and .apply.blockedCount == 29
+              and .messages[0] == "apply policy blocked 29 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -834,6 +841,8 @@
                   and .spec.vdoVolumes.archive.properties.writePolicy == "sync"
                   and .spec.vdoVolumes.archive.properties.compression == "enabled"
                   and .spec.vdoVolumes.archive.properties.deduplication == "disabled"
+                  and .spec.vdoVolumes.warmArchive.operation == "start"
+                  and .spec.vdoVolumes.coldArchive.operation == "stop"
                   and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
                   and .spec.luksKeyslots."cryptroot:1".operation == "create"
                   and .spec.luksKeyslots."cryptroot:1".device == "/dev/disk/by-id/root-luks"

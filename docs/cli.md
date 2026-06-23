@@ -407,8 +407,9 @@ unresolved-input markers and `/proc/mdstat` verification. MD assemble, stop,
 create, grow, member add, replacement, and removal commands require an explicit
 array path such as `/dev/md/root`.
 VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
-plus online `vdo growLogical` and `vdo growPhysical` growth steps. Create
-preflight remains non-ready until a backing device is declared. Supported
+online `vdo growLogical` and `vdo growPhysical` growth steps, and
+offline-required `vdo start`/`vdo stop` lifecycle steps for existing volumes.
+Create preflight remains non-ready until a backing device is declared. Supported
 property updates render `vdo changeWritePolicy`,
 `vdo enableCompression`/`disableCompression`, and
 `vdo enableDeduplication`/`disableDeduplication`; unsupported VDO properties

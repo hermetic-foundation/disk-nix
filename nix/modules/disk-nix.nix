@@ -83,6 +83,7 @@ let
       "activate"
       "deactivate"
       "assemble"
+      "start"
       "stop"
       "open"
       "close"

@@ -114,9 +114,12 @@ Examples:
 - VDO creation and removal are destructive because they write or remove VDO
   metadata on the backing device; VDO growth is online, with advice to
   distinguish logical growth from physical backing growth and verify
-  `vdostats`. Create preflight inspection is marked unresolved until a backing
-  device is declared. Supported VDO property updates render reviewed
-  `vdo changeWritePolicy`, `vdo enableCompression`/`disableCompression`, and
+  `vdostats`. VDO `operation = "start"` and `operation = "stop"` are
+  offline-required lifecycle actions that activate or deactivate existing VDO
+  metadata without recreating or removing it. Create preflight inspection is
+  marked unresolved until a backing device is declared. Supported VDO property
+  updates render reviewed `vdo changeWritePolicy`,
+  `vdo enableCompression`/`disableCompression`, and
   `vdo enableDeduplication`/`disableDeduplication` commands. Write policy
   updates require `auto`, `sync`, or `async`; unsupported properties and
   invalid values are classified as unsupported before execution.

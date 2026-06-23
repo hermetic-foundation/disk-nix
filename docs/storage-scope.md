@@ -79,7 +79,8 @@ The current probe layer normalizes:
   physical extent ranges, and dependencies on backing PV devices or internal LVs
 - VDO `vdo status` output for VDO device path, backing storage device,
   logical/physical size, compression, deduplication, write policy, index, and
-  cache settings
+  cache settings; VDO lifecycle plans can start or stop existing VDO volumes
+  without recreating or removing metadata
 - VDO `vdostats --human-readable` output for runtime size, used/free capacity,
   utilization percentage, and space-saving percentage; `vdostats --verbose`
   output for operating mode, recovery percentage, write policy, and detailed

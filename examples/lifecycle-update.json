@@ -153,6 +153,12 @@
         "compression": "enabled",
         "deduplication": "disabled"
       }
+    },
+    "warmArchive": {
+      "operation": "start"
+    },
+    "coldArchive": {
+      "operation": "stop"
     }
   },
   "physicalVolumes": {
