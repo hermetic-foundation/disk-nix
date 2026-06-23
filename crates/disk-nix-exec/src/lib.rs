@@ -466,6 +466,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "LV size and VG free space match the desired allocation".to_string(),
             ],
         ),
+        Operation::Create if collection == Some("datasets") => (
+            vec![
+                command(
+                    ["zfs", "list", "-H", "-p", "-t", "filesystem", target],
+                    false,
+                    "verify ZFS dataset exists after creation",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled dataset graph relationships after creation",
+                ),
+            ],
+            vec![
+                "dataset appears with expected inherited and explicit properties".to_string(),
+                "mountpoint, quota, reservation, and encryption policy are reviewed".to_string(),
+            ],
+        ),
         Operation::Grow if collection == Some("thinPools") => (
             vec![
                 command(
@@ -914,6 +932,17 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "destroyed zvol no longer appears in ZFS volume listings".to_string(),
                 "downstream LUN, guest, or filesystem consumers are detached or updated"
                     .to_string(),
+            ],
+        ),
+        Operation::Destroy if collection == Some("datasets") => (
+            vec![command(
+                ["zfs", "list", "-H", "-p", "-t", "filesystem"],
+                false,
+                "verify ZFS dataset inventory after destruction",
+            )],
+            vec![
+                "destroyed dataset no longer appears in ZFS filesystem listings".to_string(),
+                "mounts, descendants, snapshots, and consumers were drained or updated".to_string(),
             ],
         ),
         Operation::Destroy if collection == Some("lvmSnapshots") => (
@@ -1578,6 +1607,29 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("datasets") => {
+            let target = target.unwrap_or("<zfs-dataset>");
+            (
+                vec![
+                    command(
+                        ["zpool", "list", "-H", "-p"],
+                        false,
+                        "inspect ZFS pool free space before creating the dataset",
+                    ),
+                    command(
+                        ["zfs", "create", target],
+                        true,
+                        "create the reviewed ZFS filesystem dataset",
+                    ),
+                ],
+                vec![
+                    "review inherited mountpoint, quota, reservation, and encryption properties"
+                        .to_string(),
+                    "set required properties before exposing the dataset to consumers".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create if collection == Some("volumes") => {
             let target = target.unwrap_or("<logical-volume>");
             let desired_size = action.context.desired_size.as_deref();
@@ -1775,6 +1827,30 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "take a snapshot or clone before destruction when rollback is required"
                         .to_string(),
                     "detach LUN, VM, or filesystem consumers before destroying the zvol".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("datasets") => {
+            let target = target.unwrap_or("<zfs-dataset>");
+            (
+                vec![
+                    command(
+                        ["zfs", "list", "-H", "-p", "-r", target],
+                        false,
+                        "inspect dataset descendants before destruction",
+                    ),
+                    command(
+                        ["zfs", "destroy", target],
+                        true,
+                        "destroy the reviewed ZFS dataset after snapshots and consumers are handled",
+                    ),
+                ],
+                vec![
+                    "take a recursive snapshot or clone before destruction when rollback is required"
+                        .to_string(),
+                    "unmount dependents and review child datasets before destroying the dataset"
+                        .to_string(),
                 ],
                 true,
             )
@@ -3080,6 +3156,56 @@ mod tests {
             step.commands.iter().any(|command| {
                 command.argv == ["zfs", "list", "-H", "-p", "-t", "volume", "tank/vm/root"]
             })
+        }));
+    }
+
+    #[test]
+    fn zfs_dataset_lifecycle_reports_zfs_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "datasets": {
+                  "tank/home": {
+                    "operation": "create"
+                  },
+                  "tank/archive": {
+                    "destroy": true
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv == ["zfs", "create", "tank/home"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["zfs", "destroy", "tank/archive"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "datasets:tank/home:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "list", "-H", "-p", "-t", "filesystem", "tank/home"]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "datasets:tank/archive:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "list", "-H", "-p", "-t", "filesystem"])
         }));
     }
 

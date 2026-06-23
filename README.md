@@ -158,12 +158,14 @@ Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS format/resize
 workflows, Btrfs subvolume creation/deletion, VDO growth, LVM thin-pool growth,
 LVM snapshot create/merge/remove, loop-device mapping updates, MD RAID member
-updates, multipath map updates, zvol updates, volume and pool updates, network
-LUN growth, snapshots, and cache replacement.
+updates, multipath map updates, ZFS dataset and zvol updates, volume and pool
+updates, network LUN growth, snapshots, and cache replacement.
 Cache apply plans include bcache-aware attach, cache-mode, dirty-data, and
 replacement review steps instead of a generic cache placeholder.
 NFS export apply plans render reviewed `exportfs` create/unexport commands
 from explicit client and option declarations.
+ZFS dataset apply plans render reviewed `zfs create` commands and
+policy-gated `zfs destroy` commands.
 LVM logical volume apply plans render reviewed `lvcreate` and gated
 `lvremove` steps for volume lifecycle declarations.
 `disk-nix validate` emits the same dry-run report but exits successfully when

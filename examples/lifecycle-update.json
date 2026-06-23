@@ -15,6 +15,9 @@
     }
   },
   "datasets": {
+    "tank/home": {
+      "operation": "create"
+    },
     "tank/archive": {
       "destroy": true
     }

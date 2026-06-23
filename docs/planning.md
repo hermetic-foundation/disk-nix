@@ -78,6 +78,9 @@ Examples:
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV removal is destructive because it deletes the volume
   contents.
+- ZFS dataset creation is online, with advice to review inherited mountpoint,
+  quota, reservation, and encryption policy; dataset destruction remains
+  destructive and recommends snapshots or rename-first validation.
 - zvol creation and growth are online operations, with advice to verify pool
   capacity, reservation policy, and downstream block consumers.
 - MD RAID member add is online; replacement and grow/reshape are

@@ -205,6 +205,7 @@ Example lifecycle planning through NixOS options:
       removeDevices = [ "/dev/disk/by-id/old-disk" ];
       properties.autotrim = "on";
     };
+    datasets."tank/home".operation = "create";
     datasets."tank/archive".destroy = true;
     zvols."tank/vm/root" = {
       operation = "grow";

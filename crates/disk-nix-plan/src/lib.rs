@@ -1511,6 +1511,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "datasets" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "ZFS dataset creation adds a filesystem namespace inside an existing pool"
+                    .to_string(),
+                alternatives: vec![
+                    "verify parent dataset properties before creating children".to_string(),
+                    "set mountpoint, quota, reservation, and encryption policy before use"
+                        .to_string(),
+                    "create snapshots or consumers only after the dataset appears in zfs list"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "volumes" => (
             RiskClass::Online,
             false,
@@ -2186,6 +2201,21 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::ZfsDataset,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "ZFS dataset creation consumes pool namespace and inherits parent policy"
+                    .to_string(),
+                alternatives: vec![
+                    "review inherited mountpoint, quota, reservation, and encryption properties"
+                        .to_string(),
+                    "create under the intended parent dataset before exposing consumers"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::VdoVolume,
             operation: Operation::Grow,
             risk: RiskClass::Online,
@@ -2778,6 +2808,50 @@ mod tests {
             .find(|action| action.id == "zvols:tank/vm/tmp:create")
             .expect("zvol create action exists");
         assert_eq!(create.risk, RiskClass::Online);
+    }
+
+    #[test]
+    fn plan_classifies_zfs_dataset_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "datasets": {
+                "tank/home": {
+                  "operation": "create"
+                },
+                "tank/archive": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.destructive_count, 1);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "datasets:tank/home:create")
+            .expect("dataset create action exists");
+        assert_eq!(create.risk, RiskClass::Online);
+        assert!(create.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("mountpoint"))
+        }));
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "datasets:tank/archive:destroy")
+            .expect("dataset destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::Destructive);
+        assert!(destroy.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("recursive snapshot"))
+        }));
     }
 
     #[test]
