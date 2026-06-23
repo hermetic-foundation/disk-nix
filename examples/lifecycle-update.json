@@ -16,6 +16,16 @@
       "mountpoint": "/scratch",
       "fsType": "xfs",
       "operation": "trim"
+    },
+    "scratch-remount": {
+      "mountpoint": "/scratch",
+      "fsType": "xfs",
+      "operation": "remount",
+      "options": [
+        "rw",
+        "noatime",
+        "discard=async"
+      ]
     }
   },
   "pools": {

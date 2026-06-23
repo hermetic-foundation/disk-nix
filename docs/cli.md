@@ -399,6 +399,11 @@ volume-ID, or volume-serial updates render
 offline-required changes. Missing devices remain marked
 `needs-domain-implementation`, while unsupported filesystem property keys are
 classified as unsupported before execution.
+Filesystem remount command plans render reviewed
+`mount -o remount,<options> <mountpoint>` operations for `filesystems` entries
+without deleting data. Missing concrete mountpoints keep remount commands
+non-ready, and long-lived option changes should still be persisted through
+NixOS `fileSystems`.
 MD RAID assemble plans render `mdadm --assemble <array> <members...>`, stop
 plans render `mdadm --stop <array>`, and create plans render
 destructive-policy-gated `mdadm --create` commands from explicit `level` and

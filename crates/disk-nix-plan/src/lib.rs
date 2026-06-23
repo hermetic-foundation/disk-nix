@@ -1083,7 +1083,8 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
         | Operation::Repair
         | Operation::Scrub
         | Operation::Trim
-        | Operation::Rebalance),
+        | Operation::Rebalance
+        | Operation::Remount),
     ) = filesystem
         .get("operation")
         .or_else(|| filesystem.get("action"))
@@ -1102,6 +1103,7 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             destructive,
             context: ActionContext {
                 collection: Some("filesystems".to_string()),
+                options: lifecycle_options(filesystem),
                 property_assignments: property_assignments(filesystem),
                 ..filesystem_context(
                     name,
@@ -2966,6 +2968,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Remount if collection == "filesystems" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary:
+                    "filesystem remount updates local mount options without rewriting data"
+                        .to_string(),
+                alternatives: vec![
+                    "prefer remounting with reviewed options before unmounting a busy path"
+                        .to_string(),
+                    "persist long-lived option changes through NixOS fileSystems".to_string(),
+                    "verify active services tolerate option changes such as ro, rw, or discard"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "partitions" => (
             RiskClass::OfflineRequired,
             false,
@@ -4010,7 +4028,7 @@ fn classify_operation(
                     operation_label(operation)
                 ),
                 alternatives: vec![
-                    "use operation = \"remount\" only on nfs.mounts declarations for now"
+                    "use operation = \"remount\" on filesystems or nfs.mounts declarations"
                         .to_string(),
                     "use a filesystem-specific mount or service restart workflow for other remount needs"
                         .to_string(),
@@ -4614,6 +4632,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                         .to_string(),
                     "schedule regular fstrim instead of ad hoc discard on busy systems"
                         .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Filesystem,
+            operation: Operation::Remount,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "filesystem remount updates live mount options without deleting data"
+                    .to_string(),
+                alternatives: vec![
+                    "remount with reviewed options before unmounting a busy path".to_string(),
+                    "persist steady-state options through NixOS fileSystems".to_string(),
                 ],
             }),
         },
@@ -7424,6 +7455,45 @@ mod tests {
             trim.advice
                 .as_ref()
                 .is_some_and(|advice| { advice.summary.contains("discards unused blocks") })
+        );
+    }
+
+    #[test]
+    fn plan_accepts_filesystem_remount_operation() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "scratch": {
+                  "mountpoint": "/scratch",
+                  "fsType": "xfs",
+                  "operation": "remount",
+                  "options": ["rw", "noatime", "discard=async"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        assert_eq!(plan.summary.unsupported_count, 0);
+        let remount = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:scratch:remount")
+            .expect("filesystem remount action exists");
+        assert_eq!(remount.operation, Operation::Remount);
+        assert_eq!(remount.risk, RiskClass::Online);
+        assert_eq!(remount.context.target.as_deref(), Some("/scratch"));
+        assert_eq!(
+            remount.context.options.as_deref(),
+            Some("rw,noatime,discard=async")
+        );
+        assert!(
+            remount
+                .advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("updates local mount options"))
         );
     }
 

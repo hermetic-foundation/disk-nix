@@ -381,6 +381,10 @@ reviewed option updates, and `umount <mountpoint>` for reviewed
 `operation = "unmount"` actions. Legacy NFS mount `create` and `destroy` map
 to the same mount/unmount command plans. Missing sources or concrete
 mountpoint paths keep the command plan non-ready.
+Filesystem `operation = "remount"` actions are online, non-destructive updates
+that render `mount -o remount,<options> <mountpoint>`. Missing concrete
+mountpoints remain non-ready, and long-lived options should be kept in the
+matching NixOS `fileSystems` entry.
 LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
 for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
 destructive policy gates allow removal. LV grow and remove commands require

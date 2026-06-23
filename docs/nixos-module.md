@@ -81,6 +81,9 @@ the generated disk-nix spec while filtering them out of the derived NixOS
 `fileSystems` entries. `operation = "mount"` and `operation = "remount"` stay
 in both places: NixOS owns the steady-state mount declaration, and disk-nix can
 render reviewed mount or non-destructive remount commands to apply changes.
+Typed filesystem declarations can also use `operation = "remount"` to render a
+reviewed `mount -o remount,<options>` command for non-NFS local filesystems
+while keeping the persistent options in the same NixOS `fileSystems` entry.
 Typed active LVM declarations enable NixOS LVM support and initrd LVM support by
 default, and typed thin-pool or LVM-cache declarations also enable NixOS thin
 support. Typed active MD RAID declarations enable `boot.swraid` and add the same

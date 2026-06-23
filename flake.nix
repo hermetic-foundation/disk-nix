@@ -165,6 +165,17 @@
                 mountpoint = "/trim";
                 operation = "trim";
               };
+              filesystems.remount = {
+                device = "/dev/disk/by-label/remount";
+                fsType = "xfs";
+                mountpoint = "/remount";
+                operation = "remount";
+                options = [
+                  "rw"
+                  "noatime"
+                  "discard=async"
+                ];
+              };
               filesystems.mobile = {
                 device = "/dev/disk/by-label/mobile";
                 fsType = "f2fs";
@@ -681,7 +692,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 74
+              .summary.actionCount == 76
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -689,6 +700,7 @@
               and (.actions | any(.id == "filesystems:home-check:check" and .risk == "offline-required"))
               and (.actions | any(.id == "filesystems:data-scrub:scrub" and .risk == "online"))
               and (.actions | any(.id == "filesystems:scratch-trim:trim" and .risk == "online"))
+              and (.actions | any(.id == "filesystems:scratch-remount:remount" and .risk == "online"))
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@home:create" and .risk == "online"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:limit" and .risk == "safe"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
@@ -856,6 +868,9 @@
                   and .spec.filesystems.scrub.mountpoint == "/scrub"
                   and .spec.filesystems.trim.operation == "trim"
                   and .spec.filesystems.trim.device == "/dev/disk/by-label/trim"
+                  and .spec.filesystems.remount.operation == "remount"
+                  and .spec.filesystems.remount.mountpoint == "/remount"
+                  and (.spec.filesystems.remount.options | index("discard=async") != null)
                   and .spec.swaps.primary.device == "/dev/disk/by-label/swap"
                   and .spec.swaps.primary.operation == "format"
                   and .spec.swaps.primary.desiredSize == "8GiB"

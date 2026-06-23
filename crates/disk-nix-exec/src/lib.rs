@@ -2144,6 +2144,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Remount if action.context.collection.as_deref() == Some("filesystems") => {
+            let mountpoint = filesystem_mountpoint(action);
+            (
+                vec![
+                    filesystem_findmnt_command(mountpoint),
+                    command(
+                        ["disk-nix", "inspect", mountpoint.unwrap_or(target), "--json"],
+                        false,
+                        "verify filesystem graph state after remount",
+                    ),
+                ],
+                vec![
+                    "findmnt reports the mountpoint with the reviewed filesystem options"
+                        .to_string(),
+                    "local services continue to see the expected filesystem source and type"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Format
         | Operation::Shrink
         | Operation::Clone
@@ -2322,6 +2341,22 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         .to_string(),
                     "restore mounts and services only after post-repair verification passes"
                         .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Remount
+            if collection == Some("filesystems") || action.id.starts_with("filesystems:") =>
+        {
+            let mountpoint = filesystem_mountpoint(action);
+            (
+                vec![
+                    filesystem_findmnt_command(mountpoint),
+                    filesystem_remount_command(mountpoint, action.context.options.as_deref()),
+                ],
+                vec![
+                    "review active services before changing filesystem mount options".to_string(),
+                    "persist the final options through the NixOS fileSystems entry".to_string(),
                 ],
                 true,
             )
@@ -7648,6 +7683,66 @@ fn nfs_mount_target_path(action: &PlannedAction) -> Option<&str> {
         .or_else(|| action.context.name.as_deref().and_then(path_like_target))
 }
 
+fn filesystem_mountpoint(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .mountpoint
+        .as_deref()
+        .and_then(path_like_target)
+        .or_else(|| action.context.target.as_deref().and_then(path_like_target))
+        .or_else(|| action.context.name.as_deref().and_then(path_like_target))
+}
+
+fn filesystem_findmnt_command(mountpoint: Option<&str>) -> ExecutionCommand {
+    match mountpoint {
+        Some(mountpoint) => command(
+            ["findmnt", "--json", mountpoint],
+            false,
+            "inspect the filesystem mount after selecting the mountpoint",
+        ),
+        None => command_with_readiness(
+            ["findmnt", "--json", "<mountpoint>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["mountpoint path"],
+            "inspect the filesystem mount after selecting the mountpoint",
+        ),
+    }
+}
+
+fn filesystem_remount_command(mountpoint: Option<&str>, options: Option<&str>) -> ExecutionCommand {
+    let mountpoint_arg = mountpoint.unwrap_or("<mountpoint>");
+    let remount_options = options
+        .filter(|options| !options.is_empty())
+        .map(|options| format!("remount,{options}"))
+        .unwrap_or_else(|| "remount".to_string());
+
+    match mountpoint {
+        Some(_) => command_vec(
+            vec![
+                "mount".to_string(),
+                "-o".to_string(),
+                remount_options,
+                mountpoint_arg.to_string(),
+            ],
+            true,
+            "remount the filesystem path with the reviewed options",
+        ),
+        None => command_vec_with_readiness(
+            vec![
+                "mount".to_string(),
+                "-o".to_string(),
+                remount_options,
+                mountpoint_arg.to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["mountpoint path"],
+            "remount the filesystem path after selecting the mountpoint",
+        ),
+    }
+}
+
 fn nfs_mount_create_command(
     source: Option<&str>,
     mountpoint: Option<&str>,
@@ -11015,6 +11110,84 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["disk-nix", "inspect", "/scratch", "--json"])
+        }));
+    }
+
+    #[test]
+    fn filesystem_remount_lifecycle_reports_mount_command() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "scratch": {
+                    "mountpoint": "/scratch",
+                    "fsType": "xfs",
+                    "operation": "remount",
+                    "options": ["rw", "noatime", "discard=async"]
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:remount"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mount",
+                            "-o",
+                            "remount,rw,noatime,discard=async",
+                            "/scratch",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:remount"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["findmnt", "--json", "/scratch"])
+        }));
+    }
+
+    #[test]
+    fn filesystem_remount_requires_mountpoint_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "scratch": {
+                    "fsType": "xfs",
+                    "operation": "remount",
+                    "options": ["ro"]
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:remount"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mount", "-o", "remount,ro", "<mountpoint>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["mountpoint path"]
+                })
         }));
     }
 
