@@ -56,11 +56,15 @@ fn parse_mounts(bytes: &[u8]) -> Result<Vec<NfsMount>, ProbeError> {
 fn add_mount(graph: &mut StorageGraph, mount: NfsMount) {
     let mount_id = format!("mount:{}", mount.target);
     let mut mount_node = Node::new(mount_id.clone(), NodeKind::NfsMount, mount.target.clone());
+    mount_node = mount_node.with_property("nfs.source", mount.source.clone());
     for (key, value) in &mount.options {
         mount_node = mount_node.with_property(format!("nfs.{key}"), value.clone());
     }
     if let Some(server) = &mount.server {
         mount_node = mount_node.with_property("nfs.server", server.clone());
+    }
+    if let Some(export) = &mount.export {
+        mount_node = mount_node.with_property("nfs.export", export.clone());
     }
     graph.add_node(mount_node);
 
@@ -142,6 +146,12 @@ storage.example:/export/home mounted on /home:
                     .properties
                     .iter()
                     .any(|property| property.key == "nfs.vers" && property.value == "4.2")
+                && node.properties.iter().any(|property| {
+                    property.key == "nfs.source" && property.value == "storage.example:/export/home"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "nfs.export" && property.value == "/export/home"
+                })
         }));
     }
 }

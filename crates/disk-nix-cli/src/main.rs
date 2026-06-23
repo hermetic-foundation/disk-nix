@@ -1954,6 +1954,7 @@ fn usage_details(node: &Node) -> String {
         ("iscsi.persistent-portal", "persistent-portal"),
         ("iscsi.connection-state", "connection-state"),
         ("iscsi.attached-disk", "attached-disk"),
+        ("nfs.source", "source"),
         ("nfs.server", "server"),
         ("nfs.export", "export"),
         ("nfs.vers", "vers"),
@@ -2657,7 +2658,9 @@ mod tests {
         );
         graph.add_node(
             Node::new("mount:/home", NodeKind::NfsMount, "/home")
+                .with_property("nfs.source", "storage.example:/export/home")
                 .with_property("nfs.server", "storage.example")
+                .with_property("nfs.export", "/export/home")
                 .with_property("nfs.vers", "4.2")
                 .with_property("nfs.proto", "tcp")
                 .with_property("nfs.sec", "sys")
@@ -2678,8 +2681,9 @@ mod tests {
         assert!(output.contains("attached-disk=sdb"));
         assert!(output.contains("server=storage.example export=/export/home"));
         assert!(output.contains(
-            "server=storage.example vers=4.2 proto=tcp sec=sys clientaddr=10.0.0.20 addr=10.0.0.10"
+            "source=storage.example:/export/home server=storage.example export=/export/home vers=4.2"
         ));
+        assert!(output.contains("proto=tcp sec=sys clientaddr=10.0.0.20 addr=10.0.0.10"));
         assert!(output.contains("rsize=1048576 wsize=1048576"));
     }
 
