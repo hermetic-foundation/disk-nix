@@ -1715,6 +1715,7 @@ fn is_device_node(node: &Node) -> bool {
             | NodeKind::MultipathDevice
             | NodeKind::NvmeNamespace
             | NodeKind::LoopDevice
+            | NodeKind::BackingFile
             | NodeKind::Swap
     )
 }
@@ -1792,6 +1793,7 @@ fn is_mapping_node(node: &Node) -> bool {
             | NodeKind::VdoVolume
             | NodeKind::MdRaid
             | NodeKind::MultipathDevice
+            | NodeKind::LoopDevice
             | NodeKind::CacheDevice
     )
 }
@@ -1957,9 +1959,9 @@ mod tests {
     use disk_nix_model::{Edge, Node, NodeKind, Relationship, StorageGraph, Usage};
 
     use super::{
-        confirmation_file_accepts, is_network_storage_node, is_partition_node, is_pool_node,
-        is_snapshot_node, print_filesystems, print_usage, snapshot_source, usage_details,
-        usage_percent,
+        confirmation_file_accepts, is_device_node, is_mapping_node, is_network_storage_node,
+        is_partition_node, is_pool_node, is_snapshot_node, print_filesystems, print_usage,
+        snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2008,6 +2010,16 @@ mod tests {
             "nfs:server:/export",
             NodeKind::NfsExport,
             "server:/export"
+        )));
+        assert!(is_device_node(&Node::new(
+            "file:/var/lib/images/root.img",
+            NodeKind::BackingFile,
+            "/var/lib/images/root.img"
+        )));
+        assert!(is_mapping_node(&Node::new(
+            "block:/dev/loop0",
+            NodeKind::LoopDevice,
+            "/dev/loop0"
         )));
     }
 

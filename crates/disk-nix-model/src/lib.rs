@@ -198,6 +198,7 @@ pub enum NodeKind {
     NvmeNamespace,
     Swap,
     LoopDevice,
+    BackingFile,
 }
 
 impl fmt::Display for NodeKind {
@@ -237,6 +238,7 @@ impl fmt::Display for NodeKind {
             Self::NvmeNamespace => "nvme-namespace",
             Self::Swap => "swap",
             Self::LoopDevice => "loop-device",
+            Self::BackingFile => "backing-file",
         };
         f.write_str(value)
     }

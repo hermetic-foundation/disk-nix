@@ -13,6 +13,7 @@ mod exfat;
 mod ext;
 mod findmnt;
 mod iscsi;
+mod loopdev;
 mod lsblk;
 mod lvm;
 mod mdraid;
@@ -98,6 +99,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_exfat(&mut result);
         collect_xfs(&mut result);
         collect_swaps(&mut result);
+        collect_loopdev(&mut result);
         collect_cryptsetup(&mut result);
         collect_dmsetup(&mut result);
         collect_lvm(&mut result);
@@ -545,6 +547,43 @@ fn collect_swaps(result: &mut ProbeResult) {
             adapter: "swaps".to_string(),
             status: ProbeStatus::Unavailable,
             message: Some(error.to_string()),
+        }),
+    }
+}
+
+fn collect_loopdev(result: &mut ProbeResult) {
+    match run_report("losetup", &["--json", "--list"]) {
+        Ok(output) => match loopdev::normalize_losetup_json(&output) {
+            Ok(graph) if graph.nodes.is_empty() => result.reports.push(ProbeReport {
+                adapter: "loop".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("no loop devices discovered".to_string()),
+            }),
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "loop".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from losetup JSON"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "loop".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "loop".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
         }),
     }
 }
