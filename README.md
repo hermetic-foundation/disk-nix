@@ -114,6 +114,7 @@ The flake exposes a NixOS module:
     enable = true;
     apply.mode = "activation";
     apply.probeCurrent = true;
+    apply.failOnBlocked = true;
     apply.scriptOut = "/run/disk-nix/apply.sh";
     apply.reportOut = "/run/disk-nix/apply-report.json";
   };
@@ -126,7 +127,9 @@ and initrd LUKS options, and keeps lifecycle domains available in the same
 planner spec. When `apply.scriptOut` is set, activation validation asks the CLI
 to write the allowed command plan and post-apply verification plan to that
 reviewable shell script path. When `apply.reportOut` is set, activation also
-writes the JSON report before returning blocked-policy failures.
+writes the JSON report before returning blocked-policy failures. Set
+`apply.failOnBlocked = false` to use report-only validation during activation;
+blocked actions are still reported, but the unit exits successfully.
 
 ## Safety model
 

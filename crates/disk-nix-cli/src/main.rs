@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::{
     collections::BTreeSet,
     fmt,
@@ -675,6 +677,11 @@ fn spec_schema() -> serde_json::Value {
                     "probeCurrent": {
                         "type": "boolean",
                         "description": "NixOS module helper that controls whether activation validation passes --probe-current."
+                    },
+                    "failOnBlocked": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "NixOS module helper that controls whether activation uses apply and fails on blocked policy, or validate and reports blocked policy without failing the unit."
                     },
                     "scriptOut": {
                         "type": ["string", "null"],

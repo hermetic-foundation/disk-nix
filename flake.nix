@@ -98,6 +98,7 @@
                 requireConfirmation = false;
                 confirmation = false;
                 requireConfirmationFile = "/run/disk-nix/confirm";
+                failOnBlocked = false;
                 scriptOut = "/run/disk-nix/apply.sh";
                 reportOut = "/run/disk-nix/apply-report.json";
               };
@@ -207,6 +208,7 @@
               and (."$defs".operation.enum | index("grow") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
               and (."$defs".specBody.properties.snapshots["$ref"] == "#/$defs/snapshotMap")
+              and ."$defs".applyPolicy.properties.failOnBlocked.default == true
               and (."$defs".applyPolicy.properties.reportOut.type | index("string") != null)
             ' "$schema"
 
@@ -318,10 +320,12 @@
                   and .apply.requireConfirmation == false
                   and .apply.confirmation == false
                   and .apply.requireConfirmationFile == "/run/disk-nix/confirm"
+                  and .apply.failOnBlocked == false
                   and .apply.scriptOut == "/run/disk-nix/apply.sh"
                   and .apply.reportOut == "/run/disk-nix/apply-report.json"
                 ' "$spec"
                 applyScript='${nixosModuleTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'
+                grep -- 'validate' "$applyScript"
                 grep -- '--probe-current' "$applyScript"
                 grep -- '--script-out' "$applyScript"
                 grep -- '/run/disk-nix/apply.sh' "$applyScript"

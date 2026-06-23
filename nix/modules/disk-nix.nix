@@ -14,8 +14,9 @@ let
   applyReportOutDir = lib.optionalString (cfg.apply.reportOut != null) (
     builtins.dirOf cfg.apply.reportOut
   );
+  applyCommand = if cfg.apply.failOnBlocked then "apply" else "validate";
   applyArgs = [
-    "apply"
+    applyCommand
     "--spec"
     "/etc/disk-nix/spec.json"
   ]
@@ -738,6 +739,12 @@ in
         type = lib.types.bool;
         default = false;
         description = "Probe current topology during disk-nix apply-policy validation.";
+      };
+
+      failOnBlocked = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Fail the activation service when policy blocks planned actions. When false, activation uses disk-nix validate so blocked actions are reported without failing the unit.";
       };
 
       scriptOut = lib.mkOption {
