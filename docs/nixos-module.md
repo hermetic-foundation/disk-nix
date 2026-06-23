@@ -113,8 +113,9 @@ operations need `/dev/bcache*`, and LVM logical volumes and thin pools need
 canonical `vg/lv` or `vg/pool` targets. Declarations that omit these concrete
 addresses still produce reviewable plans, but their command plans stay
 non-ready instead of guessing from logical keys.
-MD RAID member add, replacement, and removal declarations use the same explicit
-array target requirement as create and grow plans. Multipath replacement
+MD RAID assemble, stop, member add, replacement, and removal declarations use
+the same explicit array target requirement as create and grow plans. Assemble
+also requires explicit reviewed member devices. Multipath replacement
 declarations use the concrete map target for preflight inspection, then render
 separate path add and delete commands from the `replaceDevices` mapping.
 
@@ -412,6 +413,15 @@ Example lifecycle planning through NixOS options:
     mdRaids.root = {
       target = "/dev/md/root";
       addDevices = [ "/dev/disk/by-id/nvme-md-spare" ];
+    };
+    mdRaids.existing = {
+      target = "/dev/md/existing";
+      operation = "assemble";
+      devices = [ "/dev/disk/by-id/existing-md-a" "/dev/disk/by-id/existing-md-b" ];
+    };
+    mdRaids.oldroot = {
+      target = "/dev/md/oldroot";
+      operation = "stop";
     };
     multipathMaps.mpatha = {
       target = "mpatha";

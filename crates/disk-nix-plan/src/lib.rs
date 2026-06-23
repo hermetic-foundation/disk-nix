@@ -53,6 +53,8 @@ pub enum Operation {
     Export,
     Activate,
     Deactivate,
+    Assemble,
+    Stop,
     Remount,
     Rename,
     Rebalance,
@@ -2735,6 +2737,8 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "export" => Some(Operation::Export),
         "activate" => Some(Operation::Activate),
         "deactivate" => Some(Operation::Deactivate),
+        "assemble" => Some(Operation::Assemble),
+        "stop" => Some(Operation::Stop),
         "remount" => Some(Operation::Remount),
         "rename" => Some(Operation::Rename),
         "rebalance" => Some(Operation::Rebalance),
@@ -2765,6 +2769,8 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Export => "export",
         Operation::Activate => "activate",
         Operation::Deactivate => "deactivate",
+        Operation::Assemble => "assemble",
+        Operation::Stop => "stop",
         Operation::Remount => "remount",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
@@ -3081,6 +3087,38 @@ fn classify_operation(
                         .to_string(),
                     "assemble and inspect an existing array instead of recreating it".to_string(),
                     "add replacement members to an existing redundant array when preserving data"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Assemble if collection == "mdRaids" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "MD RAID assemble activates an existing array from reviewed member devices"
+                    .to_string(),
+                alternatives: vec![
+                    "assemble existing arrays instead of recreating them when metadata already exists"
+                        .to_string(),
+                    "verify member identities and event counts with mdadm --examine before assemble"
+                        .to_string(),
+                    "mount or activate consumers only after mdadm reports the array clean or recovering"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Stop if collection == "mdRaids" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "MD RAID stop makes the array unavailable without removing member metadata"
+                    .to_string(),
+                alternatives: vec![
+                    "unmount filesystems and deactivate mappings before stopping the array"
+                        .to_string(),
+                    "prefer stop over destroy when preserving member metadata for later assembly"
+                        .to_string(),
+                    "verify no open consumers remain with lsblk, findmnt, and dmsetup before stopping"
                         .to_string(),
                 ],
             }),
@@ -3665,6 +3703,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Assemble | Operation::Stop => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: format!(
+                    "{} operations are not implemented for {collection}",
+                    operation_label(operation)
+                ),
+                alternatives: vec![
+                    "use operation = \"assemble\" or \"stop\" only on mdRaids declarations for now"
+                        .to_string(),
+                    "use subsystem-specific import, export, activate, or deactivate operations where supported"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Remount => (
             RiskClass::Unsupported,
             false,
@@ -3926,6 +3980,8 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Export => "export",
         Operation::Activate => "activate",
         Operation::Deactivate => "deactivate",
+        Operation::Assemble => "assemble",
+        Operation::Stop => "stop",
         Operation::Remount => "remount",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
@@ -5095,6 +5151,32 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "inspect member signatures before mdadm --create".to_string(),
                     "assemble an existing array instead of recreating it".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MdRaid,
+            operation: Operation::Assemble,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "MD RAID assemble activates an existing array from known members"
+                    .to_string(),
+                alternatives: vec![
+                    "assemble existing metadata instead of recreating arrays".to_string(),
+                    "inspect member event counts before starting consumers".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MdRaid,
+            operation: Operation::Stop,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "MD RAID stop deactivates the array without removing member metadata"
+                    .to_string(),
+                alternatives: vec![
+                    "unmount and deactivate all consumers before stopping".to_string(),
+                    "use stop instead of destroy when preserving later assembly".to_string(),
                 ],
             }),
         },
@@ -7712,6 +7794,18 @@ mod tests {
                     "/dev/disk/by-id/nvme-b"
                   ]
                 },
+                "existing": {
+                  "target": "/dev/md/existing",
+                  "operation": "assemble",
+                  "devices": [
+                    "/dev/disk/by-id/existing-a",
+                    "/dev/disk/by-id/existing-b"
+                  ]
+                },
+                "oldroot": {
+                  "target": "/dev/md/oldroot",
+                  "operation": "stop"
+                },
                 "root": {
                   "target": "/dev/md/root",
                   "operation": "grow",
@@ -7726,9 +7820,9 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.action_count, 6);
         assert_eq!(plan.summary.destructive_count, 1);
-        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 4);
         let create = plan
             .actions
             .iter()
@@ -7743,6 +7837,30 @@ mod tests {
                 "/dev/disk/by-id/nvme-b".to_string(),
             ]
         );
+        let assemble = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "mdraids:existing:assemble")
+            .expect("md assemble action exists");
+        assert_eq!(assemble.operation, Operation::Assemble);
+        assert_eq!(assemble.risk, RiskClass::OfflineRequired);
+        assert!(!assemble.destructive);
+        assert_eq!(assemble.context.target.as_deref(), Some("/dev/md/existing"));
+        assert_eq!(
+            assemble.context.devices,
+            vec![
+                "/dev/disk/by-id/existing-a".to_string(),
+                "/dev/disk/by-id/existing-b".to_string(),
+            ]
+        );
+        let stop = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "mdraids:oldroot:stop")
+            .expect("md stop action exists");
+        assert_eq!(stop.operation, Operation::Stop);
+        assert_eq!(stop.risk, RiskClass::OfflineRequired);
+        assert!(!stop.destructive);
         let grow = plan
             .actions
             .iter()

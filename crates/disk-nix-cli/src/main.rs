@@ -901,6 +901,8 @@ fn spec_schema() -> serde_json::Value {
                     "export",
                     "activate",
                     "deactivate",
+                    "assemble",
+                    "stop",
                     "remount",
                     "rename",
                     "rebalance",

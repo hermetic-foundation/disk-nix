@@ -156,10 +156,12 @@ Examples:
   consumers. zvol `properties = { ... }` render create-time `-o key=value`
   options and `zfs set key=value <zvol>` reconciliation actions.
 - MD RAID creation and destruction are destructive because they write array
-  metadata or make the assembled array unavailable. Create command plans
-  identify missing RAID level and member-device fields separately. Member add
-  is online; replacement and grow/reshape are offline-required because
-  redundancy, resync, and dependent consumers must be coordinated.
+  metadata or remove array identity. Assemble and stop are offline-required but
+  non-destructive: they activate or deactivate existing array metadata while
+  preserving member devices. Create command plans identify missing RAID level
+  and member-device fields separately. Member add is online; replacement and
+  grow/reshape are offline-required because redundancy, resync, and dependent
+  consumers must be coordinated.
 - Multipath map growth and path add are online; path replacement is
   offline-required and path removal is potential-data-loss because at least one
   healthy path must remain active while paths are added and deleted.
@@ -282,7 +284,8 @@ Lifecycle objects may use:
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
   `repair`, `scrub`, `trim`, `replace-device`, `add-device`, `remove-device`,
   `set-property`, `snapshot`, `promote`, `import`, `export`, `activate`,
-  `deactivate`, `remount`, `rename`, `rebalance`, `rollback`, or `destroy`
+  `deactivate`, `assemble`, `stop`, `remount`, `rename`, `rebalance`,
+  `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
 - `devices`: member devices for arrays, pools, or explicit LUN paths that
   should receive per-path host rescans
@@ -391,8 +394,9 @@ target and `desiredSize`; attach and delete flows require `namespaceId` plus
 `controllers` when attachment state is changed.
 Swap grow, format, label, and UUID command plans require a path-shaped swap
 target. Label and UUID updates render `swaplabel --label` and
-`swaplabel --uuid`. MD RAID create, grow, member add, replacement, and removal
-command plans require an explicit array path such as `/dev/md/root`.
+`swaplabel --uuid`. MD RAID assemble, stop, create, grow, member add,
+replacement, and removal command plans require an explicit array path such as
+`/dev/md/root`; assemble also requires explicit reviewed member devices.
 Loop-device refresh and detach command plans require `/dev/loop*` targets.
 Multipath map growth and path replacement preflight require a concrete map
 target such as `mpatha` or `/dev/mapper/mpatha`; replacement renders separate

@@ -325,6 +325,18 @@
                   "/dev/disk/by-id/nvme-md-aging" = "/dev/disk/by-id/nvme-md-replacement";
                 };
               };
+              mdRaids.existing = {
+                target = "/dev/md/existing";
+                operation = "assemble";
+                devices = [
+                  "/dev/disk/by-id/existing-md-a"
+                  "/dev/disk/by-id/existing-md-b"
+                ];
+              };
+              mdRaids.oldroot = {
+                target = "/dev/md/oldroot";
+                operation = "stop";
+              };
               multipathMaps.mpatha = {
                 target = "mpatha";
                 addDevices = [ "/dev/sdb" ];
@@ -536,6 +548,8 @@
               and (."$defs".operation.enum | index("export") != null)
               and (."$defs".operation.enum | index("activate") != null)
               and (."$defs".operation.enum | index("deactivate") != null)
+              and (."$defs".operation.enum | index("assemble") != null)
+              and (."$defs".operation.enum | index("stop") != null)
               and (."$defs".operation.enum | index("remount") != null)
               and ."$defs".filesystem.properties.device.type == "string"
               and ."$defs".filesystem.properties.operation["$ref"] == "#/$defs/operation"
@@ -594,8 +608,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 55
-              and .summary.offlineRequiredCount == 18
+              .summary.actionCount == 57
+              and .summary.offlineRequiredCount == 20
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -621,6 +635,8 @@
               and (.actions | any(.id == "lvmcaches:vg0/root:create" and .risk == "offline-required"))
               and (.actions | any(.id == "lvmCaches:vg0/root:set-property:lvm.cache-mode" and .risk == "safe"))
               and (.actions | any(.id == "loopdevices:/dev/loop7:create" and .risk == "online"))
+              and (.actions | any(.id == "mdraids:existing:assemble" and .risk == "offline-required"))
+              and (.actions | any(.id == "mdraids:oldroot:stop" and .risk == "offline-required"))
               and (.actions | any(.id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-md-spare" and .risk == "online"))
               and (.actions | any(.id == "multipathMaps:mpatha:add-device:/dev/sdb" and .risk == "online"))
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
@@ -673,8 +689,8 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 23
-              and .apply.blockedSummary.offlineRequiredCount == 18
+              and .apply.blockedCount == 25
+              and .apply.blockedSummary.offlineRequiredCount == 20
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
@@ -686,18 +702,20 @@
               and (.apply.blocked | any(.id == "volumegroups:exportvg:export"))
               and (.apply.blocked | any(.id == "volumegroups:activevg:activate"))
               and (.apply.blocked | any(.id == "volumes:vg0/archive:deactivate"))
+              and (.apply.blocked | any(.id == "mdraids:existing:assemble"))
+              and (.apply.blocked | any(.id == "mdraids:oldroot:stop"))
               and (.apply.blocked | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained"))
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 23
+              and .apply.blockedCount == 25
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 23
-              and .messages[0] == "apply policy blocked 23 action(s)"
+              and .apply.blockedCount == 25
+              and .messages[0] == "apply policy blocked 25 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -828,6 +846,11 @@
                   and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-b") != null)
                   and (.spec.mdRaids.root.addDevices | index("/dev/disk/by-id/nvme-md-spare") != null)
                   and .spec.mdRaids.root.replaceDevices."/dev/disk/by-id/nvme-md-aging" == "/dev/disk/by-id/nvme-md-replacement"
+                  and .spec.mdRaids.existing.operation == "assemble"
+                  and .spec.mdRaids.existing.target == "/dev/md/existing"
+                  and (.spec.mdRaids.existing.devices | index("/dev/disk/by-id/existing-md-a") != null)
+                  and .spec.mdRaids.oldroot.operation == "stop"
+                  and .spec.mdRaids.oldroot.target == "/dev/md/oldroot"
                   and .spec.multipathMaps.mpatha.target == "mpatha"
                   and (.spec.multipathMaps.mpatha.addDevices | index("/dev/sdb") != null)
                   and .spec.multipathMaps.mpatha.replaceDevices."/dev/sdc" == "/dev/sdd"

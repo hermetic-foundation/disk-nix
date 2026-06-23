@@ -117,6 +117,18 @@
     }
   },
   "mdRaids": {
+    "existing": {
+      "target": "/dev/md/existing",
+      "operation": "assemble",
+      "devices": [
+        "/dev/disk/by-id/existing-md-a",
+        "/dev/disk/by-id/existing-md-b"
+      ]
+    },
+    "oldroot": {
+      "target": "/dev/md/oldroot",
+      "operation": "stop"
+    },
     "root": {
       "target": "/dev/md/root",
       "addDevices": [

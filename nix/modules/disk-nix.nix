@@ -82,6 +82,8 @@ let
       "export"
       "activate"
       "deactivate"
+      "assemble"
+      "stop"
       "remount"
       "rename"
       "rebalance"

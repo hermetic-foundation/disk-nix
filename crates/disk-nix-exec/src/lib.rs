@@ -1202,6 +1202,8 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::ReplaceDevice
         | Operation::RemoveDevice
         | Operation::Create
+        | Operation::Assemble
+        | Operation::Stop
         | Operation::Grow
             if collection == Some("mdRaids") =>
         {
@@ -2028,6 +2030,8 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Export
         | Operation::Activate
         | Operation::Deactivate
+        | Operation::Assemble
+        | Operation::Stop
         | Operation::Remount
         | Operation::Rename
         | Operation::RemoveDevice
@@ -3317,6 +3321,40 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "choose metadata, bitmap, and spare policy before creating production arrays"
                         .to_string(),
                     "monitor /proc/mdstat until initial sync completes".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Assemble if collection == Some("mdRaids") => {
+            let target = md_array_target_path(action);
+            (
+                vec![
+                    command(
+                        ["cat", "/proc/mdstat"],
+                        false,
+                        "inspect existing MD RAID state before array assembly",
+                    ),
+                    md_raid_assemble_command(target, &action.context.devices),
+                ],
+                vec![
+                    "verify member event counts and array UUID before assembly".to_string(),
+                    "activate filesystems and mappings only after mdadm reports expected health"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Stop if collection == Some("mdRaids") => {
+            let target = md_array_target_path(action);
+            (
+                vec![
+                    md_raid_detail_command(target, "inspect MD RAID array before stopping"),
+                    md_raid_stop_command(target),
+                ],
+                vec![
+                    "unmount filesystems and deactivate mappings before stopping the array"
+                        .to_string(),
+                    "preserve member devices for later mdadm assemble".to_string(),
                 ],
                 true,
             )
@@ -4813,6 +4851,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Export
         | Operation::Activate
         | Operation::Deactivate
+        | Operation::Assemble
+        | Operation::Stop
         | Operation::Remount
         | Operation::Rename
         | Operation::RemoveDevice
@@ -9384,6 +9424,69 @@ fn md_raid_create_command(
     }
 }
 
+fn md_raid_assemble_command(target: Option<&str>, devices: &[String]) -> ExecutionCommand {
+    let missing_target = target.is_none();
+    let missing_devices = devices.is_empty();
+    let target_arg = target.unwrap_or("<md-array>");
+    let mut argv = vec![
+        "mdadm".to_string(),
+        "--assemble".to_string(),
+        target_arg.to_string(),
+    ];
+    if missing_devices {
+        argv.push("<member-device>".to_string());
+    } else {
+        argv.extend(devices.iter().cloned());
+    }
+
+    if missing_target || missing_devices {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_md_raid_assemble_inputs(missing_target, missing_devices),
+            "assemble the MD RAID array after selecting the array and reviewed member devices",
+        )
+    } else {
+        command_vec(
+            argv,
+            true,
+            "assemble the reviewed MD RAID array from existing member metadata",
+        )
+    }
+}
+
+fn missing_md_raid_assemble_inputs(
+    missing_target: bool,
+    missing_devices: bool,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if missing_target {
+        missing.push("MD array path");
+    }
+    if missing_devices {
+        missing.push("member devices");
+    }
+    missing
+}
+
+fn md_raid_stop_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["mdadm", "--stop", target],
+            true,
+            "stop the reviewed MD RAID array without removing member metadata",
+        ),
+        None => command_with_readiness(
+            ["mdadm", "--stop", "<md-array>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["MD array path"],
+            "stop the MD RAID array after selecting the array path",
+        ),
+    }
+}
+
 fn missing_md_raid_create_inputs(
     missing_target: bool,
     missing_level: bool,
@@ -12711,6 +12814,18 @@ mod tests {
             br#"{
               "spec": {
                 "mdRaids": {
+                  "existing": {
+                    "target": "/dev/md/existing",
+                    "operation": "assemble",
+                    "devices": [
+                      "/dev/disk/by-id/existing-a",
+                      "/dev/disk/by-id/existing-b"
+                    ]
+                  },
+                  "oldroot": {
+                    "target": "/dev/md/oldroot",
+                    "operation": "stop"
+                  },
                   "root": {
                     "target": "/dev/md/root",
                     "operation": "grow",
@@ -12734,6 +12849,26 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::Blocked);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:existing:assemble"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mdadm",
+                            "--assemble",
+                            "/dev/md/existing",
+                            "/dev/disk/by-id/existing-a",
+                            "/dev/disk/by-id/existing-b",
+                        ]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:oldroot:stop"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["mdadm", "--stop", "/dev/md/oldroot"])
+        }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
                 command.argv
@@ -12929,6 +13064,12 @@ mod tests {
                   "root": {
                     "operation": "grow",
                     "desiredSize": "max"
+                  },
+                  "existing": {
+                    "operation": "assemble"
+                  },
+                  "oldroot": {
+                    "operation": "stop"
                   }
                 }
               },
@@ -12969,6 +13110,22 @@ mod tests {
             step.action_id == "mdraids:root:grow"
                 && step.commands.iter().any(|command| {
                     command.argv == ["mdadm", "--grow", "<md-array>", "--size", "max"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["MD array path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:existing:assemble"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mdadm", "--assemble", "<md-array>", "<member-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["MD array path", "member devices"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:oldroot:stop"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mdadm", "--stop", "<md-array>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["MD array path"]
                 })
