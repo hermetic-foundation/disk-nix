@@ -48,6 +48,7 @@ pub enum Operation {
     SetProperty,
     Snapshot,
     Clone,
+    Promote,
     Rename,
     Rebalance,
     Rollback,
@@ -2720,6 +2721,7 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "set-property" | "setProperty" => Some(Operation::SetProperty),
         "snapshot" => Some(Operation::Snapshot),
         "clone" => Some(Operation::Clone),
+        "promote" => Some(Operation::Promote),
         "rename" => Some(Operation::Rename),
         "rebalance" => Some(Operation::Rebalance),
         "rollback" => Some(Operation::Rollback),
@@ -2744,6 +2746,7 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::SetProperty => "set-property",
         Operation::Snapshot => "snapshot",
         Operation::Clone => "clone",
+        Operation::Promote => "promote",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
@@ -3157,6 +3160,19 @@ fn classify_operation(
                 alternatives: vec![
                     "inspect the clone before using it for rollback or migration".to_string(),
                     "destroy temporary clones after validation".to_string(),
+                ],
+            }),
+        ),
+        Operation::Promote => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: format!("{collection} promote makes a clone independent of its origin"),
+                alternatives: vec![
+                    "inspect origin and dependent snapshots before promoting".to_string(),
+                    "validate mounts, shares, LUN mappings, and services against the promoted clone"
+                        .to_string(),
+                    "keep the original dataset until the promoted clone is verified".to_string(),
                 ],
             }),
         ),
@@ -3724,6 +3740,7 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::SetProperty => "set property",
         Operation::Snapshot => "snapshot",
         Operation::Clone => "clone",
+        Operation::Promote => "promote",
         Operation::Rename => "rename",
         Operation::Rebalance => "rebalance",
         Operation::Rollback => "rollback",
@@ -4452,6 +4469,19 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::Zvol,
+            operation: Operation::Promote,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "zvol clone promotion changes clone dependency ownership".to_string(),
+                alternatives: vec![
+                    "inspect origin and consumers before promoting the clone".to_string(),
+                    "validate downstream LUN, VM, and filesystem consumers after promotion"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Zvol,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             advice: Some(Advice {
@@ -4501,6 +4531,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "update mountpoints, shares, and services before rename".to_string(),
                     "validate consumers on the renamed dataset before destroying old references"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::ZfsDataset,
+            operation: Operation::Promote,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "ZFS dataset clone promotion changes clone dependency ownership"
+                    .to_string(),
+                alternatives: vec![
+                    "inspect clone origin and dependent snapshots before promotion".to_string(),
+                    "validate mounts, shares, and services against the promoted dataset"
                         .to_string(),
                 ],
             }),
@@ -5425,6 +5469,27 @@ mod tests {
         assert_eq!(grow.risk, RiskClass::OfflineRequired);
         assert_eq!(destroy.risk, RiskClass::Destructive);
         assert!(create.advice.is_some());
+    }
+
+    #[test]
+    fn zfs_clone_promotion_capabilities_are_advertised() {
+        let capabilities = default_capabilities();
+        for node_kind in [NodeKind::ZfsDataset, NodeKind::Zvol] {
+            let capability = capabilities
+                .iter()
+                .find(|capability| {
+                    capability.node_kind == node_kind && capability.operation == Operation::Promote
+                })
+                .unwrap_or_else(|| panic!("{node_kind} promote capability should exist"));
+
+            assert_eq!(capability.risk, RiskClass::OfflineRequired);
+            assert!(
+                capability
+                    .advice
+                    .as_ref()
+                    .is_some_and(|advice| { advice.summary.contains("promotion") })
+            );
+        }
     }
 
     #[test]
@@ -7732,6 +7797,44 @@ mod tests {
         assert!(plan.actions.iter().any(|action| {
             action.id == "snapshot:tank/home@before-prune:rename:tank/home@retained"
                 && action.context.rename_to.as_deref() == Some("tank/home@retained")
+        }));
+    }
+
+    #[test]
+    fn plan_accepts_zfs_clone_promotion_as_offline_non_destructive() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "spec": {
+                "datasets": {
+                  "tank/home-review": {
+                    "operation": "promote"
+                  }
+                },
+                "zvols": {
+                  "tank/vm/root-review": {
+                    "operation": "promote"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.destructive_count, 0);
+        assert!(plan.actions.iter().all(|action| {
+            action.operation == Operation::Promote
+                && action.risk == RiskClass::OfflineRequired
+                && !action.destructive
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "datasets:tank/home-review:promote"
+                && action.context.target.as_deref() == Some("tank/home-review")
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "zvols:tank/vm/root-review:promote"
+                && action.context.target.as_deref() == Some("tank/vm/root-review")
         }));
     }
 

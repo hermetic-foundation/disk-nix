@@ -1790,6 +1790,29 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Promote if collection == Some("datasets") || collection == Some("zvols") => {
+            let target = action.context.target.as_deref().unwrap_or(target);
+            (
+                vec![
+                    command(
+                        ["zfs", "get", "-H", "-o", "value", "origin", target],
+                        false,
+                        "verify clone origin after promotion",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target, "--json"],
+                        false,
+                        "verify promoted ZFS object graph state after promotion",
+                    ),
+                ],
+                vec![
+                    "promoted clone remains available at the reviewed dataset or zvol name"
+                        .to_string(),
+                    "origin dependency and dependent snapshots were reviewed after promotion"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Format if collection == Some("swaps") => (
             vec![
                 command(
@@ -1882,6 +1905,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         Operation::Format
         | Operation::Shrink
         | Operation::Clone
+        | Operation::Promote
         | Operation::Rename
         | Operation::RemoveDevice
         | Operation::Repair
@@ -3761,6 +3785,30 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Promote if collection == Some("datasets") || collection == Some("zvols") => {
+            let target = target.unwrap_or("<zfs-clone>");
+            (
+                vec![
+                    command(
+                        ["zfs", "get", "-H", "-o", "value", "origin", target],
+                        false,
+                        "inspect ZFS clone origin before promotion",
+                    ),
+                    command(
+                        ["zfs", "promote", target],
+                        true,
+                        "promote the reviewed ZFS clone",
+                    ),
+                ],
+                vec![
+                    "promotion changes clone dependency ownership; review dependent snapshots first"
+                        .to_string(),
+                    "validate consumers on the promoted clone before destroying or renaming the origin"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Destroy if collection == Some("snapshots") => {
             let snapshot = action.context.name.as_deref().unwrap_or("<snapshot>");
             let source = action
@@ -4450,6 +4498,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Check
         | Operation::Repair
         | Operation::Clone
+        | Operation::Promote
         | Operation::Rename
         | Operation::RemoveDevice
         | Operation::Rollback
@@ -11836,6 +11885,65 @@ mod tests {
                             "tank/home@retained",
                         ]
                         && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
+    fn zfs_clone_promotion_reports_reviewable_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "datasets": {
+                  "tank/home-review": {
+                    "operation": "promote"
+                  }
+                },
+                "zvols": {
+                  "tank/vm/root-review": {
+                    "operation": "promote"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "datasets:tank/home-review:promote"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "promote", "tank/home-review"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "zvols:tank/vm/root-review:promote"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "promote", "tank/vm/root-review"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "datasets:tank/home-review:promote"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "zfs",
+                            "get",
+                            "-H",
+                            "-o",
+                            "value",
+                            "origin",
+                            "tank/home-review",
+                        ]
                 })
         }));
     }

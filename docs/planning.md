@@ -214,6 +214,9 @@ Examples:
   `renameTo`, `renameTarget`, or `newName` as the new reference and renders
   reviewed rename commands for ZFS datasets/zvols/snapshots, Btrfs subvolume
   paths, LVM logical volumes/thin pools, and LVM volume groups.
+- `operation = "promote"` is offline-required but non-destructive for ZFS
+  clone datasets and zvols. It renders reviewed `zfs promote <clone>` commands
+  after inspecting the clone origin.
 - snapshot creation is reversible; snapshot rollback is potential data loss;
   snapshot destruction is destructive because it removes a recovery point.
   Generic snapshot names such as `pool/dataset@snap` map to ZFS snapshots;
@@ -272,7 +275,8 @@ Lifecycle objects may use:
 
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
   `repair`, `scrub`, `trim`, `replace-device`, `add-device`, `remove-device`,
-  `set-property`, `snapshot`, `rename`, `rebalance`, `rollback`, or `destroy`
+  `set-property`, `snapshot`, `promote`, `rename`, `rebalance`, `rollback`, or
+  `destroy`
 - `addDevices`: list of devices to attach
 - `devices`: member devices for arrays, pools, or explicit LUN paths that
   should receive per-path host rescans

@@ -894,6 +894,7 @@ fn spec_schema() -> serde_json::Value {
                     "set-property",
                     "snapshot",
                     "clone",
+                    "promote",
                     "rename",
                     "rebalance",
                     "rollback",

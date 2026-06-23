@@ -151,6 +151,8 @@ Typed Btrfs subvolume declarations can request `operation = "rename"` with
 `renameTo` to stage a path move before final cleanup.
 For ZFS pools, typed declarations can request `operation = "scrub"` to render
 reviewed `zpool scrub` plans.
+Typed ZFS dataset and zvol declarations can request `operation = "promote"` to
+render reviewed `zfs promote` plans for clones after snapshot-based validation.
 
 Typed swap declarations include:
 
@@ -355,6 +357,7 @@ Example lifecycle planning through NixOS options:
       operation = "rename";
       renameTo = "tank/legacy-staged";
     };
+    datasets."tank/home-review".operation = "promote";
     datasets."tank/archive".destroy = true;
     zvols."tank/vm/root" = {
       operation = "grow";

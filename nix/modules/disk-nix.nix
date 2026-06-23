@@ -77,6 +77,7 @@ let
       "remove-device"
       "set-property"
       "snapshot"
+      "promote"
       "rename"
       "rebalance"
       "rollback"

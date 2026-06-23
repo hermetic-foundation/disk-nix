@@ -40,6 +40,9 @@
       "operation": "rename",
       "renameTo": "tank/legacy-staged"
     },
+    "tank/home-review": {
+      "operation": "promote"
+    },
     "tank/archive": {
       "destroy": true
     }

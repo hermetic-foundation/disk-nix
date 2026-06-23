@@ -475,11 +475,14 @@ ZFS dataset command plans render reviewed `zfs create` commands, including
 create-time `-o key=value` options from declared properties, and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations. Dataset and zvol
 rename declarations render reviewed `zfs rename <old> <new>` commands from
-`operation = "rename"` plus `renameTo`.
+`operation = "rename"` plus `renameTo`. ZFS clone promotion declarations render
+reviewed `zfs get origin <clone>` preflight checks and `zfs promote <clone>`
+commands from `operation = "promote"`.
 Zvol command plans render `zfs create -o key=value -V` for declared create-time
 properties, `zfs set volsize=...`, policy-gated `zfs destroy`, and
 `zfs set key=value` property reconciliation updates for `zvols` lifecycle
-declarations.
+declarations. Zvol clone promotion uses the same reviewed `zfs promote`
+lifecycle path.
 Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
 `btrfs subvolume delete`, reviewed path renames with `mv -- <old> <new>`, and
 `btrfs property set -ts <path> ro true|false` for read-only property

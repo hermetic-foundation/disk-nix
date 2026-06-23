@@ -28,6 +28,7 @@ Creation is only one lifecycle operation. The planner should also support:
 - set safe pool, dataset, filesystem, and volume properties
 - rename datasets, volumes, volume groups, subvolumes, and snapshots before
   final cleanup
+- promote ZFS clones after snapshot-based validation or migration
 - create and prune snapshots
 - rebalance data
 - convert or attach cache layers
