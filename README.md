@@ -15,8 +15,8 @@ storage stacks:
   compression/quota/reservation/encryption properties, cache, log, and special
   vdevs
 - MD RAID, multipath, NVMe namespaces, iSCSI sessions/targets/LUNs, and NFS
-- safe lifecycle operations such as grow, replace, rebalance, property updates,
-  and migration advice
+- safe lifecycle operations such as grow, replace, rebalance, filesystem checks,
+  property updates, and migration advice
 
 The project is licensed under AGPL-3.0-or-later from the beginning.
 
@@ -204,6 +204,11 @@ resolution, unmount, `e2fsck`, and `resize2fs` steps. Ext grow and shrink
 commands use a declared filesystem `device` or `disk` when present, and leave
 source-device commands unresolved when only a mountpoint is declared. XFS shrink
 remains manual-only migration guidance.
+Filesystem check and repair plans render `e2fsck -n`/`e2fsck -f -y`,
+`xfs_repair -n`/`xfs_repair`, and `btrfs check --readonly`/`--repair` command
+plans for ext, XFS, and Btrfs. Repair is offline-required and mutates
+filesystem metadata; mountpoint-only declarations remain non-ready until the
+source block device is selected.
 Btrfs subvolume property updates render read-only toggles with
 `btrfs property set -ts <path> ro true|false`; unsupported Btrfs subvolume
 properties are classified as unsupported with manual-review alternatives.

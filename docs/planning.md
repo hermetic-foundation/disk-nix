@@ -57,6 +57,10 @@ Examples:
 - XFS shrink intent is classified as unsupported because XFS does not support
   shrinking in place; the planner and command renderer recommend creating a
   smaller filesystem and migrating data.
+- Filesystem `operation = "check"` and `operation = "repair"` are
+  offline-required maintenance workflows. Check plans prefer read-only
+  filesystem tools; repair plans mutate metadata and recommend backup or clone
+  workflows before touching production storage.
 - `preserveData = false` is classified as destructive because it permits
   formatting or replacement.
 - LUKS keyslot and token add/change operations are offline-required header
@@ -246,9 +250,9 @@ Lifecycle collections currently accepted by the planner:
 
 Lifecycle objects may use:
 
-- `operation` or `action`: `create`, `format`, `grow`, `shrink`,
-  `replace-device`, `add-device`, `remove-device`, `set-property`, `snapshot`,
-  `rebalance`, `rollback`, or `destroy`
+- `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
+  `repair`, `replace-device`, `add-device`, `remove-device`, `set-property`,
+  `snapshot`, `rebalance`, `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
 - `devices`: member devices for arrays, pools, or explicit LUN paths that
   should receive per-path host rescans
@@ -379,6 +383,10 @@ Ext filesystem grow and shrink actions also carry the declared filesystem
 `device` or `disk` into `resize2fs` and `e2fsck` command plans. Mountpoint-only
 ext declarations keep source-device mutations marked unresolved until the block
 device is explicitly selected.
+Filesystem check and repair actions carry the declared `device` or `disk` into
+read-only and mutating maintenance command plans. Ext uses `e2fsck`, XFS uses
+`xfs_repair`, and Btrfs uses `btrfs check`; repair variants remain
+offline-required and should be reviewed after a read-only check.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.

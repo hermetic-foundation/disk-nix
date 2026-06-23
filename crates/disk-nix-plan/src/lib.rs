@@ -38,6 +38,8 @@ pub enum Operation {
     Format,
     Grow,
     Shrink,
+    Check,
+    Repair,
     ReplaceDevice,
     AddDevice,
     RemoveDevice,
@@ -1036,18 +1038,21 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
         });
     }
 
-    if let Some(Operation::Rebalance) = filesystem
-        .get("operation")
-        .or_else(|| filesystem.get("action"))
-        .and_then(Value::as_str)
-        .and_then(parse_operation)
+    if let Some(operation @ (Operation::Check | Operation::Repair | Operation::Rebalance)) =
+        filesystem
+            .get("operation")
+            .or_else(|| filesystem.get("action"))
+            .and_then(Value::as_str)
+            .and_then(parse_operation)
     {
-        let (risk, destructive, advice) =
-            classify_operation("filesystems", Operation::Rebalance, filesystem);
+        let (risk, destructive, advice) = classify_operation("filesystems", operation, filesystem);
         actions.push(PlannedAction {
-            id: format!("filesystems:{name}:rebalance"),
-            description: format!("plan rebalance operation for filesystem {name}"),
-            operation: Operation::Rebalance,
+            id: format!("filesystems:{name}:{}", operation_id(operation)),
+            description: format!(
+                "plan {} operation for filesystem {name}",
+                operation_id(operation)
+            ),
+            operation,
             risk,
             destructive,
             context: ActionContext {
@@ -2032,6 +2037,8 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "format" => Some(Operation::Format),
         "grow" => Some(Operation::Grow),
         "shrink" => Some(Operation::Shrink),
+        "check" => Some(Operation::Check),
+        "repair" => Some(Operation::Repair),
         "replace-device" | "replaceDevice" => Some(Operation::ReplaceDevice),
         "add-device" | "addDevice" => Some(Operation::AddDevice),
         "remove-device" | "removeDevice" => Some(Operation::RemoveDevice),
@@ -2041,6 +2048,25 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "rollback" => Some(Operation::Rollback),
         "destroy" => Some(Operation::Destroy),
         _ => None,
+    }
+}
+
+fn operation_id(operation: Operation) -> &'static str {
+    match operation {
+        Operation::Create => "create",
+        Operation::Format => "format",
+        Operation::Grow => "grow",
+        Operation::Shrink => "shrink",
+        Operation::Check => "check",
+        Operation::Repair => "repair",
+        Operation::ReplaceDevice => "replace-device",
+        Operation::AddDevice => "add-device",
+        Operation::RemoveDevice => "remove-device",
+        Operation::SetProperty => "set-property",
+        Operation::Snapshot => "snapshot",
+        Operation::Rebalance => "rebalance",
+        Operation::Rollback => "rollback",
+        Operation::Destroy => "destroy",
     }
 }
 
@@ -2057,6 +2083,33 @@ fn classify_operation(
                 summary: "creating or replacing a disk partition table can hide existing data"
                     .to_string(),
                 alternatives: destructive_alternatives(collection, object),
+            }),
+        ),
+        Operation::Check if collection == "filesystems" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "filesystem consistency checks require a stable source device"
+                    .to_string(),
+                alternatives: vec![
+                    "prefer read-only checks before any repair attempt".to_string(),
+                    "unmount or quiesce the filesystem when the checker requires it".to_string(),
+                    "capture current topology and recent backups before maintenance".to_string(),
+                ],
+            }),
+        ),
+        Operation::Repair if collection == "filesystems" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "filesystem repair mutates metadata and must be reviewed offline"
+                    .to_string(),
+                alternatives: vec![
+                    "run a read-only check first and review the reported damage".to_string(),
+                    "restore from backup or snapshot when repair risk is unacceptable".to_string(),
+                    "repair a cloned block device before touching the production source"
+                        .to_string(),
+                ],
             }),
         ),
         Operation::Create if collection == "partitions" => (
@@ -2664,7 +2717,11 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Shrink | Operation::RemoveDevice | Operation::Rollback => (
+        Operation::Shrink
+        | Operation::Check
+        | Operation::Repair
+        | Operation::RemoveDevice
+        | Operation::Rollback => (
             RiskClass::PotentialDataLoss,
             false,
             Some(Advice {
@@ -2873,6 +2930,8 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Format => "format",
         Operation::Grow => "grow",
         Operation::Shrink => "shrink",
+        Operation::Check => "check",
+        Operation::Repair => "repair",
         Operation::ReplaceDevice => "replace device",
         Operation::AddDevice => "add device",
         Operation::RemoveDevice => "remove device",
@@ -3055,6 +3114,31 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "create a new smaller filesystem and migrate data".to_string(),
                     "grow consumers around the existing filesystem instead".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Filesystem,
+            operation: Operation::Check,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "filesystem checks inspect metadata before risky maintenance".to_string(),
+                alternatives: vec![
+                    "run read-only checks before repair".to_string(),
+                    "quiesce or unmount filesystems before tools that require offline access"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Filesystem,
+            operation: Operation::Repair,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "filesystem repair mutates metadata and requires review".to_string(),
+                alternatives: vec![
+                    "restore from backup or snapshot instead of repairing in place".to_string(),
+                    "repair a cloned device first when production risk is high".to_string(),
                 ],
             }),
         },
@@ -4766,6 +4850,62 @@ mod tests {
                 "balance.data=usage=50".to_string(),
                 "balance.metadata=usage=75".to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn plan_accepts_filesystem_check_and_repair_operations() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "home": {
+                  "mountpoint": "/home",
+                  "device": "/dev/disk/by-label/home",
+                  "fsType": "ext4",
+                  "operation": "check"
+                },
+                "data": {
+                  "mountpoint": "/data",
+                  "device": "/dev/disk/by-label/data",
+                  "fsType": "btrfs",
+                  "operation": "repair"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.unsupported_count, 0);
+        let check = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:home:check")
+            .expect("filesystem check action exists");
+        assert_eq!(check.operation, Operation::Check);
+        assert_eq!(check.risk, RiskClass::OfflineRequired);
+        assert!(!check.destructive);
+        assert_eq!(check.context.fs_type.as_deref(), Some("ext4"));
+        assert_eq!(
+            check.context.device.as_deref(),
+            Some("/dev/disk/by-label/home")
+        );
+
+        let repair = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:data:repair")
+            .expect("filesystem repair action exists");
+        assert_eq!(repair.operation, Operation::Repair);
+        assert_eq!(repair.risk, RiskClass::OfflineRequired);
+        assert!(!repair.destructive);
+        assert_eq!(repair.context.fs_type.as_deref(), Some("btrfs"));
+        assert!(
+            repair
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("repair mutates metadata") })
         );
     }
 

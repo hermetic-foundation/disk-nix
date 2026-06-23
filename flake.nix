@@ -135,6 +135,12 @@
                   "btrfs.balance.data" = "usage=50";
                 };
               };
+              filesystems.scratch = {
+                device = "/dev/disk/by-label/scratch";
+                fsType = "xfs";
+                mountpoint = "/scratch";
+                operation = "check";
+              };
               swaps.primary = {
                 device = "/dev/disk/by-label/swap";
                 operation = "format";
@@ -408,6 +414,8 @@
               and .properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap"
               and .properties.nvmeNamespaces["$ref"] == "#/$defs/lifecycleMap"
               and (."$defs".operation.enum | index("grow") != null)
+              and (."$defs".operation.enum | index("check") != null)
+              and (."$defs".operation.enum | index("repair") != null)
               and (."$defs".operation.enum | index("replace-device") != null)
               and (."$defs".specBody.properties.luks["$ref"] == "#/$defs/luksSpec")
               and (."$defs".specBody.properties.nfs["$ref"] == "#/$defs/nfsSpec")
@@ -486,11 +494,12 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 36
-              and .summary.offlineRequiredCount == 8
+              .summary.actionCount == 38
+              and .summary.offlineRequiredCount == 9
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
+              and (.actions | any(.id == "filesystems:home-check:check" and .risk == "offline-required"))
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@home:create" and .risk == "online"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:limit" and .risk == "safe"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
@@ -549,22 +558,22 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 13
-              and .apply.blockedSummary.offlineRequiredCount == 8
+              and .apply.blockedCount == 14
+              and .apply.blockedSummary.offlineRequiredCount == 9
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 13
+              and .apply.blockedCount == 14
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 13
-              and .messages[0] == "apply policy blocked 13 action(s)"
+              and .apply.blockedCount == 14
+              and .messages[0] == "apply policy blocked 14 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -598,6 +607,8 @@
                   and .spec.filesystems.data.replaceDevices."/dev/disk/by-id/nvme-btrfs-aging" == "/dev/disk/by-id/nvme-btrfs-replacement"
                   and .spec.filesystems.data.properties.label == "bulk-data"
                   and .spec.filesystems.data.properties."btrfs.balance.data" == "usage=50"
+                  and .spec.filesystems.scratch.operation == "check"
+                  and .spec.filesystems.scratch.device == "/dev/disk/by-label/scratch"
                   and .spec.swaps.primary.device == "/dev/disk/by-label/swap"
                   and .spec.swaps.primary.operation == "format"
                   and .spec.swaps.primary.desiredSize == "8GiB"

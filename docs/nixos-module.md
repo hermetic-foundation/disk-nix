@@ -98,11 +98,12 @@ Typed filesystem declarations include:
 - `desiredSize`
 - `preserveData`
 
-For ext filesystems, `device` is also used by disk-nix grow and shrink command
-plans for `resize2fs` and `e2fsck`. If only `mountpoint` is declared, those
-source-device mutations remain non-ready until the backing block device is
-selected explicitly.
-For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, device add/remove/replace operations, and filesystem property
+For ext filesystems, `device` is also used by disk-nix grow, shrink, check, and
+repair command plans for `resize2fs` and `e2fsck`. If only `mountpoint` is
+declared, source-device maintenance commands remain non-ready until the backing
+block device is selected explicitly. XFS and Btrfs check/repair declarations
+also require a stable source device for `xfs_repair` or `btrfs check`.
+For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, device add/remove/replace operations, and filesystem property
 updates such as labels or balance filters while still deriving the regular
 NixOS `fileSystems` entry from the same declaration.
 

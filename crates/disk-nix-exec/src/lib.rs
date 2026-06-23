@@ -1810,6 +1810,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         Operation::Format
         | Operation::Shrink
         | Operation::RemoveDevice
+        | Operation::Repair
         | Operation::Rollback
         | Operation::Destroy => (
             vec![command(
@@ -1826,6 +1827,14 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "verify target state after grow operation",
             )],
             vec!["target capacity and consumers match desired state".to_string()],
+        ),
+        Operation::Check => (
+            vec![command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "verify target state after filesystem check",
+            )],
+            vec!["read-only check completed and no repair action was applied".to_string()],
         ),
     }
 }
@@ -1882,6 +1891,40 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "prefer migrate-to-smaller-filesystem workflows when online shrink support is absent"
                         .to_string(),
                     "restore dependent mounts and services only after post-shrink checks pass"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Check
+            if collection == Some("filesystems") || action.id.starts_with("filesystems:") =>
+        {
+            let target = target.unwrap_or("<filesystem>");
+            let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
+            let device = action.context.device.as_deref();
+            (
+                filesystem_check_commands(fs_type, target, device),
+                vec![
+                    "run read-only consistency checks before any repair workflow".to_string(),
+                    "quiesce or unmount the filesystem when the checker requires offline access"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Repair
+            if collection == Some("filesystems") || action.id.starts_with("filesystems:") =>
+        {
+            let target = target.unwrap_or("<filesystem>");
+            let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
+            let device = action.context.device.as_deref();
+            (
+                filesystem_repair_commands(fs_type, target, device),
+                vec![
+                    "repair only after a read-only check and backup review".to_string(),
+                    "prefer repairing a cloned device before the production filesystem when practical"
+                        .to_string(),
+                    "restore mounts and services only after post-repair verification passes"
                         .to_string(),
                 ],
                 true,
@@ -3859,7 +3902,13 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Format | Operation::Shrink | Operation::RemoveDevice | Operation::Rollback | Operation::Destroy => (
+        Operation::Format
+        | Operation::Shrink
+        | Operation::Check
+        | Operation::Repair
+        | Operation::RemoveDevice
+        | Operation::Rollback
+        | Operation::Destroy => (
             Vec::new(),
             vec!["no command plan is generated for this risk class unless future explicit policy and executor support are added".to_string()],
             true,
@@ -4059,6 +4108,161 @@ fn btrfs_filesystem_shrink_command(target: &str, desired_size: Option<&str>) -> 
 
 fn ext_filesystem_device<'a>(target: &'a str, device: Option<&'a str>) -> Option<&'a str> {
     device.or_else(|| target.starts_with("/dev/").then_some(target))
+}
+
+fn filesystem_source_device<'a>(target: &'a str, device: Option<&'a str>) -> Option<&'a str> {
+    device.or_else(|| target.starts_with("/dev/").then_some(target))
+}
+
+fn filesystem_check_commands(
+    fs_type: &str,
+    target: &str,
+    device: Option<&str>,
+) -> Vec<ExecutionCommand> {
+    vec![
+        command(
+            ["disk-nix", "inspect", target],
+            false,
+            "inspect filesystem identity, mount state, and consumers before check",
+        ),
+        filesystem_check_command(fs_type, target, device),
+    ]
+}
+
+fn filesystem_repair_commands(
+    fs_type: &str,
+    target: &str,
+    device: Option<&str>,
+) -> Vec<ExecutionCommand> {
+    vec![
+        command(
+            ["disk-nix", "inspect", target],
+            false,
+            "inspect filesystem identity, mount state, and consumers before repair",
+        ),
+        command(
+            ["findmnt", "--json", "--target", target],
+            false,
+            "confirm mount state before offline repair",
+        ),
+        filesystem_repair_command(fs_type, target, device),
+    ]
+}
+
+fn filesystem_check_command(fs_type: &str, target: &str, device: Option<&str>) -> ExecutionCommand {
+    let source = filesystem_source_device(target, device);
+    match (fs_type, source) {
+        ("ext2" | "ext3" | "ext4", Some(source)) => command(
+            ["e2fsck", "-n", source],
+            false,
+            "run a read-only ext filesystem consistency check",
+        ),
+        ("ext2" | "ext3" | "ext4", None) => command_with_readiness(
+            ["e2fsck", "-n", "<filesystem-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "run ext filesystem check after resolving the source device",
+        ),
+        ("xfs", Some(source)) => command(
+            ["xfs_repair", "-n", source],
+            false,
+            "run a no-modify XFS metadata check",
+        ),
+        ("xfs", None) => command_with_readiness(
+            ["xfs_repair", "-n", "<filesystem-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "run XFS check after resolving the source device",
+        ),
+        ("btrfs", Some(source)) => command(
+            ["btrfs", "check", "--readonly", source],
+            false,
+            "run a read-only Btrfs metadata check",
+        ),
+        ("btrfs", None) => command_with_readiness(
+            ["btrfs", "check", "--readonly", "<filesystem-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "run Btrfs check after resolving the source device",
+        ),
+        (_, Some(source)) => command_vec_with_readiness(
+            vec!["<filesystem-check-tool>", source],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem check tool"],
+            "run the filesystem-specific read-only check command",
+        ),
+        (_, None) => command_with_readiness(
+            ["<filesystem-check-tool>", "<filesystem-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem check tool", "filesystem source device"],
+            "run the filesystem-specific read-only check command",
+        ),
+    }
+}
+
+fn filesystem_repair_command(
+    fs_type: &str,
+    target: &str,
+    device: Option<&str>,
+) -> ExecutionCommand {
+    let source = filesystem_source_device(target, device);
+    match (fs_type, source) {
+        ("ext2" | "ext3" | "ext4", Some(source)) => command(
+            ["e2fsck", "-f", "-y", source],
+            true,
+            "repair ext filesystem metadata after offline review",
+        ),
+        ("ext2" | "ext3" | "ext4", None) => command_with_readiness(
+            ["e2fsck", "-f", "-y", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "repair ext filesystem after resolving the source device",
+        ),
+        ("xfs", Some(source)) => command(
+            ["xfs_repair", source],
+            true,
+            "repair XFS metadata after offline review",
+        ),
+        ("xfs", None) => command_with_readiness(
+            ["xfs_repair", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "repair XFS after resolving the source device",
+        ),
+        ("btrfs", Some(source)) => command(
+            ["btrfs", "check", "--repair", source],
+            true,
+            "repair Btrfs metadata only after explicit offline review",
+        ),
+        ("btrfs", None) => command_with_readiness(
+            ["btrfs", "check", "--repair", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "repair Btrfs after resolving the source device",
+        ),
+        (_, Some(source)) => command_vec_with_readiness(
+            vec!["<filesystem-repair-tool>", source],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem repair tool"],
+            "run the filesystem-specific repair command",
+        ),
+        (_, None) => command_with_readiness(
+            ["<filesystem-repair-tool>", "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem repair tool", "filesystem source device"],
+            "run the filesystem-specific repair command after resolving the source device",
+        ),
+    }
 }
 
 fn ext_filesystem_grow_command(
@@ -7297,6 +7501,122 @@ mod tests {
                 && command.argv.contains(&"vg/root".to_string())
                 && command.readiness == CommandReadiness::NeedsDesiredSize
                 && command.unresolved_inputs == ["desired size delta"]
+        }));
+    }
+
+    #[test]
+    fn filesystem_check_and_repair_render_domain_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "home": {
+                    "mountpoint": "/home",
+                    "device": "/dev/disk/by-label/home",
+                    "fsType": "ext4",
+                    "operation": "check"
+                  },
+                  "data": {
+                    "mountpoint": "/data",
+                    "device": "/dev/disk/by-label/data",
+                    "fsType": "btrfs",
+                    "operation": "repair"
+                  },
+                  "scratch": {
+                    "mountpoint": "/scratch",
+                    "device": "/dev/disk/by-label/scratch",
+                    "fsType": "xfs",
+                    "operation": "check"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:home:check"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["e2fsck", "-n", "/dev/disk/by-label/home"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:data:repair"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "check", "--repair", "/dev/disk/by-label/data"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:scratch:check"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["xfs_repair", "-n", "/dev/disk/by-label/scratch"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "filesystems:home:check"
+                && step
+                    .checks
+                    .iter()
+                    .any(|check| check.contains("read-only check completed"))
+        }));
+    }
+
+    #[test]
+    fn filesystem_check_and_repair_require_source_device_for_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "home": {
+                    "mountpoint": "/home",
+                    "fsType": "ext4",
+                    "operation": "check"
+                  },
+                  "data": {
+                    "mountpoint": "/data",
+                    "fsType": "btrfs",
+                    "operation": "repair"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:home:check"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["e2fsck", "-n", "<filesystem-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:data:repair"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "check", "--repair", "<filesystem-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
         }));
     }
 

@@ -1,5 +1,13 @@
 {
   "version": 1,
+  "filesystems": {
+    "home-check": {
+      "mountpoint": "/home",
+      "device": "/dev/disk/by-label/home",
+      "fsType": "ext4",
+      "operation": "check"
+    }
+  },
   "pools": {
     "tank": {
       "operation": "rebalance",

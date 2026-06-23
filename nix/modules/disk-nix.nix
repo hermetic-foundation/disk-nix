@@ -63,6 +63,8 @@ let
       "format"
       "grow"
       "shrink"
+      "check"
+      "repair"
       "replace-device"
       "add-device"
       "remove-device"
