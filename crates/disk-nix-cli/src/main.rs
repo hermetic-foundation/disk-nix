@@ -142,6 +142,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered loop devices and backing file mappings.
+    Loop {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -429,6 +435,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_raid_node)?;
             } else {
                 print_raid(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Loop { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_loop_node)?;
+            } else {
+                print_loop(output, &graph)?;
             }
             Ok(())
         }
@@ -1566,6 +1581,28 @@ fn print_raid(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     Ok(())
 }
 
+fn print_loop(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<28} {:>12} {:<32} {:<10} {:<8} DETAILS",
+        "KIND", "NAME", "SIZE", "BACKING", "OFFSET", "RO"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_loop_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<28} {:>12} {:<32} {:<10} {:<8} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            property_value(node, "loop.back-file").unwrap_or("-"),
+            property_value(node, "loop.offset").unwrap_or("-"),
+            property_value(node, "loop.read-only").unwrap_or("-"),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2148,6 +2185,14 @@ fn is_raid_node(node: &Node) -> bool {
             .any(|property| property.key.starts_with("md."))
 }
 
+fn is_loop_node(node: &Node) -> bool {
+    matches!(node.kind, NodeKind::LoopDevice | NodeKind::BackingFile)
+        || node
+            .properties
+            .iter()
+            .any(|property| property.key.starts_with("loop."))
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
@@ -2595,12 +2640,13 @@ mod tests {
 
     use super::{
         confirmation_file_accepts, is_cache_node, is_device_node, is_encryption_node,
-        is_filesystem_node, is_mapping_node, is_multipath_node, is_network_storage_node,
-        is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node, is_vdo_node,
-        is_volume_node, mount_details, print_cache, print_devices, print_encryption,
-        print_filesystems, print_mappings, print_mounts, print_multipath, print_network_storage,
-        print_nvme, print_partitions, print_pools, print_raid, print_snapshots, print_usage,
-        print_vdo, print_volumes, snapshot_source, usage_details, usage_percent,
+        is_filesystem_node, is_loop_node, is_mapping_node, is_multipath_node,
+        is_network_storage_node, is_nvme_node, is_partition_node, is_pool_node, is_raid_node,
+        is_snapshot_node, is_vdo_node, is_volume_node, mount_details, print_cache, print_devices,
+        print_encryption, print_filesystems, print_loop, print_mappings, print_mounts,
+        print_multipath, print_network_storage, print_nvme, print_partitions, print_pools,
+        print_raid, print_snapshots, print_usage, print_vdo, print_volumes, snapshot_source,
+        usage_details, usage_percent,
     };
 
     #[test]
@@ -2739,6 +2785,16 @@ mod tests {
             &Node::new("block:/dev/sda1", NodeKind::Partition, "/dev/sda1")
                 .with_property("md.member-state", "active sync")
         ));
+        assert!(is_loop_node(&Node::new(
+            "block:/dev/loop0",
+            NodeKind::LoopDevice,
+            "/dev/loop0"
+        )));
+        assert!(is_loop_node(&Node::new(
+            "file:/var/lib/images/root.img",
+            NodeKind::BackingFile,
+            "/var/lib/images/root.img"
+        )));
     }
 
     #[test]
@@ -3790,6 +3846,64 @@ mod tests {
         assert!(output.contains("active sync"));
         assert!(output.contains("member-state=active sync"));
         assert!(output.contains("/dev/sdb1"));
+    }
+
+    #[test]
+    fn loop_table_includes_mapping_and_backing_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/loop0", NodeKind::LoopDevice, "/dev/loop0")
+                .with_path("/dev/loop0")
+                .with_property("loop.back-file", "/var/lib/images/root.img")
+                .with_property("loop.major-minor", "7:0")
+                .with_property("loop.offset", "1048576")
+                .with_property("loop.sizelimit", "0")
+                .with_property("loop.logical-sector-size", "512")
+                .with_property("loop.autoclear", "true")
+                .with_property("loop.read-only", "false")
+                .with_property("loop.direct-io", "true"),
+        );
+        graph.add_node(
+            Node::new(
+                "file:/var/lib/images/root.img",
+                NodeKind::BackingFile,
+                "/var/lib/images/root.img",
+            )
+            .with_path("/var/lib/images/root.img")
+            .with_property("loop.backing", "true"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/loop1", NodeKind::LoopDevice, "/dev/loop1")
+                .with_path("/dev/loop1")
+                .with_size_bytes(1_073_741_824)
+                .with_property("loop.back-file", "/dev/disk/by-id/nvme-loop-backing")
+                .with_property("loop.offset", "0")
+                .with_property("loop.sizelimit", "1073741824")
+                .with_property("loop.read-only", "true"),
+        );
+        graph.add_edge(Edge::new(
+            "file:/var/lib/images/root.img",
+            "block:/dev/loop0",
+            Relationship::Backs,
+        ));
+
+        let mut output = Vec::new();
+        print_loop(&mut output, &graph).expect("loop table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("BACKING"));
+        assert!(output.contains("OFFSET"));
+        assert!(output.contains("/dev/loop0"));
+        assert!(output.contains("/var/lib/images/root.img"));
+        assert!(output.contains("1048576"));
+        assert!(output.contains("ro=false"));
+        assert!(output.contains("back-file=/var/lib/images/root.img major-minor=7:0"));
+        assert!(output.contains("logical-sector=512 autoclear=true ro=false dio=true"));
+        assert!(output.contains("loop-backing=true"));
+        assert!(output.contains("/dev/loop1"));
+        assert!(output.contains("1.0 GiB"));
+        assert!(output.contains("/dev/disk/by-id/nvme-loop-backing"));
+        assert!(output.contains("sizelimit=1073741824"));
     }
 
     #[test]

@@ -147,6 +147,7 @@ disk-nix vdo
 disk-nix multipath
 disk-nix nvme
 disk-nix raid
+disk-nix loop
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -169,6 +170,7 @@ disk-nix vdo --json
 disk-nix multipath --json
 disk-nix nvme --json
 disk-nix raid --json
+disk-nix loop --json
 disk-nix mounts --json
 disk-nix network-storage --json
 disk-nix ids --json
@@ -244,6 +246,9 @@ Use these commands for:
   version, level, state, size, raid and total device counts, event counters,
   chunk/layout details, timestamps, and per-member state when `mdadm --detail`
   exposes them
+- `loop`: loop devices and backing files/devices, including backing path,
+  offset, size limit, logical sector size, major/minor, autoclear,
+  read-only, and direct-I/O settings when `losetup --json` exposes them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them
