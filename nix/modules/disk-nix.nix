@@ -793,6 +793,7 @@ let
       action
       destroy
       preserveData
+      metadata
       ;
     device = mount.source;
   }) cfg.nfs.mounts;
@@ -1438,6 +1439,16 @@ in
                 type = lib.types.bool;
                 default = true;
                 description = "Whether the planner must preserve remote data for this NFS mount.";
+              };
+
+              metadata = lib.mkOption {
+                type = lib.types.attrsOf json.type;
+                default = { };
+                description = "Domain-specific NFS mount metadata copied into the planner spec.";
+                example = {
+                  server = "nas.example.com";
+                  export = "/srv/shared";
+                };
               };
             };
           }

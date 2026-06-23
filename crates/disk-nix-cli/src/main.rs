@@ -753,6 +753,10 @@ fn spec_schema() -> serde_json::Value {
                     },
                     "neededForBoot": { "type": "boolean" },
                     "destroy": { "type": "boolean" },
+                    "metadata": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
                     "preserveData": { "type": "boolean", "default": true }
                 }
             },

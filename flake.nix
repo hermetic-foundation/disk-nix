@@ -340,6 +340,10 @@
                   "x-systemd.automount"
                   "vers=4.2"
                 ];
+                metadata = {
+                  server = "nas.example.com";
+                  export = "/srv/shared";
+                };
               };
               nfs.mounts."/srv/tuned" = {
                 source = "nas.example.com:/srv/tuned";
@@ -920,6 +924,7 @@
               and ."$defs".nfsMount.properties.action["$ref"] == "#/$defs/operation"
               and ."$defs".nfsMount.properties.destroy.type == "boolean"
               and ."$defs".nfsMount.properties.options.type == "array"
+              and ."$defs".nfsMount.properties.metadata.type == "object"
               and ."$defs".iscsiSpec.properties.sessions["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".iscsiSpec.properties.boot["$ref"] == "#/$defs/iscsiBoot"
               and ."$defs".iscsiBoot.properties.loginAll.type == "boolean"
@@ -1251,6 +1256,8 @@
                     and (.spec.filesystems | has("/srv/old") | not)
                     and .spec.nfs.mounts."/srv/shared".source == "nas.example.com:/srv/shared"
                     and .spec.nfs.mounts."/srv/shared".operation == "mount"
+                    and .spec.nfs.mounts."/srv/shared".metadata.server == "nas.example.com"
+                    and .spec.nfs.mounts."/srv/shared".metadata.export == "/srv/shared"
                     and .spec.nfs.mounts."/srv/tuned".operation == "remount"
                     and (.spec.nfs.mounts."/srv/tuned".options | index("ro") != null)
                     and .spec.nfs.mounts."/srv/action".action == "remount"

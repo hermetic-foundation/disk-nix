@@ -116,14 +116,14 @@ shape with top-level `spec` and `apply` objects. It includes the planner's
 filesystem fields, including filesystem `operation`, `device`, mount
 `options`, `properties`, `metadata`, `neededForBoot`, `destroy`, and Btrfs
 device-membership update fields. It also includes disk and partition lifecycle
-collections, swap, LUKS, LUKS keyslots/tokens, NFS mount wrappers, iSCSI
-discovery/session/boot wrappers, Btrfs subvolume, VDO, LVM physical volume,
-LVM thin pool, LVM snapshot, LVM cache, loop-device, MD RAID, multipath, NVMe
-namespace, and zvol lifecycle declarations, higher-layer lifecycle collections,
-snapshot declarations including Btrfs `readOnly` snapshot intent, supported
-operation names, apply policy fields, and NixOS activation helper fields such as
-`probeCurrent`, `failOnBlocked`, `scriptOut`,
-and `reportOut`.
+collections, swap, LUKS, LUKS keyslots/tokens, NFS mount wrappers with
+planner-only `metadata`, iSCSI discovery/session/boot wrappers, Btrfs
+subvolume, VDO, LVM physical volume, LVM thin pool, LVM snapshot, LVM cache,
+loop-device, MD RAID, multipath, NVMe namespace, and zvol lifecycle
+declarations, higher-layer lifecycle collections, snapshot declarations
+including Btrfs `readOnly` snapshot intent, supported operation names, apply
+policy fields, and NixOS activation helper fields such as `probeCurrent`,
+`failOnBlocked`, `scriptOut`, and `reportOut`.
 Planner-compatible aliases such as `number`, `startOffset`, `endOffset`, and
 `raidLevel` are included for editor completion and validation parity.
 The Nix package installs the same generated schema at

@@ -256,6 +256,11 @@ Typed NFS client mount declarations include:
 - `action`
 - `destroy`
 - `preserveData`
+- `metadata`
+
+`metadata` is copied only into the disk-nix planner spec for NFS-specific
+inspection or inventory context; it does not change the generated NixOS
+`fileSystems` entry.
 
 Typed iSCSI declarations include:
 
