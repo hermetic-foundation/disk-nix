@@ -72,7 +72,8 @@ Examples:
   it, apply plans render reviewed `parted mklabel` and table reread commands.
 - partition creation and growth are classified as offline-required because the
   kernel partition table reread and dependent consumers must be coordinated.
-  Growth plans render concrete table rereads when the backing disk is declared.
+  Create and growth plans render concrete table rereads when the backing disk is
+  declared.
 - swap signature creation is classified as destructive; swap growth is
   offline-required because active swap must be disabled before backing storage
   and signatures are changed. Swapfile growth can render a concrete file resize

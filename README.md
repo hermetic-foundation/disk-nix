@@ -181,6 +181,9 @@ commands and verify the topology without erasing the backing LUKS header or
 encrypted data.
 Disk initialization plans render destructive-policy-gated `parted mklabel` and
 partition table reread steps after disk identity inspection.
+Partition create plans render reviewed `parted mkpart`, `partprobe`, and
+`blockdev --rereadpt` commands when `device`, `partitionType`, `start`, and
+`end` are declared.
 Partition grow plans render reviewed `parted resizepart` commands and partition
 table rereads when `device`, `partitionNumber`, and `end` or `desiredSize` are
 declared.

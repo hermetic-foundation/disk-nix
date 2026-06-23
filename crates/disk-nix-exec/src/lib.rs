@@ -2414,27 +2414,20 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         }
         Operation::Create if collection == Some("partitions") => {
             let target = target.unwrap_or("<partition>");
-            let disk = action.context.device.as_deref().unwrap_or("<disk>");
-            let start = action.context.start.as_deref().unwrap_or("<start>");
-            let end = action.context.end.as_deref().unwrap_or("<end>");
-            let partition_type = action
-                .context
-                .partition_type
-                .as_deref()
-                .unwrap_or("<partition-type>");
+            let disk = action.context.device.as_deref();
+            let start = action.context.start.as_deref();
+            let end = action.context.end.as_deref();
+            let partition_type = action.context.partition_type.as_deref();
             (
                 vec![
                     command(
-                        ["disk-nix", "inspect", disk],
+                        ["disk-nix", "inspect", disk.unwrap_or("<disk>")],
                         false,
                         "inspect disk identity and existing partition table before creation",
                     ),
                     partition_create_command(disk, partition_type, start, end),
-                    command(
-                        ["partprobe", disk],
-                        true,
-                        "ask the kernel to reread the changed partition table",
-                    ),
+                    partition_probe_command(disk),
+                    partition_table_reread_command(disk),
                     command(
                         ["disk-nix", "inspect", target],
                         false,
@@ -3805,18 +3798,32 @@ fn disk_create_label_command(target: &str, label: &str) -> ExecutionCommand {
 }
 
 fn partition_create_command(
-    disk: &str,
-    partition_type: &str,
-    start: &str,
-    end: &str,
+    disk: Option<&str>,
+    partition_type: Option<&str>,
+    start: Option<&str>,
+    end: Option<&str>,
 ) -> ExecutionCommand {
-    command_vec_with_readiness(
-        vec!["parted", "-s", disk, "mkpart", partition_type, start, end],
-        true,
-        CommandReadiness::NeedsDomainImplementation,
-        ["verified free region", "partition number and flags"],
-        "create a partition in the reviewed free region",
-    )
+    let argv = vec![
+        "parted",
+        "-s",
+        disk.unwrap_or("<disk>"),
+        "mkpart",
+        partition_type.unwrap_or("<partition-type>"),
+        start.unwrap_or("<start>"),
+        end.unwrap_or("<end>"),
+    ];
+    let missing = missing_partition_create_inputs(disk, partition_type, start, end);
+    if missing.is_empty() {
+        command_vec(argv, true, "create a partition in the reviewed free region")
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "create a partition after resolving the disk, type, and offsets",
+        )
+    }
 }
 
 fn zfs_pool_create_command(target: &str, device: Option<&str>) -> ExecutionCommand {
@@ -3892,6 +3899,45 @@ fn missing_partition_resize_inputs(
         missing.push("partition number");
     }
     missing
+}
+
+fn missing_partition_create_inputs(
+    disk: Option<&str>,
+    partition_type: Option<&str>,
+    start: Option<&str>,
+    end: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if disk.is_none() {
+        missing.push("disk path");
+    }
+    if partition_type.is_none() {
+        missing.push("partition type");
+    }
+    if start.is_none() {
+        missing.push("partition start offset");
+    }
+    if end.is_none() {
+        missing.push("partition end offset");
+    }
+    missing
+}
+
+fn partition_probe_command(disk: Option<&str>) -> ExecutionCommand {
+    match disk {
+        Some(disk) => command(
+            ["partprobe", disk],
+            true,
+            "ask the kernel to reread the changed partition table",
+        ),
+        None => command_with_readiness(
+            ["partprobe", "<disk>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["disk path"],
+            "ask the kernel to reread the changed partition table after selecting the disk",
+        ),
+    }
 }
 
 fn partition_table_reread_command(disk: Option<&str>) -> ExecutionCommand {
@@ -4905,7 +4951,11 @@ mod tests {
                     "1MiB",
                     "100%",
                 ]
-                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["blockdev", "--rereadpt", "/dev/disk/by-id/nvme-root"]
+                && command.readiness == CommandReadiness::Ready
         }));
         assert!(
             report.verification_plan[0]
