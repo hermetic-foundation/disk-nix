@@ -1216,18 +1216,19 @@ fn print_filesystems(output: &mut impl Write, graph: &StorageGraph) -> io::Resul
 fn print_volumes(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<38} {:>12} {:>12} {:>12}",
+        "{:<22} {:<38} {:>12} {:>12} {:>12} DETAILS",
         "KIND", "NAME", "SIZE", "USED", "FREE"
     )?;
     for node in graph.nodes.iter().filter(|node| is_volume_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<38} {:>12} {:>12} {:>12}",
+            "{:<22} {:<38} {:>12} {:>12} {:>12} {}",
             node.kind,
             node.name,
             human_bytes(node.size_bytes),
             human_bytes(node.usage.as_ref().and_then(|usage| usage.used_bytes)),
-            human_bytes(node.usage.as_ref().and_then(|usage| usage.free_bytes))
+            human_bytes(node.usage.as_ref().and_then(|usage| usage.free_bytes)),
+            usage_details(node)
         )?;
     }
     Ok(())
@@ -1831,7 +1832,15 @@ fn usage_details(node: &Node) -> String {
     const DETAIL_KEYS: &[(&str, &str)] = &[
         ("lvm.data-percent", "data"),
         ("lvm.metadata-percent", "metadata"),
+        ("lvm.attr", "attr"),
+        ("lvm.origin", "origin"),
+        ("lvm.pool", "pool"),
+        ("lvm.extent-size", "extent"),
+        ("lvm.pv-count", "pvs"),
+        ("lvm.lv-count", "lvs"),
         ("btrfs.qgroup-id", "qgroup"),
+        ("btrfs.mount-target", "mount-target"),
+        ("btrfs.device-id", "device-id"),
         ("btrfs.max-referenced", "max-rfer"),
         ("btrfs.max-exclusive", "max-excl"),
         ("vdo.use-percent", "vdo-use"),
@@ -1840,6 +1849,13 @@ fn usage_details(node: &Node) -> String {
         ("vdo.recovery-percentage", "recovery"),
         ("vdo.write-policy", "write-policy"),
         ("vdo.overhead-blocks-used", "overhead-blocks"),
+        ("md.level", "level"),
+        ("md.state", "state"),
+        ("md.raid-devices", "raid-devices"),
+        ("md.total-devices", "total-devices"),
+        ("iscsi.attached-disk", "attached-disk"),
+        ("nfs.server", "server"),
+        ("nfs.export", "export"),
         ("exfat.volume-serial", "serial"),
         ("exfat.volume-length-sectors", "sectors"),
         ("exfat.cluster-count", "clusters"),
@@ -1999,7 +2015,7 @@ mod tests {
     use super::{
         confirmation_file_accepts, is_device_node, is_mapping_node, is_network_storage_node,
         is_partition_node, is_pool_node, is_snapshot_node, mount_details, print_filesystems,
-        print_mounts, print_usage, snapshot_source, usage_details, usage_percent,
+        print_mounts, print_usage, print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2218,6 +2234,46 @@ mod tests {
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains("xfs-blocks=262144 reflink=1"));
+    }
+
+    #[test]
+    fn volumes_table_includes_domain_metadata_details() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lvm-lv:vg/root-snap", NodeKind::LvmSnapshot, "vg/root-snap")
+                .with_property("lvm.origin", "root")
+                .with_property("lvm.pool", "thinpool")
+                .with_property("lvm.data-percent", "12.50"),
+        );
+        graph.add_node(
+            Node::new("md:/dev/md/root", NodeKind::MdRaid, "/dev/md/root")
+                .with_property("md.level", "raid1")
+                .with_property("md.state", "clean")
+                .with_property("md.raid-devices", "2"),
+        );
+        graph.add_node(
+            Node::new("iscsi-lun:iqn.example:0", NodeKind::Lun, "0")
+                .with_property("iscsi.attached-disk", "sdb"),
+        );
+        graph.add_node(
+            Node::new(
+                "nfs-export:storage.example:/export/home",
+                NodeKind::NfsExport,
+                "storage.example:/export/home",
+            )
+            .with_property("nfs.server", "storage.example")
+            .with_property("nfs.export", "/export/home"),
+        );
+
+        let mut output = Vec::new();
+        print_volumes(&mut output, &graph).expect("volumes table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("DETAILS"));
+        assert!(output.contains("data=12.50 origin=root pool=thinpool"));
+        assert!(output.contains("level=raid1 state=clean raid-devices=2"));
+        assert!(output.contains("attached-disk=sdb"));
+        assert!(output.contains("server=storage.example export=/export/home"));
     }
 
     #[test]

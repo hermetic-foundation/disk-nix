@@ -167,7 +167,9 @@ Use these commands for:
   ZFS datasets/snapshots, and NFS exports, with selected filesystem metadata
   details when probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
-  exports, including ZFS zvol `volsize` when reported by `zfs list`
+  exports, including LVM origin/pool/data metadata, MD RAID level/state, iSCSI
+  attached disks, NFS server/export details, and ZFS zvol `volsize` when
+  reported by `zfs list`
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
   pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
