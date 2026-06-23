@@ -2812,8 +2812,22 @@ fn usage_details(node: &Node) -> String {
         ("nfs.sec", "sec"),
         ("nfs.clientaddr", "clientaddr"),
         ("nfs.addr", "addr"),
+        ("nfs.port", "port"),
+        ("nfs.mountaddr", "mountaddr"),
+        ("nfs.mountvers", "mountvers"),
+        ("nfs.mountproto", "mountproto"),
         ("nfs.rsize", "rsize"),
         ("nfs.wsize", "wsize"),
+        ("nfs.timeo", "timeo"),
+        ("nfs.retrans", "retrans"),
+        ("nfs.local-lock", "local-lock"),
+        ("nfs.lookupcache", "lookupcache"),
+        ("nfs.fsc", "fsc"),
+        ("nfs.age", "age"),
+        ("nfs.namlen", "namlen"),
+        ("nfs.hard", "hard"),
+        ("nfs.soft", "soft"),
+        ("nfs.noresvport", "noresvport"),
         ("ext.state", "ext-state"),
         ("ext.errors-behavior", "errors"),
         ("ext.block-count", "blocks"),
@@ -4418,8 +4432,18 @@ mod tests {
                 .with_property("nfs.sec", "sys")
                 .with_property("nfs.clientaddr", "10.0.0.20")
                 .with_property("nfs.addr", "10.0.0.10")
+                .with_property("nfs.port", "2049")
+                .with_property("nfs.mountaddr", "10.0.0.10")
+                .with_property("nfs.mountvers", "3")
+                .with_property("nfs.mountproto", "tcp")
                 .with_property("nfs.rsize", "1048576")
-                .with_property("nfs.wsize", "1048576"),
+                .with_property("nfs.wsize", "1048576")
+                .with_property("nfs.timeo", "600")
+                .with_property("nfs.retrans", "2")
+                .with_property("nfs.local-lock", "none")
+                .with_property("nfs.lookupcache", "positive")
+                .with_property("nfs.fsc", "true")
+                .with_property("nfs.age", "123"),
         );
         graph.add_edge(Edge::new(
             "nfs-export:storage.example:/export/home",
@@ -4454,8 +4478,10 @@ mod tests {
         assert!(output.contains("/home"));
         assert!(output.contains("source=storage.example:/export/home"));
         assert!(output.contains("vers=4.2 proto=tcp sec=sys"));
-        assert!(output.contains("clientaddr=10.0.0.20 addr=10.0.0.10"));
-        assert!(output.contains("rsize=1048576 wsize=1048576"));
+        assert!(output.contains("clientaddr=10.0.0.20 addr=10.0.0.10 port=2049"));
+        assert!(output.contains("mountaddr=10.0.0.10 mountvers=3 mountproto=tcp"));
+        assert!(output.contains("rsize=1048576 wsize=1048576 timeo=600 retrans=2"));
+        assert!(output.contains("local-lock=none lookupcache=positive fsc=true age=123"));
     }
 
     #[test]
@@ -4517,8 +4543,18 @@ mod tests {
                 .with_property("nfs.sec", "sys")
                 .with_property("nfs.clientaddr", "10.0.0.20")
                 .with_property("nfs.addr", "10.0.0.10")
+                .with_property("nfs.port", "2049")
+                .with_property("nfs.mountaddr", "10.0.0.10")
+                .with_property("nfs.mountvers", "3")
+                .with_property("nfs.mountproto", "tcp")
                 .with_property("nfs.rsize", "1048576")
-                .with_property("nfs.wsize", "1048576"),
+                .with_property("nfs.wsize", "1048576")
+                .with_property("nfs.timeo", "600")
+                .with_property("nfs.retrans", "2")
+                .with_property("nfs.local-lock", "none")
+                .with_property("nfs.lookupcache", "positive")
+                .with_property("nfs.fsc", "true")
+                .with_property("nfs.age", "123"),
         );
 
         let mut output = Vec::new();
@@ -4545,7 +4581,9 @@ mod tests {
             "source=storage.example:/export/home server=storage.example export=/export/home vers=4.2"
         ));
         assert!(output.contains("proto=tcp sec=sys clientaddr=10.0.0.20 addr=10.0.0.10"));
-        assert!(output.contains("rsize=1048576 wsize=1048576"));
+        assert!(output.contains("mountaddr=10.0.0.10 mountvers=3 mountproto=tcp"));
+        assert!(output.contains("rsize=1048576 wsize=1048576 timeo=600 retrans=2"));
+        assert!(output.contains("local-lock=none lookupcache=positive fsc=true age=123"));
     }
 
     #[test]

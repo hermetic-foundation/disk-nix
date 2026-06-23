@@ -290,9 +290,11 @@ Use these commands for:
   attached disk state, session to target imports, target-contained LUN counts,
   and LUN-to-block-device backing relationships when `iscsiadm --mode session -P 3` exposes them
 - `nfs`: NFS exports and client mounts, including source, server/export split,
-  NFS protocol version, transport protocol, security flavor, client/server
-  addresses, read/write transfer sizes, and export-to-client mount relationships
-  when `findmnt` or NFS mount probes expose them
+  NFS protocol version, transport and mount transport, security flavor,
+  client/server addresses, port/mount address, read/write transfer sizes,
+  timeout/retransmit settings, local locking, lookup cache, FS-Cache, age, and
+  export-to-client mount relationships when `findmnt` or NFS mount probes
+  expose them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them
@@ -300,8 +302,8 @@ Use these commands for:
   mounts, including iSCSI current and persistent portals, connection/session
   state, interface identity, negotiated transfer parameters, SCSI coordinates,
   attached disk state, plus NFS mount source, server/export, protocol,
-  security, client/server address, and transfer-size details when probes expose
-  them
+  security, client/server address, mount transport, cache, timeout, and
+  transfer-size details when probes expose them
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
   metadata detail data, including bcache role/set/state, cache mode,

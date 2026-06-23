@@ -82,8 +82,12 @@ fn add_mount(graph: &mut StorageGraph, mount: NfsMount) {
 
 fn parse_header(line: &str) -> Option<(String, String)> {
     let trimmed = line.trim();
-    let (source, target) = trimmed.split_once(" mounted on ")?;
-    Some((source.to_string(), target.trim_end_matches(':').to_string()))
+    if let Some((source, target)) = trimmed.split_once(" mounted on ") {
+        return Some((source.to_string(), target.trim_end_matches(':').to_string()));
+    }
+
+    let (target, source) = trimmed.split_once(" from ")?;
+    Some((source.trim_end_matches(':').to_string(), target.to_string()))
 }
 
 fn split_source(source: &str) -> (Option<String>, Option<String>) {
@@ -95,18 +99,55 @@ fn split_source(source: &str) -> (Option<String>, Option<String>) {
 }
 
 fn parse_options(line: &str) -> Vec<(String, String)> {
-    line.split(',')
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    if let Some((label, values)) = trimmed.split_once(':') {
+        let label = normalize_key(label);
+        let values = values.trim();
+        if values.is_empty() {
+            return Vec::new();
+        }
+        if !values.contains(',') {
+            return vec![(label, values.to_string())];
+        }
+        return parse_option_list(values);
+    }
+
+    parse_option_list(trimmed)
+}
+
+fn parse_option_list(value: &str) -> Vec<(String, String)> {
+    value
+        .split(',')
         .filter_map(|part| {
             let part = part.trim();
             if part.is_empty() || part.ends_with(':') {
                 return None;
             }
             Some(part.split_once('=').map_or_else(
-                || (part.to_string(), "true".to_string()),
-                |(key, value)| (key.to_string(), value.to_string()),
+                || (normalize_key(part), "true".to_string()),
+                |(key, value)| (normalize_key(key), value.to_string()),
             ))
         })
         .collect()
+}
+
+fn normalize_key(key: &str) -> String {
+    key.trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|character| match character {
+            'a'..='z' | '0'..='9' => character,
+            _ => '-',
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
 }
 
 #[cfg(test)]
@@ -117,10 +158,11 @@ mod tests {
 
     const NFSSTAT: &[u8] = br#"
 storage.example:/export/home mounted on /home:
-   rw,vers=4.2,rsize=1048576,wsize=1048576,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=sys,clientaddr=10.0.0.20,local_lock=none,addr=10.0.0.10
+   Flags: rw,relatime,vers=4.2,rsize=1048576,wsize=1048576,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=sys,clientaddr=10.0.0.20,local_lock=none,addr=10.0.0.10,port=2049,mountaddr=10.0.0.10,mountvers=3,mountproto=tcp,lookupcache=positive,fsc
+   Age: 123
 
-10.0.0.11:/srv/backups mounted on /mnt/backups:
-   ro,vers=3,proto=tcp,addr=10.0.0.11
+/mnt/backups from 10.0.0.11:/srv/backups
+   Options: ro,vers=3,proto=tcp,addr=10.0.0.11,local_lock=all
 "#;
 
     #[test]
@@ -152,6 +194,32 @@ storage.example:/export/home mounted on /home:
                 && node.properties.iter().any(|property| {
                     property.key == "nfs.export" && property.value == "/export/home"
                 })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.fsc" && property.value == "true")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.age" && property.value == "123")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.local-lock" && property.value == "none")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.mountproto" && property.value == "tcp")
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.name == "/mnt/backups"
+                && node.properties.iter().any(|property| {
+                    property.key == "nfs.source" && property.value == "10.0.0.11:/srv/backups"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.local-lock" && property.value == "all")
         }));
     }
 }

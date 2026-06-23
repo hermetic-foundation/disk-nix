@@ -119,8 +119,10 @@ The current probe layer normalizes:
   IQNs, current and persistent portals, interface identity, connection/session
   state, negotiated transfer parameters, host state, LUN SCSI coordinates, and
   attached disk state
-- NFS mount metadata through `nfsstat -m` for server, export, protocol,
-  version, transfer sizes, locking, client address, and mount options
+- NFS mount metadata through `nfsstat -m` for server, export, alternate
+  `target from source` records, protocol version, transport and mount
+  transport, port/mount address, transfer sizes, timeout/retransmit settings,
+  local locking, lookup cache, FS-Cache, age, and mount options
 - MD RAID arrays through `mdadm --detail --scan` and `mdadm --detail <array>`
   for array UUID, level, state, size, device counts, and member devices
 - Multipath maps through `multipath -ll` for map name, WWID, dm device,
