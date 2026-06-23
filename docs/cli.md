@@ -182,8 +182,8 @@ Plan JSON includes:
 - `summary.unsupportedCount`
 - `actions`
 
-Each action includes the target id, operation, risk class, destructive flag, and
-optional advice with non-destructive alternatives.
+Each action includes the target id, operation, risk class, destructive flag,
+typed context, and optional advice with non-destructive alternatives.
 
 ## Apply Evaluation
 

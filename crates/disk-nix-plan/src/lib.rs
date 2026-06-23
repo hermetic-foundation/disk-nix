@@ -79,8 +79,45 @@ pub struct PlannedAction {
     pub operation: Operation,
     pub risk: RiskClass,
     pub destructive: bool,
+    #[serde(default, skip_serializing_if = "ActionContext::is_empty")]
+    pub context: ActionContext,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub advice: Option<Advice>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionContext {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub property: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fs_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mountpoint: Option<String>,
+}
+
+impl ActionContext {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.collection.is_none()
+            && self.name.is_none()
+            && self.target.is_none()
+            && self.device.is_none()
+            && self.replacement.is_none()
+            && self.property.is_none()
+            && self.fs_type.is_none()
+            && self.mountpoint.is_none()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -308,6 +345,26 @@ fn blocked_action(action: &PlannedAction, policy: &ApplyPolicy) -> Option<Blocke
     })
 }
 
+fn filesystem_context(name: &str, mountpoint: &str, fs_type: &str) -> ActionContext {
+    ActionContext {
+        collection: Some("filesystems".to_string()),
+        name: Some(name.to_string()),
+        target: Some(mountpoint.to_string()),
+        fs_type: Some(fs_type.to_string()),
+        mountpoint: Some(mountpoint.to_string()),
+        ..ActionContext::default()
+    }
+}
+
+fn lifecycle_context(collection: &str, name: &str) -> ActionContext {
+    ActionContext {
+        collection: Some(collection.to_string()),
+        name: Some(name.to_string()),
+        target: Some(name.to_string()),
+        ..ActionContext::default()
+    }
+}
+
 fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesystem: &Value) {
     let mountpoint = filesystem
         .get("mountpoint")
@@ -336,6 +393,7 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             operation: Operation::Grow,
             risk: RiskClass::Online,
             destructive: false,
+            context: filesystem_context(name, mountpoint, fs_type),
             advice: None,
         }),
         "shrink-allowed" => actions.push(filesystem_shrink_action(name, mountpoint, fs_type)),
@@ -345,6 +403,7 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             operation: Operation::SetProperty,
             risk: RiskClass::Safe,
             destructive: false,
+            context: filesystem_context(name, mountpoint, fs_type),
             advice: None,
         }),
     }
@@ -358,6 +417,7 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             operation: Operation::Format,
             risk: RiskClass::Destructive,
             destructive: true,
+            context: filesystem_context(name, mountpoint, fs_type),
             advice: Some(Advice {
                 summary: "formatting or replacing a filesystem destroys existing data".to_string(),
                 alternatives: vec![
@@ -432,6 +492,7 @@ fn filesystem_shrink_action(name: &str, mountpoint: &str, fs_type: &str) -> Plan
         operation: Operation::Shrink,
         risk,
         destructive: false,
+        context: filesystem_context(name, mountpoint, fs_type),
         advice: Some(advice),
     }
 }
@@ -472,6 +533,7 @@ fn add_requested_operation(
         operation,
         risk,
         destructive,
+        context: lifecycle_context(collection, name),
         advice,
     });
 }
@@ -490,6 +552,10 @@ fn add_device_membership_actions(
                 operation: Operation::AddDevice,
                 risk: RiskClass::Online,
                 destructive: false,
+                context: ActionContext {
+                    device: Some(device.to_string()),
+                    ..lifecycle_context(collection, name)
+                },
                 advice: None,
             });
         }
@@ -503,6 +569,10 @@ fn add_device_membership_actions(
                 operation: Operation::RemoveDevice,
                 risk: RiskClass::PotentialDataLoss,
                 destructive: false,
+                context: ActionContext {
+                    device: Some(device.to_string()),
+                    ..lifecycle_context(collection, name)
+                },
                 advice: Some(Advice {
                     summary: "device removal requires enough remaining data and metadata capacity"
                         .to_string(),
@@ -528,6 +598,11 @@ fn add_device_membership_actions(
                 operation: Operation::ReplaceDevice,
                 risk,
                 destructive: false,
+                context: ActionContext {
+                    device: Some(from.to_string()),
+                    replacement: Some(to.to_string()),
+                    ..lifecycle_context(collection, name)
+                },
                 advice: Some(advice),
             });
         }
@@ -551,6 +626,10 @@ fn add_property_actions(
             operation: Operation::SetProperty,
             risk: RiskClass::Safe,
             destructive: false,
+            context: ActionContext {
+                property: Some(property.to_string()),
+                ..lifecycle_context(collection, name)
+            },
             advice: None,
         });
     }
@@ -578,6 +657,7 @@ fn add_destroy_guard(
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             destructive: true,
+            context: lifecycle_context(collection, name),
             advice: Some(Advice {
                 summary: "destroying or replacing storage removes live data".to_string(),
                 alternatives: vec![
@@ -611,6 +691,12 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             destructive: true,
+            context: ActionContext {
+                collection: Some("snapshots".to_string()),
+                name: Some(name.to_string()),
+                target: Some(target.to_string()),
+                ..ActionContext::default()
+            },
             advice: Some(Advice {
                 summary: "snapshot destruction removes a recovery point".to_string(),
                 alternatives: vec![
@@ -626,6 +712,12 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
             operation: Operation::Rollback,
             risk: RiskClass::PotentialDataLoss,
             destructive: false,
+            context: ActionContext {
+                collection: Some("snapshots".to_string()),
+                name: Some(name.to_string()),
+                target: Some(target.to_string()),
+                ..ActionContext::default()
+            },
             advice: Some(Advice {
                 summary: "rollback can discard changes newer than the snapshot".to_string(),
                 alternatives: vec![
@@ -641,6 +733,12 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
             operation: Operation::Snapshot,
             risk: RiskClass::Reversible,
             destructive: false,
+            context: ActionContext {
+                collection: Some("snapshots".to_string()),
+                name: Some(name.to_string()),
+                target: Some(target.to_string()),
+                ..ActionContext::default()
+            },
             advice: None,
         });
     }
@@ -969,6 +1067,8 @@ mod tests {
         assert_eq!(plan.summary.potential_data_loss_count, 1);
         assert_eq!(plan.summary.unsupported_count, 0);
         assert_eq!(plan.actions[0].risk, RiskClass::PotentialDataLoss);
+        assert_eq!(plan.actions[0].context.fs_type.as_deref(), Some("ext4"));
+        assert_eq!(plan.actions[0].context.mountpoint.as_deref(), Some("/home"));
     }
 
     #[test]
@@ -1000,6 +1100,7 @@ mod tests {
         assert!(plan.actions.iter().any(|action| {
             action.operation == Operation::RemoveDevice
                 && action.risk == RiskClass::PotentialDataLoss
+                && action.context.device.as_deref() == Some("/dev/sdb")
                 && action.advice.is_some()
         }));
     }

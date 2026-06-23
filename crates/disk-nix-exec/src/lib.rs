@@ -133,9 +133,21 @@ fn execution_step(action: &PlannedAction) -> ExecutionStep {
 
 fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<String>, bool) {
     let parts: Vec<&str> = action.id.split(':').collect();
+    let collection = action
+        .context
+        .collection
+        .as_deref()
+        .or_else(|| parts.first().copied());
+    let target = action
+        .context
+        .target
+        .as_deref()
+        .or(action.context.name.as_deref())
+        .or_else(|| parts.get(1).copied());
     match action.operation {
-        Operation::Grow if action.id.starts_with("filesystem:") => {
-            let target = parts.get(1).copied().unwrap_or("<filesystem>");
+        Operation::Grow if collection == Some("filesystems") || action.id.starts_with("filesystem:") => {
+            let target = target.unwrap_or("<filesystem>");
+            let fs_type = action.context.fs_type.as_deref().unwrap_or("<filesystem-type>");
             (
                 vec![
                     command(
@@ -150,14 +162,16 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ),
                 ],
                 vec![
-                    "select xfs_growfs, resize2fs, btrfs filesystem resize, or zfs set volsize from the probed filesystem type".to_string(),
+                    format!(
+                        "select the {fs_type} grow command: xfs_growfs, resize2fs, btrfs filesystem resize, zfs set volsize, or equivalent"
+                    ),
                     "verify available backing capacity before running the grow command".to_string(),
                 ],
                 true,
             )
         }
-        Operation::Grow if action.id.starts_with("volumes:") => {
-            let target = parts.get(1).copied().unwrap_or("<volume>");
+        Operation::Grow if collection == Some("volumes") || action.id.starts_with("volumes:") => {
+            let target = target.unwrap_or("<volume>");
             (
                 vec![
                     command(
@@ -175,8 +189,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Grow if action.id.starts_with("luns:") => {
-            let target = parts.get(1).copied().unwrap_or("<lun>");
+        Operation::Grow if collection == Some("luns") || action.id.starts_with("luns:") => {
+            let target = target.unwrap_or("<lun>");
             (
                 vec![
                     command(
@@ -199,7 +213,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Grow if action.id.starts_with("iscsiSessions:") => (
+        Operation::Grow
+            if collection == Some("iscsiSessions") || action.id.starts_with("iscsiSessions:") =>
+        {
+            let target = target.unwrap_or("<iscsi-session>");
+            (
             vec![
                 command(
                     ["iscsiadm", "--mode", "session", "--rescan"],
@@ -207,16 +225,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "rescan iSCSI sessions after target-side changes",
                 ),
                 command(
-                    ["disk-nix", "topology", "--json"],
+                    ["disk-nix", "inspect", target, "--json"],
                     false,
                     "verify updated iSCSI, LUN, and consumer topology",
                 ),
             ],
             vec!["coordinate session rescans with every dependent LUN consumer".to_string()],
             true,
-        ),
+            )
+        }
         Operation::Grow => {
-            let target = parts.get(1).copied().unwrap_or("<target>");
+            let target = target.unwrap_or("<target>");
             (
                 vec![
                     command(
@@ -235,8 +254,13 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::AddDevice => {
-            let target = parts.get(1).copied().unwrap_or("<target>");
-            let device = parts.last().copied().unwrap_or("<device>");
+            let target = target.unwrap_or("<target>");
+            let device = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| parts.last().copied())
+                .unwrap_or("<device>");
             (
                 vec![
                     command(
@@ -255,7 +279,17 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::ReplaceDevice => {
-            let target = parts.get(1).copied().unwrap_or("<target>");
+            let target = target.unwrap_or("<target>");
+            let from = action
+                .context
+                .device
+                .as_deref()
+                .unwrap_or("<old-device>");
+            let to = action
+                .context
+                .replacement
+                .as_deref()
+                .unwrap_or("<new-device>");
             (
                 vec![
                     command(
@@ -264,7 +298,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         "inspect redundancy and source device health before replacement",
                     ),
                     command(
-                        ["<replace-device-tool>", target, "<old-device>", "<new-device>"],
+                        ["<replace-device-tool>", target, from, to],
                         true,
                         "start the storage-domain replacement operation",
                     ),
@@ -274,7 +308,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Rebalance => {
-            let target = parts.get(1).copied().unwrap_or("<target>");
+            let target = target.unwrap_or("<target>");
             (
                 vec![
                     command(
@@ -293,7 +327,12 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::SetProperty => {
-            let target = parts.get(1).copied().unwrap_or("<target>");
+            let target = target.unwrap_or("<target>");
+            let property = action
+                .context
+                .property
+                .as_deref()
+                .unwrap_or("<key>=<value>");
             (
                 vec![
                     command(
@@ -302,7 +341,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         "inspect current properties before applying changes",
                     ),
                     command(
-                        ["<set-property-tool>", target, "<key>=<value>"],
+                        ["<set-property-tool>", target, property],
                         true,
                         "apply the storage-domain property update",
                     ),
@@ -312,7 +351,8 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Snapshot => {
-            let target = parts.get(1).copied().unwrap_or("<snapshot>");
+            let target = target.unwrap_or("<snapshot>");
+            let snapshot = action.context.name.as_deref().unwrap_or(target);
             (
                 vec![
                     command(
@@ -321,7 +361,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         "inspect snapshot target before creation",
                     ),
                     command(
-                        ["<snapshot-tool>", target],
+                        ["<snapshot-tool>", target, snapshot],
                         true,
                         "create the snapshot with zfs, btrfs, lvm, or the target-specific tool",
                     ),
@@ -388,6 +428,7 @@ mod tests {
                 .argv
                 .first()
                 .is_some_and(|program| program == "lvextend")
+                && command.argv.contains(&"vg/root".to_string())
         }));
     }
 
