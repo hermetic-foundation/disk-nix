@@ -987,6 +987,30 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent filesystems or mappings see the VDO device before use".to_string(),
             ],
         ),
+        Operation::Rescan if collection == Some("vdoVolumes") => (
+            vec![
+                command(
+                    ["vdo", "status", "--name", target],
+                    false,
+                    "verify VDO volume configuration after status refresh",
+                ),
+                command(
+                    ["vdostats", "--human-readable", target],
+                    false,
+                    "verify VDO runtime counters after status refresh",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify VDO graph node and backing relationships after status refresh",
+                ),
+            ],
+            vec![
+                "VDO volume status and operating mode match expected state".to_string(),
+                "utilization, available space, and space-saving counters are reviewed".to_string(),
+                "dependent filesystems or mappings still resolve the VDO device".to_string(),
+            ],
+        ),
         Operation::Grow if collection == Some("zvols") => (
             vec![
                 command(
@@ -3921,6 +3945,33 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "review inherited mountpoint, quota, reservation, and encryption properties"
                         .to_string(),
                     "set required properties before exposing the dataset to consumers".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("vdoVolumes") => {
+            let target = target.unwrap_or("<vdo-volume>");
+            (
+                vec![
+                    command(
+                        ["vdo", "status", "--name", target],
+                        false,
+                        "refresh VDO volume status and configuration",
+                    ),
+                    command(
+                        ["vdostats", "--human-readable", target],
+                        false,
+                        "refresh VDO runtime capacity, utilization, and savings counters",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect VDO graph node and backing relationships after status refresh",
+                    ),
+                ],
+                vec![
+                    "use grow when logical or physical capacity must change".to_string(),
+                    "use start or stop only when activation state must change".to_string(),
                 ],
                 true,
             )
@@ -12968,6 +13019,9 @@ mod tests {
                   "coldArchive": {
                     "operation": "stop"
                   },
+                  "refreshArchive": {
+                    "operation": "rescan"
+                  },
                   "missing-backing": {
                     "operation": "create",
                     "desiredSize": "1TiB"
@@ -13084,6 +13138,20 @@ mod tests {
             })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:refresharchive:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["vdo", "status", "--name", "refreshArchive"])
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdostats", "--human-readable", "refreshArchive"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
                 command.argv == ["vdo", "remove", "--name", "old-cache"]
                     && command.readiness == CommandReadiness::Ready
@@ -13114,6 +13182,12 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["vdo", "status"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:refresharchive:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "refreshArchive", "--json"]
+                })
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "vdoVolumes:archive:set-property:writePolicy"

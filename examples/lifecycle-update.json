@@ -179,6 +179,9 @@
     },
     "coldArchive": {
       "operation": "stop"
+    },
+    "refreshArchive": {
+      "operation": "rescan"
     }
   },
   "physicalVolumes": {

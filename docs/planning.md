@@ -116,7 +116,8 @@ Examples:
   distinguish logical growth from physical backing growth and verify
   `vdostats`. VDO `operation = "start"` and `operation = "stop"` are
   offline-required lifecycle actions that activate or deactivate existing VDO
-  metadata without recreating or removing it. Create preflight inspection is
+  metadata without recreating or removing it. VDO `operation = "rescan"` is an
+  online, read-only status and utilization refresh. Create preflight inspection is
   marked unresolved until a backing device is declared. Supported VDO property
   updates render reviewed `vdo changeWritePolicy`,
   `vdo enableCompression`/`disableCompression`, and

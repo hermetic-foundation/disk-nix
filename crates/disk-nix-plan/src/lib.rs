@@ -3295,6 +3295,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "vdoVolumes" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "VDO rescan refreshes status, utilization, and graph inventory"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow when logical or physical VDO capacity must change".to_string(),
+                    "use start or stop only when intentionally changing activation state"
+                        .to_string(),
+                    "verify vdostats before growing filesystems or dependent volumes"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "loopDevices" => (
             RiskClass::Online,
             false,
@@ -4019,7 +4034,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG metadata, and MD RAID metadata"
+                summary: "rescan operations are currently supported for disks, partitions, LUNs, iSCSI sessions, NVMe namespaces, multipath maps, LVM PV/VG metadata, MD RAID metadata, and VDO status"
                     .to_string(),
                 alternatives: vec![
                     "use disks.<path>.operation = \"rescan\" to reread a partition table"
@@ -4037,6 +4052,8 @@ fn classify_operation(
                     "use physicalVolumes or volumeGroups operation = \"rescan\" to refresh LVM metadata"
                         .to_string(),
                     "use mdRaids.<name>.operation = \"rescan\" to refresh MD RAID metadata inventory"
+                        .to_string(),
+                    "use vdoVolumes.<name>.operation = \"rescan\" to refresh VDO status and utilization"
                         .to_string(),
                 ],
             }),
@@ -4629,6 +4646,18 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "unmount and deactivate all consumers before stopping".to_string(),
                     "use remove only when destroying the VDO volume metadata".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::VdoVolume,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "VDO rescan refreshes status and utilization reporting".to_string(),
+                alternatives: vec![
+                    "use grow when logical or physical capacity must change".to_string(),
+                    "review vdostats before resizing dependent filesystems".to_string(),
                 ],
             }),
         },
@@ -6906,6 +6935,7 @@ mod tests {
                 Operation::RemoveDevice,
                 RiskClass::PotentialDataLoss,
             ),
+            (NodeKind::VdoVolume, Operation::Rescan, RiskClass::Online),
             (NodeKind::MdRaid, Operation::Create, RiskClass::Destructive),
             (
                 NodeKind::MdRaid,
@@ -8442,6 +8472,9 @@ mod tests {
                 "coldArchive": {
                   "operation": "stop"
                 },
+                "refreshArchive": {
+                  "operation": "rescan"
+                },
                 "old-cache": {
                   "destroy": true
                 }
@@ -8450,7 +8483,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 8);
+        assert_eq!(plan.summary.action_count, 9);
         assert_eq!(plan.summary.offline_required_count, 2);
         assert_eq!(plan.summary.destructive_count, 2);
         let create = plan
@@ -8523,6 +8556,14 @@ mod tests {
                     .iter()
                     .any(|alternative| alternative.contains("stop over remove"))
         }));
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "vdovolumes:refresharchive:rescan")
+            .expect("VDO rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
         let destroy = plan
             .actions
             .iter()

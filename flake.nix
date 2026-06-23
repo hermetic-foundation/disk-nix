@@ -285,6 +285,7 @@
               };
               vdoVolumes.warmArchive.operation = "start";
               vdoVolumes.coldArchive.operation = "stop";
+              vdoVolumes.refreshArchive.operation = "rescan";
               physicalVolumes."/dev/disk/by-id/nvme-pv-grow" = {
                 operation = "grow";
               };
@@ -701,7 +702,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 80
+              .summary.actionCount == 81
               and .summary.offlineRequiredCount == 28
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -968,6 +969,7 @@
                   and .spec.vdoVolumes.archive.properties.deduplication == "disabled"
                   and .spec.vdoVolumes.warmArchive.operation == "start"
                   and .spec.vdoVolumes.coldArchive.operation == "stop"
+                  and .spec.vdoVolumes.refreshArchive.operation == "rescan"
                   and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
                   and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-refresh".operation == "rescan"
                   and .spec.luksKeyslots."cryptroot:1".operation == "add-key"

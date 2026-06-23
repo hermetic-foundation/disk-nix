@@ -356,6 +356,7 @@ Example lifecycle planning through NixOS options:
     };
     vdoVolumes.warmArchive.operation = "start";
     vdoVolumes.coldArchive.operation = "stop";
+    vdoVolumes.refreshArchive.operation = "rescan";
     filesystems.data = {
       device = "/dev/disk/by-label/data";
       fsType = "btrfs";

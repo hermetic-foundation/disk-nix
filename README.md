@@ -185,7 +185,7 @@ the planned command phase succeeds.
 Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, swap signature/resize workflows, LUKS
 format/resize/open/close/keyslot/token workflows, Btrfs subvolume
-creation/deletion, VDO create/grow/remove, LVM
+creation/deletion, VDO create/grow/rescan/remove, LVM
 physical-volume create/grow/rescan/remove, logical-volume growth/removal,
 LVM volume-group extension/device removal, LVM thin-pool create/grow/remove,
 LVM snapshot create/merge/remove, LVM cache attach/detach/property updates,
@@ -294,6 +294,9 @@ marked unresolved until a backing device is declared. VDO property updates
 cover `auto`, `sync`, and `async` write policy changes, compression, and
 deduplication with concrete `vdo` commands; unsupported properties and invalid
 property values are classified as unsupported before execution.
+VDO rescan plans render read-only `vdo status`, `vdostats`, and graph
+inspection commands to refresh status and utilization without changing
+activation state or capacity.
 NFS export apply plans render reviewed `operation = "export"`, option update,
 and `operation = "unexport"` commands from explicit client and option
 declarations. Legacy export `create` and `destroy` still map to the same
