@@ -7,6 +7,7 @@ self:
 }:
 let
   cfg = config.services.disk-nix;
+  packageSystem = pkgs.stdenv.hostPlatform.system;
   json = pkgs.formats.json { };
   applyScriptOutDir = lib.optionalString (cfg.apply.scriptOut != null) (
     builtins.dirOf cfg.apply.scriptOut
@@ -975,8 +976,8 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = self.packages.${pkgs.system}.disk-nix;
-      defaultText = lib.literalExpression "inputs.disk-nix.packages.${pkgs.system}.disk-nix";
+      default = self.packages.${packageSystem}.disk-nix;
+      defaultText = lib.literalExpression "inputs.disk-nix.packages.${pkgs.stdenv.hostPlatform.system}.disk-nix";
       description = "disk-nix CLI package used by the NixOS module.";
     };
 

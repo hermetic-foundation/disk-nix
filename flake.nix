@@ -1652,7 +1652,7 @@
       devShells = forAllSystems (system: perSystem.${system}.devShells);
       nixosModules.default = import ./nix/modules/disk-nix.nix self;
       overlays.default = final: _prev: {
-        disk-nix = self.packages.${final.system}.disk-nix;
+        disk-nix = self.packages.${final.stdenv.hostPlatform.system}.disk-nix;
       };
     };
 }
