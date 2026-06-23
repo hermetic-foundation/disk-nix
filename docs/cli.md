@@ -415,8 +415,10 @@ property updates render `vdo changeWritePolicy`,
 `vdo enableDeduplication`/`disableDeduplication`; unsupported VDO properties
 and invalid values are blocked as unsupported before commands are rendered.
 NFS export command plans use explicit `client` and `options` lifecycle fields
-to render reviewed `exportfs` create, option update, and unexport commands.
-They also require a path-shaped local export target such as `/srv/share`.
+to render reviewed `operation = "export"`, option update, and
+`operation = "unexport"` commands. Legacy export `create` and `destroy` map to
+the same command plans. They also require a path-shaped local export target
+such as `/srv/share`.
 NFS client mount command plans render reviewed `operation = "mount"` commands,
 `mount -o remount,<options>` option-update commands, and
 `operation = "unmount"` commands from `nfs.mounts`; legacy NFS mount `create`

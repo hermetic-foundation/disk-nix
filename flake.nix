@@ -381,9 +381,13 @@
                 controllers = "0x1";
               };
               exports."/srv/share" = {
-                operation = "create";
+                operation = "export";
                 client = "192.0.2.0/24";
                 options = "rw,sync,no_subtree_check";
+              };
+              exports."/srv/old-share" = {
+                operation = "unexport";
+                client = "192.0.2.55";
               };
               caches."tank/l2arc0" = {
                 operation = "replace-device";
@@ -565,6 +569,7 @@
               and (."$defs".operation.enum | index("promote") != null)
               and (."$defs".operation.enum | index("import") != null)
               and (."$defs".operation.enum | index("export") != null)
+              and (."$defs".operation.enum | index("unexport") != null)
               and (."$defs".operation.enum | index("activate") != null)
               and (."$defs".operation.enum | index("deactivate") != null)
               and (."$defs".operation.enum | index("assemble") != null)
@@ -634,8 +639,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 65
-              and .summary.offlineRequiredCount == 26
+              .summary.actionCount == 66
+              and .summary.offlineRequiredCount == 27
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -686,7 +691,8 @@
               and (.actions | any(.id == "datasets:tank/archive:destroy"))
               and (.actions | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained" and .risk == "offline-required"))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
-              and (.actions | any(.id == "exports:/srv/share:create" and .risk == "online"))
+              and (.actions | any(.id == "exports:/srv/share:export" and .risk == "online"))
+              and (.actions | any(.id == "exports:/srv/old-share:unexport" and .risk == "offline-required"))
               and (.actions | any(.id == "nfs.mounts:/srv/shared:mount" and .risk == "online"))
               and (.actions | any(.id == "nfs.mounts:/srv/tuned:remount" and .risk == "online"))
               and (.actions | any(.id == "nfs.mounts:/srv/old:unmount" and .risk == "offline-required"))
@@ -723,8 +729,8 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 31
-              and .apply.blockedSummary.offlineRequiredCount == 26
+              and .apply.blockedCount == 32
+              and .apply.blockedSummary.offlineRequiredCount == 27
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
@@ -736,6 +742,7 @@
               and (.apply.blocked | any(.id == "volumegroups:exportvg:export"))
               and (.apply.blocked | any(.id == "volumegroups:activevg:activate"))
               and (.apply.blocked | any(.id == "iscsisessions:iqn.2026-06.example:storage.logout:logout"))
+              and (.apply.blocked | any(.id == "exports:/srv/old-share:unexport"))
               and (.apply.blocked | any(.id == "nfs.mounts:/srv/old:unmount"))
               and (.apply.blocked | any(.id == "volumes:vg0/archive:deactivate"))
               and (.apply.blocked | any(.id == "vdovolumes:warmarchive:start"))
@@ -748,14 +755,14 @@
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 31
+              and .apply.blockedCount == 32
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 31
-              and .messages[0] == "apply policy blocked 31 action(s)"
+              and .apply.blockedCount == 32
+              and .messages[0] == "apply policy blocked 32 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -848,9 +855,11 @@
                   and .spec.nvmeNamespaces."/dev/nvme0".desiredSize == "100G"
                   and .spec.nvmeNamespaces."/dev/nvme0".namespaceId == "4"
                   and .spec.nvmeNamespaces."/dev/nvme0".controllers == "0x1"
-                  and .spec.exports."/srv/share".operation == "create"
+                  and .spec.exports."/srv/share".operation == "export"
                   and .spec.exports."/srv/share".client == "192.0.2.0/24"
                   and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
+                  and .spec.exports."/srv/old-share".operation == "unexport"
+                  and .spec.exports."/srv/old-share".client == "192.0.2.55"
                   and .spec.partitions.root.operation == "grow"
                   and .spec.partitions.root.device == "/dev/disk/by-id/nvme-root"
                   and .spec.partitions.root.number == "2"
@@ -1051,6 +1060,7 @@
                 ' native-storage
                 printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
                 grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
+                ! grep -- '/srv/old-share' nfs-exports
                 touch "$out"
               '';
           nixosModuleExecute =

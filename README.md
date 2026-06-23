@@ -285,9 +285,11 @@ marked unresolved until a backing device is declared. VDO property updates
 cover `auto`, `sync`, and `async` write policy changes, compression, and
 deduplication with concrete `vdo` commands; unsupported properties and invalid
 property values are classified as unsupported before execution.
-NFS export apply plans render reviewed `exportfs` create, option update, and
-unexport commands from explicit client and option declarations. Export
-mutations require a path-shaped local export target such as `/srv/share`.
+NFS export apply plans render reviewed `operation = "export"`, option update,
+and `operation = "unexport"` commands from explicit client and option
+declarations. Legacy export `create` and `destroy` still map to the same
+command plans. Export mutations require a path-shaped local export target such
+as `/srv/share`.
 NFS client mount apply plans render reviewed `operation = "mount"` commands,
 `operation = "remount"` option updates, and `operation = "unmount"` commands
 from `nfs.mounts`; legacy NFS mount `create` and `destroy` still map to the

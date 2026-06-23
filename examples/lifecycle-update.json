@@ -263,9 +263,13 @@
   },
   "exports": {
     "/srv/share": {
-      "operation": "create",
+      "operation": "export",
       "client": "192.0.2.0/24",
       "options": "rw,sync,no_subtree_check"
+    },
+    "/srv/old-share": {
+      "operation": "unexport",
+      "client": "192.0.2.55"
     }
   },
   "nfs": {

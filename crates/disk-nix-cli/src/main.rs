@@ -899,6 +899,7 @@ fn spec_schema() -> serde_json::Value {
                     "promote",
                     "import",
                     "export",
+                    "unexport",
                     "activate",
                     "deactivate",
                     "assemble",

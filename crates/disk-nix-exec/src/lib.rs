@@ -1618,7 +1618,9 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 vec!["snapshot hold state matches the desired retention tag".to_string()],
             )
         }
-        Operation::Create | Operation::Destroy if collection == Some("exports") => (
+        Operation::Create | Operation::Export | Operation::Destroy | Operation::Unexport
+            if collection == Some("exports") =>
+        (
             vec![
                 command(
                     ["exportfs", "-v"],
@@ -2112,6 +2114,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         | Operation::Promote
         | Operation::Import
         | Operation::Export
+        | Operation::Unexport
         | Operation::Activate
         | Operation::Deactivate
         | Operation::Assemble
@@ -3582,7 +3585,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Create if collection == Some("exports") => {
+        Operation::Create | Operation::Export if collection == Some("exports") => {
             let target = export_target_path(action);
             (
                 vec![nfs_export_create_command(
@@ -4907,7 +4910,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
-        Operation::Destroy if collection == Some("exports") => {
+        Operation::Destroy | Operation::Unexport if collection == Some("exports") => {
             let target = export_target_path(action);
             (
                 vec![nfs_export_destroy_command(
@@ -4987,6 +4990,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::Promote
         | Operation::Import
         | Operation::Export
+        | Operation::Unexport
         | Operation::Activate
         | Operation::Deactivate
         | Operation::Assemble
@@ -15492,7 +15496,7 @@ mod tests {
               "spec": {
                 "exports": {
                   "/srv/share": {
-                    "operation": "create",
+                    "operation": "export",
                     "client": "192.0.2.0/24",
                     "options": "rw,sync,no_subtree_check"
                   },
@@ -15508,7 +15512,7 @@ mod tests {
                     }
                   },
                   "/srv/old": {
-                    "destroy": true,
+                    "operation": "unexport",
                     "client": "192.0.2.55"
                   }
                 }

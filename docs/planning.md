@@ -205,9 +205,11 @@ Examples:
   `lvconvert` changes origin LV I/O paths and dirty cache state must be drained.
   LVM cache mode and policy updates are safe but still include verification
   advice.
-- NFS export creation is online when it publishes an existing path to explicit
-  clients and options; unexporting is offline-required because remote clients
-  may need to be drained, but it is not treated as data destruction.
+- NFS export publication with `operation = "export"` is online when it
+  publishes an existing path to explicit clients and options; unexporting is
+  offline-required because remote clients may need to be drained, but it is not
+  treated as data destruction. Legacy NFS export `create` and `destroy` still
+  map to the same lifecycle paths.
 - LUN `operation = "create"` means host-side attach for an existing target-side
   LUN and is online when it only rescans sessions and verifies stable paths.
   LUN `operation = "grow"` is offline-required because the storage target,
@@ -313,7 +315,7 @@ Lifecycle objects may use:
 - `client`: NFS export client or network selector
 - `portal`: iSCSI target portal such as `192.0.2.10:3260`; `metadata.portal`
   is also accepted for NixOS-module-derived session declarations
-- `options`: NFS export options used for reviewed `exportfs` create commands
+- `options`: NFS export options used for reviewed `exportfs` export commands
 - `start` or `startOffset`, and `end` or `endOffset`: partition geometry for
   partition creation or resizing
 - `partitionNumber` or `number`: partition number for concrete partition
@@ -361,9 +363,11 @@ replacement cache device and new cache-set UUID are verified. bcache sysfs
 operations require a concrete `/dev/bcache*` target; logical cache declaration
 names stay non-ready.
 NFS export command plans use `exportfs -i -o <options> <client>:<path>` for
-reviewed create and option-update operations and `exportfs -u <client>:<path>`
-for reviewed unexport operations, with unresolved-input markers when clients,
-options, or the local export path are missing.
+reviewed `operation = "export"` and option-update operations and
+`exportfs -u <client>:<path>` for reviewed `operation = "unexport"`
+operations, with unresolved-input markers when clients, options, or the local
+export path are missing. Legacy export `create` and `destroy` map to the same
+commands.
 NFS client mount command plans use
 `mount -t <nfs|nfs4> -o <options> <source> <mountpoint>` for reviewed
 `operation = "mount"` actions, `mount -o remount,<options> <mountpoint>` for

@@ -80,6 +80,7 @@ let
       "promote"
       "import"
       "export"
+      "unexport"
       "activate"
       "deactivate"
       "assemble"
@@ -624,6 +625,7 @@ let
       "close"
       "logout"
       "unmount"
+      "unexport"
     ];
   activeLifecycleAttrs = attrs: lib.filterAttrs (_: object: !isDestroyLifecycle object) attrs;
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;
@@ -699,8 +701,7 @@ let
       )
       (
         lib.filterAttrs (
-          _: export:
-          export.client != null && export.options != null && !export.destroy && export.operation != "destroy"
+          _: export: export.client != null && export.options != null && !isDestroyLifecycle export
         ) cfg.exports
       );
   supportedFilesystemTypes = lib.unique (

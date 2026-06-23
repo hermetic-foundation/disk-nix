@@ -67,9 +67,10 @@ same packages are installed in `environment.systemPackages`. Override the list
 to pin site-specific tool builds or to trim unused storage domains.
 
 Typed NFS export declarations derive regular NixOS NFS server export lines
-only when they are non-destroy declarations with explicit `client` and
-`options` fields. Destructive or under-specified export declarations remain in
-the disk-nix planner spec for review instead of being re-added to `/etc/exports`.
+only when they are active declarations with explicit `client` and `options`
+fields. `operation = "unexport"`, destructive, or under-specified export
+declarations remain in the disk-nix planner spec for review instead of being
+re-added to `/etc/exports`.
 Typed swap and LUKS declarations follow the same split: destroy operations stay
 in the generated disk-nix spec, but they are not re-added to NixOS
 `swapDevices` or `boot.initrd.luks.devices`. LUKS `operation = "close"` is
@@ -444,9 +445,13 @@ Example lifecycle planning through NixOS options:
       addDevices = [ "/dev/sdb" ];
     };
     exports."/srv/share" = {
-      operation = "create";
+      operation = "export";
       client = "192.0.2.0/24";
       options = "rw,sync,no_subtree_check";
+    };
+    exports."/srv/old-share" = {
+      operation = "unexport";
+      client = "192.0.2.55";
     };
     caches."tank/l2arc0" = {
       replaceDevices."/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";

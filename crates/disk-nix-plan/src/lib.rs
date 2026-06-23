@@ -51,6 +51,7 @@ pub enum Operation {
     Promote,
     Import,
     Export,
+    Unexport,
     Activate,
     Deactivate,
     Assemble,
@@ -2783,6 +2784,7 @@ fn parse_operation(value: &str) -> Option<Operation> {
         "promote" => Some(Operation::Promote),
         "import" => Some(Operation::Import),
         "export" => Some(Operation::Export),
+        "unexport" | "un-export" => Some(Operation::Unexport),
         "activate" => Some(Operation::Activate),
         "deactivate" => Some(Operation::Deactivate),
         "assemble" => Some(Operation::Assemble),
@@ -2822,6 +2824,7 @@ fn operation_id(operation: Operation) -> &'static str {
         Operation::Promote => "promote",
         Operation::Import => "import",
         Operation::Export => "export",
+        Operation::Unexport => "unexport",
         Operation::Activate => "activate",
         Operation::Deactivate => "deactivate",
         Operation::Assemble => "assemble",
@@ -3226,7 +3229,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Create if collection == "exports" => (
+        Operation::Create | Operation::Export if collection == "exports" => (
             RiskClass::Online,
             false,
             Some(Advice {
@@ -3626,7 +3629,7 @@ fn classify_operation(
                 ],
             }),
         ),
-        Operation::Destroy if collection == "exports" => (
+        Operation::Destroy | Operation::Unexport if collection == "exports" => (
             RiskClass::OfflineRequired,
             false,
             Some(Advice {
@@ -3766,13 +3769,30 @@ fn classify_operation(
             false,
             Some(Advice {
                 summary: format!(
-                    "{} is currently only supported for ZFS pools and LVM volume groups",
+                    "{} is currently only supported for ZFS pools, LVM volume groups, and NFS exports",
                     operation_label(operation)
                 ),
                 alternatives: vec![
                     "use pools.<name>.operation for ZFS pool import or export".to_string(),
                     "use volumeGroups.<name>.operation for LVM VG import or export".to_string(),
+                    "use exports.<path>.operation = \"export\" for NFS export publication"
+                        .to_string(),
                     "use domain-specific attach, detach, mount, or unmount operations where available"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Unexport => (
+            RiskClass::Unsupported,
+            false,
+            Some(Advice {
+                summary: "unexport operations are currently only supported for exports".to_string(),
+                alternatives: vec![
+                    "use operation = \"unexport\" on exports declarations for NFS server export lifecycle"
+                        .to_string(),
+                    "use operation = \"unmount\" on nfs.mounts declarations for NFS client mounts"
+                        .to_string(),
+                    "use destroy only where a storage domain has not yet gained explicit lifecycle verbs"
                         .to_string(),
                 ],
             }),
@@ -4117,6 +4137,7 @@ fn operation_label(operation: Operation) -> &'static str {
         Operation::Promote => "promote",
         Operation::Import => "import",
         Operation::Export => "export",
+        Operation::Unexport => "unexport",
         Operation::Activate => "activate",
         Operation::Deactivate => "deactivate",
         Operation::Assemble => "assemble",
@@ -5504,6 +5525,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::NfsExport,
+            operation: Operation::Export,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "NFS export publication exposes a local path to selected clients"
+                    .to_string(),
+                alternatives: vec![
+                    "start with restrictive client selectors and read-only options".to_string(),
+                    "verify ownership, permissions, and firewall policy before exporting"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsExport,
             operation: Operation::SetProperty,
             risk: RiskClass::Safe,
             advice: Some(Advice {
@@ -5517,6 +5552,18 @@ pub fn default_capabilities() -> Vec<Capability> {
         Capability {
             node_kind: NodeKind::NfsExport,
             operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "unexporting NFS paths can interrupt active remote clients".to_string(),
+                alternatives: vec![
+                    "drain or migrate clients before unexporting the path".to_string(),
+                    "verify no active mounts still depend on the export".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::NfsExport,
+            operation: Operation::Unexport,
             risk: RiskClass::OfflineRequired,
             advice: Some(Advice {
                 summary: "unexporting NFS paths can interrupt active remote clients".to_string(),
@@ -5963,6 +6010,13 @@ mod tests {
                     && capability.operation == Operation::Create
             })
             .expect("NFS export create capability should exist");
+        let export = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NfsExport
+                    && capability.operation == Operation::Export
+            })
+            .expect("NFS export capability should exist");
         let export_destroy = capabilities
             .iter()
             .find(|capability| {
@@ -5970,6 +6024,13 @@ mod tests {
                     && capability.operation == Operation::Destroy
             })
             .expect("NFS export destroy capability should exist");
+        let unexport = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::NfsExport
+                    && capability.operation == Operation::Unexport
+            })
+            .expect("NFS unexport capability should exist");
         let mount_create = capabilities
             .iter()
             .find(|capability| {
@@ -6000,7 +6061,9 @@ mod tests {
             .expect("NFS unmount capability should exist");
 
         assert_eq!(export_create.risk, RiskClass::Online);
+        assert_eq!(export.risk, RiskClass::Online);
         assert_eq!(export_destroy.risk, RiskClass::OfflineRequired);
+        assert_eq!(unexport.risk, RiskClass::OfflineRequired);
         assert_eq!(mount_create.risk, RiskClass::Online);
         assert_eq!(mount.risk, RiskClass::Online);
         assert_eq!(mount_destroy.risk, RiskClass::OfflineRequired);
@@ -9087,12 +9150,12 @@ mod tests {
             br#"{
               "exports": {
                 "/srv/share": {
-                  "operation": "create",
+                  "operation": "export",
                   "client": "192.0.2.0/24",
                   "options": "rw,sync,no_subtree_check"
                 },
                 "/srv/old": {
-                  "destroy": true,
+                  "operation": "unexport",
                   "client": "192.0.2.55"
                 }
               }
@@ -9106,8 +9169,9 @@ mod tests {
         let create = plan
             .actions
             .iter()
-            .find(|action| action.id == "exports:/srv/share:create")
-            .expect("export create exists");
+            .find(|action| action.id == "exports:/srv/share:export")
+            .expect("export action exists");
+        assert_eq!(create.operation, Operation::Export);
         assert_eq!(create.risk, RiskClass::Online);
         assert_eq!(create.context.client.as_deref(), Some("192.0.2.0/24"));
         assert_eq!(
@@ -9117,8 +9181,9 @@ mod tests {
         let destroy = plan
             .actions
             .iter()
-            .find(|action| action.id == "exports:/srv/old:destroy")
-            .expect("export destroy exists");
+            .find(|action| action.id == "exports:/srv/old:unexport")
+            .expect("unexport action exists");
+        assert_eq!(destroy.operation, Operation::Unexport);
         assert_eq!(destroy.risk, RiskClass::OfflineRequired);
         assert!(!destroy.destructive);
     }
