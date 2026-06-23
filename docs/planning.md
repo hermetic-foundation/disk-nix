@@ -321,6 +321,10 @@ Btrfs filesystem label property updates render
 `e2label <device> <label>` when the filesystem declaration includes a backing
 device; missing devices and unsupported filesystem property keys stay marked
 `needs-domain-implementation`.
+Btrfs subvolume property updates only treat read-only aliases (`readOnly`,
+`readonly`, `ro`, `btrfs.readonly`, and `btrfs.ro`) as safe planned property
+changes. Other Btrfs subvolume property keys are classified as unsupported so
+apply policy blocks them before command execution.
 Ext filesystem grow and shrink actions also carry the declared filesystem
 `device` or `disk` into `resize2fs` and `e2fsck` command plans. Mountpoint-only
 ext declarations keep source-device mutations marked unresolved until the block

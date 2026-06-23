@@ -1492,20 +1492,47 @@ fn add_property_actions(
     };
 
     for (property, value) in properties {
+        let (risk, advice) = classify_property_change(collection, property);
         actions.push(PlannedAction {
             id: format!("{collection}:{name}:set-property:{property}"),
             description: format!("set property {property} on {collection} {name}"),
             operation: Operation::SetProperty,
-            risk: RiskClass::Safe,
+            risk,
             destructive: false,
             context: ActionContext {
                 property: Some(property.to_string()),
                 property_value: Some(property_value(value)),
                 ..lifecycle_context(collection, name, object)
             },
-            advice: None,
+            advice,
         });
     }
+}
+
+fn classify_property_change(collection: &str, property: &str) -> (RiskClass, Option<Advice>) {
+    if collection == "btrfsSubvolumes" && !is_btrfs_subvolume_property_supported(property) {
+        return (
+            RiskClass::Unsupported,
+            Some(Advice {
+                summary: format!("Btrfs subvolume property {property} is not mapped to a safe command"),
+                alternatives: vec![
+                    "use readOnly, readonly, ro, btrfs.readonly, or btrfs.ro for read-only toggles"
+                        .to_string(),
+                    "apply unsupported Btrfs subvolume property changes manually after reviewing btrfs property documentation"
+                        .to_string(),
+                ],
+            }),
+        );
+    }
+
+    (RiskClass::Safe, None)
+}
+
+fn is_btrfs_subvolume_property_supported(property: &str) -> bool {
+    matches!(
+        property,
+        "ro" | "readonly" | "readOnly" | "btrfs.readonly" | "btrfs.ro"
+    )
 }
 
 fn property_value(value: &Value) -> String {
@@ -4056,6 +4083,48 @@ mod tests {
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("read-only snapshot"))
+        }));
+    }
+
+    #[test]
+    fn plan_classifies_btrfs_subvolume_property_support() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsSubvolumes": {
+                "/mnt/persist/@home": {
+                  "path": "/mnt/persist/@home",
+                  "properties": {
+                    "readonly": true,
+                    "compression": "zstd"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.unsupported_count, 1);
+        let readonly = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "btrfsSubvolumes:/mnt/persist/@home:set-property:readonly")
+            .expect("readonly property action exists");
+        assert_eq!(readonly.risk, RiskClass::Safe);
+
+        let compression = plan
+            .actions
+            .iter()
+            .find(|action| {
+                action.id == "btrfsSubvolumes:/mnt/persist/@home:set-property:compression"
+            })
+            .expect("unsupported property action exists");
+        assert_eq!(compression.risk, RiskClass::Unsupported);
+        assert!(compression.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("readOnly"))
         }));
     }
 
