@@ -75,6 +75,8 @@ as `devices --json`, `filesystems --json`, and `ids --json` return subgraphs
 and preserve relationships between nodes included in the result. `inspect --json` returns matched nodes plus their direct neighbors and relationship
 edges. `capabilities --json` returns the modeled operation/risk matrix.
 
+See [docs/cli.md](docs/cli.md) for the command reference and JSON contracts.
+
 ## NixOS module
 
 The flake exposes a NixOS module:
@@ -90,10 +92,10 @@ The flake exposes a NixOS module:
 }
 ```
 
-The module currently installs the CLI and writes a normalized storage spec to
-`/etc/disk-nix/spec.json`. Future revisions will derive regular NixOS
-`fileSystems`, `swapDevices`, initrd LUKS, iSCSI, NFS, ZFS, Btrfs, and related
-options from the same source of truth.
+The module installs the CLI, writes a normalized storage spec to
+`/etc/disk-nix/spec.json`, derives typed NixOS `fileSystems`, `swapDevices`,
+and initrd LUKS options, and keeps lifecycle domains available in the same
+planner spec.
 
 ## Safety model
 
