@@ -96,6 +96,10 @@ emitting concrete executor actions.
 planned actions against the top-level `apply` policy, and reports whether each
 action is allowed or blocked. It does not mutate storage yet.
 
+Apply reports include `blockedSummary` counters for offline-required,
+destructive, potential-data-loss, and unsupported blocked actions in addition
+to the detailed blocked action list.
+
 Policy fields currently supported:
 
 - `mode`

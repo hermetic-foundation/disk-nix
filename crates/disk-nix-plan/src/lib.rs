@@ -124,6 +124,7 @@ pub struct ApplyReport {
     pub policy: ApplyPolicy,
     pub allowed_count: usize,
     pub blocked_count: usize,
+    pub blocked_summary: BlockedSummary,
     pub blocked: Vec<BlockedAction>,
 }
 
@@ -145,6 +146,15 @@ pub struct BlockedAction {
     pub operation: Operation,
     pub risk: RiskClass,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockedSummary {
+    pub offline_required_count: usize,
+    pub destructive_count: usize,
+    pub potential_data_loss_count: usize,
+    pub unsupported_count: usize,
 }
 
 pub fn plan_from_json_bytes(bytes: &[u8]) -> Result<Plan, serde_json::Error> {
@@ -176,12 +186,35 @@ pub fn evaluate_apply_policy(plan: &Plan, policy: ApplyPolicy) -> ApplyReport {
         .filter_map(|action| blocked_action(action, &policy))
         .collect();
     let blocked_count = blocked.len();
+    let blocked_summary = blocked_summary(&blocked);
 
     ApplyReport {
         policy,
         allowed_count: plan.actions.len().saturating_sub(blocked_count),
         blocked_count,
+        blocked_summary,
         blocked,
+    }
+}
+
+fn blocked_summary(blocked: &[BlockedAction]) -> BlockedSummary {
+    BlockedSummary {
+        offline_required_count: blocked
+            .iter()
+            .filter(|action| action.risk == RiskClass::OfflineRequired)
+            .count(),
+        destructive_count: blocked
+            .iter()
+            .filter(|action| action.risk == RiskClass::Destructive)
+            .count(),
+        potential_data_loss_count: blocked
+            .iter()
+            .filter(|action| action.risk == RiskClass::PotentialDataLoss)
+            .count(),
+        unsupported_count: blocked
+            .iter()
+            .filter(|action| action.risk == RiskClass::Unsupported)
+            .count(),
     }
 }
 
@@ -1056,6 +1089,8 @@ mod tests {
         let report = evaluate_apply_policy(&plan, policy);
 
         assert_eq!(report.blocked_count, 2);
+        assert_eq!(report.blocked_summary.destructive_count, 1);
+        assert_eq!(report.blocked_summary.potential_data_loss_count, 1);
         assert!(!report.can_execute());
     }
 
@@ -1085,6 +1120,7 @@ mod tests {
         let report = evaluate_apply_policy(&plan, policy);
 
         assert_eq!(report.blocked_count, 1);
+        assert_eq!(report.blocked_summary.unsupported_count, 1);
         assert_eq!(report.blocked[0].risk, RiskClass::Unsupported);
         assert_eq!(
             report.blocked[0].reason,
@@ -1133,6 +1169,7 @@ mod tests {
 
         let report = evaluate_apply_policy(&plan, policy.clone());
         assert_eq!(report.blocked_count, 1);
+        assert_eq!(report.blocked_summary.offline_required_count, 1);
         assert_eq!(report.blocked[0].risk, RiskClass::OfflineRequired);
         assert_eq!(
             report.blocked[0].reason,

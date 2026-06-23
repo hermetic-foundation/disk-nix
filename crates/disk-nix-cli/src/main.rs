@@ -708,6 +708,14 @@ fn print_execution_report(
             writeln!(output, "{message}")?;
         }
     } else {
+        writeln!(
+            output,
+            "Blocked summary: {} offline required, {} destructive, {} potential data loss, {} unsupported",
+            report.apply.blocked_summary.offline_required_count,
+            report.apply.blocked_summary.destructive_count,
+            report.apply.blocked_summary.potential_data_loss_count,
+            report.apply.blocked_summary.unsupported_count
+        )?;
         writeln!(output, "Blocked actions:")?;
         for blocked in &report.apply.blocked {
             writeln!(
