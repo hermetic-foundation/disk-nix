@@ -1976,6 +1976,9 @@ fn usage_details(node: &Node) -> String {
         ("zfs.state", "state"),
         ("zfs.vdev-role", "vdev-role"),
         ("zfs.vdev-state", "vdev-state"),
+        ("zfs.read-errors", "read-errors"),
+        ("zfs.write-errors", "write-errors"),
+        ("zfs.checksum-errors", "checksum-errors"),
         ("zfs.origin", "origin"),
         ("zfs.userrefs", "userrefs"),
         ("zfs.compression", "compression"),
@@ -2702,7 +2705,10 @@ mod tests {
                 "/dev/disk/by-id/cache0",
             )
             .with_property("zfs.vdev-role", "cache")
-            .with_property("zfs.vdev-state", "ONLINE"),
+            .with_property("zfs.vdev-state", "ONLINE")
+            .with_property("zfs.read-errors", "0")
+            .with_property("zfs.write-errors", "1")
+            .with_property("zfs.checksum-errors", "2"),
         );
         graph.add_node(
             Node::new("lvm-vg:vg0", NodeKind::LvmVolumeGroup, "vg0")
@@ -2727,7 +2733,9 @@ mod tests {
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains("health=ONLINE state=ONLINE"));
-        assert!(output.contains("vdev-role=cache vdev-state=ONLINE"));
+        assert!(output.contains(
+            "vdev-role=cache vdev-state=ONLINE read-errors=0 write-errors=1 checksum-errors=2"
+        ));
         assert!(output.contains("extent=4.00m pvs=2 lvs=8"));
         assert!(output.contains("qgroup=0/257 max-rfer=25GiB"));
         assert!(output.contains("level=raid1 state=clean"));
