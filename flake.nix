@@ -176,6 +176,22 @@
                   "discard=async"
                 ];
               };
+              filesystems.localMount = {
+                device = "/dev/disk/by-label/local-mount";
+                fsType = "xfs";
+                mountpoint = "/mnt/local-mount";
+                operation = "mount";
+                options = [
+                  "rw"
+                  "noatime"
+                ];
+              };
+              filesystems.localUnmount = {
+                device = "/dev/disk/by-label/local-unmount";
+                fsType = "ext4";
+                mountpoint = "/mnt/local-unmount";
+                operation = "unmount";
+              };
               filesystems.runTmpfs = {
                 device = "tmpfs";
                 fsType = "tmpfs";
@@ -978,6 +994,13 @@
                   and .spec.filesystems.remount.operation == "remount"
                   and .spec.filesystems.remount.mountpoint == "/remount"
                   and (.spec.filesystems.remount.options | index("discard=async") != null)
+                  and .spec.filesystems.localMount.operation == "mount"
+                  and .spec.filesystems.localMount.device == "/dev/disk/by-label/local-mount"
+                  and .spec.filesystems.localMount.mountpoint == "/mnt/local-mount"
+                  and (.spec.filesystems.localMount.options | index("noatime") != null)
+                  and .spec.filesystems.localUnmount.operation == "unmount"
+                  and .spec.filesystems.localUnmount.device == "/dev/disk/by-label/local-unmount"
+                  and .spec.filesystems.localUnmount.mountpoint == "/mnt/local-unmount"
                   and .spec.filesystems.runTmpfs.device == "tmpfs"
                   and .spec.filesystems.runTmpfs.fsType == "tmpfs"
                   and .spec.filesystems.runTmpfs.mountpoint == "/run/disk-nix-tmp"
@@ -1249,6 +1272,10 @@
                   and has("/srv/tuned")
                   and ."/srv/tuned".device == "nas.example.com:/srv/tuned"
                   and ."/srv/tuned".fsType == "nfs4"
+                  and has("/mnt/local-mount")
+                  and ."/mnt/local-mount".device == "/dev/disk/by-label/local-mount"
+                  and ."/mnt/local-mount".fsType == "xfs"
+                  and (has("/mnt/local-unmount") | not)
                   and has("/run/disk-nix-tmp")
                   and ."/run/disk-nix-tmp".device == "tmpfs"
                   and ."/run/disk-nix-tmp".fsType == "tmpfs"

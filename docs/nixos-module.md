@@ -81,9 +81,13 @@ the generated disk-nix spec while filtering them out of the derived NixOS
 `fileSystems` entries. `operation = "mount"` and `operation = "remount"` stay
 in both places: NixOS owns the steady-state mount declaration, and disk-nix can
 render reviewed mount or non-destructive remount commands to apply changes.
-Typed filesystem declarations can also use `operation = "remount"` to render a
-reviewed `mount -o remount,<options>` command for non-NFS local filesystems
-while keeping the persistent options in the same NixOS `fileSystems` entry.
+Typed filesystem declarations can also use `operation = "mount"` or
+`operation = "remount"` to render reviewed local filesystem mount commands
+while keeping the persistent source, type, mountpoint, and options in the same
+NixOS `fileSystems` entry. `operation = "unmount"` remains in the generated
+disk-nix spec for imperative review, but is filtered out of derived NixOS
+`fileSystems` so NixOS does not immediately re-establish a mount that disk-nix
+was asked to tear down.
 The same `filesystems` option is also the typed path for non-block mounted
 filesystems that NixOS represents through `fileSystems`, including tmpfs,
 bind mounts, and overlayfs. Declare `device = "tmpfs"; fsType = "tmpfs"` for
@@ -167,6 +171,10 @@ and are offline-required. Check and repair declarations require a stable source
 device for tools such as `e2fsck`, `xfs_repair`, `btrfs check`, `fsck.fat`,
 `fsck.exfat`, or `ntfsfix`; NTFS repair remains limited Linux-side remediation,
 not a replacement for Windows `chkdsk`.
+Local filesystem `operation = "mount"` command plans use the same `device`,
+`fsType`, `mountpoint`, and `options` fields that derive NixOS `fileSystems`.
+Local filesystem `operation = "unmount"` command plans use `mountpoint`, remain
+offline-gated by apply policy, and are kept out of generated `fileSystems`.
 For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, `operation = "trim"`, device add/remove/replace operations, and filesystem property
 updates such as labels or balance filters while still deriving the regular
 NixOS `fileSystems` entry from the same declaration.

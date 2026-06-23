@@ -663,6 +663,7 @@ let
       "remove-token"
     ];
   activeLifecycleAttrs = attrs: lib.filterAttrs (_: object: !isDestroyLifecycle object) attrs;
+  activeFilesystems = activeLifecycleAttrs cfg.filesystems;
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;
   activeLuksDevices = lib.filterAttrs (_: luks: !isDestroyLifecycle luks) cfg.luks.devices;
   activeNfsMounts = lib.filterAttrs (_: mount: !isDestroyLifecycle mount) cfg.nfs.mounts;
@@ -1534,7 +1535,7 @@ in
       lib.mapAttrs' (_: filesystem: {
         name = filesystem.mountpoint;
         value = filesystemToNixos filesystem;
-      }) cfg.filesystems
+      }) activeFilesystems
       // lib.mapAttrs' (_: mount: {
         name = mount.mountpoint;
         value = filesystemToNixos {
