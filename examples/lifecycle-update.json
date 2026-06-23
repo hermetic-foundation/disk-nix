@@ -97,6 +97,16 @@
       "operation": "grow"
     }
   },
+  "luksKeyslots": {
+    "cryptroot:1": {
+      "operation": "create",
+      "device": "/dev/disk/by-id/root-luks",
+      "metadata": {
+        "keySlot": "1",
+        "newKeyFile": "/run/keys/root-new"
+      }
+    }
+  },
   "btrfsSubvolumes": {
     "/mnt/persist/@home": {
       "operation": "create",

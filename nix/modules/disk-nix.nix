@@ -277,6 +277,27 @@ let
           example = "0x1";
         };
 
+        keySlot = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "LUKS keyslot number used by keyslot lifecycle declarations.";
+          example = "1";
+        };
+
+        keyFile = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Existing LUKS key file used when changing key material.";
+          example = "/run/keys/root-old";
+        };
+
+        newKeyFile = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Replacement or newly enrolled LUKS key file.";
+          example = "/run/keys/root-new";
+        };
+
         metadata = lib.mkOption {
           type = lib.types.attrsOf json.type;
           default = { };
@@ -388,6 +409,9 @@ let
         portal
         namespaceId
         controllers
+        keySlot
+        keyFile
+        newKeyFile
         ;
     }
   );
@@ -1002,6 +1026,12 @@ in
       description = "Typed LVM physical-volume lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a concrete block device path.";
     };
 
+    luksKeyslots = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed LUKS keyslot lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a LUKS backing device and keyslot or key-file metadata depending on operation.";
+    };
+
     volumeGroups = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -1244,6 +1274,7 @@ in
         btrfsQgroups = (cfg.spec.btrfsQgroups or { }) // normalizeLifecycleSpec cfg.btrfsQgroups;
         vdoVolumes = (cfg.spec.vdoVolumes or { }) // normalizeLifecycleSpec cfg.vdoVolumes;
         physicalVolumes = (cfg.spec.physicalVolumes or { }) // normalizeLifecycleSpec cfg.physicalVolumes;
+        luksKeyslots = (cfg.spec.luksKeyslots or { }) // normalizeLifecycleSpec cfg.luksKeyslots;
         volumes = (cfg.spec.volumes or { }) // normalizeLifecycleSpec cfg.volumes;
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
         thinPools = (cfg.spec.thinPools or { }) // normalizeLifecycleSpec cfg.thinPools;

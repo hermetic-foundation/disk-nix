@@ -169,7 +169,7 @@ only policy-allowed plans where every command is ready, records each command
 result, stops on the first failure, and runs verification commands only after
 the planned command phase succeeds.
 Planner coverage includes filesystem resize intent, disk and partition
-lifecycle declarations, swap signature/resize workflows, LUKS format/resize/close
+lifecycle declarations, swap signature/resize workflows, LUKS format/resize/close/keyslot
 workflows, Btrfs subvolume creation/deletion, VDO create/grow/remove, LVM
 physical-volume create/grow/remove, logical-volume growth/removal,
 LVM volume-group extension/device removal, LVM thin-pool create/grow/remove,
@@ -219,6 +219,9 @@ LUKS open plans render reviewed `cryptsetup open` commands for preserved
 existing containers; close plans render offline-policy-gated `cryptsetup close`
 commands and verify the topology without erasing the backing LUKS header or
 encrypted data.
+LUKS keyslot plans render `cryptsetup luksAddKey`, `luksChangeKey`, and
+`luksKillSlot` with header verification. Keyslot removal is potential data loss
+because it can remove the last working unlock path.
 Disk initialization plans render destructive-policy-gated `parted mklabel` and
 partition table reread steps after disk identity inspection.
 Partition create plans render reviewed `parted mkpart`, `partprobe`, and

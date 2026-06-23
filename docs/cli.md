@@ -105,7 +105,7 @@ The schema describes both direct planner specs and the NixOS module wrapper
 shape with top-level `spec` and `apply` objects. It includes the planner's
 filesystem fields, including filesystem `operation`, `device`, mount
 `options`, `properties`, and Btrfs device-membership update fields. It also
-includes disk and partition lifecycle collections, swap, LUKS, NFS mount
+includes disk and partition lifecycle collections, swap, LUKS, LUKS keyslots, NFS mount
 wrappers, iSCSI discovery/session/boot wrappers, Btrfs subvolume, VDO, LVM
 physical volume, LVM thin pool, LVM snapshot, LVM cache, loop-device, MD RAID,
 multipath, NVMe namespace, and zvol lifecycle declarations, higher-layer lifecycle
@@ -405,6 +405,10 @@ remove commands also require the canonical `vg/lv` target form.
 LVM physical volume command plans render `pvcreate`, `pvresize`, and
 policy-gated `pvremove` for `physicalVolumes` lifecycle declarations.
 Executable plans require a concrete block-device path such as `/dev/disk/by-id/*`.
+LUKS keyslot command plans render `cryptsetup luksAddKey`, `luksChangeKey`,
+and policy-blocked `luksKillSlot` commands for `luksKeyslots` lifecycle
+declarations. Executable add/change plans require a LUKS backing device and
+new key file; keyslot removal also requires a keyslot number.
 LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
 and policy-gated `lvremove` commands for `thinPools` lifecycle declarations,
 with separate unresolved-input markers for target form and size. Thin-pool grow

@@ -197,6 +197,12 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controllers: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_slot: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_key_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
 }
 
@@ -225,6 +231,9 @@ impl ActionContext {
             && self.options.is_none()
             && self.namespace_id.is_none()
             && self.controllers.is_none()
+            && self.key_slot.is_none()
+            && self.key_file.is_none()
+            && self.new_key_file.is_none()
             && self.read_only.is_none()
     }
 }
@@ -427,6 +436,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "btrfsQgroups",
         "vdoVolumes",
         "physicalVolumes",
+        "luksKeyslots",
         "volumes",
         "volumeGroups",
         "thinPools",
@@ -834,6 +844,9 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         options: lifecycle_options(object),
         namespace_id: metadata_string_field(object, &["namespaceId", "nsid"]),
         controllers: metadata_string_field(object, &["controllers", "controllerId", "controller"]),
+        key_slot: metadata_string_field(object, &["keySlot", "key-slot", "slot"]),
+        key_file: metadata_string_field(object, &["keyFile", "key-file", "currentKeyFile"]),
+        new_key_file: metadata_string_field(object, &["newKeyFile", "new-key-file"]),
         property_assignments: property_assignments(object),
         ..ActionContext::default()
     }
@@ -1612,6 +1625,23 @@ fn classify_property_change(collection: &str, property: &str) -> (RiskClass, Opt
         );
     }
 
+    if collection == "luksKeyslots" {
+        return (
+            RiskClass::OfflineRequired,
+            Some(Advice {
+                summary: format!(
+                    "LUKS keyslot property {property} updates encrypted-container access material"
+                ),
+                alternatives: vec![
+                    "verify at least one independent recovery key before changing key material"
+                        .to_string(),
+                    "add and test a replacement key before removing the old keyslot".to_string(),
+                    "back up the LUKS header before keyslot changes".to_string(),
+                ],
+            }),
+        );
+    }
+
     (RiskClass::Safe, None)
 }
 
@@ -1767,6 +1797,29 @@ fn add_destroy_guard(
                         "verify the origin LV is readable without the cache before removing cache media"
                             .to_string(),
                         "keep the cache pool intact until post-uncache verification passes".to_string(),
+                    ],
+                }),
+            });
+            return;
+        }
+        if collection == "luksKeyslots" {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:destroy").to_ascii_lowercase(),
+                description: format!("remove LUKS keyslot {name}"),
+                operation: Operation::Destroy,
+                risk: RiskClass::PotentialDataLoss,
+                destructive: false,
+                context: lifecycle_context(collection, name, object),
+                advice: Some(Advice {
+                    summary:
+                        "removing a LUKS keyslot can lock out encrypted data if no other key works"
+                            .to_string(),
+                    alternatives: vec![
+                        "verify another passphrase, key file, or token unlocks the device first"
+                            .to_string(),
+                        "take a LUKS header backup before keyslot removal".to_string(),
+                        "add and test a replacement keyslot before killing the old slot"
+                            .to_string(),
                     ],
                 }),
             });
@@ -2070,6 +2123,20 @@ fn classify_operation(
                     "inspect signatures and backups before pvcreate".to_string(),
                     "reuse an existing PV when preserving volume-group data".to_string(),
                     "add a new device to the VG instead of reinitializing an existing PV"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Create if collection == "luksKeyslots" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "adding a LUKS keyslot changes access to the encrypted container"
+                    .to_string(),
+                alternatives: vec![
+                    "back up the LUKS header before enrolling new key material".to_string(),
+                    "test the new key before removing any existing recovery key".to_string(),
+                    "use an explicit keyslot only when site policy requires stable slot assignment"
                         .to_string(),
                 ],
             }),
@@ -2486,6 +2553,19 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Destroy if collection == "luksKeyslots" => (
+            RiskClass::PotentialDataLoss,
+            false,
+            Some(Advice {
+                summary: "removing a LUKS keyslot can lock out encrypted data if no other key works"
+                    .to_string(),
+                alternatives: vec![
+                    "verify another passphrase, key file, or token unlocks the device first".to_string(),
+                    "take a LUKS header backup before keyslot removal".to_string(),
+                    "add and test a replacement keyslot before killing the old slot".to_string(),
+                ],
+            }),
+        ),
         Operation::Destroy if collection == "physicalVolumes" => (
             RiskClass::Destructive,
             true,
@@ -2835,6 +2915,42 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "grow the backing device before cryptsetup resize".to_string(),
                     "resize consumers only after the mapper reports the new capacity".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
+            operation: Operation::Create,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LUKS keyslot enrollment changes encrypted-container access".to_string(),
+                alternatives: vec![
+                    "back up the LUKS header before adding key material".to_string(),
+                    "test the new key before removing any old keyslot".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
+            operation: Operation::SetProperty,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LUKS key changes update header access material".to_string(),
+                alternatives: vec![
+                    "verify a recovery key still unlocks the container".to_string(),
+                    "stage replacement key material before deleting old access".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LuksContainer,
+            operation: Operation::Destroy,
+            risk: RiskClass::PotentialDataLoss,
+            advice: Some(Advice {
+                summary: "LUKS keyslot removal can lock out encrypted data".to_string(),
+                alternatives: vec![
+                    "verify another key or token unlocks the device first".to_string(),
+                    "take a LUKS header backup before killing a slot".to_string(),
                 ],
             }),
         },
@@ -4138,6 +4254,36 @@ mod tests {
     }
 
     #[test]
+    fn luks_keyslot_capabilities_describe_header_lifecycle() {
+        let capabilities = default_capabilities();
+        let create = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LuksContainer
+                    && capability.operation == Operation::Create
+            })
+            .expect("LUKS keyslot create capability should exist");
+        let change = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LuksContainer
+                    && capability.operation == Operation::SetProperty
+            })
+            .expect("LUKS keyslot change capability should exist");
+        let destroy = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LuksContainer
+                    && capability.operation == Operation::Destroy
+            })
+            .expect("LUKS keyslot destroy capability should exist");
+
+        assert_eq!(create.risk, RiskClass::OfflineRequired);
+        assert_eq!(change.risk, RiskClass::OfflineRequired);
+        assert_eq!(destroy.risk, RiskClass::PotentialDataLoss);
+    }
+
+    #[test]
     fn iscsi_and_lun_capabilities_describe_host_lifecycle() {
         let capabilities = default_capabilities();
         let lun_create = capabilities
@@ -4904,6 +5050,85 @@ mod tests {
         assert_eq!(
             close.context.device.as_deref(),
             Some("/dev/disk/by-id/old-luks")
+        );
+    }
+
+    #[test]
+    fn plan_classifies_luks_keyslot_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luksKeyslots": {
+                "cryptroot:1": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "keySlot": "1",
+                    "newKeyFile": "/run/keys/root-new"
+                  }
+                },
+                "cryptroot:2": {
+                  "destroy": true,
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "keySlot": "2"
+                  }
+                },
+                "cryptroot:3": {
+                  "properties": {
+                    "keyFile": "/run/keys/root-rotated"
+                  },
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "keySlot": "3",
+                    "keyFile": "/run/keys/root-old"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.potential_data_loss_count, 1);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lukskeyslots:cryptroot:1:create")
+            .expect("LUKS keyslot create action exists");
+        assert_eq!(create.risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            create.context.device.as_deref(),
+            Some("/dev/disk/by-id/root-luks")
+        );
+        assert_eq!(create.context.key_slot.as_deref(), Some("1"));
+        assert_eq!(
+            create.context.new_key_file.as_deref(),
+            Some("/run/keys/root-new")
+        );
+
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lukskeyslots:cryptroot:2:destroy")
+            .expect("LUKS keyslot destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::PotentialDataLoss);
+        assert!(!destroy.destructive);
+
+        let change = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luksKeyslots:cryptroot:3:set-property:keyFile")
+            .expect("LUKS keyslot change action exists");
+        assert_eq!(change.risk, RiskClass::OfflineRequired);
+        assert_eq!(change.context.key_slot.as_deref(), Some("3"));
+        assert_eq!(
+            change.context.key_file.as_deref(),
+            Some("/run/keys/root-old")
+        );
+        assert_eq!(
+            change.context.property_value.as_deref(),
+            Some("/run/keys/root-rotated")
         );
     }
 

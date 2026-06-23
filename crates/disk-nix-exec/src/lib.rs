@@ -1233,6 +1233,27 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Create | Operation::SetProperty | Operation::Destroy
+            if collection == Some("luksKeyslots") =>
+        {
+            let device = luks_keyslot_device(action);
+            (
+                vec![
+                    luks_dump_command(device, "verify LUKS header and keyslot metadata"),
+                    command(
+                        ["disk-nix", "inspect", device.unwrap_or("<luks-device>"), "--json"],
+                        false,
+                        "verify modeled LUKS container relationships after keyslot change",
+                    ),
+                ],
+                vec![
+                    "at least one reviewed keyslot or token remains usable after the change"
+                        .to_string(),
+                    "LUKS header backup and keyslot inventory match the desired access policy"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Create
         | Operation::AddDevice
         | Operation::ReplaceDevice
@@ -2560,6 +2581,13 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     property,
                     &property_assignment,
                 )
+            } else if collection == Some("luksKeyslots") {
+                luks_change_key_command(
+                    luks_keyslot_device(action),
+                    luks_keyslot_id(action),
+                    action.context.key_file.as_deref(),
+                    action.context.property_value.as_deref(),
+                )
             } else {
                 set_property_command(collection, target, property, &property_assignment)
             };
@@ -3031,6 +3059,22 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("luksKeyslots") => {
+            let device = luks_keyslot_device(action);
+            let key_slot = luks_keyslot_id(action);
+            let new_key_file = luks_new_key_file(action);
+            (
+                vec![
+                    luks_dump_command(device, "inspect LUKS header before adding keyslot"),
+                    luks_add_key_command(device, key_slot, new_key_file),
+                ],
+                vec![
+                    "back up the LUKS header before enrolling new key material".to_string(),
+                    "test the new keyslot before removing any old recovery key".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Destroy if collection == Some("luks.devices") => {
             let mapper = target.unwrap_or("<mapper>");
             (
@@ -3051,6 +3095,22 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         .to_string(),
                     "verify no services still depend on the mapper path".to_string(),
                     "keep the backing LUKS header intact for later reopen".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("luksKeyslots") => {
+            let device = luks_keyslot_device(action);
+            let key_slot = luks_keyslot_id(action);
+            (
+                vec![
+                    luks_dump_command(device, "inspect LUKS keyslots before removal"),
+                    luks_kill_slot_command(device, key_slot),
+                ],
+                vec![
+                    "verify another key, token, or recovery passphrase unlocks the device first"
+                        .to_string(),
+                    "keep a LUKS header backup until post-removal unlock testing passes".to_string(),
                 ],
                 true,
             )
@@ -5838,6 +5898,153 @@ fn luks_open_command(device: Option<&str>, mapper: &str, note: &str) -> Executio
     }
 }
 
+fn luks_keyslot_device(action: &PlannedAction) -> Option<&str> {
+    action.context.device.as_deref().or(action
+        .context
+        .target
+        .as_deref()
+        .filter(|target| target.starts_with('/')))
+}
+
+fn luks_keyslot_id(action: &PlannedAction) -> Option<&str> {
+    action.context.key_slot.as_deref().or_else(|| {
+        action
+            .context
+            .name
+            .as_deref()
+            .and_then(|name| name.rsplit_once(':').map(|(_, slot)| slot).or(Some(name)))
+            .filter(|slot| slot.chars().all(|character| character.is_ascii_digit()))
+    })
+}
+
+fn luks_new_key_file(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .new_key_file
+        .as_deref()
+        .or(action.context.key_file.as_deref())
+}
+
+fn luks_dump_command(device: Option<&str>, note: &'static str) -> ExecutionCommand {
+    match device {
+        Some(device) => command(["cryptsetup", "luksDump", device], false, note),
+        None => command_with_readiness(
+            ["cryptsetup", "luksDump", "<luks-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["LUKS backing device"],
+            note,
+        ),
+    }
+}
+
+fn luks_add_key_command(
+    device: Option<&str>,
+    key_slot: Option<&str>,
+    new_key_file: Option<&str>,
+) -> ExecutionCommand {
+    let mut argv = vec!["cryptsetup".to_string(), "luksAddKey".to_string()];
+    if let Some(key_slot) = key_slot {
+        argv.extend(["--key-slot".to_string(), key_slot.to_string()]);
+    }
+    argv.push(device.unwrap_or("<luks-device>").to_string());
+    argv.push(new_key_file.unwrap_or("<new-key-file>").to_string());
+
+    let missing = missing_luks_add_key_inputs(device, new_key_file);
+    if missing.is_empty() {
+        command_vec(argv, true, "add reviewed key material to the LUKS header")
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "add LUKS key material after selecting the device and new key file",
+        )
+    }
+}
+
+fn luks_kill_slot_command(device: Option<&str>, key_slot: Option<&str>) -> ExecutionCommand {
+    match (device, key_slot) {
+        (Some(device), Some(key_slot)) => command(
+            ["cryptsetup", "luksKillSlot", device, key_slot],
+            true,
+            "remove the reviewed LUKS keyslot after alternate unlock paths are verified",
+        ),
+        (device, key_slot) => command_vec_with_readiness(
+            vec![
+                "cryptsetup".to_string(),
+                "luksKillSlot".to_string(),
+                device.unwrap_or("<luks-device>").to_string(),
+                key_slot.unwrap_or("<key-slot>").to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_luks_keyslot_inputs(device, key_slot),
+            "remove LUKS keyslot after selecting the device and slot number",
+        ),
+    }
+}
+
+fn luks_change_key_command(
+    device: Option<&str>,
+    key_slot: Option<&str>,
+    old_key_file: Option<&str>,
+    new_key_file: Option<&str>,
+) -> ExecutionCommand {
+    let mut argv = vec!["cryptsetup".to_string(), "luksChangeKey".to_string()];
+    if let Some(key_slot) = key_slot {
+        argv.extend(["--key-slot".to_string(), key_slot.to_string()]);
+    }
+    if let Some(old_key_file) = old_key_file {
+        argv.extend(["--key-file".to_string(), old_key_file.to_string()]);
+    }
+    argv.push(device.unwrap_or("<luks-device>").to_string());
+    argv.push(new_key_file.unwrap_or("<new-key-file>").to_string());
+
+    let missing = missing_luks_add_key_inputs(device, new_key_file);
+    if missing.is_empty() {
+        command_vec(
+            argv,
+            true,
+            "change LUKS key material for the reviewed keyslot",
+        )
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "change LUKS key material after selecting the device and replacement key file",
+        )
+    }
+}
+
+fn missing_luks_add_key_inputs(
+    device: Option<&str>,
+    new_key_file: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if device.is_none() {
+        missing.push("LUKS backing device");
+    }
+    if new_key_file.is_none() {
+        missing.push("new key file");
+    }
+    missing
+}
+
+fn missing_luks_keyslot_inputs(device: Option<&str>, key_slot: Option<&str>) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if device.is_none() {
+        missing.push("LUKS backing device");
+    }
+    if key_slot.is_none() {
+        missing.push("LUKS keyslot number");
+    }
+    missing
+}
+
 fn vdo_grow_logical_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
     match desired_size {
         Some(size) => command_vec(
@@ -7941,6 +8148,153 @@ mod tests {
         assert!(report.command_plan[0].commands.iter().any(|command| {
             command.argv == ["blockdev", "--rereadpt", "/dev/disk/by-id/nvme-root"]
                 && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+    }
+
+    #[test]
+    fn luks_keyslot_lifecycle_reports_cryptsetup_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "luksKeyslots": {
+                  "cryptroot:1": {
+                    "operation": "create",
+                    "device": "/dev/disk/by-id/root-luks",
+                    "metadata": {
+                      "keySlot": "1",
+                      "newKeyFile": "/run/keys/root-new"
+                    }
+                  },
+                  "cryptroot:3": {
+                    "properties": {
+                      "keyFile": "/run/keys/root-rotated"
+                    },
+                    "device": "/dev/disk/by-id/root-luks",
+                    "metadata": {
+                      "keySlot": "3",
+                      "keyFile": "/run/keys/root-old"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lukskeyslots:cryptroot:1:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "luksAddKey",
+                            "--key-slot",
+                            "1",
+                            "/dev/disk/by-id/root-luks",
+                            "/run/keys/root-new",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luksKeyslots:cryptroot:3:set-property:keyFile"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "luksChangeKey",
+                            "--key-slot",
+                            "3",
+                            "--key-file",
+                            "/run/keys/root-old",
+                            "/dev/disk/by-id/root-luks",
+                            "/run/keys/root-rotated",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "lukskeyslots:cryptroot:1:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
+                })
+        }));
+    }
+
+    #[test]
+    fn luks_keyslot_lifecycle_reports_missing_inputs_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "luksKeyslots": {
+                  "root-add": {
+                    "operation": "create"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lukskeyslots:root-add:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "luksAddKey",
+                            "<luks-device>",
+                            "<new-key-file>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["LUKS backing device", "new key file"]
+                })
+        }));
+    }
+
+    #[test]
+    fn luks_keyslot_destroy_renderer_uses_cryptsetup_kill_slot() {
+        let action = PlannedAction {
+            id: "lukskeyslots:cryptroot:2:destroy".to_string(),
+            description: "remove LUKS keyslot".to_string(),
+            operation: Operation::Destroy,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("luksKeyslots".to_string()),
+                name: Some("cryptroot:2".to_string()),
+                device: Some("/dev/disk/by-id/root-luks".to_string()),
+                key_slot: Some("2".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+
+        let (commands, _, requires_manual_review) = commands_for_action(&action);
+
+        assert!(requires_manual_review);
+        assert!(commands.iter().any(|command| {
+            command.argv
+                == [
+                    "cryptsetup",
+                    "luksKillSlot",
+                    "/dev/disk/by-id/root-luks",
+                    "2",
+                ]
                 && command.readiness == CommandReadiness::Ready
         }));
     }

@@ -59,6 +59,9 @@ Examples:
   smaller filesystem and migrating data.
 - `preserveData = false` is classified as destructive because it permits
   formatting or replacement.
+- LUKS keyslot add and change operations are offline-required header updates.
+  Keyslot removal is potential-data-loss because deleting the last usable
+  unlock path can make encrypted data inaccessible.
 - `removeDevices = [ ... ]` is classified as potential data loss and recommends
   replacement capacity, evacuation, and health verification. Btrfs filesystem
   device removal also verifies allocation state with `btrfs filesystem usage`
@@ -217,6 +220,7 @@ Lifecycle collections currently accepted by the planner:
 - `partitions`
 - `swaps`
 - `luks.devices`
+- `luksKeyslots`
 - `btrfsSubvolumes`
 - `btrfsQgroups`
 - `vdoVolumes`
@@ -328,6 +332,11 @@ LVM physical volume command plans use `pvcreate`, `pvresize`, and `pvremove`
 for `physicalVolumes` lifecycle declarations. Executable plans require a
 concrete path-shaped target or `device`, and PV removal advice recommends
 `pvmove` plus `vgreduce` before `pvremove`.
+LUKS keyslot command plans use `cryptsetup luksAddKey`, `luksChangeKey`, and
+`luksKillSlot` for `luksKeyslots` lifecycle declarations. Executable add and
+change plans require a LUKS backing device and replacement key file; removal
+requires both the device and keyslot number and remains blocked by the
+potential-data-loss policy.
 LVM cache command plans use `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` for `lvmCaches` lifecycle
 declarations. Executable attach plans require an origin `vg/lv` target and a

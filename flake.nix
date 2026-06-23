@@ -191,6 +191,12 @@
               physicalVolumes."/dev/disk/by-id/nvme-pv-grow" = {
                 operation = "grow";
               };
+              luksKeyslots."cryptroot:1" = {
+                operation = "create";
+                device = "/dev/disk/by-id/root-luks";
+                keySlot = "1";
+                newKeyFile = "/run/keys/root-new";
+              };
               btrfsSubvolumes."/mnt/persist/@home" = {
                 operation = "create";
                 path = "/mnt/persist/@home";
@@ -385,6 +391,7 @@
               and .properties.btrfsQgroups["$ref"] == "#/$defs/lifecycleMap"
               and .properties.vdoVolumes["$ref"] == "#/$defs/lifecycleMap"
               and .properties.physicalVolumes["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.luksKeyslots["$ref"] == "#/$defs/lifecycleMap"
               and .properties.zvols["$ref"] == "#/$defs/lifecycleMap"
               and .properties.thinPools["$ref"] == "#/$defs/lifecycleMap"
               and .properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap"
@@ -403,6 +410,7 @@
               and (."$defs".specBody.properties.btrfsQgroups["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.vdoVolumes["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.physicalVolumes["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.luksKeyslots["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.zvols["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.thinPools["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap")
@@ -444,6 +452,9 @@
               and ."$defs".lifecycleObject.properties.portal.type == "string"
               and (."$defs".lifecycleObject.properties.namespaceId.type | index("string") != null)
               and ."$defs".lifecycleObject.properties.controllers.type == "string"
+              and (."$defs".lifecycleObject.properties.keySlot.type | index("string") != null)
+              and ."$defs".lifecycleObject.properties.keyFile.type == "string"
+              and ."$defs".lifecycleObject.properties.newKeyFile.type == "string"
               and ."$defs".lifecycleObject.properties.options.type == "string"
               and ."$defs".applyPolicy.properties.failOnBlocked.default == true
               and (."$defs".applyPolicy.properties.reportOut.type | index("string") != null)
@@ -464,8 +475,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 34
-              and .summary.offlineRequiredCount == 6
+              .summary.actionCount == 35
+              and .summary.offlineRequiredCount == 7
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -475,6 +486,7 @@
               and (.actions | any(.id == "volumes:vg0/scratch:create" and .risk == "online"))
               and (.actions | any(.id == "vdovolumes:archive:grow" and .risk == "online"))
               and (.actions | any(.id == "physicalvolumes:/dev/disk/by-id/nvme-pv-grow:grow" and .risk == "online"))
+              and (.actions | any(.id == "lukskeyslots:cryptroot:1:create" and .risk == "offline-required"))
               and (.actions | any(.id == "zvols:tank/vm/root:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/newthin:create" and .risk == "online"))
@@ -525,22 +537,22 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 11
-              and .apply.blockedSummary.offlineRequiredCount == 6
+              and .apply.blockedCount == 12
+              and .apply.blockedSummary.offlineRequiredCount == 7
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 11
+              and .apply.blockedCount == 12
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 11
-              and .messages[0] == "apply policy blocked 11 action(s)"
+              and .apply.blockedCount == 12
+              and .messages[0] == "apply policy blocked 12 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -625,6 +637,10 @@
                   and .spec.vdoVolumes.archive.operation == "grow"
                   and .spec.vdoVolumes.archive.desiredSize == "4TiB"
                   and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
+                  and .spec.luksKeyslots."cryptroot:1".operation == "create"
+                  and .spec.luksKeyslots."cryptroot:1".device == "/dev/disk/by-id/root-luks"
+                  and .spec.luksKeyslots."cryptroot:1".keySlot == "1"
+                  and .spec.luksKeyslots."cryptroot:1".newKeyFile == "/run/keys/root-new"
                   and .spec.zvols."tank/vm/root".operation == "grow"
                   and .spec.zvols."tank/vm/root".desiredSize == "80GiB"
                   and .spec.thinPools."vg0/thinpool".operation == "grow"

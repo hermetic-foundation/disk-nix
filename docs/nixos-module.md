@@ -164,6 +164,7 @@ Typed lifecycle declarations are available for:
 - `btrfsQgroups`
 - `vdoVolumes`
 - `physicalVolumes`
+- `luksKeyslots`
 - `volumes`
 - `volumeGroups`
 - `thinPools`
@@ -317,6 +318,12 @@ Example lifecycle planning through NixOS options:
       operation = "create";
       device = "vg0/root-cache";
       properties."lvm.cache-mode" = "writethrough";
+    };
+    luksKeyslots."cryptroot:1" = {
+      operation = "create";
+      device = "/dev/disk/by-id/root-luks";
+      keySlot = "1";
+      newKeyFile = "/run/keys/root-new";
     };
     loopDevices."/dev/loop7" = {
       operation = "create";

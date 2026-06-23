@@ -562,6 +562,9 @@ fn spec_schema() -> serde_json::Value {
             "physicalVolumes": {
                 "$ref": "#/$defs/lifecycleMap"
             },
+            "luksKeyslots": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
             "volumes": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -630,6 +633,7 @@ fn spec_schema() -> serde_json::Value {
                     "btrfsQgroups": { "$ref": "#/$defs/lifecycleMap" },
                     "vdoVolumes": { "$ref": "#/$defs/lifecycleMap" },
                     "physicalVolumes": { "$ref": "#/$defs/lifecycleMap" },
+                    "luksKeyslots": { "$ref": "#/$defs/lifecycleMap" },
                     "volumes": { "$ref": "#/$defs/lifecycleMap" },
                     "volumeGroups": { "$ref": "#/$defs/lifecycleMap" },
                     "thinPools": { "$ref": "#/$defs/lifecycleMap" },
@@ -804,6 +808,9 @@ fn spec_schema() -> serde_json::Value {
                     "controllers": { "type": "string" },
                     "controllerId": { "type": ["string", "number"] },
                     "controller": { "type": ["string", "number"] },
+                    "keySlot": { "type": ["string", "number"] },
+                    "keyFile": { "type": "string" },
+                    "newKeyFile": { "type": "string" },
                     "options": { "type": "string" },
                     "priority": { "type": "integer" },
                     "randomEncryption": { "type": "boolean" },
