@@ -1941,6 +1941,18 @@ fn usage_details(node: &Node) -> String {
         ("nfs.addr", "addr"),
         ("nfs.rsize", "rsize"),
         ("nfs.wsize", "wsize"),
+        ("ext.state", "ext-state"),
+        ("ext.errors-behavior", "errors"),
+        ("ext.block-count", "blocks"),
+        ("ext.free-blocks", "free-blocks"),
+        ("ext.block-size", "block-size"),
+        ("ext.inode-count", "inodes"),
+        ("ext.free-inodes", "free-inodes"),
+        ("ext.features", "features"),
+        ("ext.mount-count", "mount-count"),
+        ("ext.last-checked", "last-checked"),
+        ("ext.lifetime-writes", "lifetime-writes"),
+        ("ext.journal-size", "journal-size"),
         ("exfat.volume-serial", "serial"),
         ("exfat.volume-length-sectors", "sectors"),
         ("exfat.cluster-count", "clusters"),
@@ -2378,6 +2390,25 @@ mod tests {
         assert_eq!(
             usage_details(&xfs),
             "xfs-blocks=262144 xfs-bsize=4096 reflink=1 bigtime=1"
+        );
+
+        let ext = Node::new("fs:/dev/sda2", NodeKind::Filesystem, "ext4")
+            .with_property("filesystem.type", "ext4")
+            .with_property("ext.state", "clean")
+            .with_property("ext.errors-behavior", "Continue")
+            .with_property("ext.block-count", "122096646")
+            .with_property("ext.free-blocks", "73328197")
+            .with_property("ext.block-size", "4096")
+            .with_property("ext.inode-count", "30531584")
+            .with_property("ext.free-inodes", "27187554")
+            .with_property("ext.features", "has_journal extent metadata_csum")
+            .with_property("ext.mount-count", "12")
+            .with_property("ext.last-checked", "Mon Jan 01 00:00:00 2024")
+            .with_property("ext.lifetime-writes", "189 GB")
+            .with_property("ext.journal-size", "1024M");
+        assert_eq!(
+            usage_details(&ext),
+            "fstype=ext4 ext-state=clean errors=Continue blocks=122096646 free-blocks=73328197 block-size=4096 inodes=30531584 free-inodes=27187554 features=has_journal extent metadata_csum mount-count=12 last-checked=Mon Jan 01 00:00:00 2024 lifetime-writes=189 GB journal-size=1024M"
         );
 
         let exfat = Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
