@@ -1872,19 +1872,14 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Grow if collection == Some("loopDevices") => {
-            let target = target.unwrap_or("<loop-device>");
+            let target = loop_device_target_path(action);
             (
                 vec![
-                    command(
-                        ["losetup", "--json", "--list", target],
-                        false,
+                    loop_device_list_command(
+                        target,
                         "inspect loop device before refreshing backing size",
                     ),
-                    command(
-                        ["losetup", "-c", target],
-                        true,
-                        "refresh the loop device size after backing storage growth",
-                    ),
+                    loop_device_refresh_command(target),
                 ],
                 vec![
                     "grow the backing file or block device before refreshing the loop mapping"
@@ -3259,19 +3254,14 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Destroy if collection == Some("loopDevices") => {
-            let target = target.unwrap_or("<loop-device>");
+            let target = loop_device_target_path(action);
             (
                 vec![
-                    command(
-                        ["losetup", "--json", "--list", target],
-                        false,
+                    loop_device_list_command(
+                        target,
                         "inspect loop device and backing file before detach",
                     ),
-                    command(
-                        ["losetup", "--detach", target],
-                        true,
-                        "detach the loop device without deleting the backing file",
-                    ),
+                    loop_device_detach_command(target),
                 ],
                 vec![
                     "unmount filesystems and deactivate mappings before detach".to_string(),
@@ -5455,6 +5445,68 @@ fn loop_device_create_command(target: &str, backing: Option<&str>) -> ExecutionC
             CommandReadiness::NeedsDomainImplementation,
             ["backing file or block device"],
             "create a loop-device mapping after selecting the backing path",
+        ),
+    }
+}
+
+fn loop_device_target_path(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .target
+        .as_deref()
+        .filter(|target| target.starts_with("/dev/loop"))
+        .or_else(|| {
+            action
+                .context
+                .name
+                .as_deref()
+                .filter(|name| name.starts_with("/dev/loop"))
+        })
+}
+
+fn loop_device_list_command(target: Option<&str>, description: &'static str) -> ExecutionCommand {
+    match target {
+        Some(target) => command(["losetup", "--json", "--list", target], false, description),
+        None => command_with_readiness(
+            ["losetup", "--json", "--list", "<loop-device>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["loop device path"],
+            description,
+        ),
+    }
+}
+
+fn loop_device_refresh_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["losetup", "-c", target],
+            true,
+            "refresh the loop device size after backing storage growth",
+        ),
+        None => command_with_readiness(
+            ["losetup", "-c", "<loop-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["loop device path"],
+            "refresh the loop device size after backing storage growth",
+        ),
+    }
+}
+
+fn loop_device_detach_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["losetup", "--detach", target],
+            true,
+            "detach the loop device without deleting the backing file",
+        ),
+        None => command_with_readiness(
+            ["losetup", "--detach", "<loop-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["loop device path"],
+            "detach the loop device without deleting the backing file",
         ),
     }
 }
@@ -7988,6 +8040,50 @@ mod tests {
             step.commands
                 .iter()
                 .any(|command| command.argv == ["losetup", "--json", "--list", "/dev/loop8"])
+        }));
+    }
+
+    #[test]
+    fn loop_device_update_and_detach_require_stable_loop_path_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "loopDevices": {
+                  "root-image": {
+                    "operation": "grow"
+                  },
+                  "old-image": {
+                    "operation": "destroy"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "loopdevices:root-image:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["losetup", "-c", "<loop-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["loop device path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "loopdevices:old-image:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["losetup", "--detach", "<loop-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["loop device path"]
+                })
         }));
     }
 
