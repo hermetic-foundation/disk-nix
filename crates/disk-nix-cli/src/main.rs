@@ -1707,20 +1707,21 @@ fn print_multipath(output: &mut impl Write, graph: &StorageGraph) -> io::Result<
 fn print_nvme(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<24} {:>12} {:>12} {:>7} {:<20} DETAILS",
-        "KIND", "NAME", "SIZE", "USED", "USE%", "SERIAL"
+        "{:<22} {:<24} {:>12} {:>12} {:>7} {:<20} {:<18} DETAILS",
+        "KIND", "NAME", "SIZE", "USED", "USE%", "SERIAL", "CONTROLLER"
     )?;
     for node in graph.nodes.iter().filter(|node| is_nvme_node(node)) {
         let usage = node.usage.as_ref();
         writeln!(
             output,
-            "{:<22} {:<24} {:>12} {:>12} {:>7} {:<20} {}",
+            "{:<22} {:<24} {:>12} {:>12} {:>7} {:<20} {:<18} {}",
             node.kind,
             node.name,
             human_bytes(node.size_bytes),
             human_bytes(usage.and_then(|usage| usage.used_bytes)),
             usage_percent(node),
             node.identity.serial.as_deref().unwrap_or("-"),
+            property_value(node, "nvme.controller").unwrap_or("-"),
             usage_details(node)
         )?;
     }
@@ -2544,9 +2545,15 @@ fn usage_details(node: &Node) -> String {
         ("vendor", "vendor"),
         ("transport", "transport"),
         ("rotational", "rotational"),
+        ("nvme.generic-path", "generic"),
         ("nvme.model", "nvme-model"),
+        ("nvme.product", "product"),
         ("nvme.firmware", "firmware"),
         ("nvme.index", "ns-index"),
+        ("nvme.namespace", "namespace"),
+        ("nvme.subsystem", "subsystem"),
+        ("nvme.controller", "controller"),
+        ("nvme.address", "address"),
         ("nvme.maximum-lba", "max-lba"),
         ("nvme.sector-size", "sector-size"),
         ("lsblk.type", "lsblk-type"),
@@ -3259,6 +3266,10 @@ mod tests {
             &Node::new("block:/dev/nvme1n1", NodeKind::PhysicalDisk, "/dev/nvme1n1")
                 .with_property("nvme.model", "Example NVMe")
         ));
+        assert!(is_nvme_node(
+            &Node::new("block:/dev/nvme2n1", NodeKind::PhysicalDisk, "/dev/nvme2n1")
+                .with_property("nvme.subsystem", "nvme-subsys0")
+        ));
         assert!(is_raid_node(&Node::new(
             "md:/dev/md0",
             NodeKind::MdRaid,
@@ -3328,8 +3339,12 @@ mod tests {
                 .with_property("transport", "nvme")
                 .with_property("rotational", "false")
                 .with_property("nvme.model", "Example NVMe")
+                .with_property("nvme.product", "Example Controller")
                 .with_property("nvme.firmware", "1.0")
                 .with_property("nvme.index", "0")
+                .with_property("nvme.namespace", "1")
+                .with_property("nvme.subsystem", "nvme-subsys0")
+                .with_property("nvme.controller", "nvme0")
                 .with_property("nvme.maximum-lba", "1953125")
                 .with_property("nvme.sector-size", "512")
                 .with_property("partition.table", "gpt")
@@ -3390,10 +3405,10 @@ mod tests {
         let output = String::from_utf8(output).expect("table is utf8");
 
         assert!(output.contains("DETAILS"));
-        assert!(
-            output
-                .contains("model=FastDisk vendor=Acme transport=nvme rotational=false nvme-model=Example NVMe firmware=1.0 ns-index=0 max-lba=1953125 sector-size=512 ptable=gpt")
-        );
+        assert!(output.contains("model=FastDisk vendor=Acme transport=nvme rotational=false"));
+        assert!(output.contains("nvme-model=Example NVMe product=Example Controller firmware=1.0"));
+        assert!(output.contains("ns-index=0 namespace=1 subsystem=nvme-subsys0 controller=nvme0"));
+        assert!(output.contains("max-lba=1953125 sector-size=512 ptable=gpt"));
         assert!(output.contains("udev-link=disk/by-id/nvme-Acme_FastDisk"));
         assert!(output.contains("lsblk-type=part fstype=vfat partno=1 udev-fstype=vfat"));
         assert!(output.contains(
@@ -3688,14 +3703,20 @@ mod tests {
             NodeKind::NvmeNamespace,
             "/dev/nvme0n1",
         )
+        .with_property("nvme.generic-path", "/dev/ng0n1")
         .with_property("nvme.model", "Example NVMe")
+        .with_property("nvme.product", "Example Controller")
         .with_property("nvme.firmware", "1.0")
         .with_property("nvme.index", "0")
+        .with_property("nvme.namespace", "1")
+        .with_property("nvme.subsystem", "nvme-subsys0")
+        .with_property("nvme.controller", "nvme0")
+        .with_property("nvme.address", "0000:01:00.0")
         .with_property("nvme.maximum-lba", "1953125")
         .with_property("nvme.sector-size", "512");
         assert_eq!(
             usage_details(&nvme),
-            "nvme-model=Example NVMe firmware=1.0 ns-index=0 max-lba=1953125 sector-size=512"
+            "generic=/dev/ng0n1 nvme-model=Example NVMe product=Example Controller firmware=1.0 ns-index=0 namespace=1 subsystem=nvme-subsys0 controller=nvme0 address=0000:01:00.0 max-lba=1953125 sector-size=512"
         );
     }
 
@@ -4705,9 +4726,15 @@ mod tests {
                 serial: Some("SERIAL123".to_string()),
                 ..Identity::default()
             })
+            .with_property("nvme.generic-path", "/dev/ng0n1")
             .with_property("nvme.model", "Example NVMe")
+            .with_property("nvme.product", "Example Controller")
             .with_property("nvme.firmware", "1.0")
             .with_property("nvme.index", "0")
+            .with_property("nvme.namespace", "1")
+            .with_property("nvme.subsystem", "nvme-subsys0")
+            .with_property("nvme.controller", "nvme0")
+            .with_property("nvme.address", "0000:01:00.0")
             .with_property("nvme.maximum-lba", "1953125")
             .with_property("nvme.sector-size", "512"),
         );
@@ -4717,12 +4744,17 @@ mod tests {
         let output = String::from_utf8(output).expect("table is utf8");
 
         assert!(output.contains("SERIAL"));
+        assert!(output.contains("CONTROLLER"));
         assert!(output.contains("USE%"));
         assert!(output.contains("/dev/nvme0n1"));
         assert!(output.contains("SERIAL123"));
+        assert!(output.contains("nvme0"));
         assert!(output.contains("40.0%"));
-        assert!(output.contains("nvme-model=Example NVMe firmware=1.0"));
-        assert!(output.contains("ns-index=0 max-lba=1953125 sector-size=512"));
+        assert!(output.contains("generic=/dev/ng0n1 nvme-model=Example NVMe"));
+        assert!(output.contains("product=Example Controller firmware=1.0"));
+        assert!(output.contains("ns-index=0 namespace=1 subsystem=nvme-subsys0"));
+        assert!(output.contains("controller=nvme0 address=0000:01:00.0"));
+        assert!(output.contains("max-lba=1953125 sector-size=512"));
     }
 
     #[test]

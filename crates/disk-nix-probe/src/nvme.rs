@@ -14,10 +14,20 @@ struct NvmeList {
 #[serde(rename_all = "PascalCase")]
 struct NvmeDevice {
     device_path: Option<String>,
+    generic: Option<String>,
     model_number: Option<String>,
+    product_name: Option<String>,
     serial_number: Option<String>,
     firmware: Option<String>,
     index: Option<u64>,
+    #[serde(alias = "NameSpace")]
+    namespace: Option<u64>,
+    #[serde(rename = "SubSystem", alias = "Subsystem", alias = "SubsystemNQN")]
+    subsystem: Option<String>,
+    #[serde(alias = "Controller")]
+    controller: Option<String>,
+    #[serde(alias = "Address", alias = "TransportAddress")]
+    address: Option<String>,
     physical_size: Option<u64>,
     used_bytes: Option<u64>,
     maximum_lba: Option<u64>,
@@ -67,9 +77,18 @@ fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
     }
 
     for (key, value) in [
+        ("nvme.generic-path", device.generic),
         ("nvme.model", device.model_number),
+        ("nvme.product", device.product_name),
         ("nvme.firmware", device.firmware),
         ("nvme.index", device.index.map(|value| value.to_string())),
+        (
+            "nvme.namespace",
+            device.namespace.map(|value| value.to_string()),
+        ),
+        ("nvme.subsystem", device.subsystem),
+        ("nvme.controller", device.controller),
+        ("nvme.address", device.address),
         (
             "nvme.maximum-lba",
             device.maximum_lba.map(|value| value.to_string()),
@@ -98,10 +117,16 @@ mod tests {
   "Devices": [
     {
       "DevicePath": "/dev/nvme0n1",
+      "Generic": "/dev/ng0n1",
       "ModelNumber": "Example NVMe",
+      "ProductName": "Example Controller",
       "SerialNumber": "SERIAL123",
       "Firmware": "1.0",
       "Index": 0,
+      "NameSpace": 1,
+      "SubSystem": "nvme-subsys0",
+      "Controller": "nvme0",
+      "Address": "0000:01:00.0",
       "PhysicalSize": 1000,
       "UsedBytes": 400,
       "MaximumLBA": 1953125,
@@ -127,6 +152,30 @@ mod tests {
             node.properties
                 .iter()
                 .any(|property| property.key == "nvme.model" && property.value == "Example NVMe")
+        );
+        assert!(node.properties.iter().any(|property| {
+            property.key == "nvme.generic-path" && property.value == "/dev/ng0n1"
+        }));
+        assert!(node.properties.iter().any(|property| {
+            property.key == "nvme.product" && property.value == "Example Controller"
+        }));
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "nvme.namespace" && property.value == "1")
+        );
+        assert!(node.properties.iter().any(|property| {
+            property.key == "nvme.subsystem" && property.value == "nvme-subsys0"
+        }));
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "nvme.controller" && property.value == "nvme0")
+        );
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "nvme.address" && property.value == "0000:01:00.0")
         );
     }
 }

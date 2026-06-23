@@ -123,8 +123,9 @@ The current probe layer normalizes:
 - Multipath maps through `multipath -ll` for map name, WWID, dm device,
   vendor/product, map features, hardware handler, write-protect state,
   path-group policy/priority/status, and backing path device state
-- NVMe namespaces through `nvme list -o json` for namespace path, serial,
-  model, firmware, capacity, usage, LBA, and sector size
+- NVMe namespaces through `nvme list -o json` for namespace path, generic
+  namespace path, serial, model/product, firmware, subsystem, controller,
+  address, namespace id/index, capacity, usage, LBA, and sector size
 
 LVM probing may report `partial` when the process lacks permission to talk to
 device-mapper. That should not prevent the rest of discovery from succeeding.
