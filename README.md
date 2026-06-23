@@ -218,8 +218,8 @@ LVM thin-pool apply plans render reviewed `lvcreate --type thin-pool`,
 `vg/pool` targets or sizes.
 LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
 volume group lifecycle declarations, reviewed `vgextend` steps for grow
-operations with an explicit physical volume, and reviewed `vgreduce` steps for
-explicit physical-volume removal.
+operations with an explicit physical volume, and reviewed `pvmove` then
+`vgreduce` steps for explicit physical-volume removal.
 ZFS pool apply plans render gated `zpool create` commands from a single
 `device` or an explicit `devices` vdev list, gated `zpool destroy` commands,
 and reviewed topology updates such as `zpool add`, `zpool replace`, and

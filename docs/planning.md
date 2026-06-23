@@ -273,9 +273,9 @@ LVM volume group grow command plans use `vgextend <vg> <pv>` when a physical
 volume device is declared, and mark the command unresolved when it is missing.
 ZFS pool device removal renders reviewed `zpool remove <pool> <device>` steps
 when the pool layout supports evacuation. LVM volume group device removal
-renders reviewed `vgreduce <vg> <pv>` steps after `pvmove` or replacement
-capacity has evacuated allocated extents. These remain potential-data-loss
-intents unless a safer explicit workflow is selected.
+renders reviewed `pvmove <pv>` then `vgreduce <vg> <pv>` steps so allocated
+extents are evacuated before the physical volume is reduced. These remain
+potential-data-loss intents unless a safer explicit workflow is selected.
 `disk-nix apply --script-out <path>` writes those allowed command and
 verification plans as a reviewable bash script after policy validation passes.
 Commands with unresolved inputs remain commented as not ready.

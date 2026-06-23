@@ -2986,6 +2986,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         "inspect physical volume allocation before vgreduce",
                     ),
                     command(
+                        ["pvmove", device],
+                        true,
+                        "evacuate allocated extents from the reviewed physical volume before vgreduce",
+                    ),
+                    command(
                         ["vgreduce", target, device],
                         true,
                         "remove the reviewed physical volume from the LVM volume group after extents are evacuated",
@@ -4748,6 +4753,11 @@ mod tests {
         assert!(vg_commands.iter().any(|command| {
             command.argv == ["pvs", "--reportformat", "json", "/dev/disk/by-id/old-pv"]
                 && !command.mutates
+        }));
+        assert!(vg_commands.iter().any(|command| {
+            command.argv == ["pvmove", "/dev/disk/by-id/old-pv"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
         }));
         assert!(vg_commands.iter().any(|command| {
             command.argv == ["vgreduce", "vg0", "/dev/disk/by-id/old-pv"]
