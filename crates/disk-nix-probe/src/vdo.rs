@@ -241,6 +241,7 @@ fn add_volume(graph: &mut StorageGraph, volume: VdoVolume) {
     }
 
     for (key, value) in [
+        ("vdo.storage-device", volume.storage_device.clone()),
         ("vdo.logical-size", volume.logical_size),
         ("vdo.physical-size", volume.physical_size),
     ] {
@@ -447,6 +448,9 @@ Device                    1K-blocks    Used Available Use% Space saving%
                 .iter()
                 .any(|property| property.key == "vdo.compression" && property.value == "enabled")
         );
+        assert!(volume.properties.iter().any(|property| {
+            property.key == "vdo.storage-device" && property.value == "/dev/sdb"
+        }));
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0 == "block:/dev/sdb"
                 && edge.to.0 == "vdo:archive"

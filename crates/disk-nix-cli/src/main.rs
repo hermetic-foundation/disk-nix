@@ -1903,6 +1903,12 @@ fn usage_details(node: &Node) -> String {
         ("btrfs.parent-uuid", "parent-uuid"),
         ("btrfs.max-referenced", "max-rfer"),
         ("btrfs.max-exclusive", "max-excl"),
+        ("vdo.storage-device", "backing"),
+        ("vdo.logical-size", "logical"),
+        ("vdo.physical-size", "physical"),
+        ("vdo.stats-size", "stats-size"),
+        ("vdo.stats-used", "stats-used"),
+        ("vdo.stats-available", "stats-free"),
         ("vdo.use-percent", "vdo-use"),
         ("vdo.space-saving-percent", "saving"),
         ("vdo.operating-mode", "mode"),
@@ -2548,6 +2554,9 @@ mod tests {
                     free_bytes: Some(50),
                     allocated_bytes: None,
                 })
+                .with_property("vdo.storage-device", "/dev/sdb")
+                .with_property("vdo.logical-size", "100G")
+                .with_property("vdo.physical-size", "50G")
                 .with_property("vdo.use-percent", "50%")
                 .with_property("vdo.space-saving-percent", "20%")
                 .with_property("vdo.operating-mode", "normal")
@@ -2559,6 +2568,7 @@ mod tests {
         let output = String::from_utf8(output).expect("table is utf8");
 
         assert!(output.contains("DETAILS"));
+        assert!(output.contains("backing=/dev/sdb logical=100G physical=50G"));
         assert!(output.contains("vdo-use=50% saving=20% mode=normal write-policy=sync"));
     }
 
@@ -2845,6 +2855,9 @@ mod tests {
         );
         graph.add_node(
             Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_property("vdo.storage-device", "/dev/sdb")
+                .with_property("vdo.logical-size", "1T")
+                .with_property("vdo.physical-size", "250G")
                 .with_property("vdo.operating-mode", "normal")
                 .with_property("vdo.write-policy", "sync")
                 .with_property("vdo.compression", "enabled")
@@ -2882,7 +2895,7 @@ mod tests {
         );
         assert!(
             output.contains(
-                "mode=normal write-policy=sync compression=enabled deduplication=disabled"
+                "backing=/dev/sdb logical=1T physical=250G mode=normal write-policy=sync compression=enabled deduplication=disabled"
             )
         );
         assert!(output.contains(

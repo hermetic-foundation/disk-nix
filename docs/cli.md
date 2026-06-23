@@ -189,9 +189,10 @@ Use these commands for:
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
   counts, header area/epoch/flag details, data-segment cipher/offset/length
-  details, dm open/segment counters, multipath WWID/size/path state, VDO mode
-  and data-reduction settings, loop backing/offset/read-only/direct-I/O
-  settings, and bcache role/cache-set/tuning details such as label, state,
+  details, dm open/segment counters, multipath WWID/size/path state, VDO
+  backing device, logical/physical size, mode, and data-reduction settings,
+  loop backing/offset/read-only/direct-I/O settings, and bcache
+  role/cache-set/tuning details such as label, state,
   cache mode, readahead, sequential cutoff, and writeback rate when probes
   expose them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
@@ -205,8 +206,9 @@ Use these commands for:
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
   metadata detail data, including bcache role/set/state, cache mode,
   replacement policy, dirty data, writeback percentage, `blkid` signature
-  details, ext superblock details, NVMe namespace details, loop mapping
-  details, and active swap state/type/priority when probed
+  details, ext superblock details, VDO backing and logical/physical size
+  details, NVMe namespace details, loop mapping details, and active swap
+  state/type/priority when probed
 
 ## Inspect
 
