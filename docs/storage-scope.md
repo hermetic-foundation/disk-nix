@@ -54,8 +54,9 @@ The current probe layer normalizes:
 - `udevadm info --export-db` for block-device udev identity, by-id/by-path
   symlinks, serials, WWNs, filesystem IDs, partition metadata, and
   device-mapper properties
-- `findmnt --json --bytes` for mounted filesystems, pseudo filesystems, and
-  NFS exports
+- `findmnt --json --bytes` for mounted filesystems, pseudo filesystems, NFS
+  exports, tmpfs sizing and ownership options, bind source paths, overlayfs
+  lower/upper/work directories, mount propagation, and read/write state
 - `tune2fs -l` for ext2/ext3/ext4 superblock metadata, feature flags,
   filesystem state, mount/check counters, inode and block counts, UUIDs, labels,
   and computed capacity/usage where device access is permitted

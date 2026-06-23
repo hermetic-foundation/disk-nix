@@ -60,6 +60,12 @@ fn add_filesystem(
     if let Some(options) = &filesystem.options {
         mount = mount.with_property("mount.options", options.clone());
     }
+    if let Some(source) = &filesystem.source {
+        mount = mount.with_property("mount.source", source.clone());
+    }
+    for (key, value) in mount_option_properties(filesystem) {
+        mount = mount.with_property(key, value);
+    }
     if let Some(size) = filesystem.size {
         mount = mount.with_size_bytes(size);
     }
@@ -104,7 +110,7 @@ fn add_source(
     let source_id = source_id(kind, source);
     let mut node = Node::new(source_id.clone(), kind, source.to_string());
 
-    if source.starts_with("/dev/") {
+    if source.starts_with('/') {
         node = node.with_path(source.to_string());
     }
     if let Some(fstype) = &filesystem.fstype {
@@ -146,6 +152,92 @@ fn source_id(kind: NodeKind, source: &str) -> String {
     }
 }
 
+fn mount_option_properties(filesystem: &FindmntFilesystem) -> Vec<(String, String)> {
+    let mut properties = Vec::new();
+    let Some(options) = &filesystem.options else {
+        return properties;
+    };
+
+    for option in parse_options(options) {
+        match option.name.as_str() {
+            "ro" => properties.push(("mount.read-only".to_string(), "true".to_string())),
+            "rw" => properties.push(("mount.read-write".to_string(), "true".to_string())),
+            "bind" | "rbind" => properties.push(("mount.bind".to_string(), "true".to_string())),
+            "private" | "rprivate" | "shared" | "rshared" | "slave" | "rslave" | "unbindable"
+            | "runbindable" => properties.push((
+                "mount.propagation".to_string(),
+                option.name.trim_start_matches('r').to_string(),
+            )),
+            _ if option.name.starts_with("shared:")
+                || option.name.starts_with("master:")
+                || option.name.starts_with("propagate_from:") =>
+            {
+                properties.push(("mount.propagation.id".to_string(), option.name.clone()));
+            }
+            _ => {}
+        }
+
+        if filesystem.fstype.as_deref() == Some("tmpfs")
+            && matches!(
+                option.name.as_str(),
+                "size" | "nr_inodes" | "nr-inodes" | "mode" | "uid" | "gid" | "mpol"
+            )
+        {
+            if let Some(value) = &option.value {
+                properties.push((
+                    format!("tmpfs.{}", option.name.replace('_', "-")),
+                    value.clone(),
+                ));
+            }
+        }
+
+        if filesystem.fstype.as_deref() == Some("overlay")
+            && matches!(
+                option.name.as_str(),
+                "lowerdir"
+                    | "upperdir"
+                    | "workdir"
+                    | "index"
+                    | "metacopy"
+                    | "redirect_dir"
+                    | "xino"
+                    | "uuid"
+            )
+        {
+            if let Some(value) = &option.value {
+                properties.push((format!("overlay.{}", option.name), value.clone()));
+            }
+        }
+    }
+
+    properties
+}
+
+fn parse_options(options: &str) -> Vec<MountOption> {
+    options
+        .split(',')
+        .filter(|option| !option.is_empty())
+        .map(|option| {
+            if let Some((name, value)) = option.split_once('=') {
+                MountOption {
+                    name: name.to_string(),
+                    value: Some(value.to_string()),
+                }
+            } else {
+                MountOption {
+                    name: option.to_string(),
+                    value: None,
+                }
+            }
+        })
+        .collect()
+}
+
+struct MountOption {
+    name: String,
+    value: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use disk_nix_model::{NodeKind, Relationship};
@@ -169,6 +261,24 @@ mod tests {
           "source": "storage.example:/export/share",
           "fstype": "nfs4",
           "options": "rw,vers=4.2"
+        },
+        {
+          "target": "/run",
+          "source": "tmpfs",
+          "fstype": "tmpfs",
+          "options": "rw,nosuid,nodev,mode=755,size=16777216,nr_inodes=4096"
+        },
+        {
+          "target": "/srv/bind",
+          "source": "/srv/source",
+          "fstype": "none",
+          "options": "rw,bind"
+        },
+        {
+          "target": "/merged",
+          "source": "overlay",
+          "fstype": "overlay",
+          "options": "rw,lowerdir=/lower:/lower2,upperdir=/upper,workdir=/work,index=off"
         }
       ]
     }
@@ -201,5 +311,42 @@ mod tests {
                 .iter()
                 .any(|edge| edge.relationship == Relationship::MountedAt)
         );
+
+        let run = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "mount:/run")
+            .expect("tmpfs mount should exist");
+        assert!(has_property(run, "tmpfs.size", "16777216"));
+        assert!(has_property(run, "tmpfs.nr-inodes", "4096"));
+
+        let bind = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "mount:/srv/bind")
+            .expect("bind mount should exist");
+        assert!(has_property(bind, "mount.bind", "true"));
+
+        let bind_source = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "fs-source:/srv/source")
+            .expect("bind source should exist");
+        assert_eq!(bind_source.path.as_deref(), Some("/srv/source"));
+
+        let overlay = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "mount:/merged")
+            .expect("overlay mount should exist");
+        assert!(has_property(overlay, "overlay.lowerdir", "/lower:/lower2"));
+        assert!(has_property(overlay, "overlay.upperdir", "/upper"));
+        assert!(has_property(overlay, "overlay.workdir", "/work"));
+    }
+
+    fn has_property(node: &disk_nix_model::Node, key: &str, value: &str) -> bool {
+        node.properties
+            .iter()
+            .any(|property| property.key == key && property.value == value)
     }
 }
