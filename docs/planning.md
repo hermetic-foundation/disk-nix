@@ -103,8 +103,9 @@ Examples:
   preserving an existing group is possible. VG growth with an explicit physical
   volume is an online `vgextend` workflow.
 - ZFS pool creation and destruction are destructive because they write labels
-  to vdev devices or remove all contained datasets and zvols; import/export is
-  preferred when moving an existing pool.
+  to vdev devices or remove all contained datasets and zvols; create command
+  plans accept either a single `device` or an explicit `devices` vdev list.
+  Import/export is preferred when moving an existing pool.
 - ZFS dataset creation is online, with advice to review inherited mountpoint,
   quota, reservation, and encryption policy; dataset destruction remains
   destructive and recommends snapshots or rename-first validation.

@@ -2198,14 +2198,15 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         Operation::Create if collection == Some("pools") => {
             let target = target.unwrap_or("<zfs-pool>");
             let device = action.context.device.as_deref();
+            let devices = pool_create_devices(device, &action.context.devices);
             (
                 vec![
                     command(
-                        ["disk-nix", "inspect", device.unwrap_or("<vdev-device>")],
+                        ["disk-nix", "inspect", devices.first().map_or("<vdev-device>", String::as_str)],
                         false,
                         "inspect vdev device identity before creating the ZFS pool",
                     ),
-                    zfs_pool_create_command(target, device),
+                    zfs_pool_create_command(target, &devices),
                 ],
                 vec![
                     "verify every vdev device is empty or fully backed up before pool creation"
@@ -3826,20 +3827,35 @@ fn partition_create_command(
     }
 }
 
-fn zfs_pool_create_command(target: &str, device: Option<&str>) -> ExecutionCommand {
-    match device {
-        Some(device) => command(
-            ["zpool", "create", target, device],
-            true,
-            "create a ZFS pool on the reviewed vdev device",
-        ),
-        None => command_with_readiness(
+fn pool_create_devices(device: Option<&str>, devices: &[String]) -> Vec<String> {
+    if devices.is_empty() {
+        device.into_iter().map(ToString::to_string).collect()
+    } else {
+        devices.to_vec()
+    }
+}
+
+fn zfs_pool_create_command(target: &str, devices: &[String]) -> ExecutionCommand {
+    if devices.is_empty() {
+        command_with_readiness(
             ["zpool", "create", target, "<vdev-device>"],
             true,
             CommandReadiness::NeedsDomainImplementation,
             ["vdev device or topology"],
             "create a ZFS pool after selecting the vdev topology",
-        ),
+        )
+    } else {
+        let mut argv = vec![
+            "zpool".to_string(),
+            "create".to_string(),
+            target.to_string(),
+        ];
+        argv.extend(devices.iter().cloned());
+        command_vec(
+            argv,
+            true,
+            "create a ZFS pool on the reviewed vdev device set",
+        )
     }
 }
 
@@ -6454,6 +6470,14 @@ mod tests {
                   "operation": "create",
                   "device": "/dev/disk/by-id/new-pool-vdev"
                 },
+                "mirrorpool": {
+                  "operation": "create",
+                  "devices": [
+                    "mirror",
+                    "/dev/disk/by-id/mirror-a",
+                    "/dev/disk/by-id/mirror-b"
+                  ]
+                },
                 "tank": {
                   "operation": "rebalance",
                   "addDevices": ["/dev/disk/by-id/new"],
@@ -6494,6 +6518,20 @@ mod tests {
                         "create",
                         "newtank",
                         "/dev/disk/by-id/new-pool-vdev",
+                    ]
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "zpool",
+                        "create",
+                        "mirrorpool",
+                        "mirror",
+                        "/dev/disk/by-id/mirror-a",
+                        "/dev/disk/by-id/mirror-b",
                     ]
                     && command.readiness == CommandReadiness::Ready
             })

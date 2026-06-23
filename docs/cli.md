@@ -352,9 +352,10 @@ LVM volume group command plans render policy-gated `vgcreate` and `vgremove`
 commands for `volumeGroups` lifecycle declarations, reviewed `vgextend`
 commands for grow operations with an explicit physical volume, and reviewed
 `vgreduce` commands for explicit physical-volume removal.
-ZFS pool command plans render policy-gated `zpool create` and `zpool destroy`,
-plus online topology commands such as `zpool add`, `zpool replace`,
-`zpool remove`, and scrub.
+ZFS pool command plans render policy-gated `zpool create` from a single
+`device` or explicit `devices` vdev list, policy-gated `zpool destroy`, plus
+online topology commands such as `zpool add`, `zpool replace`, `zpool remove`,
+and scrub.
 ZFS dataset command plans render reviewed `zfs create` and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations.
 Zvol command plans render `zfs create -V`, `zfs set volsize=...`, policy-gated

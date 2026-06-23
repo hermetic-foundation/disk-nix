@@ -219,8 +219,9 @@ LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
 volume group lifecycle declarations, reviewed `vgextend` steps for grow
 operations with an explicit physical volume, and reviewed `vgreduce` steps for
 explicit physical-volume removal.
-ZFS pool apply plans render gated `zpool create` and `zpool destroy` commands,
-plus reviewed topology updates such as `zpool add`, `zpool replace`, and
+ZFS pool apply plans render gated `zpool create` commands from a single
+`device` or an explicit `devices` vdev list, gated `zpool destroy` commands,
+and reviewed topology updates such as `zpool add`, `zpool replace`, and
 `zpool remove`.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
