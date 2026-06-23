@@ -1516,7 +1516,7 @@ in
         if cfg.iscsi.boot.discoverPortal != null then
           cfg.iscsi.boot.discoverPortal
         else
-          cfg.iscsi.discoverPortal;
+          iscsiDiscoverPortal;
     };
 
     systemd.services.disk-nix-plan = {
@@ -1552,9 +1552,8 @@ in
       }
       {
         assertion =
-          cfg.iscsi.boot.enable
-          -> (cfg.iscsi.boot.discoverPortal != null || cfg.iscsi.discoverPortal != null);
-        message = "services.disk-nix.iscsi.boot.enable requires services.disk-nix.iscsi.boot.discoverPortal or services.disk-nix.iscsi.discoverPortal.";
+          cfg.iscsi.boot.enable -> (cfg.iscsi.boot.discoverPortal != null || iscsiDiscoverPortal != null);
+        message = "services.disk-nix.iscsi.boot.enable requires services.disk-nix.iscsi.boot.discoverPortal, services.disk-nix.iscsi.discoverPortal, or an active services.disk-nix.iscsi.sessions entry with portal.";
       }
       {
         assertion = cfg.iscsi.boot.enable -> (cfg.iscsi.boot.loginAll || cfg.iscsi.boot.target != null);

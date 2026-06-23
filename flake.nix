@@ -186,7 +186,6 @@
                 enableAutoLoginOut = true;
                 boot = {
                   enable = true;
-                  discoverPortal = "192.0.2.10:3260";
                   target = "iqn.2026-06.example:storage.root";
                 };
                 sessions."iqn.2026-06.example:storage.root" = {
@@ -692,7 +691,7 @@
                   and .spec.nfs.mounts."/srv/old".operation == "destroy"
                   and .spec.iscsi.initiatorName == "iqn.2026-06.example:host"
                   and (.spec.iscsi | has("discoverPortal") | not)
-                  and .spec.iscsi.boot.discoverPortal == "192.0.2.10:3260"
+                  and (.spec.iscsi.boot | has("discoverPortal") | not)
                   and .spec.iscsi.boot.target == "iqn.2026-06.example:storage.root"
                   and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".operation == "grow"
                   and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".desiredSize == "2TiB"
@@ -856,6 +855,7 @@
                       bcache = nixosModuleTest.config.boot.bcache.enable;
                       bcacheInitrd = nixosModuleTest.config.boot.initrd.services.bcache.enable;
                       openIscsiDiscoverPortal = nixosModuleTest.config.services.openiscsi.discoverPortal;
+                      bootIscsiDiscoverPortal = nixosModuleTest.config.boot.iscsi-initiator.discoverPortal;
                     }
                   )
                 }
@@ -873,6 +873,7 @@
                   and .bcache == true
                   and .bcacheInitrd == true
                   and .openIscsiDiscoverPortal == "192.0.2.10:3260"
+                  and .bootIscsiDiscoverPortal == "192.0.2.10:3260"
                 ' native-storage
                 printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
                 grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
