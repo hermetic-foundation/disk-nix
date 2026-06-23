@@ -1020,6 +1020,12 @@ in
       description = "Typed LVM snapshot lifecycle declarations emitted into the disk-nix planner spec.";
     };
 
+    lvmCaches = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed LVM cache lifecycle declarations emitted into the disk-nix planner spec. Attach plans require a vg/origin target and cache-pool logical volume.";
+    };
+
     loopDevices = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -1242,6 +1248,7 @@ in
         volumeGroups = (cfg.spec.volumeGroups or { }) // normalizeLifecycleSpec cfg.volumeGroups;
         thinPools = (cfg.spec.thinPools or { }) // normalizeLifecycleSpec cfg.thinPools;
         lvmSnapshots = (cfg.spec.lvmSnapshots or { }) // normalizeLifecycleSpec cfg.lvmSnapshots;
+        lvmCaches = (cfg.spec.lvmCaches or { }) // normalizeLifecycleSpec cfg.lvmCaches;
         loopDevices = (cfg.spec.loopDevices or { }) // normalizeLifecycleSpec cfg.loopDevices;
         mdRaids = (cfg.spec.mdRaids or { }) // normalizeLifecycleSpec cfg.mdRaids;
         multipathMaps = (cfg.spec.multipathMaps or { }) // normalizeLifecycleSpec cfg.multipathMaps;

@@ -169,6 +169,10 @@ Examples:
   existing cache-set identity; cache replacement remains offline-required and
   cache removal is potential-data-loss because dirty writeback data must be
   flushed or detached before media changes.
+- LVM cache attach, detach, and replacement are offline-required because
+  `lvconvert` changes origin LV I/O paths and dirty cache state must be drained.
+  LVM cache mode and policy updates are safe but still include verification
+  advice.
 - NFS export creation is online when it publishes an existing path to explicit
   clients and options; unexporting is offline-required because remote clients
   may need to be drained, but it is not treated as data destruction.
@@ -221,6 +225,7 @@ Lifecycle collections currently accepted by the planner:
 - `volumeGroups`
 - `thinPools`
 - `lvmSnapshots`
+- `lvmCaches`
 - `loopDevices`
 - `mdRaids`
 - `multipathMaps`
@@ -323,6 +328,10 @@ LVM physical volume command plans use `pvcreate`, `pvresize`, and `pvremove`
 for `physicalVolumes` lifecycle declarations. Executable plans require a
 concrete path-shaped target or `device`, and PV removal advice recommends
 `pvmove` plus `vgreduce` before `pvremove`.
+LVM cache command plans use `lvconvert --type cache`, `lvconvert --uncache`,
+and `lvchange --cachemode` or `--cachepolicy` for `lvmCaches` lifecycle
+declarations. Executable attach plans require an origin `vg/lv` target and a
+cache-pool LV through `device` or `addDevices`.
 NVMe namespace command plans use `nvme create-ns`, `nvme attach-ns`,
 `nvme ns-rescan`, `nvme detach-ns`, and `nvme delete-ns`. Create and delete
 are destructive controller namespace-management operations. Grow is

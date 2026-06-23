@@ -107,8 +107,8 @@ filesystem fields, including filesystem `operation`, `device`, mount
 `options`, `properties`, and Btrfs device-membership update fields. It also
 includes disk and partition lifecycle collections, swap, LUKS, NFS mount
 wrappers, iSCSI discovery/session/boot wrappers, Btrfs subvolume, VDO, LVM
-physical volume, LVM thin pool, LVM snapshot, loop-device, MD RAID, multipath,
-NVMe namespace, and zvol lifecycle declarations, higher-layer lifecycle
+physical volume, LVM thin pool, LVM snapshot, LVM cache, loop-device, MD RAID,
+multipath, NVMe namespace, and zvol lifecycle declarations, higher-layer lifecycle
 collections, snapshot declarations including Btrfs `readOnly` snapshot intent,
 supported operation names, apply policy fields, and NixOS activation helper
 fields such as
@@ -409,6 +409,10 @@ LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
 and policy-gated `lvremove` commands for `thinPools` lifecycle declarations,
 with separate unresolved-input markers for target form and size. Thin-pool grow
 and remove commands require the canonical `vg/pool` target form.
+LVM cache command plans render `lvconvert --type cache`, `lvconvert --uncache`,
+and `lvchange --cachemode` or `--cachepolicy` commands for `lvmCaches`
+lifecycle declarations. Executable attach plans require both an origin `vg/lv`
+target and a cache-pool LV.
 LVM volume group command plans render policy-gated `vgcreate` and `vgremove`
 commands for `volumeGroups` lifecycle declarations, reviewed `vgextend`
 commands for grow operations with an explicit physical volume, and reviewed

@@ -1233,6 +1233,35 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Create
+        | Operation::AddDevice
+        | Operation::ReplaceDevice
+        | Operation::RemoveDevice
+        | Operation::SetProperty
+        | Operation::Destroy
+            if collection == Some("lvmCaches") =>
+        {
+            let target = lvm_volume_target_path(Some(target));
+            (
+                vec![
+                    lvm_lvs_report_command(
+                        target,
+                        Some("lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent"),
+                        "verify LVM cache state after lifecycle change",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", target.unwrap_or("<lvm-cache>"), "--json"],
+                        false,
+                        "verify modeled LVM cache relationships after cache update",
+                    ),
+                ],
+                vec![
+                    "origin LV, cache pool, cache mode, and dirty data state match the desired cache lifecycle"
+                        .to_string(),
+                    "origin LV remains readable after cache attach, detach, or mode update".to_string(),
+                ],
+            )
+        }
         Operation::AddDevice
         | Operation::ReplaceDevice
         | Operation::RemoveDevice
@@ -1906,6 +1935,31 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "verify the target volume group has enough data and metadata capacity"
                         .to_string(),
                     "choose overcommit, monitoring, and autoextend policy before using the thin pool"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Create if collection == Some("lvmCaches") => {
+            let target = lvm_volume_target_path(target);
+            let cache_pool = action
+                .context
+                .device
+                .as_deref()
+                .or_else(|| action.context.devices.first().map(String::as_str));
+            (
+                vec![
+                    lvm_lvs_report_command(
+                        target,
+                        Some("lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent"),
+                        "inspect origin LV and cache state before attaching LVM cache",
+                    ),
+                    lvm_cache_attach_command(target, cache_pool),
+                ],
+                vec![
+                    "verify the cache pool LV is clean and belongs to the same VG as the origin"
+                        .to_string(),
+                    "prefer writethrough cache mode until post-attach verification passes"
                         .to_string(),
                 ],
                 true,
@@ -3323,6 +3377,26 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Destroy if collection == Some("lvmCaches") => {
+            let target = lvm_volume_target_path(target);
+            (
+                vec![
+                    lvm_lvs_report_command(
+                        target,
+                        Some("lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent"),
+                        "inspect LVM cache dirty state before removal",
+                    ),
+                    lvm_cache_uncache_command(target),
+                ],
+                vec![
+                    "switch writeback caches to writethrough before removing cache state"
+                        .to_string(),
+                    "verify the origin LV after lvconvert --uncache before removing cache media"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Destroy if collection == Some("vdoVolumes") => {
             let target = target.unwrap_or("<vdo-volume>");
             (
@@ -3524,6 +3598,24 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "remove a path only when alternate paths remain active".to_string(),
                     "verify the path belongs to the intended map WWID before deletion".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::RemoveDevice if collection == Some("lvmCaches") => {
+            let target = lvm_volume_target_path(target);
+            (
+                vec![
+                    lvm_lvs_report_command(
+                        target,
+                        Some("lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent"),
+                        "inspect LVM cache dirty state before detach",
+                    ),
+                    lvm_cache_uncache_command(target),
+                ],
+                vec![
+                    "switch writeback caches to writethrough before detach".to_string(),
+                    "wait for dirty data to drain before lvconvert --uncache".to_string(),
                 ],
                 true,
             )
@@ -3973,6 +4065,9 @@ fn add_device_command(
             true,
             "add or re-add a path to multipathd",
         ),
+        Some("lvmCaches") => {
+            lvm_cache_attach_command(lvm_volume_target_path(Some(target)), Some(device))
+        }
         Some("caches") => bcache_attach_command(target, device),
         Some("filesystems") => command(
             ["btrfs", "device", "add", device, target],
@@ -4038,6 +4133,9 @@ fn replace_device_command(
             true,
             "add the replacement multipath path before deleting the old path",
         ),
+        Some("lvmCaches") => {
+            lvm_cache_replace_command(lvm_volume_target_path(Some(target)), Some(from), Some(to))
+        }
         Some("caches") => command_vec_with_readiness(
             vec![
                 "make-bcache".to_string(),
@@ -4393,6 +4491,9 @@ fn set_property_command(
             true,
             "reload NFS exports after export property changes",
         ),
+        Some("lvmCaches") => {
+            lvm_cache_property_command(lvm_volume_target_path(Some(target)), property, assignment)
+        }
         Some("caches") => bcache_property_command(target, property, assignment),
         _ => command_with_readiness(
             ["<set-property-tool>", target, property],
@@ -4629,6 +4730,172 @@ fn normalize_boolish_btrfs_property_value(value: &str) -> String {
 
 fn is_bcache_target(target: &str) -> bool {
     target.starts_with("/dev/bcache")
+}
+
+fn lvm_cache_attach_command(target: Option<&str>, cache_pool: Option<&str>) -> ExecutionCommand {
+    match (target, cache_pool) {
+        (Some(target), Some(cache_pool)) => command(
+            [
+                "lvconvert",
+                "--type",
+                "cache",
+                "--cachepool",
+                cache_pool,
+                target,
+            ],
+            true,
+            "attach the reviewed LVM cache pool to the origin logical volume",
+        ),
+        (target, cache_pool) => command_vec_with_readiness(
+            vec![
+                "lvconvert".to_string(),
+                "--type".to_string(),
+                "cache".to_string(),
+                "--cachepool".to_string(),
+                cache_pool.unwrap_or("<cache-pool>").to_string(),
+                target.unwrap_or("<origin-logical-volume>").to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_lvm_cache_inputs(target, cache_pool),
+            "attach LVM cache after selecting an origin LV and cache-pool LV",
+        ),
+    }
+}
+
+fn lvm_cache_replace_command(
+    target: Option<&str>,
+    old_cache_pool: Option<&str>,
+    new_cache_pool: Option<&str>,
+) -> ExecutionCommand {
+    match (target, new_cache_pool) {
+        (Some(target), Some(new_cache_pool)) => command_vec(
+            vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                "lvconvert --uncache \"$1\" && lvconvert --type cache --cachepool \"$2\" \"$1\""
+                    .to_string(),
+                "disk-nix-lvm-cache-replace".to_string(),
+                target.to_string(),
+                new_cache_pool.to_string(),
+            ],
+            true,
+            "detach the old LVM cache and attach the reviewed replacement cache pool",
+        ),
+        (target, new_cache_pool) => {
+            let mut missing = missing_lvm_cache_inputs(target, new_cache_pool);
+            if old_cache_pool.is_none() {
+                missing.push("cache pool to replace");
+            }
+            command_vec_with_readiness(
+                vec![
+                    "sh".to_string(),
+                    "-c".to_string(),
+                    "lvconvert --uncache \"$1\" && lvconvert --type cache --cachepool \"$2\" \"$1\""
+                        .to_string(),
+                    "disk-nix-lvm-cache-replace".to_string(),
+                    target.unwrap_or("<origin-logical-volume>").to_string(),
+                    new_cache_pool.unwrap_or("<replacement-cache-pool>").to_string(),
+                ],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                missing,
+                "replace LVM cache after selecting origin and replacement cache pool",
+            )
+        }
+    }
+}
+
+fn lvm_cache_uncache_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["lvconvert", "--uncache", target],
+            true,
+            "detach LVM cache from the origin logical volume after dirty data is flushed",
+        ),
+        None => command_with_readiness(
+            ["lvconvert", "--uncache", "<origin-logical-volume>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["target in volume-group/logical-volume form"],
+            "detach LVM cache after selecting the origin logical volume",
+        ),
+    }
+}
+
+fn lvm_cache_property_command(
+    target: Option<&str>,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            [
+                "lvchange",
+                "<cache-property>",
+                "<value>",
+                "<origin-logical-volume>",
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["cache property value"],
+            "set LVM cache property after resolving the desired value",
+        );
+    };
+    let Some(flag) = lvm_cache_property_flag(property) else {
+        return command_with_readiness(
+            [
+                "lvchange",
+                "<cache-property>",
+                value,
+                target.unwrap_or("<origin-logical-volume>"),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported LVM cache property"],
+            "set LVM cache property after mapping it to an lvchange flag",
+        );
+    };
+    match target {
+        Some(target) => command(
+            ["lvchange", flag, value, target],
+            true,
+            "set LVM cache mode or policy on the reviewed origin logical volume",
+        ),
+        None => command_vec_with_readiness(
+            vec![
+                "lvchange".to_string(),
+                flag.to_string(),
+                value.to_string(),
+                "<origin-logical-volume>".to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["target in volume-group/logical-volume form"],
+            "set LVM cache property after selecting the origin logical volume",
+        ),
+    }
+}
+
+fn missing_lvm_cache_inputs(target: Option<&str>, cache_pool: Option<&str>) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if target.is_none() {
+        missing.push("target in volume-group/logical-volume form");
+    }
+    if cache_pool.is_none() {
+        missing.push("cache-pool logical volume");
+    }
+    missing
+}
+
+fn lvm_cache_property_flag(property: &str) -> Option<&'static str> {
+    match property {
+        "cache-mode" | "cacheMode" | "lvm.cache-mode" | "lvm.cacheMode" => Some("--cachemode"),
+        "cache-policy" | "cachePolicy" | "lvm.cache-policy" | "lvm.cachePolicy" => {
+            Some("--cachepolicy")
+        }
+        _ => None,
+    }
 }
 
 fn bcache_attach_command(target: &str, cache_set: &str) -> ExecutionCommand {
@@ -10307,6 +10574,160 @@ mod tests {
                         "dirty_data",
                     ]
             })
+        }));
+    }
+
+    #[test]
+    fn lvm_cache_lifecycle_reports_lvm_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "lvmCaches": {
+                  "vg0/root": {
+                    "operation": "create",
+                    "device": "vg0/root-cache",
+                    "addDevices": ["vg0/root-cache"],
+                    "removeDevices": ["vg0/root-cache"],
+                    "replaceDevices": {
+                      "vg0/root-cache": "vg0/root-cache-new"
+                    },
+                    "properties": {
+                      "lvm.cache-mode": "writethrough"
+                    },
+                    "destroy": true
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true,
+                "allowDeviceReplacement": true,
+                "confirmation": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lvmcaches:vg0/root:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvconvert",
+                            "--type",
+                            "cache",
+                            "--cachepool",
+                            "vg0/root-cache",
+                            "vg0/root",
+                        ]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lvmCaches:vg0/root:add-device:vg0/root-cache"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvconvert",
+                            "--type",
+                            "cache",
+                            "--cachepool",
+                            "vg0/root-cache",
+                            "vg0/root",
+                        ]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lvmCaches:vg0/root:set-property:lvm.cache-mode"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvchange", "--cachemode", "writethrough", "vg0/root"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lvmCaches:vg0/root:remove-device:vg0/root-cache"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["lvconvert", "--uncache", "vg0/root"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lvmcaches:vg0/root:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["lvconvert", "--uncache", "vg0/root"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "lvmCaches:vg0/root:set-property:lvm.cache-mode"
+                && step.commands.iter().any(|command| {
+                    command.argv.len() >= 4
+                        && command.argv[0] == "lvs"
+                        && command.argv[1] == "--reportformat"
+                        && command.argv[2] == "json"
+                        && command.argv[3] == "-o"
+                })
+        }));
+    }
+
+    #[test]
+    fn lvm_cache_lifecycle_requires_origin_and_cache_pool_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "lvmCaches": {
+                  "root-cache": {
+                    "operation": "create",
+                    "properties": {
+                      "lvm.cache-policy": "smq"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lvmcaches:root-cache:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvconvert",
+                            "--type",
+                            "cache",
+                            "--cachepool",
+                            "<cache-pool>",
+                            "<origin-logical-volume>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == [
+                                "target in volume-group/logical-volume form",
+                                "cache-pool logical volume",
+                            ]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lvmCaches:root-cache:set-property:lvm.cache-policy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "lvchange",
+                            "--cachepolicy",
+                            "smq",
+                            "<origin-logical-volume>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == ["target in volume-group/logical-volume form"]
+                })
         }));
     }
 

@@ -431,6 +431,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "volumeGroups",
         "thinPools",
         "lvmSnapshots",
+        "lvmCaches",
         "loopDevices",
         "mdRaids",
         "multipathMaps",
@@ -1494,17 +1495,18 @@ fn add_device_membership_actions(
 ) {
     if let Some(devices) = object.get("addDevices").and_then(Value::as_array) {
         for device in devices.iter().filter_map(Value::as_str) {
+            let (risk, advice) = classify_add_device(collection);
             actions.push(PlannedAction {
                 id: format!("{collection}:{name}:add-device:{device}"),
                 description: format!("add device {device} to {collection} {name}"),
                 operation: Operation::AddDevice,
-                risk: RiskClass::Online,
+                risk,
                 destructive: false,
                 context: ActionContext {
                     device: Some(device.to_string()),
                     ..lifecycle_context(collection, name, object)
                 },
-                advice: None,
+                advice,
             });
         }
     }
@@ -1589,6 +1591,22 @@ fn classify_property_change(collection: &str, property: &str) -> (RiskClass, Opt
                         .to_string(),
                     "apply unsupported Btrfs subvolume property changes manually after reviewing btrfs property documentation"
                         .to_string(),
+                ],
+            }),
+        );
+    }
+
+    if collection == "lvmCaches" {
+        return (
+            RiskClass::Safe,
+            Some(Advice {
+                summary: format!(
+                    "LVM cache property {property} changes cache behavior on the origin LV"
+                ),
+                alternatives: vec![
+                    "prefer writethrough mode before cache detach or replacement".to_string(),
+                    "verify dirty cache data is drained before disabling writeback".to_string(),
+                    "review lvs cache fields after changing cache policy or mode".to_string(),
                 ],
             }),
         );
@@ -1727,6 +1745,28 @@ fn add_destroy_guard(
                         "pvmove allocated extents and vgreduce the PV before pvremove".to_string(),
                         "verify no volume group still depends on the PV".to_string(),
                         "preserve the device for recovery until backups are verified".to_string(),
+                    ],
+                }),
+            });
+            return;
+        }
+        if collection == "lvmCaches" {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:destroy").to_ascii_lowercase(),
+                description: format!("detach LVM cache from {name}"),
+                operation: Operation::Destroy,
+                risk: RiskClass::OfflineRequired,
+                destructive: false,
+                context: lifecycle_context(collection, name, object),
+                advice: Some(Advice {
+                    summary: "LVM cache removal must flush dirty cache state before uncaching"
+                        .to_string(),
+                    alternatives: vec![
+                        "switch to writethrough and wait for dirty blocks to drain before lvconvert --uncache"
+                            .to_string(),
+                        "verify the origin LV is readable without the cache before removing cache media"
+                            .to_string(),
+                        "keep the cache pool intact until post-uncache verification passes".to_string(),
                     ],
                 }),
             });
@@ -2045,6 +2085,38 @@ fn classify_operation(
                     "choose explicit pool size and monitor metadata utilization from first use"
                         .to_string(),
                     "review thin-volume overcommit policy before exposing consumers".to_string(),
+                ],
+            }),
+        ),
+        Operation::Create if collection == "lvmCaches" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary:
+                    "LVM cache attachment converts an origin LV to use a reviewed cache pool"
+                        .to_string(),
+                alternatives: vec![
+                    "attach cache only after the cache pool LV and origin LV are both verified"
+                        .to_string(),
+                    "use writethrough mode first when data safety is more important than write latency"
+                        .to_string(),
+                    "snapshot or back up the origin LV before enabling writeback cache".to_string(),
+                ],
+            }),
+        ),
+        Operation::AddDevice if collection == "lvmCaches" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary:
+                    "LVM cache attachment changes origin LV write paths through a cache pool"
+                        .to_string(),
+                alternatives: vec![
+                    "verify the cache pool LV belongs to the same volume group as the origin"
+                        .to_string(),
+                    "start in writethrough mode when rollback safety matters".to_string(),
+                    "keep the origin LV snapshot or backup until cache verification passes"
+                        .to_string(),
                 ],
             }),
         ),
@@ -2399,6 +2471,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Destroy if collection == "lvmCaches" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "LVM cache removal must flush dirty cache state before uncaching"
+                    .to_string(),
+                alternatives: vec![
+                    "switch to writethrough and wait for dirty blocks to drain before lvconvert --uncache"
+                        .to_string(),
+                    "verify the origin LV is readable without the cache before removing cache media"
+                        .to_string(),
+                    "keep the cache pool intact until post-uncache verification passes".to_string(),
+                ],
+            }),
+        ),
         Operation::Destroy if collection == "physicalVolumes" => (
             RiskClass::Destructive,
             true,
@@ -2469,7 +2556,7 @@ fn classify_operation(
 }
 
 fn classify_replace_device(collection: &str) -> (RiskClass, Advice) {
-    if collection == "caches" {
+    if collection == "caches" || collection == "lvmCaches" {
         (
             RiskClass::OfflineRequired,
             Advice {
@@ -2527,8 +2614,29 @@ fn classify_replace_device(collection: &str) -> (RiskClass, Advice) {
     }
 }
 
+fn classify_add_device(collection: &str) -> (RiskClass, Option<Advice>) {
+    if collection == "lvmCaches" {
+        (
+            RiskClass::OfflineRequired,
+            Some(Advice {
+                summary: "LVM cache attachment changes origin LV I/O through cache media"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the cache pool LV belongs to the same volume group as the origin"
+                        .to_string(),
+                    "start in writethrough mode when rollback safety matters".to_string(),
+                    "keep the origin LV snapshot or backup until cache verification passes"
+                        .to_string(),
+                ],
+            }),
+        )
+    } else {
+        (RiskClass::Online, None)
+    }
+}
+
 fn classify_remove_device(collection: &str) -> (RiskClass, Advice) {
-    if collection == "caches" {
+    if collection == "caches" || collection == "lvmCaches" {
         (
             RiskClass::OfflineRequired,
             Advice {
@@ -3718,6 +3826,68 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::LvmCache,
+            operation: Operation::Create,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LVM cache creation attaches a cache pool to an origin LV".to_string(),
+                alternatives: vec![
+                    "verify the origin LV and cache pool with lvs before lvconvert".to_string(),
+                    "use writethrough mode before moving to writeback".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmCache,
+            operation: Operation::AddDevice,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LVM cache attachment changes origin LV I/O through cache media"
+                    .to_string(),
+                alternatives: vec![
+                    "attach a reviewed cache pool LV from the same VG".to_string(),
+                    "verify dirty data and cache mode after conversion".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmCache,
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            advice: Some(Advice {
+                summary: "LVM cache property changes tune cache mode or policy".to_string(),
+                alternatives: vec![
+                    "switch toward writethrough before detach or replacement".to_string(),
+                    "review lvs cache fields after every mode change".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmCache,
+            operation: Operation::RemoveDevice,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LVM cache detach must flush dirty cache state before uncaching"
+                    .to_string(),
+                alternatives: vec![
+                    "wait for dirty data to drain before lvconvert --uncache".to_string(),
+                    "keep cache media available until the origin LV is verified".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::LvmCache,
+            operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "LVM cache removal detaches cache state from the origin LV".to_string(),
+                alternatives: vec![
+                    "set cache mode to writethrough before uncaching".to_string(),
+                    "verify origin LV consistency after cache removal".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::CacheDevice,
             operation: Operation::AddDevice,
             risk: RiskClass::Online,
@@ -3826,6 +3996,44 @@ mod tests {
                 .iter()
                 .any(|alternative| alternative.contains("flush dirty data"))
         }));
+    }
+
+    #[test]
+    fn lvm_cache_capabilities_describe_lifecycle_paths() {
+        let capabilities = default_capabilities();
+        let create = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LvmCache
+                    && capability.operation == Operation::Create
+            })
+            .expect("LVM cache create capability should exist");
+        let add = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LvmCache
+                    && capability.operation == Operation::AddDevice
+            })
+            .expect("LVM cache add-device capability should exist");
+        let set_property = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LvmCache
+                    && capability.operation == Operation::SetProperty
+            })
+            .expect("LVM cache property capability should exist");
+        let remove = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::LvmCache
+                    && capability.operation == Operation::RemoveDevice
+            })
+            .expect("LVM cache remove-device capability should exist");
+
+        assert_eq!(create.risk, RiskClass::OfflineRequired);
+        assert_eq!(add.risk, RiskClass::OfflineRequired);
+        assert_eq!(set_property.risk, RiskClass::Safe);
+        assert_eq!(remove.risk, RiskClass::OfflineRequired);
     }
 
     #[test]
@@ -5804,6 +6012,60 @@ mod tests {
         assert_eq!(detach.operation, Operation::RemoveDevice);
         assert_eq!(detach.risk, RiskClass::OfflineRequired);
         assert!(detach.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("dirty data"))
+        }));
+    }
+
+    #[test]
+    fn plan_classifies_lvm_cache_attach_and_detach() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "lvmCaches": {
+                "vg0/root": {
+                  "operation": "create",
+                  "device": "vg0/root-cache",
+                  "addDevices": ["vg0/root-cache"],
+                  "removeDevices": ["vg0/root-cache"],
+                  "properties": {
+                    "lvm.cache-mode": "writethrough"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lvmcaches:vg0/root:create")
+            .expect("LVM cache create action exists");
+        let add = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lvmCaches:vg0/root:add-device:vg0/root-cache")
+            .expect("LVM cache add action exists");
+        let remove = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lvmCaches:vg0/root:remove-device:vg0/root-cache")
+            .expect("LVM cache remove action exists");
+        let property = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "lvmCaches:vg0/root:set-property:lvm.cache-mode")
+            .expect("LVM cache property action exists");
+
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 3);
+        assert_eq!(create.risk, RiskClass::OfflineRequired);
+        assert_eq!(add.risk, RiskClass::OfflineRequired);
+        assert_eq!(remove.risk, RiskClass::OfflineRequired);
+        assert_eq!(property.risk, RiskClass::Safe);
+        assert!(remove.advice.as_ref().is_some_and(|advice| {
             advice
                 .alternatives
                 .iter()

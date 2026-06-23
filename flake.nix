@@ -226,6 +226,11 @@
                 target = "vg0/root";
                 desiredSize = "20GiB";
               };
+              lvmCaches."vg0/root" = {
+                operation = "create";
+                device = "vg0/root-cache";
+                properties."lvm.cache-mode" = "writethrough";
+              };
               loopDevices."/dev/loop7" = {
                 operation = "create";
                 device = "/var/lib/images/root.img";
@@ -383,6 +388,7 @@
               and .properties.zvols["$ref"] == "#/$defs/lifecycleMap"
               and .properties.thinPools["$ref"] == "#/$defs/lifecycleMap"
               and .properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.lvmCaches["$ref"] == "#/$defs/lifecycleMap"
               and .properties.loopDevices["$ref"] == "#/$defs/lifecycleMap"
               and .properties.mdRaids["$ref"] == "#/$defs/lifecycleMap"
               and .properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap"
@@ -400,6 +406,7 @@
               and (."$defs".specBody.properties.zvols["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.thinPools["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.lvmCaches["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.loopDevices["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.mdRaids["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap")
@@ -457,8 +464,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 32
-              and .summary.offlineRequiredCount == 5
+              .summary.actionCount == 34
+              and .summary.offlineRequiredCount == 6
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 2
               and .summary.unsupportedCount == 0
@@ -472,6 +479,8 @@
               and (.actions | any(.id == "thinpools:vg0/thinpool:grow" and .risk == "online"))
               and (.actions | any(.id == "thinpools:vg0/newthin:create" and .risk == "online"))
               and (.actions | any(.id == "lvmsnapshots:vg0/root-snap:snapshot" and .risk == "reversible"))
+              and (.actions | any(.id == "lvmcaches:vg0/root:create" and .risk == "offline-required"))
+              and (.actions | any(.id == "lvmCaches:vg0/root:set-property:lvm.cache-mode" and .risk == "safe"))
               and (.actions | any(.id == "loopdevices:/dev/loop7:create" and .risk == "online"))
               and (.actions | any(.id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-md-spare" and .risk == "online"))
               and (.actions | any(.id == "multipathMaps:mpatha:add-device:/dev/sdb" and .risk == "online"))
@@ -516,22 +525,22 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 10
-              and .apply.blockedSummary.offlineRequiredCount == 5
+              and .apply.blockedCount == 11
+              and .apply.blockedSummary.offlineRequiredCount == 6
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 2
               and .apply.blockedSummary.unsupportedCount == 0
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 10
+              and .apply.blockedCount == 11
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 10
-              and .messages[0] == "apply policy blocked 10 action(s)"
+              and .apply.blockedCount == 11
+              and .messages[0] == "apply policy blocked 11 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -625,6 +634,9 @@
                   and .spec.lvmSnapshots."vg0/root-snap".operation == "snapshot"
                   and .spec.lvmSnapshots."vg0/root-snap".target == "vg0/root"
                   and .spec.lvmSnapshots."vg0/root-snap".desiredSize == "20GiB"
+                  and .spec.lvmCaches."vg0/root".operation == "create"
+                  and .spec.lvmCaches."vg0/root".device == "vg0/root-cache"
+                  and .spec.lvmCaches."vg0/root".properties."lvm.cache-mode" == "writethrough"
                   and .spec.loopDevices."/dev/loop7".operation == "create"
                   and .spec.loopDevices."/dev/loop7".device == "/var/lib/images/root.img"
                   and .spec.mdRaids.root.target == "/dev/md/root"

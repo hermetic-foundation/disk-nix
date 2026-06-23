@@ -173,7 +173,7 @@ lifecycle declarations, swap signature/resize workflows, LUKS format/resize/clos
 workflows, Btrfs subvolume creation/deletion, VDO create/grow/remove, LVM
 physical-volume create/grow/remove, logical-volume growth/removal,
 LVM volume-group extension/device removal, LVM thin-pool create/grow/remove,
-LVM snapshot create/merge/remove,
+LVM snapshot create/merge/remove, LVM cache attach/detach/property updates,
 loop-device mapping updates, MD RAID lifecycle/member updates, multipath map
 updates, NVMe namespace create/attach/rescan/detach/delete workflows, ZFS pool
 topology updates, dataset and zvol updates including zvol property changes,
@@ -183,6 +183,9 @@ Cache apply plans include bcache-aware attach, detach, cache-mode, dirty-data,
 and replacement review steps instead of a generic cache placeholder. bcache
 sysfs commands require a concrete `/dev/bcache*` target; logical cache names
 remain non-ready until the backing bcache device path is declared.
+LVM cache apply plans use separate `lvmCaches` declarations and render
+`lvconvert --type cache`, `lvconvert --uncache`, and `lvchange --cachemode` or
+`--cachepolicy` commands when an origin `vg/lv` and cache-pool LV are declared.
 Btrfs filesystem device topology plans render `btrfs device add`,
 `btrfs replace start`, and allocation-inspected `btrfs device remove` commands
 for review. Removal remains blocked by the current potential-data-loss policy

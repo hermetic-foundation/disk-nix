@@ -168,6 +168,7 @@ Typed lifecycle declarations are available for:
 - `volumeGroups`
 - `thinPools`
 - `lvmSnapshots`
+- `lvmCaches`
 - `loopDevices`
 - `mdRaids`
 - `multipathMaps`
@@ -311,6 +312,11 @@ Example lifecycle planning through NixOS options:
       operation = "snapshot";
       target = "vg0/root";
       desiredSize = "20GiB";
+    };
+    lvmCaches."vg0/root" = {
+      operation = "create";
+      device = "vg0/root-cache";
+      properties."lvm.cache-mode" = "writethrough";
     };
     loopDevices."/dev/loop7" = {
       operation = "create";
