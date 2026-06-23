@@ -1097,7 +1097,7 @@ fn add_filesystem_property_actions(
         if fs_type == "btrfs" && is_btrfs_balance_filter_property(property) {
             continue;
         }
-        let (risk, advice) = classify_filesystem_property_change(fs_type, property);
+        let (risk, advice) = classify_filesystem_property_change(fs_type, property, value);
         actions.push(PlannedAction {
             id: format!("filesystems:{name}:set-property:{property}"),
             description: format!("set property {property} on filesystem {name}"),
@@ -1124,7 +1124,29 @@ fn add_filesystem_property_actions(
 fn classify_filesystem_property_change(
     fs_type: &str,
     property: &str,
+    value: &Value,
 ) -> (RiskClass, Option<Advice>) {
+    if is_fat_filesystem_uuid_property(fs_type, property)
+        && !is_valid_fat_volume_id(&property_value(value))
+    {
+        return (
+            RiskClass::Unsupported,
+            Some(Advice {
+                summary: format!(
+                    "{fs_type} filesystem volume ID {} is not a valid FAT volume ID",
+                    property_value(value)
+                ),
+                alternatives: vec![
+                    "use an 8-hex-digit FAT volume ID such as A1B2-C3D4 or A1B2C3D4".to_string(),
+                    "update NixOS fileSystems and boot references instead of changing the FAT volume ID when possible"
+                        .to_string(),
+                    "recreate the FAT filesystem only when data preservation is not required"
+                        .to_string(),
+                ],
+            }),
+        );
+    }
+
     if is_filesystem_uuid_property_supported(fs_type, property) {
         return (
             RiskClass::OfflineRequired,
@@ -1153,9 +1175,9 @@ fn classify_filesystem_property_change(
                 "{fs_type} filesystem property {property} is not mapped to a safe command"
             ),
             alternatives: vec![
-                "use label, filesystem.label, btrfs.label, ext.label, or xfs.label when changing filesystem labels"
+                "use label, filesystem.label, btrfs.label, ext.label, fat.label, vfat.label, or xfs.label when changing filesystem labels"
                     .to_string(),
-                "use uuid, filesystem.uuid, btrfs.uuid, ext.uuid, or xfs.uuid when changing supported filesystem UUIDs"
+                "use uuid, filesystem.uuid, btrfs.uuid, ext.uuid, fat.uuid, vfat.uuid, or xfs.uuid when changing supported filesystem UUIDs"
                     .to_string(),
                 "use ZFS dataset declarations for arbitrary zfs set property updates".to_string(),
                 "apply unsupported filesystem property changes manually after reviewing filesystem-specific tooling"
@@ -1187,6 +1209,21 @@ fn is_filesystem_property_supported(fs_type: &str, property: &str) -> bool {
                     | "filesystem.uuid"
             )
         }
+        "fat" | "fat12" | "fat16" | "fat32" | "msdos" | "vfat" => matches!(
+            property,
+            "label"
+                | "fat.label"
+                | "vfat.label"
+                | "filesystem.label"
+                | "uuid"
+                | "fat.uuid"
+                | "vfat.uuid"
+                | "filesystem.uuid"
+                | "volumeId"
+                | "volume-id"
+                | "fat.volume-id"
+                | "vfat.volume-id"
+        ),
         "xfs" => matches!(
             property,
             "label" | "xfs.label" | "filesystem.label" | "uuid" | "xfs.uuid" | "filesystem.uuid"
@@ -1204,8 +1241,57 @@ fn is_filesystem_uuid_property_supported(fs_type: &str, property: &str) -> bool 
                 "ext2" | "ext3" | "ext4",
                 "uuid" | "ext.uuid" | "filesystem.uuid"
             )
+            | (
+                "fat" | "fat12" | "fat16" | "fat32" | "msdos" | "vfat",
+                "uuid"
+                    | "fat.uuid"
+                    | "vfat.uuid"
+                    | "filesystem.uuid"
+                    | "volumeId"
+                    | "volume-id"
+                    | "fat.volume-id"
+                    | "vfat.volume-id"
+            )
             | ("xfs", "uuid" | "xfs.uuid" | "filesystem.uuid")
     )
+}
+
+fn is_fat_filesystem_uuid_property(fs_type: &str, property: &str) -> bool {
+    matches!(
+        (fs_type, property),
+        (
+            "fat" | "fat12" | "fat16" | "fat32" | "msdos" | "vfat",
+            "uuid"
+                | "fat.uuid"
+                | "vfat.uuid"
+                | "filesystem.uuid"
+                | "volumeId"
+                | "volume-id"
+                | "fat.volume-id"
+                | "vfat.volume-id"
+        )
+    )
+}
+
+fn is_valid_fat_volume_id(value: &str) -> bool {
+    fat_volume_id(value).is_some()
+}
+
+fn fat_volume_id(value: &str) -> Option<String> {
+    let normalized: String = value
+        .trim()
+        .chars()
+        .filter(|character| *character != '-')
+        .collect();
+    if normalized.len() == 8
+        && normalized
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        Some(normalized.to_ascii_uppercase())
+    } else {
+        None
+    }
 }
 
 fn is_btrfs_balance_filter_property(property: &str) -> bool {
@@ -5129,6 +5215,68 @@ mod tests {
             .find(|action| action.id == "filesystems:scratch:set-property:xfs.reflink")
             .expect("unsupported XFS property action should exist");
         assert_eq!(unsupported.risk, RiskClass::Unsupported);
+    }
+
+    #[test]
+    fn plan_accepts_fat_label_and_volume_id_properties() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "efi": {
+                  "mountpoint": "/boot",
+                  "device": "/dev/disk/by-partlabel/EFI",
+                  "fsType": "vfat",
+                  "properties": {
+                    "vfat.label": "NIXBOOT",
+                    "vfat.uuid": "A1B2-C3D4",
+                    "fat.volume-id": "not-a-fat-id"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.unsupported_count, 1);
+
+        let label = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:efi:set-property:vfat.label")
+            .expect("FAT label property action should exist");
+        assert_eq!(label.operation, Operation::SetProperty);
+        assert_eq!(label.risk, RiskClass::Safe);
+        assert_eq!(label.context.fs_type.as_deref(), Some("vfat"));
+        assert_eq!(label.context.property_value.as_deref(), Some("NIXBOOT"));
+
+        let volume_id = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:efi:set-property:vfat.uuid")
+            .expect("FAT volume ID property action should exist");
+        assert_eq!(volume_id.risk, RiskClass::OfflineRequired);
+        assert!(volume_id.advice.as_ref().is_some_and(|advice| {
+            advice.summary.contains("UUID")
+                && advice
+                    .alternatives
+                    .iter()
+                    .any(|alternative| alternative.contains("NixOS fileSystems"))
+        }));
+
+        let invalid_volume_id = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:efi:set-property:fat.volume-id")
+            .expect("invalid FAT volume ID property action should exist");
+        assert_eq!(invalid_volume_id.risk, RiskClass::Unsupported);
+        assert!(invalid_volume_id.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("8-hex-digit FAT volume ID"))
+        }));
     }
 
     #[test]

@@ -20,6 +20,7 @@ let
     bcache-tools
     btrfs-progs
     cryptsetup
+    dosfstools
     e2fsprogs
     lvm2
     mdadm
@@ -598,6 +599,7 @@ in
           bcache-tools
           btrfs-progs
           cryptsetup
+          dosfstools
           e2fsprogs
           lvm2
           mdadm

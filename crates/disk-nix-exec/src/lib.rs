@@ -5059,6 +5059,9 @@ fn filesystem_property_command(
         Some("ext2" | "ext3" | "ext4") => {
             ext_filesystem_property_command(device, target, property, assignment)
         }
+        Some("fat" | "fat12" | "fat16" | "fat32" | "msdos" | "vfat") => {
+            fat_filesystem_property_command(device, target, property, assignment)
+        }
         Some("xfs") => xfs_filesystem_property_command(device, target, property, assignment),
         Some("zfs") => command(
             ["zfs", "set", assignment, target],
@@ -5072,6 +5075,101 @@ fn filesystem_property_command(
             ["filesystem type", "supported filesystem property"],
             "set a filesystem property after selecting the filesystem-specific command",
         ),
+    }
+}
+
+fn fat_filesystem_property_command(
+    device: Option<&str>,
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let Some((_, value)) = assignment.split_once('=') else {
+        return command_with_readiness(
+            ["<fat-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["FAT filesystem property value"],
+            "set a FAT filesystem property after resolving the desired value",
+        );
+    };
+    match (property, device) {
+        ("label" | "fat.label" | "vfat.label" | "filesystem.label", Some(device)) => command(
+            ["fatlabel", device, value],
+            true,
+            "set the FAT filesystem label on the reviewed backing device",
+        ),
+        ("label" | "fat.label" | "vfat.label" | "filesystem.label", None) => {
+            command_with_readiness(
+                ["fatlabel", "<filesystem-device>", value],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["filesystem source device"],
+                "set the FAT filesystem label after resolving the backing device",
+            )
+        }
+        (
+            "uuid" | "fat.uuid" | "vfat.uuid" | "filesystem.uuid" | "volumeId" | "volume-id"
+            | "fat.volume-id" | "vfat.volume-id",
+            Some(device),
+        ) => match fat_volume_id(value) {
+            Some(volume_id) => command_vec(
+                ["fatlabel", "-i", device, volume_id.as_str()],
+                true,
+                "set the FAT filesystem volume ID on the reviewed unmounted backing device",
+            ),
+            None => command_with_readiness(
+                ["<fat-filesystem-property-tool>", target, property],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["8-hex-digit FAT volume ID"],
+                "set a FAT filesystem volume ID after resolving a valid value",
+            ),
+        },
+        (
+            "uuid" | "fat.uuid" | "vfat.uuid" | "filesystem.uuid" | "volumeId" | "volume-id"
+            | "fat.volume-id" | "vfat.volume-id",
+            None,
+        ) => match fat_volume_id(value) {
+            Some(volume_id) => command_vec_with_readiness(
+                ["fatlabel", "-i", "<filesystem-device>", volume_id.as_str()],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["filesystem source device"],
+                "set the FAT filesystem volume ID after resolving the backing device",
+            ),
+            None => command_with_readiness(
+                ["<fat-filesystem-property-tool>", target, property],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["filesystem source device", "8-hex-digit FAT volume ID"],
+                "set a FAT filesystem volume ID after resolving device and value",
+            ),
+        },
+        _ => command_with_readiness(
+            ["<fat-filesystem-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported FAT filesystem property"],
+            "set a FAT filesystem property after selecting a supported property mapping",
+        ),
+    }
+}
+
+fn fat_volume_id(value: &str) -> Option<String> {
+    let normalized: String = value
+        .trim()
+        .chars()
+        .filter(|character| *character != '-')
+        .collect();
+    if normalized.len() == 8
+        && normalized
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        Some(normalized.to_ascii_uppercase())
+    } else {
+        None
     }
 }
 
@@ -8350,6 +8448,64 @@ mod tests {
             step.action_id == "filesystems:missing-device:set-property:xfs.label"
                 && step.commands.iter().any(|command| {
                     command.argv == ["xfs_admin", "-L", "archive-new", "<filesystem-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+    }
+
+    #[test]
+    fn fat_filesystem_properties_use_fatlabel() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "efi": {
+                    "mountpoint": "/boot",
+                    "device": "/dev/disk/by-partlabel/EFI",
+                    "fsType": "vfat",
+                    "properties": {
+                      "label": "NIXBOOT",
+                      "vfat.uuid": "a1b2-c3d4"
+                    }
+                  },
+                  "missing-device": {
+                    "mountpoint": "/firmware",
+                    "fsType": "vfat",
+                    "properties": {
+                      "volume-id": "deadbeef"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:efi:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["fatlabel", "/dev/disk/by-partlabel/EFI", "NIXBOOT"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:efi:set-property:vfat.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["fatlabel", "-i", "/dev/disk/by-partlabel/EFI", "A1B2C3D4"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:missing-device:set-property:volume-id"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["fatlabel", "-i", "<filesystem-device>", "DEADBEEF"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["filesystem source device"]
                 })
