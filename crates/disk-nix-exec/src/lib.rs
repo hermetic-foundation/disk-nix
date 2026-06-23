@@ -5039,7 +5039,7 @@ fn filesystem_property_command(
     assignment: &str,
 ) -> ExecutionCommand {
     match fs_type {
-        Some("btrfs") => btrfs_filesystem_property_command(target, property, assignment),
+        Some("btrfs") => btrfs_filesystem_property_command(target, device, property, assignment),
         Some("ext2" | "ext3" | "ext4") => {
             ext_filesystem_property_command(device, target, property, assignment)
         }
@@ -5161,6 +5161,7 @@ fn ext_filesystem_property_command(
 
 fn btrfs_filesystem_property_command(
     target: &str,
+    device: Option<&str>,
     property: &str,
     assignment: &str,
 ) -> ExecutionCommand {
@@ -5179,6 +5180,20 @@ fn btrfs_filesystem_property_command(
             true,
             "set the Btrfs filesystem label",
         ),
+        "uuid" | "btrfs.uuid" | "filesystem.uuid" => match device {
+            Some(device) => command(
+                ["btrfstune", "-U", value, device],
+                true,
+                "set the Btrfs filesystem UUID on the reviewed unmounted backing device",
+            ),
+            None => command_with_readiness(
+                ["btrfstune", "-U", value, "<filesystem-device>"],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["filesystem source device"],
+                "set the Btrfs filesystem UUID after resolving the backing device",
+            ),
+        },
         _ => command_with_readiness(
             ["<btrfs-filesystem-property-tool>", target, property],
             true,
@@ -8347,11 +8362,26 @@ mod tests {
                       "filesystem.uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
                     }
                   },
+                  "data": {
+                    "mountpoint": "/data",
+                    "device": "/dev/disk/by-label/data",
+                    "fsType": "btrfs",
+                    "properties": {
+                      "btrfs.uuid": "bbbbbbbb-1111-2222-3333-cccccccccccc"
+                    }
+                  },
                   "missing-device": {
                     "mountpoint": "/archive",
                     "fsType": "xfs",
                     "properties": {
                       "uuid": "ffffffff-1111-2222-3333-444444444444"
+                    }
+                  },
+                  "missing-btrfs": {
+                    "mountpoint": "/missing-btrfs",
+                    "fsType": "btrfs",
+                    "properties": {
+                      "uuid": "cccccccc-1111-2222-3333-dddddddddddd"
                     }
                   }
                 }
@@ -8393,6 +8423,19 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:data:set-property:btrfs.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfstune",
+                            "-U",
+                            "bbbbbbbb-1111-2222-3333-cccccccccccc",
+                            "/dev/disk/by-label/data",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
             step.action_id == "filesystems:missing-device:set-property:uuid"
                 && step.commands.iter().any(|command| {
                     command.argv
@@ -8400,6 +8443,20 @@ mod tests {
                             "xfs_admin",
                             "-U",
                             "ffffffff-1111-2222-3333-444444444444",
+                            "<filesystem-device>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystems:missing-btrfs:set-property:uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfstune",
+                            "-U",
+                            "cccccccc-1111-2222-3333-dddddddddddd",
                             "<filesystem-device>",
                         ]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation

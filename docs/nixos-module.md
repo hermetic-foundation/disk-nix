@@ -102,9 +102,10 @@ For ext filesystems, `device` is also used by disk-nix grow, shrink, check, and
 repair command plans for `resize2fs` and `e2fsck`. If only `mountpoint` is
 declared, source-device maintenance commands remain non-ready until the backing
 block device is selected explicitly. XFS label changes also use `device` for
-`xfs_admin -L`. Ext and XFS UUID changes use `device` for `tune2fs -U` and
-`xfs_admin -U` and are offline-required. XFS and Btrfs check/repair
-declarations require a stable source device for `xfs_repair` or `btrfs check`.
+`xfs_admin -L`. Btrfs, ext, and XFS UUID changes use `device` for
+`btrfstune -U`, `tune2fs -U`, and `xfs_admin -U` and are offline-required. XFS
+and Btrfs check/repair declarations require a stable source device for
+`xfs_repair` or `btrfs check`.
 For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, `operation = "trim"`, device add/remove/replace operations, and filesystem property
 updates such as labels or balance filters while still deriving the regular
 NixOS `fileSystems` entry from the same declaration.

@@ -1155,7 +1155,7 @@ fn classify_filesystem_property_change(
             alternatives: vec![
                 "use label, filesystem.label, btrfs.label, ext.label, or xfs.label when changing filesystem labels"
                     .to_string(),
-                "use uuid, filesystem.uuid, ext.uuid, or xfs.uuid when changing supported filesystem UUIDs"
+                "use uuid, filesystem.uuid, btrfs.uuid, ext.uuid, or xfs.uuid when changing supported filesystem UUIDs"
                     .to_string(),
                 "use ZFS dataset declarations for arbitrary zfs set property updates".to_string(),
                 "apply unsupported filesystem property changes manually after reviewing filesystem-specific tooling"
@@ -1167,7 +1167,15 @@ fn classify_filesystem_property_change(
 
 fn is_filesystem_property_supported(fs_type: &str, property: &str) -> bool {
     match fs_type {
-        "btrfs" => matches!(property, "label" | "btrfs.label" | "filesystem.label"),
+        "btrfs" => matches!(
+            property,
+            "label"
+                | "btrfs.label"
+                | "filesystem.label"
+                | "uuid"
+                | "btrfs.uuid"
+                | "filesystem.uuid"
+        ),
         "ext2" | "ext3" | "ext4" => {
             matches!(
                 property,
@@ -1191,10 +1199,12 @@ fn is_filesystem_property_supported(fs_type: &str, property: &str) -> bool {
 fn is_filesystem_uuid_property_supported(fs_type: &str, property: &str) -> bool {
     matches!(
         (fs_type, property),
-        (
-            "ext2" | "ext3" | "ext4",
-            "uuid" | "ext.uuid" | "filesystem.uuid"
-        ) | ("xfs", "uuid" | "xfs.uuid" | "filesystem.uuid")
+        ("btrfs", "uuid" | "btrfs.uuid" | "filesystem.uuid")
+            | (
+                "ext2" | "ext3" | "ext4",
+                "uuid" | "ext.uuid" | "filesystem.uuid"
+            )
+            | ("xfs", "uuid" | "xfs.uuid" | "filesystem.uuid")
     )
 }
 
@@ -4991,7 +5001,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_classifies_ext_and_xfs_uuid_updates_as_offline_required() {
+    fn plan_classifies_filesystem_uuid_updates_as_offline_required() {
         let plan = plan_from_json_bytes(
             br#"{
               "filesystems": {
@@ -5010,14 +5020,22 @@ mod tests {
                   "properties": {
                     "filesystem.uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
                   }
+                },
+                "data": {
+                  "mountpoint": "/data",
+                  "device": "/dev/disk/by-label/data",
+                  "fsType": "btrfs",
+                  "properties": {
+                    "btrfs.uuid": "bbbbbbbb-1111-2222-3333-cccccccccccc"
+                  }
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 4);
-        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.action_count, 6);
+        assert_eq!(plan.summary.offline_required_count, 3);
         assert_eq!(plan.summary.unsupported_count, 0);
         let ext_uuid = plan
             .actions
@@ -5045,6 +5063,18 @@ mod tests {
             .expect("XFS UUID property action should exist");
         assert_eq!(xfs_uuid.risk, RiskClass::OfflineRequired);
         assert_eq!(xfs_uuid.context.fs_type.as_deref(), Some("xfs"));
+
+        let btrfs_uuid = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:data:set-property:btrfs.uuid")
+            .expect("Btrfs UUID property action should exist");
+        assert_eq!(btrfs_uuid.risk, RiskClass::OfflineRequired);
+        assert_eq!(btrfs_uuid.context.fs_type.as_deref(), Some("btrfs"));
+        assert_eq!(
+            btrfs_uuid.context.property_value.as_deref(),
+            Some("bbbbbbbb-1111-2222-3333-cccccccccccc")
+        );
     }
 
     #[test]

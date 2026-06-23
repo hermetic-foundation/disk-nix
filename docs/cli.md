@@ -374,11 +374,11 @@ Btrfs filesystem label property updates render
 `btrfs filesystem label <path> <label>` as ready commands. Ext filesystem label
 updates render `e2label <device> <label>` when an explicit backing device is
 declared. XFS filesystem label updates render
-`xfs_admin -L <label> <device>`. Ext and XFS UUID updates render
-`tune2fs -U <uuid> <device>` and `xfs_admin -U <uuid> <device>` as
-offline-required changes. Missing devices remain marked
-`needs-domain-implementation`, while unsupported filesystem property keys are
-classified as unsupported before execution.
+`xfs_admin -L <label> <device>`. Btrfs, ext, and XFS UUID updates render
+`btrfstune -U <uuid> <device>`, `tune2fs -U <uuid> <device>`, and
+`xfs_admin -U <uuid> <device>` as offline-required changes. Missing devices
+remain marked `needs-domain-implementation`, while unsupported filesystem
+property keys are classified as unsupported before execution.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit `level` and `devices` fields, with exact unresolved-input markers
 when either field is missing and `/proc/mdstat` verification. MD create, grow,

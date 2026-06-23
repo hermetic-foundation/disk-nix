@@ -379,7 +379,8 @@ Btrfs filesystem label property updates render
 `btrfs filesystem label <path> <label>`. Ext filesystem label updates render
 `e2label <device> <label>` when the filesystem declaration includes a backing
 device. XFS filesystem label updates render `xfs_admin -L <label> <device>`.
-Ext and XFS filesystem UUID updates render `tune2fs -U <uuid> <device>` and
+Btrfs, ext, and XFS filesystem UUID updates render
+`btrfstune -U <uuid> <device>`, `tune2fs -U <uuid> <device>`, and
 `xfs_admin -U <uuid> <device>` and are offline-required because they mutate
 filesystem identity used by mounts and boot paths. Missing devices stay marked
 `needs-domain-implementation`, while unsupported filesystem property keys are
