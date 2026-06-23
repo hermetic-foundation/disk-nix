@@ -148,6 +148,7 @@ disk-nix multipath
 disk-nix nvme
 disk-nix raid
 disk-nix loop
+disk-nix swap
 disk-nix mounts
 disk-nix network-storage
 disk-nix ids
@@ -171,6 +172,7 @@ disk-nix multipath --json
 disk-nix nvme --json
 disk-nix raid --json
 disk-nix loop --json
+disk-nix swap --json
 disk-nix mounts --json
 disk-nix network-storage --json
 disk-nix ids --json
@@ -249,6 +251,9 @@ Use these commands for:
 - `loop`: loop devices and backing files/devices, including backing path,
   offset, size limit, logical sector size, major/minor, autoclear,
   read-only, and direct-I/O settings when `losetup --json` exposes them
+- `swap`: active swap devices and files, including type, priority, active
+  state, size, used bytes, free bytes, utilization, and backing relationship
+  when `/proc/swaps` exposes them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them

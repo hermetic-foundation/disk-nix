@@ -148,6 +148,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered active swap devices and files.
+    Swap {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered mountpoints.
     Mounts {
         /// Emit JSON for matching graph nodes.
@@ -444,6 +450,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_loop_node)?;
             } else {
                 print_loop(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Swap { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_swap_node)?;
+            } else {
+                print_swap(output, &graph)?;
             }
             Ok(())
         }
@@ -1603,6 +1618,31 @@ fn print_loop(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     Ok(())
 }
 
+fn print_swap(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<32} {:>12} {:>12} {:>12} {:>7} {:<10} {:<8} DETAILS",
+        "KIND", "NAME", "SIZE", "USED", "FREE", "USE%", "TYPE", "PRIO"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_swap_node(node)) {
+        let usage = node.usage.as_ref();
+        writeln!(
+            output,
+            "{:<22} {:<32} {:>12} {:>12} {:>12} {:>7} {:<10} {:<8} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            human_bytes(usage.and_then(|usage| usage.used_bytes)),
+            human_bytes(usage.and_then(|usage| usage.free_bytes)),
+            usage_percent(node),
+            property_value(node, "swap.type").unwrap_or("-"),
+            property_value(node, "swap.priority").unwrap_or("-"),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_mounts(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2193,6 +2233,14 @@ fn is_loop_node(node: &Node) -> bool {
             .any(|property| property.key.starts_with("loop."))
 }
 
+fn is_swap_node(node: &Node) -> bool {
+    node.kind == NodeKind::Swap
+        || node
+            .properties
+            .iter()
+            .any(|property| property.key.starts_with("swap."))
+}
+
 fn is_mount_node(node: &Node) -> bool {
     matches!(node.kind, NodeKind::Mountpoint | NodeKind::NfsMount)
 }
@@ -2642,11 +2690,11 @@ mod tests {
         confirmation_file_accepts, is_cache_node, is_device_node, is_encryption_node,
         is_filesystem_node, is_loop_node, is_mapping_node, is_multipath_node,
         is_network_storage_node, is_nvme_node, is_partition_node, is_pool_node, is_raid_node,
-        is_snapshot_node, is_vdo_node, is_volume_node, mount_details, print_cache, print_devices,
-        print_encryption, print_filesystems, print_loop, print_mappings, print_mounts,
-        print_multipath, print_network_storage, print_nvme, print_partitions, print_pools,
-        print_raid, print_snapshots, print_usage, print_vdo, print_volumes, snapshot_source,
-        usage_details, usage_percent,
+        is_snapshot_node, is_swap_node, is_vdo_node, is_volume_node, mount_details, print_cache,
+        print_devices, print_encryption, print_filesystems, print_loop, print_mappings,
+        print_mounts, print_multipath, print_network_storage, print_nvme, print_partitions,
+        print_pools, print_raid, print_snapshots, print_swap, print_usage, print_vdo,
+        print_volumes, snapshot_source, usage_details, usage_percent,
     };
 
     #[test]
@@ -2795,6 +2843,15 @@ mod tests {
             NodeKind::BackingFile,
             "/var/lib/images/root.img"
         )));
+        assert!(is_swap_node(&Node::new(
+            "swap:/dev/sda3",
+            NodeKind::Swap,
+            "/dev/sda3"
+        )));
+        assert!(is_swap_node(
+            &Node::new("block:/swapfile", NodeKind::BackingFile, "/swapfile")
+                .with_property("swap.active", "true")
+        ));
     }
 
     #[test]
@@ -3904,6 +3961,71 @@ mod tests {
         assert!(output.contains("1.0 GiB"));
         assert!(output.contains("/dev/disk/by-id/nvme-loop-backing"));
         assert!(output.contains("sizelimit=1073741824"));
+    }
+
+    #[test]
+    fn swap_table_includes_active_swap_usage_and_priority() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/sda3", NodeKind::Swap, "/dev/sda3")
+                .with_path("/dev/sda3")
+                .with_size_bytes(9_448_955_904)
+                .with_usage(Usage {
+                    used_bytes: Some(53_592_064),
+                    free_bytes: Some(9_395_363_840),
+                    allocated_bytes: Some(9_448_955_904),
+                })
+                .with_property("swap.active", "true")
+                .with_property("swap.type", "partition")
+                .with_property("swap.priority", "-2"),
+        );
+        graph.add_node(
+            Node::new("swap:/dev/sda3", NodeKind::Swap, "/dev/sda3")
+                .with_path("/dev/sda3")
+                .with_size_bytes(9_448_955_904)
+                .with_usage(Usage {
+                    used_bytes: Some(53_592_064),
+                    free_bytes: Some(9_395_363_840),
+                    allocated_bytes: Some(9_448_955_904),
+                })
+                .with_property("swap.active", "true")
+                .with_property("swap.type", "partition")
+                .with_property("swap.priority", "-2"),
+        );
+        graph.add_node(
+            Node::new("swap:/swapfile", NodeKind::Swap, "/swapfile")
+                .with_path("/swapfile")
+                .with_size_bytes(1_073_741_824)
+                .with_usage(Usage {
+                    used_bytes: Some(0),
+                    free_bytes: Some(1_073_741_824),
+                    allocated_bytes: Some(1_073_741_824),
+                })
+                .with_property("swap.active", "true")
+                .with_property("swap.type", "file")
+                .with_property("swap.priority", "10"),
+        );
+        graph.add_edge(Edge::new(
+            "block:/dev/sda3",
+            "swap:/dev/sda3",
+            Relationship::Backs,
+        ));
+
+        let mut output = Vec::new();
+        print_swap(&mut output, &graph).expect("swap table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("TYPE"));
+        assert!(output.contains("PRIO"));
+        assert!(output.contains("/dev/sda3"));
+        assert!(output.contains("partition"));
+        assert!(output.contains("-2"));
+        assert!(output.contains("swap-active=true swap-type=partition swap-priority=-2"));
+        assert!(output.contains("/swapfile"));
+        assert!(output.contains("file"));
+        assert!(output.contains("10"));
+        assert!(output.contains("swap-active=true swap-type=file swap-priority=10"));
+        assert!(output.contains("0.0%"));
     }
 
     #[test]
