@@ -186,6 +186,8 @@ and rescan commands from explicit target IQN and portal declarations.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain.
+ZFS snapshot rollback plans render reviewed `zfs rollback` details while
+remaining blocked by the potential-data-loss policy gate.
 ZFS dataset apply plans render reviewed `zfs create` commands and
 policy-gated `zfs destroy` commands.
 LVM logical volume apply plans render reviewed `lvcreate` and gated

@@ -1222,6 +1222,33 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "origin logical volume contents and consumers are verified after merge".to_string(),
             ],
         ),
+        Operation::Rollback if collection == Some("snapshots") && is_zfs_snapshot_name(target) => {
+            let dataset = zfs_snapshot_dataset(target).unwrap_or("<dataset>");
+            (
+                vec![
+                    command(
+                        ["zfs", "list", "-t", "snapshot", "-H", "-p", target],
+                        false,
+                        "verify the ZFS snapshot still exists after rollback",
+                    ),
+                    command(
+                        ["zfs", "list", "-H", "-p", dataset],
+                        false,
+                        "verify the rolled-back ZFS dataset after rollback",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", dataset, "--json"],
+                        false,
+                        "verify dataset graph state and consumers after rollback",
+                    ),
+                ],
+                vec![
+                    "dataset contents match the reviewed snapshot rollback point".to_string(),
+                    "newer snapshots, clones, mounts, and dependent services were reviewed after rollback"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Format if collection == Some("swaps") => (
             vec![
                 command(
@@ -2576,6 +2603,40 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Rollback if collection == Some("snapshots") => {
+            let target = target.unwrap_or("<snapshot>");
+            if is_zfs_snapshot_name(target) {
+                (
+                    vec![
+                        command(
+                            ["zfs", "list", "-t", "snapshot", "-H", "-p", target],
+                            false,
+                            "inspect ZFS snapshot before rollback",
+                        ),
+                        command(
+                            ["zfs", "rollback", target],
+                            true,
+                            "roll back the ZFS dataset to the reviewed snapshot",
+                        ),
+                    ],
+                    vec![
+                        "take a fresh snapshot of the current dataset before rollback".to_string(),
+                        "review newer snapshots and clones before considering zfs rollback -r or -R"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            } else {
+                (
+                    Vec::new(),
+                    vec![
+                        "snapshot rollback command is only rendered for unambiguous ZFS snapshot names"
+                            .to_string(),
+                    ],
+                    true,
+                )
+            }
+        }
         Operation::RemoveDevice if collection == Some("mdRaids") => {
             let target = target.unwrap_or("<md-array>");
             let device = action
@@ -3164,6 +3225,10 @@ fn is_zfs_snapshot_name(snapshot: &str) -> bool {
         return false;
     };
     !dataset.is_empty() && !name.is_empty() && !dataset.starts_with('/')
+}
+
+fn zfs_snapshot_dataset(snapshot: &str) -> Option<&str> {
+    snapshot.split_once('@').map(|(dataset, _)| dataset)
 }
 
 fn is_btrfs_snapshot_pair(target: &str, snapshot: &str) -> bool {
@@ -3902,6 +3967,77 @@ mod tests {
                 .iter()
                 .any(|check| check.contains("Btrfs device list matches desired topology"))
         );
+    }
+
+    #[test]
+    fn zfs_snapshot_rollback_renderer_reports_reviewable_commands() {
+        let action = PlannedAction {
+            id: "snapshot:tank/home@before:rollback".to_string(),
+            description: "roll back tank/home to snapshot tank/home@before".to_string(),
+            operation: Operation::Rollback,
+            risk: RiskClass::PotentialDataLoss,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("snapshots".to_string()),
+                name: Some("tank/home@before".to_string()),
+                target: Some("tank/home@before".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+
+        let (commands, notes, requires_manual_review) = commands_for_action(&action);
+        let (verification_commands, verification_checks) = verification_for_action(&action);
+
+        assert!(requires_manual_review);
+        assert!(notes.iter().any(|note| note.contains("fresh snapshot")));
+        assert!(commands.iter().any(|command| {
+            command.argv
+                == [
+                    "zfs",
+                    "list",
+                    "-t",
+                    "snapshot",
+                    "-H",
+                    "-p",
+                    "tank/home@before",
+                ]
+                && !command.mutates
+        }));
+        assert!(commands.iter().any(|command| {
+            command.argv == ["zfs", "rollback", "tank/home@before"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(verification_commands.iter().any(|command| {
+            command.argv == ["zfs", "list", "-H", "-p", "tank/home"] && !command.mutates
+        }));
+        assert!(
+            verification_checks
+                .iter()
+                .any(|check| check.contains("rollback point"))
+        );
+    }
+
+    #[test]
+    fn zfs_snapshot_rollback_stays_blocked_by_apply_policy() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home",
+                  "rollback": true
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::Blocked);
+        assert!(report.command_plan.is_empty());
+        assert_eq!(report.command_summary.step_count, 0);
     }
 
     #[test]

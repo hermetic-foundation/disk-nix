@@ -345,6 +345,8 @@ ZFS dataset command plans render reviewed `zfs create` and policy-gated
 Generic snapshot declarations render concrete `zfs snapshot` commands for
 `dataset@snapshot` names and Btrfs `subvolume snapshot` commands when both the
 source target and snapshot name are absolute paths.
+ZFS snapshot rollback declarations render reviewed `zfs rollback` command
+details internally, but apply remains blocked as potential data loss.
 `verificationSummary` and `verificationPlan` record read-only commands and
 state checks that should run after a future mutating executor or manual apply
 finishes. These checks re-probe the relevant graph node and include
