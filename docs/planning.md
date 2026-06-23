@@ -65,7 +65,8 @@ Examples:
 - Cache `replace-device` is classified as offline-required because dirty or
   writeback data must be flushed or detached cleanly before replacement.
 - disk partition-table creation is classified as destructive because it can
-  hide or replace existing storage metadata.
+  hide or replace existing storage metadata. When destructive policy permits
+  it, apply plans render reviewed `parted mklabel` and table reread commands.
 - partition creation and growth are classified as offline-required because the
   kernel partition table reread and dependent consumers must be coordinated.
 - swap signature creation is classified as destructive; swap growth is

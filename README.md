@@ -168,6 +168,8 @@ domain-specific `btrfs device remove` rendering for review, while remaining
 blocked by the current potential-data-loss policy gate.
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit.
+Disk initialization plans render destructive-policy-gated `parted mklabel` and
+partition table reread steps after disk identity inspection.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
 online `vdo growLogical` and physical growth review steps.
 NFS export apply plans render reviewed `exportfs` create/unexport commands

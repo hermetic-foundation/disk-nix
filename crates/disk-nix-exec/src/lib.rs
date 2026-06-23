@@ -711,6 +711,29 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Create if collection == Some("disks") => (
+            vec![
+                command(
+                    ["parted", "-lm", target],
+                    false,
+                    "verify disk partition table label after initialization",
+                ),
+                command(
+                    ["lsblk", "--json", "--bytes", "--output-all", target],
+                    false,
+                    "verify kernel disk and partition-table state after reread",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify modeled disk graph node after initialization",
+                ),
+            ],
+            vec![
+                "disk reports the requested partition table label".to_string(),
+                "no unexpected partitions or consumers remain after initialization".to_string(),
+            ],
+        ),
         Operation::Grow
             if collection == Some("luns")
                 || collection == Some("iscsiSessions")
@@ -2077,6 +2100,42 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create if collection == Some("disks") => {
+            let target = target.unwrap_or("<disk>");
+            let label = action
+                .context
+                .partition_type
+                .as_deref()
+                .unwrap_or("gpt");
+            (
+                vec![
+                    command(
+                        ["disk-nix", "inspect", target],
+                        false,
+                        "inspect disk identity, signatures, and existing consumers before initialization",
+                    ),
+                    disk_create_label_command(target, label),
+                    command(
+                        ["partprobe", target],
+                        true,
+                        "ask the kernel to reread the initialized partition table",
+                    ),
+                    command(
+                        ["parted", "-lm", target],
+                        false,
+                        "verify the disk reports the reviewed partition table label",
+                    ),
+                ],
+                vec![
+                    "creating a partition table can hide existing signatures and partitions"
+                        .to_string(),
+                    "prefer importing or preserving existing metadata when the disk is not empty"
+                        .to_string(),
+                    "create partitions only after the initialized disk is re-probed".to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Create if collection == Some("partitions") => {
             let target = target.unwrap_or("<partition>");
             let disk = action.context.device.as_deref().unwrap_or("<disk>");
@@ -3023,6 +3082,14 @@ fn snapshot_command(collection: Option<&str>, target: &str, snapshot: &str) -> E
     }
 }
 
+fn disk_create_label_command(target: &str, label: &str) -> ExecutionCommand {
+    command_vec(
+        vec!["parted", "-s", target, "mklabel", label],
+        true,
+        "create the reviewed disk partition table label",
+    )
+}
+
 fn partition_create_command(
     disk: &str,
     partition_type: &str,
@@ -3716,6 +3783,69 @@ mod tests {
 
         assert!(script.contains("# NOT READY: lvextend --resizefs --size '+<size>' vg/root"));
         assert!(script.contains("# Unresolved inputs: desired size delta"));
+    }
+
+    #[test]
+    fn disk_initialization_requires_destructive_policy_and_renders_mklabel() {
+        let (blocked_plan, blocked_policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "disks": {
+                  "/dev/disk/by-id/nvme-root": {
+                    "operation": "create",
+                    "partitionType": "gpt"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let blocked = prepare_execution(&blocked_plan, blocked_policy, ExecutionMode::DryRun);
+
+        assert_eq!(blocked.status, ExecutionStatus::Blocked);
+        assert!(blocked.command_plan.is_empty());
+
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "disks": {
+                  "/dev/disk/by-id/nvme-root": {
+                    "operation": "create",
+                    "partitionType": "gpt"
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_plan.len(), 1);
+        assert!(report.command_plan[0].requires_manual_review);
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv
+                == [
+                    "parted",
+                    "-s",
+                    "/dev/disk/by-id/nvme-root",
+                    "mklabel",
+                    "gpt",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["partprobe", "/dev/disk/by-id/nvme-root"] && command.mutates
+        }));
+        assert!(report.verification_plan[0].commands.iter().any(|command| {
+            command.argv == ["parted", "-lm", "/dev/disk/by-id/nvme-root"] && !command.mutates
+        }));
     }
 
     #[test]

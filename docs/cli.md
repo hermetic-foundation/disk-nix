@@ -315,6 +315,8 @@ blocked while potential-data-loss actions have no explicit apply override.
 Swapfile growth command plans render `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon`; block-device swap growth keeps the backing resize command
 non-ready until the partition, LV, LUN, or other backing layer is selected.
+Disk initialization plans render policy-gated `parted mklabel` and partition
+table reread commands after inspecting the target disk.
 VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
 plus online `vdo growLogical` and `vdo growPhysical` growth steps.
 NFS export command plans use explicit `client` and `options` lifecycle fields
