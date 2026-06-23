@@ -176,6 +176,8 @@ Lifecycle objects may use:
   when it differs from the attribute name
 - `device` or `disk`: backing device path for disk and partition operations
 - `client`: NFS export client or network selector
+- `portal`: iSCSI target portal such as `192.0.2.10:3260`; `metadata.portal`
+  is also accepted for NixOS-module-derived session declarations
 - `options`: NFS export options used for reviewed `exportfs` create commands
 - `start` and `end`: partition geometry for partition creation or resizing
 - `partitionType` or `type`: partition type/name metadata for partition

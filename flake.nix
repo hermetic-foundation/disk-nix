@@ -296,6 +296,7 @@
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
               and ."$defs".lifecycleObject.properties.path.type == "string"
               and ."$defs".lifecycleObject.properties.client.type == "string"
+              and ."$defs".lifecycleObject.properties.portal.type == "string"
               and ."$defs".lifecycleObject.properties.options.type == "string"
               and ."$defs".applyPolicy.properties.failOnBlocked.default == true
               and (."$defs".applyPolicy.properties.reportOut.type | index("string") != null)

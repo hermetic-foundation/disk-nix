@@ -741,6 +741,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Create | Operation::Destroy if collection == Some("iscsiSessions") => (
+            vec![
+                command(
+                    ["iscsiadm", "--mode", "session"],
+                    false,
+                    "list active iSCSI sessions after login or logout",
+                ),
+                command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    "verify iSCSI session, LUN, multipath, and consumer graph state",
+                ),
+            ],
+            vec![
+                "session login state matches the declared lifecycle operation".to_string(),
+                "dependent LUN paths and multipath maps are present only when expected".to_string(),
+            ],
+        ),
         Operation::AddDevice | Operation::ReplaceDevice | Operation::Rebalance
             if collection == Some("pools") =>
         {
@@ -1432,6 +1450,126 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ),
                 ],
                 vec!["coordinate session rescans with every dependent LUN consumer".to_string()],
+                true,
+            )
+        }
+        Operation::Create
+            if collection == Some("iscsiSessions") || action.id.starts_with("iscsiSessions:") =>
+        {
+            let target = target.unwrap_or("<iscsi-target-iqn>");
+            let portal = action.context.portal.as_deref();
+            let discovery = match portal {
+                Some(portal) => command_vec(
+                    vec![
+                        "iscsiadm",
+                        "--mode",
+                        "discovery",
+                        "--type",
+                        "sendtargets",
+                        "--portal",
+                        portal,
+                    ],
+                    true,
+                    "discover iSCSI target records from the reviewed portal",
+                ),
+                None => command_vec_with_readiness(
+                    vec![
+                        "iscsiadm",
+                        "--mode",
+                        "discovery",
+                        "--type",
+                        "sendtargets",
+                        "--portal",
+                        "<portal>",
+                    ],
+                    true,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["iSCSI portal"],
+                    "discover iSCSI target records after selecting the target portal",
+                ),
+            };
+            let login = match portal {
+                Some(portal) => command_vec(
+                    vec![
+                        "iscsiadm",
+                        "--mode",
+                        "node",
+                        "--targetname",
+                        target,
+                        "--portal",
+                        portal,
+                        "--login",
+                    ],
+                    true,
+                    "log in to the reviewed iSCSI target through the selected portal",
+                ),
+                None => command_vec_with_readiness(
+                    vec![
+                        "iscsiadm",
+                        "--mode",
+                        "node",
+                        "--targetname",
+                        target,
+                        "--portal",
+                        "<portal>",
+                        "--login",
+                    ],
+                    true,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["iSCSI portal"],
+                    "log in to the iSCSI target after selecting the target portal",
+                ),
+            };
+            (
+                vec![discovery, login],
+                vec![
+                    "verify the target IQN and portal before creating host sessions".to_string(),
+                    "rescan and settle multipath paths before exposing dependent volumes"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy
+            if collection == Some("iscsiSessions") || action.id.starts_with("iscsiSessions:") =>
+        {
+            let target = target.unwrap_or("<iscsi-target-iqn>");
+            let portal = action.context.portal.as_deref();
+            let logout = match portal {
+                Some(portal) => command_vec(
+                    vec![
+                        "iscsiadm",
+                        "--mode",
+                        "node",
+                        "--targetname",
+                        target,
+                        "--portal",
+                        portal,
+                        "--logout",
+                    ],
+                    true,
+                    "log out from the reviewed iSCSI target and portal",
+                ),
+                None => command_vec(
+                    vec![
+                        "iscsiadm",
+                        "--mode",
+                        "node",
+                        "--targetname",
+                        target,
+                        "--logout",
+                    ],
+                    true,
+                    "log out from all node records for the reviewed iSCSI target",
+                ),
+            };
+            (
+                vec![logout],
+                vec![
+                    "unmount filesystems and deactivate mappings before logging out".to_string(),
+                    "verify multipath, LVM, and filesystem consumers have migrated away"
+                        .to_string(),
+                ],
                 true,
             )
         }
@@ -4505,6 +4643,125 @@ mod tests {
         assert!(report.command_plan[0].commands.iter().any(|command| {
             command.argv == ["iscsiadm", "--mode", "session", "--rescan"] && command.mutates
         }));
+    }
+
+    #[test]
+    fn iscsi_session_lifecycle_reports_login_and_logout_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "operation": "create",
+                  "portal": "192.0.2.10:3260"
+                },
+                "iqn.2026-06.example:storage.old": {
+                  "destroy": true,
+                  "metadata": {
+                    "portal": "192.0.2.11:3260"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "iscsiadm",
+                        "--mode",
+                        "discovery",
+                        "--type",
+                        "sendtargets",
+                        "--portal",
+                        "192.0.2.10:3260",
+                    ]
+                    && command.mutates
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "iscsiadm",
+                        "--mode",
+                        "node",
+                        "--targetname",
+                        "iqn.2026-06.example:storage.root",
+                        "--portal",
+                        "192.0.2.10:3260",
+                        "--login",
+                    ]
+                    && command.mutates
+                    && command.readiness == CommandReadiness::Ready
+            })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "iscsiadm",
+                        "--mode",
+                        "node",
+                        "--targetname",
+                        "iqn.2026-06.example:storage.old",
+                        "--portal",
+                        "192.0.2.11:3260",
+                        "--logout",
+                    ]
+                    && command.mutates
+            })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "iscsisessions:iqn.2026-06.example:storage.root:create"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["iscsiadm", "--mode", "session"])
+        }));
+    }
+
+    #[test]
+    fn iscsi_session_login_without_portal_reports_unresolved_input() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "operation": "create"
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.commands.iter().any(|command| {
+                command.argv
+                    == [
+                        "iscsiadm",
+                        "--mode",
+                        "node",
+                        "--targetname",
+                        "iqn.2026-06.example:storage.root",
+                        "--portal",
+                        "<portal>",
+                        "--login",
+                    ]
+                    && command.readiness == CommandReadiness::NeedsDomainImplementation
+                    && command.unresolved_inputs == ["iSCSI portal"]
+            })
+        }));
+        assert!(!report.command_summary.all_commands_ready());
     }
 
     #[test]

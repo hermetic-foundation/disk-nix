@@ -319,6 +319,9 @@ VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
 plus online `vdo growLogical` and `vdo growPhysical` growth steps.
 NFS export command plans use explicit `client` and `options` lifecycle fields
 to render reviewed `exportfs` create and unexport commands.
+iSCSI session command plans use `target` or the lifecycle key as the target IQN
+and `portal` or `metadata.portal` for reviewed discovery, login, and logout
+commands.
 LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`.
 LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,

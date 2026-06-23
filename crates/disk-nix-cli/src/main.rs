@@ -686,6 +686,7 @@ fn spec_schema() -> serde_json::Value {
                     "device": { "type": "string" },
                     "disk": { "type": "string" },
                     "client": { "type": "string" },
+                    "portal": { "type": "string" },
                     "options": { "type": "string" },
                     "priority": { "type": "integer" },
                     "randomEncryption": { "type": "boolean" },

@@ -172,6 +172,8 @@ VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
 online `vdo growLogical` and physical growth review steps.
 NFS export apply plans render reviewed `exportfs` create/unexport commands
 from explicit client and option declarations.
+iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
+and rescan commands from explicit target IQN and portal declarations.
 ZFS dataset apply plans render reviewed `zfs create` commands and
 policy-gated `zfs destroy` commands.
 LVM logical volume apply plans render reviewed `lvcreate` and gated

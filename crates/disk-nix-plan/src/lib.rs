@@ -181,6 +181,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub portal: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<String>,
 }
 
@@ -201,6 +203,7 @@ impl ActionContext {
             && self.end.is_none()
             && self.partition_type.is_none()
             && self.client.is_none()
+            && self.portal.is_none()
             && self.options.is_none()
     }
 }
@@ -785,6 +788,7 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         end: string_field(object, &["end", "endOffset"]),
         partition_type: string_field(object, &["partitionType", "type"]),
         client: string_field(object, &["client"]),
+        portal: lifecycle_portal(object),
         options: lifecycle_options(object),
         ..ActionContext::default()
     }
@@ -817,6 +821,14 @@ fn lifecycle_options(object: &Value) -> Option<String> {
         object
             .get("properties")
             .and_then(|properties| string_field(properties, &["options"]))
+    })
+}
+
+fn lifecycle_portal(object: &Value) -> Option<String> {
+    string_field(object, &["portal"]).or_else(|| {
+        object
+            .get("metadata")
+            .and_then(|metadata| string_field(metadata, &["portal"]))
     })
 }
 
@@ -1346,6 +1358,27 @@ fn add_destroy_guard(
             });
             return;
         }
+        if collection == "iscsiSessions" {
+            actions.push(PlannedAction {
+                id: format!("{collection}:{name}:destroy").to_ascii_lowercase(),
+                description: format!("log out iSCSI session {name}"),
+                operation: Operation::Destroy,
+                risk: RiskClass::OfflineRequired,
+                destructive: false,
+                context: lifecycle_context(collection, name, object),
+                advice: Some(Advice {
+                    summary: "iSCSI logout detaches remote LUN paths from the host".to_string(),
+                    alternatives: vec![
+                        "unmount filesystems and deactivate mappings before logout".to_string(),
+                        "verify multipath, LVM, and filesystem consumers have migrated away"
+                            .to_string(),
+                        "disable automatic login only after dependent services no longer need the LUN"
+                            .to_string(),
+                    ],
+                }),
+            });
+            return;
+        }
 
         let mut alternatives = destructive_alternatives(collection, object);
         alternatives.push("rename, detach, or unmount first when supported".to_string());
@@ -1643,6 +1676,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "iscsiSessions" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "iSCSI session login discovers target portals and attaches remote LUNs"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the portal and target IQN before logging in".to_string(),
+                    "prefer stable multipath and by-id consumers before resizing filesystems"
+                        .to_string(),
+                    "keep NixOS open-iscsi session declarations aligned with imperative login"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::SetProperty => (RiskClass::Safe, false, None),
         Operation::Grow if collection == "mdRaids" => (
             RiskClass::OfflineRequired,
@@ -1789,6 +1837,20 @@ fn classify_operation(
                     "remove or migrate clients before unexporting the path".to_string(),
                     "switch export options to read-only before final removal".to_string(),
                     "verify no active mounts depend on the export before reload".to_string(),
+                ],
+            }),
+        ),
+        Operation::Destroy if collection == "iscsiSessions" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "iSCSI logout detaches remote LUN paths from the host".to_string(),
+                alternatives: vec![
+                    "unmount filesystems and deactivate mappings before logout".to_string(),
+                    "verify multipath, LVM, and filesystem consumers have migrated away"
+                        .to_string(),
+                    "disable automatic login only after dependent services no longer need the LUN"
+                        .to_string(),
                 ],
             }),
         ),
@@ -3577,6 +3639,48 @@ mod tests {
         assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.actions[0].operation, Operation::Grow);
         assert_eq!(plan.actions[0].risk, RiskClass::OfflineRequired);
+    }
+
+    #[test]
+    fn plan_classifies_iscsi_session_login_and_logout() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "operation": "create",
+                  "metadata": {
+                    "portal": "192.0.2.10:3260"
+                  }
+                },
+                "iqn.2026-06.example:storage.old": {
+                  "destroy": true,
+                  "portal": "192.0.2.11:3260"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.destructive_count, 0);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "iscsisessions:iqn.2026-06.example:storage.root:create")
+            .expect("iSCSI create action exists");
+        assert_eq!(create.operation, Operation::Create);
+        assert_eq!(create.risk, RiskClass::Online);
+        assert_eq!(create.context.portal.as_deref(), Some("192.0.2.10:3260"));
+
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "iscsisessions:iqn.2026-06.example:storage.old:destroy")
+            .expect("iSCSI destroy action exists");
+        assert_eq!(destroy.operation, Operation::Destroy);
+        assert_eq!(destroy.risk, RiskClass::OfflineRequired);
+        assert_eq!(destroy.context.portal.as_deref(), Some("192.0.2.11:3260"));
     }
 
     #[test]
