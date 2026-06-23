@@ -316,7 +316,11 @@
               and ."$defs".lifecycleObject.properties.partitionType.type == "string"
               and (."$defs".lifecycleObject.properties.partitionNumber.type | index("string") != null)
               and (."$defs".lifecycleObject.properties.partitionNumber.type | index("number") != null)
+              and (."$defs".lifecycleObject.properties.number.type | index("string") != null)
+              and (."$defs".lifecycleObject.properties.startOffset.type | index("number") != null)
+              and (."$defs".lifecycleObject.properties.endOffset.type | index("string") != null)
               and ."$defs".lifecycleObject.properties.level.type == "string"
+              and ."$defs".lifecycleObject.properties.raidLevel.type == "string"
               and ."$defs".lifecycleObject.properties.devices.type == "array"
               and ."$defs".lifecycleObject.properties.path.type == "string"
               and ."$defs".lifecycleObject.properties.client.type == "string"

@@ -195,7 +195,8 @@ Lifecycle objects may use:
   `replace-device`, `add-device`, `remove-device`, `set-property`, `snapshot`,
   `rebalance`, `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
-- `devices`: list of member devices for create operations such as MD RAID
+- `devices`: member devices for arrays, pools, or explicit LUN paths that
+  should receive per-path host rescans
 - `removeDevices`: list of devices to remove
 - `replaceDevices`: object mapping old device to replacement device
 - `properties`: object of properties to set
@@ -204,14 +205,13 @@ Lifecycle objects may use:
 - `target`, `path`, or `mountpoint`: explicit target path or object identity
   when it differs from the attribute name
 - `device` or `disk`: backing device path for disk, partition, and LUN operations
-- `devices`: member devices for arrays, pools, or explicit LUN paths that
-  should receive per-path host rescans
 - `level` or `raidLevel`: MD RAID level for reviewed array creation
 - `client`: NFS export client or network selector
 - `portal`: iSCSI target portal such as `192.0.2.10:3260`; `metadata.portal`
   is also accepted for NixOS-module-derived session declarations
 - `options`: NFS export options used for reviewed `exportfs` create commands
-- `start` and `end`: partition geometry for partition creation or resizing
+- `start` or `startOffset`, and `end` or `endOffset`: partition geometry for
+  partition creation or resizing
 - `partitionNumber` or `number`: partition number for concrete partition
   resize commands
 - `partitionType` or `type`: partition type/name metadata for partition
