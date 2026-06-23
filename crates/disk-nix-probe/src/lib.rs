@@ -1270,7 +1270,7 @@ fn collect_lvm(result: &mut ProbeResult) {
             "--reportformat",
             "json",
             "-o",
-            "lv_name,vg_name,lv_uuid,lv_path,lv_size,lv_attr,origin,pool_lv,data_percent,metadata_percent",
+            "lv_name,vg_name,lv_uuid,lv_path,lv_size,lv_attr,lv_active,lv_role,lv_time,origin,pool_lv,data_percent,metadata_percent,cache_mode,cache_policy",
         ],
     );
     let segments = run_report(

@@ -176,9 +176,9 @@ Use these commands for:
   geometry, and ext state/features/block and inode counts when probes expose
   them
 - `volumes`: logical storage objects such as LVM, Btrfs, ZFS, zvols, LUNs, and
-  exports, including LVM origin/pool/data metadata, MD RAID level/state, iSCSI
-  attached disks, NFS server/export details, and ZFS zvol `volsize` when
-  reported by `zfs list`
+  exports, including LVM origin/pool/data metadata, activation state, role, and
+  cache mode/policy, MD RAID level/state, iSCSI attached disks, NFS
+  server/export details, and ZFS zvol `volsize` when reported by `zfs list`
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
   pools, Btrfs filesystems/qgroups, ZFS pools/vdevs, and MD RAID arrays,
   including ZFS health/vdev role/state/error counters, LVM extent and PV/LV

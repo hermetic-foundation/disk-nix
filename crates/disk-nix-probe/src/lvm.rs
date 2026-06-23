@@ -49,10 +49,15 @@ struct LogicalVolume {
     lv_path: Option<String>,
     lv_size: Option<String>,
     lv_attr: Option<String>,
+    lv_active: Option<String>,
+    lv_role: Option<String>,
+    lv_time: Option<String>,
     origin: Option<String>,
     pool_lv: Option<String>,
     data_percent: Option<String>,
     metadata_percent: Option<String>,
+    cache_mode: Option<String>,
+    cache_policy: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -229,10 +234,15 @@ fn add_logical_volume(graph: &mut StorageGraph, lv: LogicalVolume) {
 
     for (key, value) in [
         ("lvm.attr", lv.lv_attr.clone()),
+        ("lvm.active", lv.lv_active.clone()),
+        ("lvm.role", lv.lv_role.clone()),
+        ("lvm.time", lv.lv_time.clone()),
         ("lvm.origin", lv.origin.clone()),
         ("lvm.pool", lv.pool_lv.clone()),
         ("lvm.data-percent", lv.data_percent.clone()),
         ("lvm.metadata-percent", lv.metadata_percent.clone()),
+        ("lvm.cache-mode", lv.cache_mode.clone()),
+        ("lvm.cache-policy", lv.cache_policy.clone()),
     ] {
         if let Some(value) = value.filter(|value| !value.is_empty()) {
             node = node.with_property(key, value);
@@ -431,10 +441,15 @@ mod tests {
             "lv_path": "/dev/vg0/root",
             "lv_size": "40.00g",
             "lv_attr": "-wi-ao----",
+            "lv_active": "active",
+            "lv_role": "public",
+            "lv_time": "2026-06-23 10:00:00 -0500",
             "origin": "",
             "pool_lv": "",
             "data_percent": "",
-            "metadata_percent": ""
+            "metadata_percent": "",
+            "cache_mode": "",
+            "cache_policy": ""
           },
           {
             "lv_name": "root-snap",
@@ -443,10 +458,15 @@ mod tests {
             "lv_path": "/dev/vg0/root-snap",
             "lv_size": "10.00g",
             "lv_attr": "swi-a-s---",
+            "lv_active": "active",
+            "lv_role": "public",
+            "lv_time": "2026-06-23 10:05:00 -0500",
             "origin": "root",
             "pool_lv": "",
             "data_percent": "12.00",
-            "metadata_percent": ""
+            "metadata_percent": "",
+            "cache_mode": "writeback",
+            "cache_policy": "smq"
           }
         ]
       }]
@@ -511,6 +531,21 @@ mod tests {
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.segment-type" && property.value == "linear"
                 })
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::LvmSnapshot
+                && node.name == "vg0/root-snap"
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.active" && property.value == "active")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.cache-mode" && property.value == "writeback"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.cache-policy" && property.value == "smq")
         }));
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0.starts_with("lvm-seg:vg0/root:")

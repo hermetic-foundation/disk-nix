@@ -1896,6 +1896,11 @@ fn usage_details(node: &Node) -> String {
         ("lvm.extent-size", "extent"),
         ("lvm.pv-count", "pvs"),
         ("lvm.lv-count", "lvs"),
+        ("lvm.active", "active"),
+        ("lvm.role", "role"),
+        ("lvm.time", "time"),
+        ("lvm.cache-mode", "cache-mode"),
+        ("lvm.cache-policy", "cache-policy"),
         ("btrfs.qgroup-id", "qgroup"),
         ("btrfs.mount-target", "mount-target"),
         ("btrfs.device-id", "device-id"),
@@ -2423,8 +2428,15 @@ mod tests {
                 allocated_bytes: None,
             })
             .with_property("lvm.data-percent", "12.50")
-            .with_property("lvm.metadata-percent", "3.00");
-        assert_eq!(usage_details(&lv), "data=12.50 metadata=3.00");
+            .with_property("lvm.metadata-percent", "3.00")
+            .with_property("lvm.active", "active")
+            .with_property("lvm.role", "public")
+            .with_property("lvm.cache-mode", "writeback")
+            .with_property("lvm.cache-policy", "smq");
+        assert_eq!(
+            usage_details(&lv),
+            "data=12.50 metadata=3.00 active=active role=public cache-mode=writeback cache-policy=smq"
+        );
 
         let pool = Node::new("zpool:tank", NodeKind::ZfsPool, "tank")
             .with_size_bytes(100)
@@ -2608,7 +2620,10 @@ mod tests {
             Node::new("lvm-lv:vg/root-snap", NodeKind::LvmSnapshot, "vg/root-snap")
                 .with_property("lvm.origin", "root")
                 .with_property("lvm.pool", "thinpool")
-                .with_property("lvm.data-percent", "12.50"),
+                .with_property("lvm.data-percent", "12.50")
+                .with_property("lvm.active", "active")
+                .with_property("lvm.cache-mode", "writeback")
+                .with_property("lvm.cache-policy", "smq"),
         );
         graph.add_node(
             Node::new("md:/dev/md/root", NodeKind::MdRaid, "/dev/md/root")
@@ -2635,7 +2650,9 @@ mod tests {
         let output = String::from_utf8(output).expect("table is utf8");
 
         assert!(output.contains("DETAILS"));
-        assert!(output.contains("data=12.50 origin=root pool=thinpool"));
+        assert!(output.contains(
+            "data=12.50 origin=root pool=thinpool active=active cache-mode=writeback cache-policy=smq"
+        ));
         assert!(output.contains("level=raid1 state=clean raid-devices=2"));
         assert!(output.contains("attached-disk=sdb"));
         assert!(output.contains("server=storage.example export=/export/home"));
