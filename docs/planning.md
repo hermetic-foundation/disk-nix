@@ -122,7 +122,10 @@ Examples:
   writeback data must be flushed or detached cleanly before replacement.
 - Cache `remove-device` is classified as offline-required rather than
   destructive; reviewed plans require dirty-data inspection before bcache
-  detach and keep the backing storage intact.
+  detach and keep the backing storage intact. Current-topology comparison
+  suppresses detach only when a concrete `/dev/bcache*` target is already
+  absent; present targets stay actionable with a warning that includes dirty
+  data, cache mode, and cache-set UUID when probe metadata reports them.
 - Cache `operation = "rescan"` is online and non-destructive; it reads bcache
   state, cache mode, dirty-data, and graph relationships before any later
   attach, detach, or replacement.
@@ -497,7 +500,7 @@ actions are suppressed only when a logged-in session is present; logout actions
 are suppressed only when the target is known and no logged-in session is
 present.
 Already-satisfied grow, shrink, device-mapper destroy, multipath destroy,
-iSCSI login/logout, LVM activation/deactivation, LUKS open, loop
+bcache detach, iSCSI login/logout, LVM activation/deactivation, LUKS open, loop
 create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
 unmount, remount, NFS export/unexport, VDO start, VDO stop, MD assemble, ZFS
 pool import, LVM volume-group import/export, and set-property actions with no
@@ -532,7 +535,9 @@ concrete `/dev/bcache*` target, and new cache-set UUID are declared. Once
 detach, and attach steps without guessing generated identity. bcache sysfs
 operations require a concrete `/dev/bcache*` target; logical cache declaration
 names become ready when `target`, `path`, or `device` declares the backing
-bcache device path.
+bcache device path. Current-topology comparison keeps logical cache names
+actionable as missing unless the graph can match them, so a logical name is not
+treated as absent proof for detach.
 Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
 detach operations. Logical loop declaration names can supply that target with
 `target` or `path`; `device` remains the backing file or block device for

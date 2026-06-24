@@ -238,6 +238,8 @@ pub enum TopologyDiagnosticKind {
     SizeAlreadySatisfied,
     SizeConflict,
     FilesystemTypeConflict,
+    BcacheDetachAlreadySatisfied,
+    BcacheDetachRequired,
     IscsiLoginAlreadySatisfied,
     IscsiLoginRequired,
     IscsiLogoutAlreadySatisfied,
@@ -771,6 +773,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                 matches!(
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
                         | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
@@ -1372,6 +1375,7 @@ fn already_satisfied_action_ids(
                 | Operation::Start
                 | Operation::Stop
                 | Operation::Destroy
+                | Operation::RemoveDevice
                 | Operation::SetProperty
         ) {
             continue;
@@ -1385,6 +1389,7 @@ fn already_satisfied_action_ids(
             already_satisfied |= matches!(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
+                    | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
                     | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
@@ -1431,6 +1436,9 @@ fn topology_diagnostics_for_action(
 
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
+        if let Some(diagnostic) = bcache_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = dm_map_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1484,6 +1492,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
     diagnostics.extend(luks_close_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
+    diagnostics.extend(bcache_present_diagnostic(action, node, &query));
     diagnostics.extend(dm_map_present_diagnostic(action, node, &query));
     diagnostics.extend(multipath_present_diagnostic(action, node, &query));
     diagnostics.extend(loop_present_diagnostic(action, node, &query));
@@ -1868,6 +1877,72 @@ fn luks_close_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn bcache_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("caches")
+        || action.operation != Operation::RemoveDevice
+        || !is_concrete_bcache_target(query)
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::BcacheDetachAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("bcache device {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn bcache_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("caches")
+        || action.operation != Operation::RemoveDevice
+    {
+        return None;
+    }
+
+    let details = bcache_detach_details(node);
+    let message = if details.is_empty() {
+        format!("bcache device {query} is still present")
+    } else {
+        format!(
+            "bcache device {query} is still present with {}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::BcacheDetachRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn bcache_detach_details(node: &Node) -> Vec<String> {
+    [
+        ("bcache.dirty-data", "dirty data"),
+        ("bcache.cache-mode", "cache mode"),
+        ("bcache.set-uuid", "cache set"),
+    ]
+    .into_iter()
+    .filter_map(|(property, label)| {
+        property_value_from_node(node, property).map(|value| format!("{label} {value}"))
+    })
+    .collect()
+}
+
+fn is_concrete_bcache_target(query: &str) -> bool {
+    query.starts_with("/dev/bcache") || query.starts_with("block:/dev/bcache")
 }
 
 fn dm_map_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
@@ -14885,6 +14960,109 @@ mod tests {
             diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.old:logout"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::IscsiLogoutRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_bcache_detach_when_concrete_target_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "caches": {
+                "/dev/bcache0": {
+                  "removeDevices": ["cache-set-uuid"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "caches:/dev/bcache0:remove-device:cache-set-uuid"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_bcache_detach_when_target_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "caches": {
+                "/dev/bcache0": {
+                  "removeDevices": ["cache-set-uuid"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
+                .with_path("/dev/bcache0")
+                .with_property("bcache.dirty-data", "64.0M")
+                .with_property("bcache.cache-mode", "writeback")
+                .with_property("bcache.set-uuid", "cache-set-uuid"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "caches:/dev/bcache0:remove-device:cache-set-uuid"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::BcacheDetachRequired
+                && diagnostic.message.contains("dirty data 64.0M")
+                && diagnostic.message.contains("cache mode writeback")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_logical_bcache_detach_missing() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "caches": {
+                "root-cache": {
+                  "removeDevices": ["cache-set-uuid"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "caches:root-cache:remove-device:cache-set-uuid"
+                && diagnostic.kind == TopologyDiagnosticKind::Missing
         }));
     }
 
