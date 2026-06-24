@@ -240,6 +240,8 @@ pub enum TopologyDiagnosticKind {
     FilesystemTypeConflict,
     IscsiLoginAlreadySatisfied,
     IscsiLoginRequired,
+    LuksOpenAlreadySatisfied,
+    LuksOpenRequired,
     MountAlreadySatisfied,
     MountSourceConflict,
     MountOptionsAlreadySatisfied,
@@ -729,6 +731,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
+                        | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                         | TopologyDiagnosticKind::NfsExportAlreadySatisfied
@@ -1290,6 +1293,7 @@ fn already_satisfied_action_ids(
             Operation::Grow
                 | Operation::Shrink
                 | Operation::Login
+                | Operation::Open
                 | Operation::Mount
                 | Operation::Remount
                 | Operation::Export
@@ -1307,6 +1311,7 @@ fn already_satisfied_action_ids(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
+                    | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                     | TopologyDiagnosticKind::NfsExportAlreadySatisfied
@@ -1354,6 +1359,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(size_diagnostic(action, node, &query));
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
+    diagnostics.extend(luks_open_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
     diagnostics.extend(nfs_export_diagnostic(action, node, &query));
@@ -1498,6 +1504,41 @@ fn mount_diagnostic(
             TopologyDiagnosticLevel::Warning,
             TopologyDiagnosticKind::MountSourceConflict,
             format!("mountpoint {query} uses source {current_source}, desired {desired_source}"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn luks_open_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Open
+        || action.context.collection.as_deref() != Some("luks.devices")
+    {
+        return None;
+    }
+    let active = luks_node_is_active(node)?;
+    let (level, kind, message) = if active {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LuksOpenAlreadySatisfied,
+            format!("LUKS mapper {query} is already active"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LuksOpenRequired,
+            format!("LUKS mapper {query} is known but not active"),
         )
     };
 
@@ -1669,6 +1710,10 @@ fn is_logged_in_iscsi_state(value: &str) -> bool {
         .collect::<String>()
         .to_ascii_lowercase();
     normalized == "loggedin"
+}
+
+fn luks_node_is_active(node: &Node) -> Option<bool> {
+    property_value_from_node(node, "cryptsetup.active").map(|value| value == "true")
 }
 
 fn property_value_from_node<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
@@ -12671,6 +12716,94 @@ mod tests {
             diagnostic.action_id == "exports:/srv/share:export"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::NfsExportDiffers
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_open_luks_mapper_when_active() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "operation": "open",
+                    "device": "/dev/disk/by-partuuid/root",
+                    "target": "cryptroot"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/mapper/cryptroot",
+                NodeKind::LuksContainer,
+                "cryptroot",
+            )
+            .with_path("/dev/mapper/cryptroot")
+            .with_property("cryptsetup.active", "true")
+            .with_property("cryptsetup.in-use", "true"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptroot:open"
+                && diagnostic.kind == TopologyDiagnosticKind::LuksOpenAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_open_luks_mapper_when_inactive() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "operation": "open",
+                    "device": "/dev/disk/by-partuuid/root",
+                    "target": "cryptroot"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/mapper/cryptroot",
+                NodeKind::LuksContainer,
+                "cryptroot",
+            )
+            .with_path("/dev/mapper/cryptroot")
+            .with_property("cryptsetup.active", "false"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptroot:open"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LuksOpenRequired
         }));
     }
 

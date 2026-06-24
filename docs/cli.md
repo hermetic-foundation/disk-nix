@@ -566,16 +566,17 @@ With `--probe-current`, the CLI also probes the current host and adds
 size diagnostics, filesystem type conflicts, and already-satisfied property,
 size, or remount option checks. Mount actions are also compared with
 `mount.source` when the current graph has mountpoint data, remount actions
-treat declared options as a required subset of current mount options, NFS export
-actions are compared with `nfs.export-client` and `nfs.export-option-*`
-properties, and iSCSI login actions are compared with current session state
-across all matching target/session nodes when metadata is available. Safe
-already-satisfied grow, shrink, iSCSI login, mount, remount, NFS export, and
-property actions that have no warning diagnostics are suppressed from the
-actionable plan and counted as
-`topologyComparison.summary.suppressedActionCount`; mountpoints using a
-different source, export client/option differences, or known iSCSI targets
-without a logged-in session stay actionable with a warning diagnostic.
+treat declared options as a required subset of current mount options, LUKS open
+actions are compared with `cryptsetup.active`, NFS export actions are compared
+with `nfs.export-client` and `nfs.export-option-*` properties, and iSCSI login
+actions are compared with current session state across all matching
+target/session nodes when metadata is available. Safe already-satisfied grow,
+shrink, iSCSI login, LUKS open, mount, remount, NFS export, and property
+actions that have no warning diagnostics are suppressed from the actionable
+plan and counted as `topologyComparison.summary.suppressedActionCount`;
+inactive LUKS mappers, mountpoints using a different source, export
+client/option differences, or known iSCSI targets without a logged-in session
+stay actionable with a warning diagnostic.
 
 ## Apply Evaluation
 
@@ -707,10 +708,11 @@ Plain zram declarations render read-only `zramctl`, `swapon --show`, and
 activation review. Explicit zram `operation = "rescan"` uses the same inventory
 path as a named refresh action.
 LUKS `operation = "open"` command plans render `cryptsetup open` for preserved
-existing containers. Legacy preserved `operation = "create"` still maps to the
-same open flow. `operation = "close"` plans render offline-policy-gated
-`cryptsetup close` steps and keep the backing LUKS container intact for later
-reopen. LUKS header label and subsystem property updates render
+existing containers. With current-topology probing, active mappers are
+suppressed from the actionable plan and inactive matched mappers remain
+warnings. Legacy preserved `operation = "create"` still maps to the same open
+flow. `operation = "close"` plans render offline-policy-gated `cryptsetup close` steps and keep the backing LUKS container intact for later reopen. LUKS
+header label and subsystem property updates render
 `cryptsetup config <device> --label` or `--subsystem`, while UUID updates render
 `cryptsetup luksUUID <device> --uuid <uuid>`. Logical LUKS declaration keys can
 declare the concrete mapper name with `target`, `mapperName`, `mapper`, or

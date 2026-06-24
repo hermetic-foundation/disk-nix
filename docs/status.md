@@ -39,11 +39,11 @@ behavior across real storage stacks.
   hints for missing tools, permission barriers, parse failures, inaccessible
   kernel/service data, and generic command failures.
 - Current-topology reconciliation suppresses safe no-op grow, shrink, iSCSI
-  login, mount, remount, NFS export, and property actions when the graph proves
-  they are already satisfied and no warning diagnostics are present; mount
-  source mismatches, remount option differences, export client/option
-  differences, and known iSCSI targets without logged-in sessions remain
-  actionable warnings.
+  login, LUKS open, mount, remount, NFS export, and property actions when the
+  graph proves they are already satisfied and no warning diagnostics are
+  present; inactive LUKS mappers, mount source mismatches, remount option
+  differences, export client/option differences, and known iSCSI targets
+  without logged-in sessions remain actionable warnings.
 - NixOS module options for steady-state resources plus imperative lifecycle
   declarations emitted into `/etc/disk-nix/spec.json`, with a generated
   `/etc/disk-nix/steady-state.json` inventory of native NixOS mounts, swaps,

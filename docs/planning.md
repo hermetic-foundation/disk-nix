@@ -146,10 +146,13 @@ Examples:
 - LUKS `operation = "open"` opens an existing encrypted container as a mapper
   and is offline-required. Legacy `operation = "create"` with preserved data
   remains accepted for the same preserved open flow. LUKS `operation = "close"`
-  tears down the mapper without removing the header. LUKS `operation = "format"` or `preserveData = false` is destructive. LUKS growth and mapper
-  close are offline-required because backing capacity, mapper state, and
-  dependent consumers must be coordinated. LUKS header label, subsystem, and
-  UUID property updates are offline-required identity metadata changes rendered
+  tears down the mapper without removing the header. LUKS format operations or
+  `preserveData = false` are destructive. Current-topology
+  comparison suppresses `operation = "open"` only when `cryptsetup.active`
+  proves the mapper is already active. LUKS growth and mapper close are
+  offline-required because backing capacity, mapper state, and dependent
+  consumers must be coordinated. LUKS header label, subsystem, and UUID
+  property updates are offline-required identity metadata changes rendered
   through `cryptsetup config` or `cryptsetup luksUUID`. Mapper close keeps the
   LUKS header and backing data intact unless a separate format action is
   requested. Logical LUKS declaration keys can declare the concrete mapper name
@@ -449,13 +452,17 @@ mount, remount, NFS export, iSCSI login, or property updates where the current
 graph has enough data. Remount reconciliation treats declared options as a
 required subset of the current mount options, allowing kernel-added defaults to
 remain.
+LUKS open reconciliation uses `cryptsetup.active` topology metadata to suppress
+mapper opens that are already active and to warn when a matched mapper is
+known but inactive.
 NFS export reconciliation compares the declared client and options against
 `nfs.export-client` and `nfs.export-option-*` topology properties.
 iSCSI login reconciliation checks all matching target and session nodes so an
 active session is not hidden by a configured but disconnected target.
-Already-satisfied grow, shrink, iSCSI login, mount, remount, NFS export, and
-set-property actions with no warning diagnostics are suppressed from the
-actionable plan and counted in `topologyComparison.summary.suppressedActionCount`.
+Already-satisfied grow, shrink, iSCSI login, LUKS open, mount, remount, NFS
+export, and set-property actions with no warning diagnostics are suppressed
+from the actionable plan and counted in
+`topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy
 
