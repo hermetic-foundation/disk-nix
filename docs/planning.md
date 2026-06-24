@@ -464,11 +464,13 @@ Btrfs qgroup `operation = "rescan"` actions are online read-only refreshes for
 quota hierarchy, referenced/exclusive usage, and limits. Qgroup create,
 destroy, limit, and rescan declarations use the qgroup id as the graph identity
 and the mounted filesystem path as executor context. Current-topology
-comparison suppresses concrete numeric qgroup destroy actions such as `0/257`
-only when that qgroup is already absent; present qgroups stay actionable with
-warnings that include usage, limit, parent, or child metadata when available.
-Logical qgroup names remain actionable unless a graph node actually matches
-them.
+comparison suppresses concrete numeric qgroup create actions when the matched
+node is already a Btrfs qgroup, and suppresses destroy actions such as `0/257`
+only when that qgroup is already absent. Existing non-qgroup matches stay
+actionable for create with warnings; present qgroups stay actionable for destroy
+with warnings that include usage, limit, parent, or child metadata when
+available. Logical qgroup names remain actionable unless a graph node actually
+matches them.
 
 Lifecycle objects may use:
 

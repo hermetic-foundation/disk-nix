@@ -242,6 +242,8 @@ pub enum TopologyDiagnosticKind {
     BtrfsSubvolumeCreateRequired,
     BtrfsSubvolumeDestroyAlreadySatisfied,
     BtrfsSubvolumeDestroyRequired,
+    BtrfsQgroupCreateAlreadySatisfied,
+    BtrfsQgroupCreateRequired,
     BtrfsQgroupDestroyAlreadySatisfied,
     BtrfsQgroupDestroyRequired,
     BcacheDetachAlreadySatisfied,
@@ -810,6 +812,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
+                        | TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
@@ -1443,6 +1446,7 @@ fn already_satisfied_action_ids(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
+                    | TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
@@ -1607,6 +1611,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(btrfs_qgroup_destroy_present_diagnostic(
         action, node, &query,
     ));
+    diagnostics.extend(btrfs_qgroup_create_present_diagnostic(action, node, &query));
     diagnostics.extend(dm_map_present_diagnostic(action, node, &query));
     diagnostics.extend(multipath_present_diagnostic(action, node, &query));
     diagnostics.extend(loop_present_diagnostic(action, node, &query));
@@ -2916,6 +2921,51 @@ fn btrfs_qgroup_destroy_absent_diagnostic(
         query: query.to_string(),
         message: format!("Btrfs qgroup {query} is already absent from current topology"),
         current: None,
+    })
+}
+
+fn btrfs_qgroup_create_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("btrfsQgroups")
+        || action.operation != Operation::Create
+    {
+        return None;
+    }
+
+    if node.kind != NodeKind::BtrfsQgroup {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::BtrfsQgroupCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a Btrfs qgroup; btrfs qgroup create remains actionable",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let details = btrfs_qgroup_destroy_details(node);
+    let message = if details.is_empty() {
+        format!("Btrfs qgroup {query} already exists")
+    } else {
+        format!(
+            "Btrfs qgroup {query} already exists with {}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
     })
 }
 
@@ -18559,6 +18609,71 @@ mod tests {
             diagnostic.action_id == "btrfsqgroups:0/257:destroy"
                 && diagnostic.kind == TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                 && diagnostic.query == "0/257"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_btrfs_qgroup_create() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsQgroups": {
+                "0/257": {
+                  "operation": "create",
+                  "target": "/mnt/persist"
+                },
+                "0/258": {
+                  "operation": "create",
+                  "target": "/mnt/persist"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("btrfs-qgroup:fs-uuid:0/257", NodeKind::BtrfsQgroup, "0/257")
+                .with_property("btrfs.qgroup-id", "0/257")
+                .with_property("btrfs.max-referenced", "21474836480")
+                .with_property("btrfs.max-exclusive", "none")
+                .with_property("btrfs.qgroup-parents", "1/0")
+                .with_usage(disk_nix_model::Usage {
+                    used_bytes: Some(10_737_418_240),
+                    free_bytes: None,
+                    allocated_bytes: Some(2_147_483_648),
+                }),
+        );
+        graph.add_node(
+            Node::new("mount:/mnt/persist/0/258", NodeKind::Mountpoint, "0/258")
+                .with_path("/mnt/persist/0/258"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.summary.action_count, 1);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id == "btrfsqgroups:0/258:create")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfsqgroups:0/257:create"
+                && diagnostic.kind == TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
+                && diagnostic.message.contains("qgroup id 0/257")
+                && diagnostic.message.contains("max referenced 21474836480")
+                && diagnostic.message.contains("referenced 10737418240 bytes")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfsqgroups:0/258:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::BtrfsQgroupCreateRequired
+                && diagnostic.message.contains("not a Btrfs qgroup")
         }));
     }
 
