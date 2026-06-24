@@ -244,6 +244,8 @@ pub enum TopologyDiagnosticKind {
     IscsiLogoutRequired,
     LvmActivateAlreadySatisfied,
     LvmActivateRequired,
+    LvmDeactivateAlreadySatisfied,
+    LvmDeactivateRequired,
     LvmVgExportAlreadySatisfied,
     LvmVgExportRequired,
     LvmVgImportAlreadySatisfied,
@@ -751,6 +753,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
                         | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
+                        | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
                         | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
@@ -1322,6 +1325,7 @@ fn already_satisfied_action_ids(
                 | Operation::Assemble
                 | Operation::Import
                 | Operation::Activate
+                | Operation::Deactivate
                 | Operation::Close
                 | Operation::Login
                 | Operation::Logout
@@ -1347,6 +1351,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
                     | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
+                    | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
                     | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
@@ -1404,6 +1409,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
     diagnostics.extend(iscsi_logout_diagnostic(action, &matches, &query));
     diagnostics.extend(lvm_activate_diagnostic(action, node, &query));
+    diagnostics.extend(lvm_deactivate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_export_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
     diagnostics.extend(luks_close_diagnostic(action, node, &query));
@@ -1589,6 +1595,39 @@ fn lvm_activate_diagnostic(
             TopologyDiagnosticLevel::Warning,
             TopologyDiagnosticKind::LvmActivateRequired,
             format!("LVM object {query} is known but not active"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn lvm_deactivate_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Deactivate || !is_lvm_activation_collection(action) {
+        return None;
+    }
+    let active = lvm_node_is_active(node)?;
+    let (level, kind, message) = if active {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LvmDeactivateRequired,
+            format!("LVM object {query} is still active"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied,
+            format!("LVM object {query} is already inactive"),
         )
     };
 
@@ -13401,6 +13440,86 @@ mod tests {
             diagnostic.action_id == "volumes:vg0/home:activate"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::LvmActivateRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_lvm_deactivate_action_when_inactive() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg0/archive": {
+                  "operation": "deactivate"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "lvm:lv:vg0/archive",
+                NodeKind::LvmLogicalVolume,
+                "vg0/archive",
+            )
+            .with_path("/dev/vg0/archive")
+            .with_property("lvm.active", "inactive"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/archive:deactivate"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_lvm_deactivate_action_when_active() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg0/archive": {
+                  "operation": "deactivate"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "lvm:lv:vg0/archive",
+                NodeKind::LvmLogicalVolume,
+                "vg0/archive",
+            )
+            .with_path("/dev/vg0/archive")
+            .with_property("lvm.active", "active")
+            .with_property("lvm.active-locally", "active locally"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/archive:deactivate"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmDeactivateRequired
         }));
     }
 

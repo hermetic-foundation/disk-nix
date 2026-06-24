@@ -456,9 +456,10 @@ mount, remount, NFS export, iSCSI login, or property updates where the current
 graph has enough data. Remount reconciliation treats declared options as a
 required subset of the current mount options, allowing kernel-added defaults to
 remain.
-LVM activation reconciliation uses `lvm.active` topology metadata to suppress
-already-active `volumes`, `thinPools`, and `lvmSnapshots` activation actions
-and to warn when a matched LVM object is known but inactive.
+LVM activation/deactivation reconciliation uses `lvm.active` topology metadata
+to suppress already-active `volumes`, `thinPools`, and `lvmSnapshots`
+activation actions and already-inactive deactivation actions, and to warn when
+a matched LVM object is in the opposite state.
 LUKS open/close reconciliation uses `cryptsetup.active` topology metadata to
 suppress mapper opens that are already active and mapper closes that are
 already inactive; opposite-state mappers remain actionable with a warning.
@@ -473,9 +474,9 @@ active session is not hidden by a configured but disconnected target. Login
 actions are suppressed only when a logged-in session is present; logout actions
 are suppressed only when the target is known and no logged-in session is
 present.
-Already-satisfied grow, shrink, iSCSI login/logout, LVM activation, LUKS open,
-mount, remount, NFS export, VDO start, and set-property actions with no warning
-diagnostics are suppressed from the actionable plan and counted in
+Already-satisfied grow, shrink, iSCSI login/logout, LVM
+activation/deactivation, LUKS open, mount, remount, NFS export, VDO start, and
+set-property actions with no warning diagnostics are suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy
