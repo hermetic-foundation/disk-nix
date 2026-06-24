@@ -48,7 +48,7 @@ fn parse_parted_machine(bytes: &[u8]) -> Result<Vec<PartedDisk>, ProbeError> {
             continue;
         }
 
-        let fields: Vec<&str> = line.trim_end_matches(';').split(':').collect();
+        let fields = split_machine_fields(line.trim_end_matches(';'));
         let Some(first) = fields.first() else {
             continue;
         };
@@ -72,7 +72,7 @@ fn parse_parted_machine(bytes: &[u8]) -> Result<Vec<PartedDisk>, ProbeError> {
     Ok(disks)
 }
 
-fn parse_disk(fields: &[&str]) -> Result<PartedDisk, ProbeError> {
+fn parse_disk(fields: &[String]) -> Result<PartedDisk, ProbeError> {
     if fields.len() < 6 {
         return Err(ProbeError::Adapter(format!(
             "parted disk row has {} fields, expected at least 6",
@@ -93,7 +93,7 @@ fn parse_disk(fields: &[&str]) -> Result<PartedDisk, ProbeError> {
     })
 }
 
-fn parse_partition(fields: &[&str]) -> Result<PartedPartition, ProbeError> {
+fn parse_partition(fields: &[String]) -> Result<PartedPartition, ProbeError> {
     if fields.len() < 4 {
         return Err(ProbeError::Adapter(format!(
             "parted partition row has {} fields, expected at least 4",
@@ -173,7 +173,34 @@ fn add_partition(
     graph.add_edge(Edge::new(disk_id.to_string(), id, Relationship::Contains));
 }
 
-fn field(fields: &[&str], index: usize) -> Option<String> {
+fn split_machine_fields(line: &str) -> Vec<String> {
+    let mut fields = Vec::new();
+    let mut current = String::new();
+    let mut escaped = false;
+
+    for character in line.chars() {
+        if escaped {
+            current.push(character);
+            escaped = false;
+        } else if character == '\\' {
+            escaped = true;
+        } else if character == ':' {
+            fields.push(current.trim().to_string());
+            current.clear();
+        } else {
+            current.push(character);
+        }
+    }
+
+    if escaped {
+        current.push('\\');
+    }
+    fields.push(current.trim().to_string());
+
+    fields
+}
+
+fn field(fields: &[String], index: usize) -> Option<String> {
     fields
         .get(index)
         .map(|value| value.trim())
@@ -211,9 +238,9 @@ mod tests {
 
     const PARTED: &[u8] = br#"
 BYT;
-/dev/nvme0n1:1000204886016B:nvme:512:4096:gpt:Samsung SSD:;
+/dev/nvme0n1:1000204886016B:nvme:512:4096:gpt:Samsung\:SSD:;
 1:1048576B:1074790399B:1073741824B:fat32:EFI System Partition:boot, esp;
-2:1074790400B:1000203091967B:999128301568B:ext4:nixos-root:;
+2:1074790400B:1000203091967B:999128301568B:ext4:nixos\:root:;
 /dev/sdb:500107862016B:scsi:512:512:msdos:ATA Disk:;
 1:1048576B:500107862015B:500106813440B:primary::lvm;
 "#;
@@ -233,6 +260,11 @@ BYT;
                 .iter()
                 .any(|property| { property.key == "partition.table" && property.value == "gpt" })
         );
+        assert!(
+            disk.properties
+                .iter()
+                .any(|property| { property.key == "model" && property.value == "Samsung:SSD" })
+        );
 
         let partition = graph
             .nodes
@@ -242,6 +274,12 @@ BYT;
         assert_eq!(partition.size_bytes, Some(1_073_741_824));
         assert!(partition.properties.iter().any(|property| {
             property.key == "partition.flags" && property.value == "boot, esp"
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.id.0 == "block:/dev/nvme0n1p2"
+                && node.properties.iter().any(|property| {
+                    property.key == "partition.name" && property.value == "nixos:root"
+                })
         }));
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0 == "block:/dev/nvme0n1"
