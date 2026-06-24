@@ -39,7 +39,8 @@ behavior across real storage stacks.
   remediation hints for missing tools/packages, permission barriers, parse
   failures, inaccessible kernel/service data, and generic command failures.
 - Current-topology reconciliation suppresses safe no-op grow, shrink, iSCSI
-  login/logout, existing partition creates that match declared size,
+  login/logout, disk partition-table create actions that already match the
+  requested table label, existing partition creates that match declared size,
   partition growth with parseable byte-sized end targets, LVM
   logical-volume activation/deactivation, LUKS open, LUKS close, loop
   create/destroy, LUN attach/detach, NVMe namespace attach/detach,

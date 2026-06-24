@@ -807,7 +807,11 @@ header label and subsystem property updates render
 declare the concrete mapper name with `target`, `mapperName`, `mapper`, or
 `name`.
 Disk initialization plans render policy-gated `parted mklabel` and partition
-table reread commands after inspecting the target disk.
+table reread commands after inspecting the target disk. With
+`--probe-current`, disk create is suppressed when the matched physical disk
+already reports the requested partition table label; mismatched labels, unknown
+labels, and matched non-disk nodes remain actionable warnings because `mklabel`
+can hide existing metadata.
 Partition create command plans render concrete `parted mkpart`, `partprobe`,
 and `blockdev --rereadpt` commands when `device`, `partitionType`, `start`, and
 `end` are declared. With `--probe-current`, create is suppressed when the target

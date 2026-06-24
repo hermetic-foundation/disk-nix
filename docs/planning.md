@@ -137,6 +137,10 @@ Examples:
 - disk partition-table creation is classified as destructive because it can
   hide or replace existing storage metadata. When destructive policy permits
   it, apply plans render reviewed `parted mklabel` and table reread commands.
+  Current-topology comparison suppresses disk create actions only when the
+  matched physical disk already reports the requested partition table label;
+  mismatched labels, unknown labels, and matched non-disk nodes stay actionable
+  warnings because `mklabel` can hide existing data.
 - partition creation and growth are classified as offline-required because the
   kernel partition table reread and dependent consumers must be coordinated.
   Create and growth plans render concrete table rereads when the backing disk is

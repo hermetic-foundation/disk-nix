@@ -405,7 +405,10 @@ declare concrete slot/token ids with `keySlot`, `key-slot`, `slot`, `tokenId`,
 `token-id`, or `token`. Keyslot and token removal are potential data loss
 because they can remove the last working unlock path.
 Disk initialization plans render destructive-policy-gated `parted mklabel` and
-partition table reread steps after disk identity inspection.
+partition table reread steps after disk identity inspection. With
+current-topology probing enabled, disk create is suppressed when the matched
+physical disk already reports the requested partition table label; mismatched
+labels, unknown labels, or matched non-disk nodes remain actionable warnings.
 Partition create plans render reviewed `parted mkpart`, `partprobe`, and
 `blockdev --rereadpt` commands when `device`, `partitionType`, `start`, and
 `end` are declared. With current-topology probing enabled, create is suppressed
