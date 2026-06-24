@@ -94,6 +94,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List bcachefs filesystems, member devices, and usage accounting.
+    Bcachefs {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List ZFS pools, vdevs, datasets, snapshots, and zvols.
     Zfs {
         /// Emit JSON for matching graph nodes.
@@ -420,6 +426,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_btrfs_node)?;
             } else {
                 print_btrfs(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Bcachefs { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_bcachefs_node)?;
+            } else {
+                print_bcachefs(output, &graph)?;
             }
             Ok(())
         }
@@ -1625,6 +1640,31 @@ fn print_btrfs(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> 
     Ok(())
 }
 
+fn print_bcachefs(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:>12} {:>12} {:>7} {:<18} {:>7} DETAILS",
+        "KIND", "NAME", "SIZE", "USED", "FREE", "USE%", "MOUNT", "MEMBERS"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_bcachefs_node(node)) {
+        let usage = node.usage.as_ref();
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>12} {:>12} {:>12} {:>7} {:<18} {:>7} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            human_bytes(usage.and_then(|usage| usage.used_bytes)),
+            human_bytes(usage.and_then(|usage| usage.free_bytes)),
+            usage_percent(node),
+            property_value(node, "bcachefs.mount-target").unwrap_or("-"),
+            member_count(graph, node),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_zfs(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2590,6 +2630,16 @@ fn is_btrfs_node(node: &Node) -> bool {
         .properties
         .iter()
         .any(|property| property.key.starts_with("btrfs."))
+}
+
+fn is_bcachefs_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::BcachefsFilesystem | NodeKind::BcachefsDevice
+    ) || node
+        .properties
+        .iter()
+        .any(|property| property.key.starts_with("bcachefs."))
 }
 
 fn is_zfs_node(node: &Node) -> bool {
@@ -4272,13 +4322,14 @@ mod tests {
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 
     use super::{
-        confirmation_file_accepts, is_btrfs_node, is_cache_node, is_complex_filesystem_node,
-        is_device_node, is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node,
-        is_lun_node, is_lvm_node, is_mapping_node, is_multipath_node, is_network_storage_node,
-        is_nfs_node, is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node,
-        is_swap_node, is_vdo_node, is_volume_node, is_zfs_node, is_zram_node, iscsi_lun_count,
-        mount_details, nfs_mount_count, print_btrfs, print_cache, print_complex_filesystems,
-        print_devices, print_encryption, print_filesystems, print_filtered_json, print_inspect,
+        confirmation_file_accepts, is_bcachefs_node, is_btrfs_node, is_cache_node,
+        is_complex_filesystem_node, is_device_node, is_encryption_node, is_filesystem_node,
+        is_iscsi_node, is_loop_node, is_lun_node, is_lvm_node, is_mapping_node, is_multipath_node,
+        is_network_storage_node, is_nfs_node, is_nvme_node, is_partition_node, is_pool_node,
+        is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node, is_volume_node, is_zfs_node,
+        is_zram_node, iscsi_lun_count, member_count, mount_details, nfs_mount_count,
+        print_bcachefs, print_btrfs, print_cache, print_complex_filesystems, print_devices,
+        print_encryption, print_filesystems, print_filtered_json, print_inspect,
         print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm, print_mappings,
         print_mounts, print_multipath, print_network_storage, print_nfs, print_nvme,
         print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
@@ -4340,6 +4391,7 @@ mod tests {
         assert!(is_complex_filesystem_node(&bcachefs));
         assert!(is_volume_node(&bcachefs));
         assert!(is_pool_node(&bcachefs));
+        assert!(is_bcachefs_node(&bcachefs));
         assert!(is_complex_filesystem_node(&Node::new(
             "btrfs:/mnt/persist",
             NodeKind::BtrfsFilesystem,
@@ -5905,6 +5957,87 @@ mod tests {
         assert!(json.contains("btrfs-subvolume:fs:@home"));
         assert!(json.contains("btrfs-snapshot:fs:@home-before"));
         assert!(json.contains("block:/dev/nvme0n1p2"));
+    }
+
+    #[test]
+    fn bcachefs_table_includes_member_usage_and_json_neighbors() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
+                NodeKind::BcachefsFilesystem,
+                "archive",
+            )
+            .with_size_bytes(10_737_418_240)
+            .with_usage(Usage {
+                used_bytes: Some(2_147_483_648),
+                free_bytes: Some(8_589_934_592),
+                allocated_bytes: Some(10_737_418_240),
+            })
+            .with_property(
+                "bcachefs.external-uuid",
+                "a2d6fc04-efd0-4e36-aece-2475941d09a3",
+            )
+            .with_property(
+                "bcachefs.internal-uuid",
+                "55083d1e-27cf-4929-ada4-3fe6e45cf02c",
+            )
+            .with_property("bcachefs.mount-target", "/mnt/archive")
+            .with_property("bcachefs.device-count", "2")
+            .with_property("bcachefs.version", "1.20: (unknown version)")
+            .with_property("bcachefs.data-user", "2147483648")
+            .with_property("bcachefs.data-cached", "1048576"),
+        );
+        graph.add_node(
+            Node::new(
+                "bcachefs-device:a2d6fc04-efd0-4e36-aece-2475941d09a3:0",
+                NodeKind::BcachefsDevice,
+                "/dev/sdc",
+            )
+            .with_size_bytes(16_000_900_661_248)
+            .with_property("bcachefs.device-label", "hdd.archive")
+            .with_property("bcachefs.device-state", "rw")
+            .with_property("bcachefs.device-free", "1649975230464")
+            .with_property("bcachefs.device-capacity", "16000900661248")
+            .with_property("bcachefs.device-data-user", "2147483648"),
+        );
+        graph.add_edge(Edge::new(
+            "bcachefs-device:a2d6fc04-efd0-4e36-aece-2475941d09a3:0",
+            "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
+            Relationship::MemberOf,
+        ));
+
+        let filesystem = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::BcachefsFilesystem)
+            .expect("bcachefs filesystem exists");
+        assert_eq!(member_count(&graph, filesystem), 1);
+
+        let mut output = Vec::new();
+        print_bcachefs(&mut output, &graph).expect("bcachefs table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("MEMBERS"));
+        assert!(output.contains("archive"));
+        assert!(output.contains("10.0 GiB"));
+        assert!(output.contains("20.0%"));
+        assert!(output.contains("/mnt/archive"));
+        assert!(output.contains("bcachefs-uuid=a2d6fc04-efd0-4e36-aece-2475941d09a3"));
+        assert!(output.contains("bcachefs-internal=55083d1e-27cf-4929-ada4-3fe6e45cf02c"));
+        assert!(output.contains("bcachefs-version=1.20: (unknown version)"));
+        assert!(output.contains("bcachefs-user=2147483648 bcachefs-cached=1048576"));
+        assert!(output.contains("hdd.archive"));
+        assert!(output.contains("14.6 TiB"));
+        assert!(output.contains("bcachefs-label=hdd.archive bcachefs-state=rw"));
+        assert!(output.contains("bcachefs-device-free=1649975230464"));
+        assert!(output.contains("bcachefs-device-user=2147483648"));
+
+        let mut json = Vec::new();
+        print_filtered_json(&mut json, &graph, is_bcachefs_node).expect("bcachefs json renders");
+        let json = String::from_utf8(json).expect("json is utf8");
+        assert!(json.contains("bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3"));
+        assert!(json.contains("bcachefs-device:a2d6fc04-efd0-4e36-aece-2475941d09a3:0"));
     }
 
     #[test]

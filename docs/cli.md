@@ -149,6 +149,7 @@ disk-nix partitions
 disk-nix filesystems
 disk-nix complex-filesystems
 disk-nix btrfs
+disk-nix bcachefs
 disk-nix zfs
 disk-nix volumes
 disk-nix pools
@@ -181,6 +182,7 @@ disk-nix partitions --json
 disk-nix filesystems --json
 disk-nix complex-filesystems --json
 disk-nix btrfs --json
+disk-nix bcachefs --json
 disk-nix zfs --json
 disk-nix volumes --json
 disk-nix pools --json
@@ -264,6 +266,10 @@ Use these commands for:
   size, used/free capacity, utilization, mount targets, backing relationships,
   allocation profiles, subvolume IDs/generations/parentage, snapshot UUID
   lineage, and qgroup hierarchy and limits
+- `bcachefs`: bcachefs filesystems and member devices, including external and
+  internal UUIDs, mount target, version/upgrade state, online reservation,
+  member count, data-type accounting, member labels, member state, member free
+  and capacity counters, and one-hop member relationships
 - `zfs`: ZFS pools, vdevs, datasets, snapshots, and zvols, including pool
   health/state, capacity, dedup ratio, fragmentation, altroot, status/action
   advisories, scan/error summaries, vdev roles and error counters, dataset
