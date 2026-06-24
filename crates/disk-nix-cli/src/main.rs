@@ -2819,8 +2819,11 @@ fn usage_details(node: &Node) -> String {
         ("btrfs.device-id", "device-id"),
         ("btrfs.id", "subvol-id"),
         ("btrfs.generation", "generation"),
+        ("btrfs.created-generation", "created-generation"),
+        ("btrfs.parent-id", "parent-id"),
         ("btrfs.top-level", "top-level"),
         ("btrfs.parent-uuid", "parent-uuid"),
+        ("btrfs.received-uuid", "received-uuid"),
         ("btrfs.data-profile", "data-profile"),
         ("btrfs.data-size", "data-size"),
         ("btrfs.data-used", "data-used"),
@@ -5308,8 +5311,11 @@ mod tests {
             )
             .with_property("btrfs.id", "257")
             .with_property("btrfs.generation", "11")
+            .with_property("btrfs.created-generation", "8")
+            .with_property("btrfs.parent-id", "256")
             .with_property("btrfs.top-level", "5")
-            .with_property("btrfs.parent-uuid", "subvol-root"),
+            .with_property("btrfs.parent-uuid", "subvol-root")
+            .with_property("btrfs.received-uuid", "received-snap"),
         );
 
         let mut output = Vec::new();
@@ -5323,7 +5329,8 @@ mod tests {
                 .contains("userrefs=2 compression=zstd encryption=aes-256-gcm keystatus=available")
         );
         assert!(output.contains("data=12.50 origin=root pool=thinpool"));
-        assert!(output.contains("subvol-id=257 generation=11 top-level=5 parent-uuid=subvol-root"));
+        assert!(output.contains("subvol-id=257 generation=11 created-generation=8 parent-id=256"));
+        assert!(output.contains("top-level=5 parent-uuid=subvol-root received-uuid=received-snap"));
     }
 
     #[test]

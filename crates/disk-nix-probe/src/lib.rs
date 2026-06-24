@@ -1310,7 +1310,10 @@ fn collect_btrfs(result: &mut ProbeResult) {
     for target in targets {
         let show = run_report("btrfs", &["filesystem", "show", &target]);
         let usage = run_report("btrfs", &["filesystem", "usage", "-b", &target]);
-        let subvolumes = run_report("btrfs", &["subvolume", "list", "-u", &target]);
+        let subvolumes = run_report(
+            "btrfs",
+            &["subvolume", "list", "-p", "-u", "-q", "-R", "-c", &target],
+        );
         let qgroups =
             run_report("btrfs", &["qgroup", "show", "--raw", "-reF", &target]).unwrap_or_default();
 

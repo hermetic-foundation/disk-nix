@@ -128,10 +128,11 @@ The current probe layer normalizes:
   snapshots, zvols, mountpoints, clone origins, and snapshot user-reference
   counts that indicate active holds; ZFS dataset and zvol policy properties
   include compression, quota, reservation, encryption, key status, and volsize
-- Btrfs mounted filesystems through `btrfs filesystem show`, `btrfs filesystem usage -b`, `btrfs subvolume list -u`, and `btrfs qgroup show --raw -reF` for
-  filesystem identity, member devices, usage, subvolumes, subvolume generation
-  and top-level metadata, snapshot-like subvolume relationships, and qgroup
-  referenced/exclusive usage and limits
+- Btrfs mounted filesystems through `btrfs filesystem show`, `btrfs filesystem usage -b`, rich `btrfs subvolume list` output, and
+  `btrfs qgroup show --raw -reF` for filesystem identity, member devices,
+  usage, subvolumes, subvolume generation and creation generation, parent IDs,
+  top-level metadata, parent/received UUIDs for snapshot and send/receive
+  relationships, and qgroup referenced/exclusive usage and limits
 - bcache sysfs metadata through `/sys/block/*/bcache` for backing devices,
   cache devices, explicit backing-device metadata, cache sets, mode,
   running/state, dirty data, available cache percentage, discard, I/O error

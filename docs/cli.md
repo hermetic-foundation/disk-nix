@@ -256,8 +256,8 @@ Use these commands for:
   them
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
   source relationships, LVM origin/pool/data metadata, Btrfs subvolume IDs,
-  generation, top-level, and parent UUIDs, and ZFS user-reference, compression,
-  and encryption details
+  generation, creation generation, parent IDs, top-level, parent UUIDs, and
+  received UUIDs, and ZFS user-reference, compression, and encryption details
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
   counts, keyslot priorities/ciphers/PBKDF cost metadata, token-to-keyslot

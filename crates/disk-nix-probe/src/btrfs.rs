@@ -57,8 +57,11 @@ struct AllocationGroup {
 struct Subvolume {
     id: String,
     generation: Option<String>,
+    created_generation: Option<String>,
+    parent_id: Option<String>,
     top_level: Option<String>,
     parent_uuid: Option<String>,
+    received_uuid: Option<String>,
     uuid: Option<String>,
     path: String,
 }
@@ -197,8 +200,17 @@ fn add_subvolume(graph: &mut StorageGraph, filesystem_id: &str, subvolume: Subvo
     if let Some(generation) = subvolume.generation {
         node = node.with_property("btrfs.generation", generation);
     }
+    if let Some(created_generation) = subvolume.created_generation {
+        node = node.with_property("btrfs.created-generation", created_generation);
+    }
+    if let Some(parent_id) = subvolume.parent_id {
+        node = node.with_property("btrfs.parent-id", parent_id);
+    }
     if let Some(top_level) = subvolume.top_level {
         node = node.with_property("btrfs.top-level", top_level);
+    }
+    if let Some(received_uuid) = subvolume.received_uuid {
+        node = node.with_property("btrfs.received-uuid", received_uuid);
     }
 
     if let Some(uuid) = subvolume.uuid {
@@ -373,9 +385,14 @@ fn parse_subvolume_line(line: &str) -> Option<Subvolume> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     let id = value_after(&parts, "ID")?.to_string();
     let generation = value_after(&parts, "gen").map(str::to_string);
+    let created_generation = value_after(&parts, "cgen").map(str::to_string);
+    let parent_id = value_after(&parts, "parent").map(str::to_string);
     let top_level = value_after(&parts, "level").map(str::to_string);
     let uuid = value_after(&parts, "uuid").map(str::to_string);
     let parent_uuid = value_after(&parts, "parent_uuid")
+        .filter(|value| *value != "-")
+        .map(str::to_string);
+    let received_uuid = value_after(&parts, "received_uuid")
         .filter(|value| *value != "-")
         .map(str::to_string);
     let path_index = parts.iter().position(|part| *part == "path")?;
@@ -384,8 +401,11 @@ fn parse_subvolume_line(line: &str) -> Option<Subvolume> {
     Some(Subvolume {
         id,
         generation,
+        created_generation,
+        parent_id,
         top_level,
         parent_uuid,
+        received_uuid,
         uuid,
         path,
     })
@@ -477,8 +497,8 @@ Data,single: Size:512, Used:400\n\
 Metadata,DUP: Size:128, Used:64\n\
 System,DUP: Size:64, Used:32\n";
 
-    const SUBVOLUMES: &[u8] = b"ID 256 gen 10 top level 5 uuid subvol-root parent_uuid - path @\n\
-ID 257 gen 11 top level 5 uuid snap-1 parent_uuid subvol-root path @/.snapshots/1/snapshot\n";
+    const SUBVOLUMES: &[u8] = b"ID 256 gen 10 cgen 7 parent 5 top level 5 uuid subvol-root parent_uuid - received_uuid - path @\n\
+ID 257 gen 11 cgen 8 parent 256 top level 5 uuid snap-1 parent_uuid subvol-root received_uuid received-snap path @/.snapshots/1/snapshot\n";
     const QGROUPS: &[u8] = b"qgroupid         rfer         excl     max_rfer     max_excl\n\
 --------         ----         ----     --------     --------\n\
 0/256            4096         2048         none         none\n\
@@ -520,10 +540,20 @@ ID 257 gen 11 top level 5 uuid snap-1 parent_uuid subvol-root path @/.snapshots/
                     .properties
                     .iter()
                     .any(|property| property.key == "btrfs.generation" && property.value == "11")
+                && node.properties.iter().any(|property| {
+                    property.key == "btrfs.created-generation" && property.value == "8"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "btrfs.parent-id" && property.value == "256")
                 && node
                     .properties
                     .iter()
                     .any(|property| property.key == "btrfs.top-level" && property.value == "5")
+                && node.properties.iter().any(|property| {
+                    property.key == "btrfs.received-uuid" && property.value == "received-snap"
+                })
         }));
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::BtrfsQgroup
