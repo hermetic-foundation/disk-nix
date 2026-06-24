@@ -4224,6 +4224,7 @@ fn vdo_destroy_details(node: &Node) -> Vec<String> {
         ("lvm.vdo-operating-mode", "operating mode"),
         ("lvm.vdo-logical-size", "logical size"),
         ("lvm.vdo-physical-size", "physical size"),
+        ("lvm.vdo-used-size", "used"),
         ("lvm.vdo-used", "used"),
         ("lvm.vdo-saving-percent", "saving"),
         ("lvm.vdo-write-policy", "write policy"),
@@ -17831,7 +17832,7 @@ mod tests {
         graph.add_node(
             Node::new("lvm:vg0/archive", NodeKind::VdoVolume, "vg0/archive")
                 .with_property("lvm.vdo-operating-mode", "normal")
-                .with_property("lvm.vdo-used", "128.00m")
+                .with_property("lvm.vdo-used-size", "128.00m")
                 .with_property("lvm.vdo-saving-percent", "72.50"),
         );
 
