@@ -2693,10 +2693,21 @@ fn usage_details(node: &Node) -> String {
         ("lvm.check-needed", "check-needed"),
         ("lvm.role", "role"),
         ("lvm.time", "time"),
+        ("lvm.cache-total-blocks", "cache-total"),
+        ("lvm.cache-used-blocks", "cache-used"),
+        ("lvm.cache-dirty-blocks", "cache-dirty"),
+        ("lvm.cache-read-hits", "cache-read-hits"),
+        ("lvm.cache-read-misses", "cache-read-misses"),
+        ("lvm.cache-write-hits", "cache-write-hits"),
+        ("lvm.cache-write-misses", "cache-write-misses"),
+        ("lvm.cache-promotions", "cache-promotions"),
+        ("lvm.cache-demotions", "cache-demotions"),
         ("lvm.cache-mode", "cache-mode"),
         ("lvm.cache-policy", "cache-policy"),
+        ("lvm.kernel-cache-settings", "kernel-cache-settings"),
         ("lvm.kernel-cache-mode", "kernel-cache-mode"),
         ("lvm.kernel-cache-policy", "kernel-cache-policy"),
+        ("lvm.kernel-metadata-format", "kernel-metadata-format"),
         ("lvm.kernel-discards", "kernel-discards"),
         ("lvm.writecache-total-blocks", "writecache-total"),
         ("lvm.writecache-free-blocks", "writecache-free"),
@@ -5283,6 +5294,17 @@ mod tests {
             Node::new("lvm-lv:vg/root", NodeKind::LvmLogicalVolume, "vg/root")
                 .with_property("lvm.cache-mode", "writethrough")
                 .with_property("lvm.cache-policy", "smq")
+                .with_property("lvm.cache-total-blocks", "4096")
+                .with_property("lvm.cache-used-blocks", "1024")
+                .with_property("lvm.cache-dirty-blocks", "64")
+                .with_property("lvm.cache-read-hits", "1000")
+                .with_property("lvm.cache-read-misses", "25")
+                .with_property("lvm.cache-write-hits", "900")
+                .with_property("lvm.cache-write-misses", "30")
+                .with_property("lvm.cache-promotions", "128")
+                .with_property("lvm.cache-demotions", "32")
+                .with_property("lvm.kernel-cache-settings", "migration_threshold=2048")
+                .with_property("lvm.kernel-metadata-format", "2")
                 .with_property("lvm.writecache-total-blocks", "1024")
                 .with_property("lvm.writecache-free-blocks", "512")
                 .with_property("lvm.writecache-writeback-blocks", "16")
@@ -5317,6 +5339,17 @@ mod tests {
         assert!(output.contains("vg/root"));
         assert!(output.contains("writethrough"));
         assert!(output.contains("cache-policy=smq"));
+        assert!(output.contains("cache-total=4096"));
+        assert!(output.contains("cache-used=1024"));
+        assert!(output.contains("cache-dirty=64"));
+        assert!(output.contains("cache-read-hits=1000"));
+        assert!(output.contains("cache-read-misses=25"));
+        assert!(output.contains("cache-write-hits=900"));
+        assert!(output.contains("cache-write-misses=30"));
+        assert!(output.contains("cache-promotions=128"));
+        assert!(output.contains("cache-demotions=32"));
+        assert!(output.contains("kernel-cache-settings=migration_threshold=2048"));
+        assert!(output.contains("kernel-metadata-format=2"));
         assert!(output.contains("writecache-total=1024"));
         assert!(output.contains("writecache-free=512"));
         assert!(output.contains("writecache-writeback=16"));

@@ -276,9 +276,10 @@ Use these commands for:
   details, token-to-keyslot bindings, and data-segment details
 - `cache`: bcache devices/cache sets, LVM cache/writecache metadata, bcachefs
   member-device cache accounting, and ZFS cache vdevs, including cache mode,
-  policy, dirty/writeback data, writecache total/free/error counters,
-  backing device, cache-set identity, state/running flags, available cache
-  percentage, discard, I/O errors,
+  policy, dirty/writeback data, LVM cache block totals, dirty blocks,
+  hit/miss and promotion/demotion counters, writecache total/free/error
+  counters, backing device, cache-set identity, state/running flags, available
+  cache percentage, discard, I/O errors,
   written/metadata-written accounting, priority stats, and vdev state
 - `lvm`: LVM physical volumes, volume groups, logical volumes, segments, thin
   pools, snapshots, and cache/writecache layers, including data and metadata

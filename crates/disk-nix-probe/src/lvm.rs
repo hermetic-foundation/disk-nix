@@ -69,10 +69,21 @@ struct LogicalVolume {
     metadata_percent: Option<String>,
     copy_percent: Option<String>,
     sync_percent: Option<String>,
+    cache_total_blocks: Option<String>,
+    cache_used_blocks: Option<String>,
+    cache_dirty_blocks: Option<String>,
+    cache_read_hits: Option<String>,
+    cache_read_misses: Option<String>,
+    cache_write_hits: Option<String>,
+    cache_write_misses: Option<String>,
+    cache_promotions: Option<String>,
+    cache_demotions: Option<String>,
     cache_mode: Option<String>,
     cache_policy: Option<String>,
+    kernel_cache_settings: Option<String>,
     kernel_cache_mode: Option<String>,
     kernel_cache_policy: Option<String>,
+    kernel_metadata_format: Option<String>,
     kernel_discards: Option<String>,
     vdo_operating_mode: Option<String>,
     vdo_compression_state: Option<String>,
@@ -294,10 +305,27 @@ fn add_logical_volume(graph: &mut StorageGraph, lv: LogicalVolume) {
         ("lvm.metadata-percent", lv.metadata_percent.clone()),
         ("lvm.copy-percent", lv.copy_percent.clone()),
         ("lvm.sync-percent", lv.sync_percent.clone()),
+        ("lvm.cache-total-blocks", lv.cache_total_blocks.clone()),
+        ("lvm.cache-used-blocks", lv.cache_used_blocks.clone()),
+        ("lvm.cache-dirty-blocks", lv.cache_dirty_blocks.clone()),
+        ("lvm.cache-read-hits", lv.cache_read_hits.clone()),
+        ("lvm.cache-read-misses", lv.cache_read_misses.clone()),
+        ("lvm.cache-write-hits", lv.cache_write_hits.clone()),
+        ("lvm.cache-write-misses", lv.cache_write_misses.clone()),
+        ("lvm.cache-promotions", lv.cache_promotions.clone()),
+        ("lvm.cache-demotions", lv.cache_demotions.clone()),
         ("lvm.cache-mode", lv.cache_mode.clone()),
         ("lvm.cache-policy", lv.cache_policy.clone()),
+        (
+            "lvm.kernel-cache-settings",
+            lv.kernel_cache_settings.clone(),
+        ),
         ("lvm.kernel-cache-mode", lv.kernel_cache_mode.clone()),
         ("lvm.kernel-cache-policy", lv.kernel_cache_policy.clone()),
+        (
+            "lvm.kernel-metadata-format",
+            lv.kernel_metadata_format.clone(),
+        ),
         ("lvm.kernel-discards", lv.kernel_discards.clone()),
         ("lvm.vdo-operating-mode", lv.vdo_operating_mode.clone()),
         (
@@ -565,10 +593,21 @@ mod tests {
             "metadata_percent": "",
             "copy_percent": "",
             "sync_percent": "",
+            "cache_total_blocks": "",
+            "cache_used_blocks": "",
+            "cache_dirty_blocks": "",
+            "cache_read_hits": "",
+            "cache_read_misses": "",
+            "cache_write_hits": "",
+            "cache_write_misses": "",
+            "cache_promotions": "",
+            "cache_demotions": "",
             "cache_mode": "",
             "cache_policy": "",
+            "kernel_cache_settings": "",
             "kernel_cache_mode": "",
             "kernel_cache_policy": "",
+            "kernel_metadata_format": "",
             "kernel_discards": "",
             "vdo_operating_mode": "",
             "vdo_compression_state": "",
@@ -607,10 +646,21 @@ mod tests {
             "metadata_percent": "",
             "copy_percent": "",
             "sync_percent": "",
+            "cache_total_blocks": "4096",
+            "cache_used_blocks": "1024",
+            "cache_dirty_blocks": "64",
+            "cache_read_hits": "1000",
+            "cache_read_misses": "25",
+            "cache_write_hits": "900",
+            "cache_write_misses": "30",
+            "cache_promotions": "128",
+            "cache_demotions": "32",
             "cache_mode": "writeback",
             "cache_policy": "smq",
+            "kernel_cache_settings": "migration_threshold=2048",
             "kernel_cache_mode": "writeback",
             "kernel_cache_policy": "smq",
+            "kernel_metadata_format": "2",
             "kernel_discards": "passdown",
             "vdo_operating_mode": "normal",
             "vdo_compression_state": "online",
@@ -762,6 +812,28 @@ mod tests {
                     .properties
                     .iter()
                     .any(|property| property.key == "lvm.cache-policy" && property.value == "smq")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.cache-total-blocks" && property.value == "4096"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.cache-dirty-blocks" && property.value == "64"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.cache-read-hits" && property.value == "1000"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.cache-write-misses" && property.value == "30"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.cache-promotions" && property.value == "128"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.kernel-cache-settings"
+                        && property.value == "migration_threshold=2048"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.kernel-metadata-format" && property.value == "2"
+                })
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.kernel-discards" && property.value == "passdown"
                 })
