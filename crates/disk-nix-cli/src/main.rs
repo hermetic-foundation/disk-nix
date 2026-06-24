@@ -2803,6 +2803,25 @@ fn usage_details(node: &Node) -> String {
         ("nvme.id-ctrl.mdts", "mdts"),
         ("nvme.id-ctrl.version", "version"),
         ("nvme.id-ctrl.controller-type", "controller-type"),
+        ("nvme.id-ctrl.oacs", "optional-admin-commands"),
+        ("nvme.id-ctrl.fuses", "fused-operations"),
+        ("nvme.id-ctrl.fna", "format-nvm-attributes"),
+        ("nvme.id-ctrl.awun", "atomic-write-unit-normal"),
+        ("nvme.id-ctrl.awupf", "atomic-write-unit-powerfail"),
+        ("nvme.id-ctrl.acwu", "atomic-compare-write-unit"),
+        ("nvme.id-ctrl.sgls", "sgl-support"),
+        ("nvme.id-ctrl.namespace-set-id-max", "namespace-set-id-max"),
+        (
+            "nvme.id-ctrl.endurance-group-id-max",
+            "endurance-group-id-max",
+        ),
+        ("nvme.id-ctrl.ana-transition-time", "ana-transition-time"),
+        ("nvme.id-ctrl.ana-group-max", "ana-group-max"),
+        (
+            "nvme.id-ctrl.persistent-event-log-size",
+            "persistent-event-log-size",
+        ),
+        ("nvme.id-ctrl.domain-id", "domain-id"),
         (
             "nvme.id-ctrl.warning-composite-temp",
             "warning-composite-temp",
@@ -6641,6 +6660,19 @@ mod tests {
                 .with_property("nvme.id-ctrl.ssvid", "5197")
                 .with_property("nvme.id-ctrl.mdts", "9")
                 .with_property("nvme.id-ctrl.controller-type", "1")
+                .with_property("nvme.id-ctrl.oacs", "31")
+                .with_property("nvme.id-ctrl.fuses", "1")
+                .with_property("nvme.id-ctrl.fna", "4")
+                .with_property("nvme.id-ctrl.awun", "255")
+                .with_property("nvme.id-ctrl.awupf", "0")
+                .with_property("nvme.id-ctrl.acwu", "0")
+                .with_property("nvme.id-ctrl.sgls", "131073")
+                .with_property("nvme.id-ctrl.namespace-set-id-max", "32")
+                .with_property("nvme.id-ctrl.endurance-group-id-max", "8")
+                .with_property("nvme.id-ctrl.ana-transition-time", "10")
+                .with_property("nvme.id-ctrl.ana-group-max", "4")
+                .with_property("nvme.id-ctrl.persistent-event-log-size", "4096")
+                .with_property("nvme.id-ctrl.domain-id", "2")
                 .with_property("nvme.id-ctrl.warning-composite-temp", "343")
                 .with_property("nvme.id-ctrl.critical-composite-temp", "353")
                 .with_property("nvme.id-ctrl.minimum-thermal-management-temp", "273")
@@ -6736,6 +6768,17 @@ mod tests {
         assert!(output.contains("nvme0"));
         assert!(output.contains("nqn.2014-08.org.nvmexpress:uuid:12345678"));
         assert!(output.contains("vid=5197 ssvid=5197 mdts=9 controller-type=1"));
+        assert!(
+            output
+                .contains("optional-admin-commands=31 fused-operations=1 format-nvm-attributes=4")
+        );
+        assert!(output.contains(
+            "atomic-write-unit-normal=255 atomic-write-unit-powerfail=0 atomic-compare-write-unit=0 sgl-support=131073"
+        ));
+        assert!(output.contains(
+            "namespace-set-id-max=32 endurance-group-id-max=8 ana-transition-time=10 ana-group-max=4"
+        ));
+        assert!(output.contains("persistent-event-log-size=4096 domain-id=2"));
         assert!(output.contains(
             "warning-composite-temp=343 critical-composite-temp=353 min-thermal-management-temp=273 max-thermal-management-temp=358"
         ));
