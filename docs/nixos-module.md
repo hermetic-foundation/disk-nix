@@ -712,7 +712,7 @@ Example lifecycle planning through NixOS options:
     };
     luns."iqn.2026-06.example:storage/rescan:4" = {
       operation = "rescan";
-      devices = [
+      paths = [
         "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4"
       ];
     };

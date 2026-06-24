@@ -694,8 +694,9 @@ rescan, and grow keep the broad `iscsiadm --mode session --rescan` step,
 rescan/grow add per-path SCSI rescans when stable paths are declared, and
 detach deletes only declared stable SCSI path devices before reloading
 multipath. Legacy LUN `create` and `destroy` map to the same command plans.
-Attach, rescan, grow, and detach remain non-ready until stable `device` or
-`devices` paths are declared. Target-side array
+Attach, rescan, grow, and detach remain non-ready until stable paths are
+declared through `device`, `path`, `devices`, `paths`, or `devicePaths`.
+Target-side array
 provisioning or deletion must be handled outside the host plan unless a future
 target adapter is added.
 The capability inventory advertises iSCSI login/logout and LUN attach/detach

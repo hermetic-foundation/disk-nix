@@ -18217,6 +18217,83 @@ mod tests {
     }
 
     #[test]
+    fn lun_lifecycle_accepts_stable_path_aliases() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "luns": {
+                  "iqn.2026-06.example:storage/path:0": {
+                    "operation": "attach",
+                    "path": "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                  },
+                  "iqn.2026-06.example:storage/paths:1": {
+                    "operation": "rescan",
+                    "paths": [
+                      "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-1"
+                    ]
+                  },
+                  "iqn.2026-06.example:storage/device-paths:2": {
+                    "operation": "detach",
+                    "devicePaths": [
+                      "/dev/disk/by-path/ip-192.0.2.12:3260-iscsi-iqn.2026-06.example:storage-lun-2"
+                    ]
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/path:0:attach"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "blockdev",
+                            "--getsize64",
+                            "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/paths:1:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "block=$(basename \"$(readlink -f \"$1\")\"); printf '1\\n' > \"/sys/class/block/${block}/device/rescan\"",
+                            "disk-nix-scsi-rescan",
+                            "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-1",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/device-paths:2:detach"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "block=$(basename \"$(readlink -f \"$1\")\"); printf '1\\n' > \"/sys/class/block/${block}/device/delete\"",
+                            "disk-nix-scsi-delete",
+                            "/dev/disk/by-path/ip-192.0.2.12:3260-iscsi-iqn.2026-06.example:storage-lun-2",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
     fn nvme_namespace_lifecycle_reports_nvme_commands() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

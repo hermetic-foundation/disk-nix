@@ -880,8 +880,8 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         collection: Some(collection.to_string()),
         name: Some(name.to_string()),
         target: lifecycle_target(collection, name, object),
-        device: string_field(object, &["device", "disk", "source"]),
-        devices: string_array_field(object, &["devices", "addDevices"]),
+        device: lifecycle_device(collection, object),
+        devices: lifecycle_devices(collection, object),
         rename_to: string_field(object, &["renameTo", "renameTarget", "newName"]),
         fs_type: string_field(object, &["fsType", "type"]),
         mountpoint: string_field(object, &["mountpoint", "path"])
@@ -909,6 +909,24 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         property_assignments: property_assignments(object),
         ..ActionContext::default()
     }
+}
+
+fn lifecycle_device(collection: &str, object: &Value) -> Option<String> {
+    let keys: &[&str] = if collection == "luns" {
+        &["device", "disk", "source", "path"]
+    } else {
+        &["device", "disk", "source"]
+    };
+    string_field(object, keys)
+}
+
+fn lifecycle_devices(collection: &str, object: &Value) -> Vec<String> {
+    let keys: &[&str] = if collection == "luns" {
+        &["devices", "devicePaths", "paths", "addDevices"]
+    } else {
+        &["devices", "addDevices"]
+    };
+    string_array_field(object, keys)
 }
 
 fn lifecycle_target(collection: &str, name: &str, object: &Value) -> Option<String> {

@@ -148,6 +148,20 @@ let
           ];
         };
 
+        paths = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Stable host paths for path-addressed lifecycle objects such as LUNs.";
+          example = [ "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.example-lun-0" ];
+        };
+
+        devicePaths = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Alias for paths accepted by disk-nix for stable host path declarations.";
+          example = [ "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.example-lun-0" ];
+        };
+
         removeDevices = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [ ];
@@ -682,6 +696,8 @@ let
         action
         addDevices
         devices
+        paths
+        devicePaths
         removeDevices
         replaceDevices
         renameTo

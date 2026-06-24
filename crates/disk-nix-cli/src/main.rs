@@ -1018,6 +1018,14 @@ fn spec_schema() -> serde_json::Value {
                         "type": "array",
                         "items": { "type": "string" }
                     },
+                    "paths": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "devicePaths": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
                     "removeDevices": {
                         "type": "array",
                         "items": { "type": "string" }

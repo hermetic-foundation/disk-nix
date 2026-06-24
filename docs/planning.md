@@ -242,10 +242,11 @@ Examples:
   host rescan, multipath, and consumers must be coordinated. LUN
   `operation = "detach"` is modeled as host-side path detach, not target-side
   array deletion, and remains offline-required. Legacy LUN `destroy` maps to
-  the same detach lifecycle. When stable `device` or `devices` paths are
-  declared, apply plans render per-path SCSI rescans or deletes in addition to
-  broad iSCSI session and multipath refreshes. Executable attach, grow, and
-  detach plans remain non-ready until those stable LUN paths are declared.
+  the same detach lifecycle. When stable paths are declared through `device`,
+  `path`, `devices`, `paths`, or `devicePaths`, apply plans render per-path SCSI
+  rescans or deletes in addition to broad iSCSI session and multipath refreshes.
+  Executable attach, grow, and detach plans remain non-ready until those stable
+  LUN paths are declared.
 - iSCSI session `operation = "login"` discovers/logs into an existing target
   and is online. Legacy `operation = "create"` remains accepted for the same
   login flow. `operation = "logout"` detaches remote LUN paths from the host,
@@ -341,8 +342,8 @@ Lifecycle objects may use:
   `login`, `logout`, `open`, `close`, `mount`, `unmount`, `remount`, `rename`,
   `rebalance`, `rollback`, or `destroy`
 - `addDevices`: list of devices to attach
-- `devices`: member devices for arrays, pools, or explicit LUN paths that
-  should receive per-path host rescans
+- `devices`, `paths`, or `devicePaths`: member devices for arrays and pools, or
+  explicit LUN paths that should receive per-path host rescans
 - `removeDevices`: list of devices to remove
 - `renameTo`, `renameTarget`, or `newName`: new name or path for rename
   lifecycle operations

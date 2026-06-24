@@ -374,7 +374,8 @@ login/logout command plans. LUN apply plans model host-side
 rescan declared SCSI paths, and detach deletes only declared stable path
 devices before refreshing multipath. Legacy LUN `create` and `destroy` still
 map to the same host-side command plans. Executable LUN attach, grow, rescan,
-and detach plans require declared stable `device` or `devices` paths.
+and detach plans require declared stable paths through `device`, `path`,
+`devices`, `paths`, or `devicePaths`.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain. Btrfs snapshot declarations with `readOnly = true` render

@@ -643,7 +643,7 @@
               };
               luns."iqn.2026-06.example:storage/rescan:4" = {
                 operation = "rescan";
-                devices = [
+                paths = [
                   "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4"
                 ];
               };
@@ -971,6 +971,8 @@
               and ."$defs".lifecycleObject.properties.level.type == "string"
               and ."$defs".lifecycleObject.properties.raidLevel.type == "string"
               and ."$defs".lifecycleObject.properties.devices.type == "array"
+              and ."$defs".lifecycleObject.properties.paths.type == "array"
+              and ."$defs".lifecycleObject.properties.devicePaths.type == "array"
               and ."$defs".lifecycleObject.properties.path.type == "string"
               and ."$defs".lifecycleObject.properties.client.type == "string"
               and ."$defs".lifecycleObject.properties.portal.type == "string"
@@ -1328,7 +1330,7 @@
                     and .spec.luns."iqn.2026-06.example:storage/old:3".operation == "detach"
                     and (.spec.luns."iqn.2026-06.example:storage/old:3".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3") != null)
                     and .spec.luns."iqn.2026-06.example:storage/rescan:4".operation == "rescan"
-                    and (.spec.luns."iqn.2026-06.example:storage/rescan:4".devices | index("/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4") != null)
+                    and (.spec.luns."iqn.2026-06.example:storage/rescan:4".paths | index("/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4") != null)
                     and .spec.nvmeNamespaces."/dev/nvme0".operation == "create"
                     and .spec.nvmeNamespaces."/dev/nvme0".desiredSize == "100G"
                     and .spec.nvmeNamespaces."/dev/nvme0".namespaceId == "4"
