@@ -518,8 +518,9 @@
                 operation = "rescan";
                 target = "/mnt/persist";
               };
-              volumes."vg0/scratch" = {
+              volumes.scratch = {
                 operation = "create";
+                target = "vg0/scratch";
                 desiredSize = "10GiB";
               };
               volumes."vg0/size-alias" = {
@@ -559,8 +560,9 @@
               zvols."tank/vm/inventory" = {
                 operation = "rescan";
               };
-              thinPools."vg0/thinpool" = {
+              thinPools.primaryPool = {
                 operation = "grow";
+                path = "vg0/thinpool";
                 desiredSize = "500GiB";
               };
               thinPools."vg0/newthin" = {
@@ -1364,8 +1366,9 @@
                     and .spec.btrfsQgroups."0/257".properties.limit == "25GiB"
                     and .spec.btrfsQgroups."0/258".operation == "rescan"
                     and .spec.btrfsQgroups."0/258".target == "/mnt/persist"
-                    and .spec.volumes."vg0/scratch".operation == "create"
-                    and .spec.volumes."vg0/scratch".desiredSize == "10GiB"
+                    and .spec.volumes.scratch.operation == "create"
+                    and .spec.volumes.scratch.target == "vg0/scratch"
+                    and .spec.volumes.scratch.desiredSize == "10GiB"
                     and .spec.volumes."vg0/size-alias".size == "12GiB"
                     and .spec.volumes."vg0/reporting".operation == "rescan"
                     and .spec.datasets."tank/home".operation == "create"
@@ -1404,8 +1407,9 @@
                     and .spec.zvols."tank/vm/root".operation == "grow"
                     and .spec.zvols."tank/vm/root".desiredSize == "80GiB"
                     and .spec.zvols."tank/vm/inventory".operation == "rescan"
-                    and .spec.thinPools."vg0/thinpool".operation == "grow"
-                    and .spec.thinPools."vg0/thinpool".desiredSize == "500GiB"
+                    and .spec.thinPools.primaryPool.operation == "grow"
+                    and .spec.thinPools.primaryPool.path == "vg0/thinpool"
+                    and .spec.thinPools.primaryPool.desiredSize == "500GiB"
                     and .spec.thinPools."vg0/newthin".operation == "create"
                     and .spec.thinPools."vg0/newthin".desiredSize == "100GiB"
                     and .spec.thinPools."vg0/reporting".operation == "rescan"

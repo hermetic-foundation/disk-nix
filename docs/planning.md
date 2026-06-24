@@ -450,9 +450,9 @@ the command plan non-ready.
 LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
 for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
 destructive policy gates allow removal. LV grow and remove commands require
-canonical `vg/lv` targets.
+canonical `vg/lv` targets from the declaration key, `target`, or `path`.
 LVM thin-pool command plans require canonical `vg/pool` targets for grow and
-remove operations.
+remove operations, supplied by the declaration key, `target`, or `path`.
 LVM volume group grow and add-device command plans use `vgextend <vg> <pv>`
 when a physical volume device is declared. Replacement plans render
 `vgextend <vg> <new-pv>`, `pvmove <old-pv> <new-pv>`, and
@@ -468,6 +468,10 @@ Create, grow, and remove plans require a concrete path-shaped declaration key,
 `target`, `path`, or `device`; rescan can refresh all visible PV metadata when
 no path-shaped target is declared. PV removal advice recommends `pvmove` plus
 `vgreduce` before `pvremove`.
+LVM logical volume and thin-pool command plans require canonical `vg/lv` or
+`vg/pool` targets. Logical declaration names can provide those targets through
+`target` or `path` so command planning stays executable without encoding the
+native LVM name in the Nix attribute key.
 LUKS keyslot and token command plans use explicit `add-key`, `remove-key`,
 `import-token`, and `remove-token` lifecycle declarations for
 `cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and

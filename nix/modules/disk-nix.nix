@@ -1661,7 +1661,7 @@ in
     volumes = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed volume lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed LVM logical-volume lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a canonical vg/lv target through the declaration key, target, or path.";
     };
 
     disks = lib.mkOption {
@@ -1721,7 +1721,7 @@ in
     thinPools = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed LVM thin-pool lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed LVM thin-pool lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a canonical vg/pool target through the declaration key, target, or path.";
     };
 
     lvmSnapshots = lib.mkOption {

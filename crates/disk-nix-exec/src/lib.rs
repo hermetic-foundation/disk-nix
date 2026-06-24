@@ -17278,6 +17278,76 @@ mod tests {
     }
 
     #[test]
+    fn lvm_volume_and_thin_pool_lifecycle_accept_target_aliases_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "volumes": {
+                  "scratch": {
+                    "operation": "grow",
+                    "target": "vg0/scratch",
+                    "desiredSize": "20GiB"
+                  },
+                  "old": {
+                    "destroy": true,
+                    "path": "vg0/old"
+                  }
+                },
+                "thinPools": {
+                  "pool": {
+                    "operation": "grow",
+                    "target": "vg0/pool",
+                    "desiredSize": "200GiB"
+                  },
+                  "oldpool": {
+                    "destroy": true,
+                    "path": "vg0/oldpool"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumes:scratch:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvextend", "--resizefs", "--size", "20GiB", "vg0/scratch"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "volumes:old:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvremove", "--yes", "vg0/old"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "thinpools:pool:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvextend", "--size", "200GiB", "vg0/pool"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "thinpools:oldpool:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lvremove", "--yes", "vg0/oldpool"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
     fn lvm_volume_group_lifecycle_reports_lvm_commands() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

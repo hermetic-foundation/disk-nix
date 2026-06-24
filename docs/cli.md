@@ -722,7 +722,8 @@ size change.
 LVM logical volume command plans render concrete `lvcreate` commands when a
 `volumes` create action has a `vg/lv` target and `desiredSize`, and report
 missing target form and size separately when either is absent. LV grow and
-remove commands also require the canonical `vg/lv` target form.
+remove commands also require the canonical `vg/lv` target form from the
+declaration key, `target`, or `path`.
 `operation = "rescan"` renders read-only `lvs` and graph inspection commands
 for LV size, attributes, and dependent mappings.
 LVM physical volume command plans render `pvcreate`, `pvresize`, explicit
@@ -744,7 +745,7 @@ LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
 read-only `lvs` rescans, and policy-gated `lvremove` commands for `thinPools`
 lifecycle declarations, with separate unresolved-input markers for target form
 and size. Thin-pool grow, rescan, and remove commands require the canonical
-`vg/pool` target form.
+`vg/pool` target form from the declaration key, `target`, or `path`.
 LVM cache command plans render `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` commands for `lvmCaches`
 lifecycle declarations. Executable attach plans require both an origin `vg/lv`

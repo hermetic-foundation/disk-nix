@@ -155,6 +155,9 @@ addresses still produce reviewable plans, but their command plans stay
 non-ready instead of guessing from logical keys.
 For loop devices, `target` or `path` supplies the `/dev/loop*` address and
 `device` remains the backing file or block device used by create plans.
+For LVM logical volumes and thin pools, `target` or `path` supplies the
+canonical `vg/lv` or `vg/pool` name while the Nix attribute can remain a
+logical object name.
 MD RAID assemble, stop, member add, replacement, and removal declarations use
 the same explicit array target requirement as create and grow plans. Assemble
 also requires explicit reviewed member devices. MD RAID rescan declarations can
@@ -559,8 +562,9 @@ Example lifecycle planning through NixOS options:
       operation = "rescan";
       path = "/mnt/persist";
     };
-    volumes."vg0/scratch" = {
+    volumes.scratch = {
       operation = "create";
+      target = "vg0/scratch";
       desiredSize = "10GiB";
     };
     volumes."vg0/reporting".operation = "rescan";

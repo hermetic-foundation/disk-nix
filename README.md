@@ -408,8 +408,9 @@ properties as create-time `-o key=value` options, plus policy-gated
 LVM logical volume apply plans render reviewed `lvcreate` and gated
 `lvremove` steps for volume lifecycle declarations, with unresolved markers for
 missing `vg/lv` targets or sizes. Grow and remove commands also require that
-canonical `vg/lv` target form before they are executable. `operation = "rescan"`
-renders read-only `lvs` and graph inspection for LV status refresh.
+canonical `vg/lv` target form before they are executable; logical volume names
+can declare it through `target` or `path`. `operation = "rescan"` renders
+read-only `lvs` and graph inspection for LV status refresh.
 LVM physical volume apply plans render reviewed `pvcreate`, `pvresize`,
 `pvscan --cache`, and gated `pvremove` steps. Create, grow, and remove plans
 require a concrete block path from the declaration key, `target`, `path`, or
@@ -417,7 +418,8 @@ require a concrete block path from the declaration key, `target`, `path`, or
 LVM thin-pool apply plans render reviewed `lvcreate --type thin-pool`,
 `lvextend`, and gated `lvremove` steps, with unresolved markers for missing
 `vg/pool` targets or sizes. Thin-pool grow and remove commands likewise
-require the canonical `vg/pool` target form.
+require the canonical `vg/pool` target form, supplied by the declaration key,
+`target`, or `path`.
 LVM volume group apply plans render gated `vgcreate` and `vgremove` steps for
 volume group lifecycle declarations, reviewed `vgextend` steps for grow or
 add-device operations with an explicit physical volume, reviewed replacement
