@@ -2122,6 +2122,11 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
             .or_else(|| property_value_from_node(node, property).map(str::to_string));
     }
 
+    if action.context.collection.as_deref() == Some("swaps") {
+        return current_swap_property_value(property, node)
+            .or_else(|| property_value_from_node(node, property).map(str::to_string));
+    }
+
     if let Some(aliases) = aliases {
         return aliases
             .iter()
@@ -2165,7 +2170,46 @@ fn comparable_property_value(action: &PlannedAction, property: &str, value: &str
             normalize_filesystem_property_value(action, &normalized_property, value)
                 .unwrap_or_else(|| value.to_string())
         }
+        Some("swaps") => normalize_swap_property_value(&normalized_property, value)
+            .unwrap_or_else(|| value.to_string()),
         _ => value.to_string(),
+    }
+}
+
+fn current_swap_property_value(property: &str, node: &Node) -> Option<String> {
+    match swap_property_kind(property)? {
+        SwapPropertyKind::Label => node.identity.label.clone().or_else(|| {
+            property_value_from_node(node, "swap.label")
+                .or_else(|| property_value_from_node(node, "udev.id-fs-label"))
+                .or_else(|| property_value_from_node(node, "udev.id-fs-label-safe"))
+                .map(str::to_string)
+        }),
+        SwapPropertyKind::Uuid => node.identity.uuid.clone().or_else(|| {
+            property_value_from_node(node, "swap.uuid")
+                .or_else(|| property_value_from_node(node, "udev.id-fs-uuid"))
+                .map(str::to_string)
+        }),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SwapPropertyKind {
+    Label,
+    Uuid,
+}
+
+fn swap_property_kind(property: &str) -> Option<SwapPropertyKind> {
+    match normalize_storage_property_name(property).as_str() {
+        "label" | "swap-label" => Some(SwapPropertyKind::Label),
+        "uuid" | "swap-uuid" => Some(SwapPropertyKind::Uuid),
+        _ => None,
+    }
+}
+
+fn normalize_swap_property_value(property: &str, value: &str) -> Option<String> {
+    match swap_property_kind(property)? {
+        SwapPropertyKind::Label => Some(value.to_string()),
+        SwapPropertyKind::Uuid => Some(value.trim().to_ascii_lowercase()),
     }
 }
 
@@ -17804,6 +17848,91 @@ mod tests {
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::SwapFormatTargetPresent
                 && diagnostic.message.contains("filesystem")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_swap_identity_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "swaps": {
+                "primary": {
+                  "device": "/dev/disk/by-label/swap-old",
+                  "properties": {
+                    "label": "swap-new",
+                    "swap.uuid": "01234567-89AB-CDEF-0123-456789ABCDEF"
+                  }
+                },
+                "scratch": {
+                  "device": "/dev/disk/by-label/scratch-swap",
+                  "properties": {
+                    "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "swap:/dev/disk/by-label/swap-old",
+                NodeKind::Swap,
+                "swap-old",
+            )
+            .with_path("/dev/disk/by-label/swap-old")
+            .with_identity(Identity {
+                uuid: Some("01234567-89ab-cdef-0123-456789abcdef".to_string()),
+                partuuid: None,
+                label: Some("swap-new".to_string()),
+                serial: None,
+                wwn: None,
+            })
+            .with_property("swap.active", "false"),
+        );
+        graph.add_node(
+            Node::new(
+                "swap:/dev/disk/by-label/scratch-swap",
+                NodeKind::Swap,
+                "scratch-swap",
+            )
+            .with_path("/dev/disk/by-label/scratch-swap")
+            .with_property("swap.uuid", "ffffffff-1111-2222-3333-444444444444"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 5);
+        assert_eq!(comparison.summary.matched_count, 5);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.actions.len(), 3);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "swaps:scratch:set-property:uuid"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:primary:set-property:label"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:primary:set-property:swap.uuid"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:scratch:set-property:uuid"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic
+                    .message
+                    .contains("ffffffff-1111-2222-3333-444444444444")
+                && diagnostic
+                    .message
+                    .contains("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
         }));
     }
 
