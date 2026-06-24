@@ -298,6 +298,14 @@
     "inventory": {
       "device": "/dev/disk/by-label/swap-inventory",
       "operation": "rescan"
+    },
+    "retired": {
+      "device": "/dev/disk/by-label/retired-swap",
+      "operation": "deactivate"
+    },
+    "remove": {
+      "device": "/dev/disk/by-label/remove-swap",
+      "operation": "destroy"
     }
   },
   "luks": {

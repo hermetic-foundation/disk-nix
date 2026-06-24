@@ -41,7 +41,8 @@ behavior across real storage stacks.
 - Current-topology reconciliation suppresses safe no-op grow, shrink, iSCSI
   login/logout, LVM logical-volume activation/deactivation, LUKS open, LUKS
   close, loop create/destroy, LUN attach/detach, NVMe namespace attach/detach,
-  mount, unmount, remount, NFS export/unexport, VDO start, VDO stop, MD
+  swap deactivate/destroy, mount, unmount, remount, NFS export/unexport, VDO
+  start, VDO stop, MD
   assemble, ZFS pool import, LVM volume-group import/export, and property
   actions when the graph proves they are already satisfied and no warning
   diagnostics are present;
@@ -51,7 +52,8 @@ behavior across real storage stacks.
   mapped to different backing files, still-mapped loop detach targets, absent
   LUN attach paths, visible LUN detach paths, absent NVMe namespace attach
   paths, visible NVMe namespace detach paths, non-normal VDO start modes,
-  running VDO stop targets, degraded or failed MD arrays, degraded ZFS pools,
+  running VDO stop targets, active swap teardown targets, degraded or failed MD
+  arrays, degraded ZFS pools,
   mount source mismatches, currently mounted unmount targets, published
   unexport targets, remount option differences, export client/option
   differences, and known iSCSI targets without logged-in sessions remain

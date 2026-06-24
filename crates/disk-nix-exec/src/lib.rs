@@ -1873,6 +1873,48 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Deactivate if collection == Some("swaps") => (
+            vec![
+                command(
+                    ["swapon", "--show", "--bytes", "--raw"],
+                    false,
+                    "verify active swap inventory after swapoff",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "verify modeled swap node is inactive or absent after swapoff",
+                ),
+            ],
+            vec![
+                "target is absent from active swapon output".to_string(),
+                "swap signature remains intact unless a separate destroy action was requested"
+                    .to_string(),
+            ],
+        ),
+        Operation::Destroy if collection == Some("swaps") => (
+            vec![
+                command(
+                    ["swapon", "--show", "--bytes", "--raw"],
+                    false,
+                    "verify active swap inventory after signature removal",
+                ),
+                swap_blkid_command(
+                    swap_target_path(action),
+                    "verify swap signature is absent or intentionally replaced",
+                ),
+                command(
+                    ["disk-nix", "topology", "--json"],
+                    false,
+                    "verify modeled swap node and consumers after swap destruction",
+                ),
+            ],
+            vec![
+                "target is absent from active swapon output".to_string(),
+                "NixOS swapDevices, resume, and hibernation references no longer point at the destroyed signature"
+                    .to_string(),
+            ],
+        ),
         Operation::Rescan if collection == Some("swaps") => {
             let target = swap_target_path(action);
             (
@@ -4786,6 +4828,46 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "verify memory pressure and hibernation dependencies before swapoff"
                         .to_string(),
                     "prefer adding replacement swap capacity before resizing active swap"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Deactivate if collection == Some("swaps") => {
+            let target = swap_target_path(action);
+            (
+                vec![
+                    command(
+                        ["swapon", "--show", "--bytes", "--raw"],
+                        false,
+                        "inspect active swap state before swapoff",
+                    ),
+                    swap_command("swapoff", target, "disable active swap without removing its signature"),
+                ],
+                vec![
+                    "verify memory pressure and hibernation dependencies before swapoff"
+                        .to_string(),
+                    "use destroy only when swap signature metadata should be removed".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("swaps") => {
+            let target = swap_target_path(action);
+            (
+                vec![
+                    disk_nix_inspect_command(
+                        target,
+                        "<swap>",
+                        "swap target path",
+                        "inspect target before disabling and wiping swap signature",
+                    ),
+                    swap_command("swapoff", target, "disable active swap before removing its signature"),
+                    swap_wipefs_command(target),
+                ],
+                vec![
+                    "remove or update NixOS swapDevices before wiping the signature".to_string(),
+                    "verify resume and hibernation references before deleting swap metadata"
                         .to_string(),
                 ],
                 true,
@@ -11502,6 +11584,23 @@ fn swap_blkid_command(target: Option<&str>, note: &'static str) -> ExecutionComm
     }
 }
 
+fn swap_wipefs_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["wipefs", "--all", target],
+            true,
+            "remove the reviewed swap signature metadata",
+        ),
+        None => command_with_readiness(
+            ["wipefs", "--all", "<swap>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap target path"],
+            "remove the swap signature after resolving the target",
+        ),
+    }
+}
+
 fn swap_inspect_command(target: Option<&str>, note: &'static str) -> ExecutionCommand {
     disk_nix_inspect_command(target, "<swap>", "swap target path", note)
 }
@@ -16988,6 +17087,14 @@ mod tests {
                   "inventory": {
                     "device": "/dev/disk/by-label/swap-inventory",
                     "operation": "rescan"
+                  },
+                  "retired": {
+                    "device": "/dev/disk/by-label/retired-swap",
+                    "operation": "deactivate"
+                  },
+                  "remove": {
+                    "device": "/dev/disk/by-label/remove-swap",
+                    "operation": "destroy"
                   }
                 },
                 "luks": {
@@ -17038,7 +17145,7 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_plan.len(), 9);
+        assert_eq!(report.command_plan.len(), 11);
         assert!(report.command_plan.iter().any(|step| {
             step.commands
                 .iter()
@@ -17060,6 +17167,24 @@ mod tests {
                 && step.commands.iter().any(|command| {
                     command.argv == ["disk-nix", "inspect", "/dev/disk/by-label/swap-inventory"]
                         && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:retired:deactivate"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["swapoff", "/dev/disk/by-label/retired-swap"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:remove:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["swapoff", "/dev/disk/by-label/remove-swap"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["wipefs", "--all", "/dev/disk/by-label/remove-swap"]
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
@@ -17320,6 +17445,12 @@ mod tests {
                   "inventory": {
                     "operation": "rescan"
                   },
+                  "retired": {
+                    "operation": "deactivate"
+                  },
+                  "remove": {
+                    "operation": "destroy"
+                  },
                   "primary": {
                     "preserveData": false
                   }
@@ -17363,6 +17494,27 @@ mod tests {
                 })
                 && step.commands.iter().any(|command| {
                     command.argv == ["disk-nix", "inspect", "<swap>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["swap target path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:retired:deactivate"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["swapoff", "<swap>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["swap target path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:remove:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["swapoff", "<swap>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["swap target path"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["wipefs", "--all", "<swap>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["swap target path"]
                 })

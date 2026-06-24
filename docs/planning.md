@@ -140,6 +140,10 @@ Examples:
   offline-required because active swap must be disabled before backing storage
   and signatures are changed. Swapfile growth can render a concrete file resize
   command; block-device swap growth must use the backing storage layer first.
+  Swap deactivation is offline-required and renders `swapoff` without removing
+  the signature. Swap destruction is destructive because it disables active swap
+  and removes signature metadata with `wipefs --all`; prefer deactivation when
+  the signature should remain available for later reactivation.
   Swap label and UUID property updates are offline-required because they mutate
   swap signature identity used by mounts, resume paths, and automation.
 - zram is modeled as generated compressed swap state rather than persistent

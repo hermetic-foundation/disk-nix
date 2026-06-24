@@ -776,6 +776,12 @@ or `device`. Swap label and UUID property updates render
 `operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
 inspection commands for activation,
 capacity, label, UUID, and backing-storage refresh.
+Swap `operation = "deactivate"` renders `swapoff` while keeping the signature
+intact. Swap `operation = "destroy"` renders `swapoff` and `wipefs --all`, so
+it remains blocked until destructive policy is explicitly allowed. With
+`--probe-current`, inactive or absent swap teardown requests are suppressed,
+while active swap targets stay actionable with size, usage, type, or priority
+diagnostics.
 Plain zram declarations render read-only `zramctl`, `swapon --show`, and
 `disk-nix zram` commands for compressed swap size, algorithm, memory use, and
 activation review. Explicit zram `operation = "rescan"` uses the same inventory

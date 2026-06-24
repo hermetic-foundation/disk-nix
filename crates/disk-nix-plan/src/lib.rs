@@ -278,6 +278,10 @@ pub enum TopologyDiagnosticKind {
     LuksTokenRemoveRequired,
     MultipathDestroyAlreadySatisfied,
     MultipathDestroyRequired,
+    SwapDeactivateAlreadySatisfied,
+    SwapDeactivateRequired,
+    SwapDestroyAlreadySatisfied,
+    SwapDestroyRequired,
     LoopCreateAlreadySatisfied,
     LoopCreateConflict,
     LoopCreateRequired,
@@ -815,6 +819,8 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
                         | TopologyDiagnosticKind::LuksTokenRemoveAlreadySatisfied
                         | TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied
+                        | TopologyDiagnosticKind::SwapDeactivateAlreadySatisfied
+                        | TopologyDiagnosticKind::SwapDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
                         | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
@@ -1441,6 +1447,8 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
                     | TopologyDiagnosticKind::LuksTokenRemoveAlreadySatisfied
                     | TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied
+                    | TopologyDiagnosticKind::SwapDeactivateAlreadySatisfied
+                    | TopologyDiagnosticKind::SwapDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
                     | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
@@ -1521,6 +1529,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = nfs_unexport_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = swap_inactive_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = unmount_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1579,6 +1590,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(unmount_diagnostic(action, node, &query));
     diagnostics.extend(nfs_export_diagnostic(action, node, &query));
     diagnostics.extend(nfs_unexport_diagnostic(action, node, &query));
+    diagnostics.extend(swap_active_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics.extend(vdo_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(vdo_start_diagnostic(action, node, &query));
@@ -3106,6 +3118,91 @@ fn nfs_unexport_diagnostic(
         message: format!("NFS export {query} is currently published"),
         current: Some(current_node_summary(node)),
     })
+}
+
+fn swap_inactive_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("swaps")
+        || !matches!(action.operation, Operation::Deactivate | Operation::Destroy)
+    {
+        return None;
+    }
+
+    let (kind, message) = match action.operation {
+        Operation::Deactivate => (
+            TopologyDiagnosticKind::SwapDeactivateAlreadySatisfied,
+            format!("swap target {query} is already inactive or absent from current topology"),
+        ),
+        Operation::Destroy => (
+            TopologyDiagnosticKind::SwapDestroyAlreadySatisfied,
+            format!("swap target {query} is already inactive or absent from current topology"),
+        ),
+        _ => unreachable!("operation checked above"),
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind,
+        query: query.to_string(),
+        message,
+        current: None,
+    })
+}
+
+fn swap_active_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("swaps")
+        || !matches!(action.operation, Operation::Deactivate | Operation::Destroy)
+    {
+        return None;
+    }
+
+    let details = swap_active_details(node);
+    let detail_suffix = if details.is_empty() {
+        String::new()
+    } else {
+        format!(" with {}", details.join(", "))
+    };
+    let (kind, message) = match action.operation {
+        Operation::Deactivate => (
+            TopologyDiagnosticKind::SwapDeactivateRequired,
+            format!("swap target {query} is active{detail_suffix}"),
+        ),
+        Operation::Destroy => (
+            TopologyDiagnosticKind::SwapDestroyRequired,
+            format!("swap target {query} is active{detail_suffix}"),
+        ),
+        _ => unreachable!("operation checked above"),
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn swap_active_details(node: &Node) -> Vec<String> {
+    let mut details = Vec::new();
+    if let Some(size) = node.size_bytes {
+        details.push(format!("size {size} bytes"));
+    }
+    if let Some(used) = node.usage.as_ref().and_then(|usage| usage.used_bytes) {
+        details.push(format!("used {used} bytes"));
+    }
+    if let Some(priority) = property_value_from_node(node, "swap.priority") {
+        details.push(format!("priority {priority}"));
+    }
+    if let Some(swap_type) = property_value_from_node(node, "swap.type") {
+        details.push(format!("type {swap_type}"));
+    }
+    details
 }
 
 fn vdo_destroy_absent_diagnostic(
@@ -4675,6 +4772,44 @@ fn add_swap_actions(actions: &mut Vec<PlannedAction>, name: &str, swap: &Value) 
                     "use grow when backing swap capacity must change".to_string(),
                     "use format only when replacing the swap signature is intended".to_string(),
                     "verify resume and hibernation references before changing swap identity"
+                        .to_string(),
+                ],
+            }),
+        }),
+        Some(Operation::Deactivate | Operation::Stop) => actions.push(PlannedAction {
+            id: format!("swaps:{name}:deactivate"),
+            description: format!("disable active swap on {device}"),
+            operation: Operation::Deactivate,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context: context.clone(),
+            advice: Some(Advice {
+                summary: "swap deactivation runs swapoff without removing the swap signature"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement swap capacity before disabling active swap".to_string(),
+                    "use destroy only when the swap signature should be removed".to_string(),
+                    "verify resume and hibernation references before disabling swap".to_string(),
+                ],
+            }),
+        }),
+        Some(Operation::Destroy) => actions.push(PlannedAction {
+            id: format!("swaps:{name}:destroy"),
+            description: format!("disable swap and remove swap signature from {device}"),
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            destructive: true,
+            context: context.clone(),
+            advice: Some(Advice {
+                summary:
+                    "swap destruction disables active swap and removes swap signature metadata"
+                        .to_string(),
+                alternatives: vec![
+                    "use operation = \"deactivate\" to run swapoff without removing the signature"
+                        .to_string(),
+                    "remove or update NixOS swapDevices before deleting the swap signature"
+                        .to_string(),
+                    "verify resume and hibernation references before wiping swap metadata"
                         .to_string(),
                 ],
             }),
@@ -8105,6 +8240,32 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::Swap,
+            operation: Operation::Deactivate,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "swap deactivation runs swapoff without removing the signature"
+                    .to_string(),
+                alternatives: vec![
+                    "add replacement swap capacity before disabling this swap".to_string(),
+                    "use destroy only when the swap signature should be removed".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::Swap,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "swap destruction disables swap and removes signature metadata".to_string(),
+                alternatives: vec![
+                    "use deactivate to run swapoff without wiping the signature".to_string(),
+                    "remove NixOS swapDevices and resume references before metadata removal"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::ZramDevice,
             operation: Operation::Rescan,
             risk: RiskClass::Online,
@@ -10451,6 +10612,8 @@ pub fn default_capabilities() -> Vec<Capability> {
 
 #[cfg(test)]
 mod tests {
+    use disk_nix_model::Usage;
+
     use super::*;
 
     #[test]
@@ -12772,6 +12935,14 @@ mod tests {
                 "inventory": {
                   "device": "/dev/disk/by-label/swap-inventory",
                   "operation": "rescan"
+                },
+                "retired": {
+                  "device": "/dev/disk/by-label/old-swap",
+                  "operation": "deactivate"
+                },
+                "remove": {
+                  "device": "/dev/disk/by-label/remove-swap",
+                  "operation": "destroy"
                 }
               },
               "luks": {
@@ -12817,9 +12988,9 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 10);
-        assert_eq!(plan.summary.offline_required_count, 7);
-        assert_eq!(plan.summary.destructive_count, 2);
+        assert_eq!(plan.summary.action_count, 12);
+        assert_eq!(plan.summary.offline_required_count, 8);
+        assert_eq!(plan.summary.destructive_count, 3);
 
         let swap = plan
             .actions
@@ -12844,6 +13015,30 @@ mod tests {
             swap_rescan.context.device.as_deref(),
             Some("/dev/disk/by-label/swap-inventory")
         );
+
+        let swap_deactivate = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "swaps:retired:deactivate")
+            .expect("swap deactivate action exists");
+        assert_eq!(swap_deactivate.operation, Operation::Deactivate);
+        assert_eq!(swap_deactivate.risk, RiskClass::OfflineRequired);
+        assert!(!swap_deactivate.destructive);
+
+        let swap_destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "swaps:remove:destroy")
+            .expect("swap destroy action exists");
+        assert_eq!(swap_destroy.operation, Operation::Destroy);
+        assert_eq!(swap_destroy.risk, RiskClass::Destructive);
+        assert!(swap_destroy.destructive);
+        assert!(swap_destroy.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("deactivate"))
+        }));
 
         let luks = plan
             .actions
@@ -14600,6 +14795,114 @@ mod tests {
             diagnostic.action_id == "filesystems:archive:unmount"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::UnmountRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_inactive_swap_teardown() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "swaps": {
+                "old-file": {
+                  "path": "/swapfile.old",
+                  "operation": "deactivate"
+                },
+                "old-device": {
+                  "device": "/dev/disk/by-label/old-swap",
+                  "operation": "destroy"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:old-file:deactivate"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::SwapDeactivateAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:old-device:destroy"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::SwapDestroyAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_active_swap_teardown() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "swaps": {
+                "scratch": {
+                  "path": "/swapfile",
+                  "operation": "deactivate"
+                },
+                "remove": {
+                  "device": "/dev/disk/by-label/remove-swap",
+                  "operation": "destroy"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("swap:/swapfile", NodeKind::Swap, "/swapfile")
+                .with_path("/swapfile")
+                .with_size_bytes(1_073_741_824)
+                .with_usage(Usage {
+                    used_bytes: Some(134_217_728),
+                    free_bytes: Some(939_524_096),
+                    allocated_bytes: Some(1_073_741_824),
+                })
+                .with_property("swap.active", "true")
+                .with_property("swap.type", "file")
+                .with_property("swap.priority", "10"),
+        );
+        graph.add_node(
+            Node::new(
+                "swap:/dev/disk/by-label/remove-swap",
+                NodeKind::Swap,
+                "/dev/disk/by-label/remove-swap",
+            )
+            .with_path("/dev/disk/by-label/remove-swap")
+            .with_property("swap.active", "true")
+            .with_property("swap.type", "partition"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 2);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:scratch:deactivate"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SwapDeactivateRequired
+                && diagnostic.message.contains("priority 10")
+                && diagnostic.message.contains("type file")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:remove:destroy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SwapDestroyRequired
+                && diagnostic.message.contains("type partition")
         }));
     }
 

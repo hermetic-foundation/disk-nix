@@ -1625,14 +1625,14 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 99
+              .summary.actionCount == 101
               and (.dependencyOrder | length) == .summary.actionCount
               and (.dependencyOrder | any(.actionId == "datasets:tank/home:create" and (.unblocks | index("snapshot:tank/home@before-upgrade:create") != null)))
               and (.dependencyOrder | any(.actionId == "snapshot:tank/home@before-upgrade:create" and (.dependsOn | index("datasets:tank/home:create") != null)))
               and (.dependencyOrder | any(.actionId == "btrfssubvolumes:/mnt/persist/@home:create" and (.unblocks | index("snapshot:/mnt/persist/@home-inventory:rescan") != null)))
               and (.dependencyOrder | any(.actionId == "snapshot:/mnt/persist/@home-inventory:rescan" and (.dependsOn | index("btrfssubvolumes:/mnt/persist/@home:create") != null)))
-              and .summary.offlineRequiredCount == 30
-              and .summary.destructiveCount == 3
+              and .summary.offlineRequiredCount == 31
+              and .summary.destructiveCount == 4
               and .summary.potentialDataLossCount == 4
               and .summary.unsupportedCount == 0
               and (.actions | any(.id == "filesystems:home-check:check" and .risk == "offline-required"))
@@ -1687,6 +1687,8 @@
               and (.actions | any(.id == "partitions:data-table:rescan" and .risk == "online"))
               and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
               and (.actions | any(.id == "swaps:inventory:rescan" and .risk == "online"))
+              and (.actions | any(.id == "swaps:retired:deactivate" and .risk == "offline-required"))
+              and (.actions | any(.id == "swaps:remove:destroy" and .risk == "destructive"))
               and (.actions | any(.id == "luks.devices:cryptroot:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "luks.devices:cryptarchive:open" and .risk == "offline-required"))
               and (.actions | any(.id == "luks.devices:cryptclosed:close" and .risk == "offline-required"))
@@ -1748,9 +1750,9 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 37
-              and .apply.blockedSummary.offlineRequiredCount == 30
-              and .apply.blockedSummary.destructiveCount == 3
+              and .apply.blockedCount == 39
+              and .apply.blockedSummary.offlineRequiredCount == 31
+              and .apply.blockedSummary.destructiveCount == 4
               and .apply.blockedSummary.potentialDataLossCount == 4
               and .apply.blockedSummary.unsupportedCount == 0
               and (.apply.blocked | any(.id == "datasets:tank/legacy:rename"))
@@ -1766,6 +1768,8 @@
               and (.apply.blocked | any(.id == "exports:/srv/old-share:unexport"))
               and (.apply.blocked | any(.id == "nfs.mounts:/srv/old:unmount"))
               and (.apply.blocked | any(.id == "volumes:vg0/archive:deactivate"))
+              and (.apply.blocked | any(.id == "swaps:retired:deactivate"))
+              and (.apply.blocked | any(.id == "swaps:remove:destroy"))
               and (.apply.blocked | any(.id == "vdovolumes:warmarchive:start"))
               and (.apply.blocked | any(.id == "vdovolumes:coldarchive:stop"))
               and (.apply.blocked | any(.id == "luks.devices:cryptarchive:open"))
@@ -1779,14 +1783,14 @@
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 37
+              and .apply.blockedCount == 39
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 37
-              and .messages[0] == "apply policy blocked 37 action(s)"
+              and .apply.blockedCount == 39
+              and .messages[0] == "apply policy blocked 39 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
