@@ -36,6 +36,8 @@ pub struct ExecutionReport {
     pub verification_plan: Vec<VerificationStep>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub execution_results: Vec<ExecutionCommandResult>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recovery_actions: Vec<RecoveryAction>,
     pub messages: Vec<String>,
 }
 
@@ -106,6 +108,27 @@ pub struct ExecutionCommandResult {
     pub stderr: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RecoveryActionKind {
+    ReviewPolicy,
+    ResolveInputs,
+    InspectCurrentState,
+    ReviewExecutionFailure,
+    RunVerification,
+    ResumeAfterFix,
+    PreserveRecoveryPoints,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryAction {
+    pub kind: RecoveryActionKind,
+    pub summary: String,
+    pub commands: Vec<ExecutionCommand>,
+    pub notes: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CommandRunResult {
     success: bool,
@@ -172,7 +195,7 @@ fn prepare_execution_with_runner(
     let verification_summary = summarize_verification_plan(&verification_plan);
     if !apply.can_execute() {
         let blocked_count = apply.blocked_count;
-        return ExecutionReport {
+        return attach_recovery_actions(ExecutionReport {
             apply,
             status: ExecutionStatus::Blocked,
             topology_comparison,
@@ -181,12 +204,13 @@ fn prepare_execution_with_runner(
             verification_summary,
             verification_plan,
             execution_results: Vec::new(),
+            recovery_actions: Vec::new(),
             messages: vec![format!("apply policy blocked {blocked_count} action(s)")],
-        };
+        });
     }
 
     match mode {
-        ExecutionMode::DryRun => ExecutionReport {
+        ExecutionMode::DryRun => attach_recovery_actions(ExecutionReport {
             apply,
             status: ExecutionStatus::DryRun,
             topology_comparison,
@@ -200,10 +224,11 @@ fn prepare_execution_with_runner(
             command_plan,
             verification_plan,
             execution_results: Vec::new(),
-        },
+            recovery_actions: Vec::new(),
+        }),
         ExecutionMode::Execute => {
             if !command_summary.all_commands_ready() {
-                return ExecutionReport {
+                return attach_recovery_actions(ExecutionReport {
                     apply,
                     status: ExecutionStatus::NotReady,
                     topology_comparison,
@@ -212,11 +237,12 @@ fn prepare_execution_with_runner(
                     verification_summary,
                     verification_plan,
                     execution_results: Vec::new(),
+                    recovery_actions: Vec::new(),
                     messages: vec![
                         "execute refused: every planned command must be ready before mutating storage"
                             .to_string(),
                     ],
-                };
+                });
             }
 
             let (status, execution_results) = execute_command_and_verification_plan(
@@ -236,7 +262,7 @@ fn prepare_execution_with_runner(
                 _ => Vec::new(),
             };
 
-            ExecutionReport {
+            attach_recovery_actions(ExecutionReport {
                 apply,
                 status,
                 topology_comparison,
@@ -245,10 +271,194 @@ fn prepare_execution_with_runner(
                 verification_summary,
                 verification_plan,
                 execution_results,
+                recovery_actions: Vec::new(),
                 messages,
-            }
+            })
         }
     }
+}
+
+fn attach_recovery_actions(mut report: ExecutionReport) -> ExecutionReport {
+    report.recovery_actions = recovery_actions_for_report(&report);
+    report
+}
+
+fn recovery_actions_for_report(report: &ExecutionReport) -> Vec<RecoveryAction> {
+    let mut actions = match report.status {
+        ExecutionStatus::Blocked => blocked_recovery_actions(report),
+        ExecutionStatus::NotReady => not_ready_recovery_actions(report),
+        ExecutionStatus::Failed => failed_recovery_actions(report),
+        ExecutionStatus::DryRun | ExecutionStatus::Succeeded => Vec::new(),
+    };
+
+    if report.status == ExecutionStatus::Failed && report_has_mutating_or_risky_steps(report) {
+        actions.push(RecoveryAction {
+            kind: RecoveryActionKind::PreserveRecoveryPoints,
+            summary: "Preserve backups, snapshots, and captured metadata until recovery is complete"
+                .to_string(),
+            commands: Vec::new(),
+            notes: vec![
+                "do not prune snapshots, LUKS headers, partition tables, or prior apply reports while investigating a partial apply".to_string(),
+                "prefer clone, snapshot, import read-only, or mount read-only workflows before rollback or destroy operations".to_string(),
+            ],
+        });
+    }
+
+    actions
+}
+
+fn blocked_recovery_actions(report: &ExecutionReport) -> Vec<RecoveryAction> {
+    vec![
+        RecoveryAction {
+            kind: RecoveryActionKind::ReviewPolicy,
+            summary: "Review blocked actions and choose a safer update path before execution"
+                .to_string(),
+            commands: Vec::new(),
+            notes: vec![
+                format!(
+                    "policy blocked {} action(s): {} destructive, {} potential data loss, {} offline required, {} unsupported",
+                    report.apply.blocked_count,
+                    report.apply.blocked_summary.destructive_count,
+                    report.apply.blocked_summary.potential_data_loss_count,
+                    report.apply.blocked_summary.offline_required_count,
+                    report.apply.blocked_summary.unsupported_count
+                ),
+                "prefer non-destructive alternatives from action advice before enabling broader policy gates".to_string(),
+            ],
+        },
+        RecoveryAction {
+            kind: RecoveryActionKind::InspectCurrentState,
+            summary: "Refresh current storage state before changing policy or spec".to_string(),
+            commands: state_inspection_commands(),
+            notes: vec![
+                "rerun planning with current topology after editing policy, desired state, or safety gates"
+                    .to_string(),
+            ],
+        },
+    ]
+}
+
+fn not_ready_recovery_actions(report: &ExecutionReport) -> Vec<RecoveryAction> {
+    vec![
+        RecoveryAction {
+            kind: RecoveryActionKind::ResolveInputs,
+            summary: "Resolve unresolved command inputs before requesting execution".to_string(),
+            commands: Vec::new(),
+            notes: vec![format!(
+                "{} command(s) need desired size, {} need domain command implementation, {} are manual-only",
+                report.command_summary.needs_desired_size_count,
+                report.command_summary.needs_domain_implementation_count,
+                report.command_summary.manual_only_count
+            )],
+        },
+        RecoveryAction {
+            kind: RecoveryActionKind::InspectCurrentState,
+            summary: "Compare the spec with fresh topology after filling missing inputs".to_string(),
+            commands: state_inspection_commands(),
+            notes: vec![
+                "non-ready command plans do not mutate storage; fix declarations or renderer support first"
+                    .to_string(),
+            ],
+        },
+    ]
+}
+
+fn failed_recovery_actions(report: &ExecutionReport) -> Vec<RecoveryAction> {
+    let failed = report
+        .execution_results
+        .iter()
+        .find(|result| !result.success);
+    let mut actions = vec![
+        RecoveryAction {
+            kind: RecoveryActionKind::ReviewExecutionFailure,
+            summary: "Review the first failed command before running additional mutations".to_string(),
+            commands: Vec::new(),
+            notes: failed
+                .map(failed_result_notes)
+                .unwrap_or_else(|| vec!["execution failed before a command result was recorded".to_string()]),
+        },
+        RecoveryAction {
+            kind: RecoveryActionKind::InspectCurrentState,
+            summary: "Capture current topology and probe diagnostics after the stopped apply".to_string(),
+            commands: state_inspection_commands(),
+            notes: vec![
+                "compare current topology with the saved apply report before deciding whether to resume, roll forward, or roll back".to_string(),
+            ],
+        },
+        RecoveryAction {
+            kind: RecoveryActionKind::ResumeAfterFix,
+            summary: "Resume only after validation shows the remaining plan is ready".to_string(),
+            commands: Vec::new(),
+            notes: vec![
+                "rerun validate and dry-run apply against the current host before using --execute again"
+                    .to_string(),
+                "do not rerun destructive, rollback, or format commands blindly; inspect whether the prior command already changed state".to_string(),
+            ],
+        },
+    ];
+
+    if failed.is_some_and(|result| result.phase == ExecutionPhase::Verification) {
+        actions.push(RecoveryAction {
+            kind: RecoveryActionKind::RunVerification,
+            summary: "Repeat read-only verification after repairing the reported condition".to_string(),
+            commands: verification_commands_for_report(report),
+            notes: vec![
+                "a verification failure means planned commands ran first; confirm actual state before any rollback attempt".to_string(),
+            ],
+        });
+    }
+
+    actions
+}
+
+fn failed_result_notes(result: &ExecutionCommandResult) -> Vec<String> {
+    let mut notes = vec![
+        format!(
+            "{:?} phase failed for action {}",
+            result.phase, result.action_id
+        ),
+        format!("command: {}", result.argv.join(" ")),
+    ];
+    if let Some(status_code) = result.status_code {
+        notes.push(format!("exit status: {status_code}"));
+    }
+    if !result.stderr.trim().is_empty() {
+        notes.push(format!("stderr: {}", result.stderr.trim()));
+    }
+    notes
+}
+
+fn state_inspection_commands() -> Vec<ExecutionCommand> {
+    vec![
+        command(
+            ["disk-nix", "probe-status", "--json"],
+            false,
+            "inspect probe tool availability and degradation categories",
+        ),
+        command(
+            ["disk-nix", "topology", "--json"],
+            false,
+            "capture the current storage graph before resuming or rolling back",
+        ),
+    ]
+}
+
+fn verification_commands_for_report(report: &ExecutionReport) -> Vec<ExecutionCommand> {
+    report
+        .verification_plan
+        .iter()
+        .flat_map(|step| step.commands.iter().cloned())
+        .collect()
+}
+
+fn report_has_mutating_or_risky_steps(report: &ExecutionReport) -> bool {
+    report.command_plan.iter().any(|step| {
+        step.commands.iter().any(|command| command.mutates)
+            || matches!(
+                step.risk,
+                RiskClass::Destructive | RiskClass::PotentialDataLoss | RiskClass::Irreversible
+            )
+    })
 }
 
 fn run_command(argv: &[String]) -> CommandRunResult {
@@ -20680,6 +20890,20 @@ mod tests {
                 .iter()
                 .any(|message| message.contains("every planned command must be ready"))
         );
+        assert!(report.recovery_actions.iter().any(|action| {
+            action.kind == RecoveryActionKind::ResolveInputs
+                && action
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("need desired size"))
+        }));
+        assert!(report.recovery_actions.iter().any(|action| {
+            action.kind == RecoveryActionKind::InspectCurrentState
+                && action
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
+        }));
     }
 
     #[test]
@@ -20823,6 +21047,25 @@ mod tests {
         assert_eq!(report.execution_results.len(), 1);
         assert_eq!(report.execution_results[0].status_code, Some(32));
         assert_eq!(report.execution_results[0].stderr, "export failed");
+        assert!(report.recovery_actions.iter().any(|action| {
+            action.kind == RecoveryActionKind::ReviewExecutionFailure
+                && action
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("export failed"))
+        }));
+        assert!(report.recovery_actions.iter().any(|action| {
+            action.kind == RecoveryActionKind::InspectCurrentState
+                && action.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "probe-status", "--json"] && !command.mutates
+                })
+        }));
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| { action.kind == RecoveryActionKind::PreserveRecoveryPoints })
+        );
     }
 
     #[test]
@@ -20850,6 +21093,17 @@ mod tests {
         assert!(report.command_plan.is_empty());
         assert_eq!(report.verification_summary.step_count, 0);
         assert!(report.verification_plan.is_empty());
+        assert!(report.recovery_actions.iter().any(|action| {
+            action.kind == RecoveryActionKind::ReviewPolicy
+                && action.summary.contains("Review blocked actions")
+        }));
+        assert!(report.recovery_actions.iter().any(|action| {
+            action.kind == RecoveryActionKind::InspectCurrentState
+                && action
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
+        }));
     }
 
     #[test]

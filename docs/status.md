@@ -76,7 +76,10 @@ manual-review guidance, or non-ready command plans instead of guessing.
 - More NixOS steady-state synthesis for lifecycle-managed resources after
   mutation, especially when imperative changes should update declarative mounts,
   crypttab, swap, NFS exports, iSCSI boot, or generated files.
-- Recovery and rollback recipes for partially completed apply runs.
+- Deeper domain-specific recovery and rollback recipes for partially completed
+  apply runs. Apply reports now expose generic recovery actions for blocked,
+  non-ready, and failed execution states, but safe rollback and roll-forward
+  recipes still need per-domain topology awareness.
 - Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output
   formats. Probe reports now expose structured degradation categories, but

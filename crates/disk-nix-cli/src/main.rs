@@ -2657,6 +2657,26 @@ fn print_execution_report(
         }
     }
 
+    if !report.recovery_actions.is_empty() {
+        writeln!(output, "Recovery actions:")?;
+        for action in &report.recovery_actions {
+            writeln!(output, "- {:?}: {}", action.kind, action.summary)?;
+            for command in &action.commands {
+                let mutation = if command.mutates {
+                    "mutating"
+                } else {
+                    "read-only"
+                };
+                writeln!(output, "  {mutation}: {}", command.argv.join(" "))?;
+                writeln!(output, "    readiness: {:?}", command.readiness)?;
+                writeln!(output, "    {}", command.note)?;
+            }
+            for note in &action.notes {
+                writeln!(output, "  note: {note}")?;
+            }
+        }
+    }
+
     Ok(())
 }
 

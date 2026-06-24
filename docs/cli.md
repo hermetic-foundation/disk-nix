@@ -576,6 +576,7 @@ The report includes:
 - `verificationSummary`
 - `verificationPlan`
 - `executionResults` when `--execute` runs commands
+- `recoveryActions` for blocked, non-ready, or failed execution reports
 - `messages`
 
 The default policy allows online grow and property-change intents, but blocks
@@ -598,6 +599,12 @@ disk-nix apply --spec ./examples/lifecycle-update.json --execute
 
 Automation should treat a blocked apply report as a hard stop and surface the
 reported advice before requesting a more permissive policy.
+Blocked, non-ready, and failed reports include `recoveryActions` with
+machine-readable action kinds, read-only inspection commands, and operator notes.
+These actions are advisory: they steer operators toward current-state capture,
+policy review, missing-input resolution, validation before resume, and preserving
+recovery points after partial mutation. They do not automatically roll back
+storage because rollback safety is domain- and topology-specific.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.
