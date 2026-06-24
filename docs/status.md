@@ -24,7 +24,8 @@ behavior across real storage stacks.
   potential-data-loss, reversible, safe, and unsupported actions.
 - Guarded apply flow with dry-run reports, script generation, readiness
   summaries, manual-review markers, unresolved-input reporting, policy blocks,
-  optional current-topology probing, and sequential execution of ready commands.
+  renderer tool requirement inventories, optional current-topology probing, and
+  sequential execution of ready commands.
 - Current-topology reconciliation suppresses safe no-op grow, shrink, and
   property actions when the graph proves they are already satisfied and no
   warning diagnostics are present.
@@ -83,7 +84,7 @@ manual-review guidance, or non-ready command plans instead of guessing.
 - Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output
   formats. Probe reports now expose structured degradation categories, but
-  per-tool remediation and renderer preflight coverage still need expansion.
+  per-tool remediation and renderer availability checks still need expansion.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
 - Deeper stability policy for JSON contracts, NixOS option compatibility, and

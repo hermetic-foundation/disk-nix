@@ -572,6 +572,7 @@ The report includes:
 - `apply.blocked`
 - `topologyComparison` when `--probe-current` is set
 - `commandSummary`
+- `toolRequirements`
 - `commandPlan`
 - `verificationSummary`
 - `verificationPlan`
@@ -608,6 +609,10 @@ storage because rollback safety is domain- and topology-specific.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.
+`toolRequirements` summarizes the external executables referenced by rendered
+command and verification plans, including command counts, mutating counts,
+verification counts, and phases. Automation can compare this inventory with
+host policy or `probe-status` output before allowing mutation.
 When policy allows an action, `commandPlan` records the planned commands,
 whether each command mutates system state, and notes that still require
 operator review. Each command also reports readiness:

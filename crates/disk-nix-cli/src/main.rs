@@ -2557,6 +2557,20 @@ fn print_execution_report(
                 report.command_summary.manual_only_count
             )?;
             writeln!(output, "Command plan:")?;
+            if !report.tool_requirements.is_empty() {
+                writeln!(output, "Tool requirements:")?;
+                for requirement in &report.tool_requirements {
+                    writeln!(
+                        output,
+                        "- {}: {} commands, {} mutating, {} verification, phases {:?}",
+                        requirement.tool,
+                        requirement.command_count,
+                        requirement.mutating_count,
+                        requirement.verification_count,
+                        requirement.phases
+                    )?;
+                }
+            }
             for step in &report.command_plan {
                 writeln!(
                     output,

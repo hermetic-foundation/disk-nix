@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, process::Command};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    process::Command,
+};
 
 use disk_nix_plan::{
     ApplyPolicy, ApplyReport, Operation, Plan, PlannedAction, RiskClass, TopologyComparison,
@@ -31,6 +34,8 @@ pub struct ExecutionReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub topology_comparison: Option<TopologyComparison>,
     pub command_summary: CommandPlanSummary,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_requirements: Vec<ToolRequirement>,
     pub command_plan: Vec<ExecutionStep>,
     pub verification_summary: VerificationPlanSummary,
     pub verification_plan: Vec<VerificationStep>,
@@ -106,6 +111,16 @@ pub struct ExecutionCommandResult {
     pub status_code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolRequirement {
+    pub tool: String,
+    pub command_count: usize,
+    pub mutating_count: usize,
+    pub verification_count: usize,
+    pub phases: Vec<ExecutionPhase>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -193,6 +208,7 @@ fn prepare_execution_with_runner(
     let command_summary = summarize_command_plan(&command_plan);
     let verification_plan = verification_plan(plan, &apply);
     let verification_summary = summarize_verification_plan(&verification_plan);
+    let tool_requirements = summarize_tool_requirements(&command_plan, &verification_plan);
     if !apply.can_execute() {
         let blocked_count = apply.blocked_count;
         return attach_recovery_actions(ExecutionReport {
@@ -200,6 +216,7 @@ fn prepare_execution_with_runner(
             status: ExecutionStatus::Blocked,
             topology_comparison,
             command_summary,
+            tool_requirements,
             command_plan,
             verification_summary,
             verification_plan,
@@ -215,6 +232,7 @@ fn prepare_execution_with_runner(
             status: ExecutionStatus::DryRun,
             topology_comparison,
             command_summary,
+            tool_requirements,
             verification_summary,
             messages: vec![format!(
                 "dry run only: generated {} command plan step(s) and {} verification step(s), no storage commands were run",
@@ -233,6 +251,7 @@ fn prepare_execution_with_runner(
                     status: ExecutionStatus::NotReady,
                     topology_comparison,
                     command_summary,
+                    tool_requirements,
                     command_plan,
                     verification_summary,
                     verification_plan,
@@ -267,6 +286,7 @@ fn prepare_execution_with_runner(
                 status,
                 topology_comparison,
                 command_summary,
+                tool_requirements,
                 command_plan,
                 verification_summary,
                 verification_plan,
@@ -583,6 +603,51 @@ fn summarize_verification_plan(verification_plan: &[VerificationStep]) -> Verifi
             .map(|step| step.commands.len())
             .sum(),
         check_count: verification_plan.iter().map(|step| step.checks.len()).sum(),
+    }
+}
+
+fn summarize_tool_requirements(
+    command_plan: &[ExecutionStep],
+    verification_plan: &[VerificationStep],
+) -> Vec<ToolRequirement> {
+    let mut requirements = BTreeMap::<String, ToolRequirement>::new();
+
+    for command in command_plan.iter().flat_map(|step| &step.commands) {
+        register_tool_requirement(&mut requirements, ExecutionPhase::Command, command);
+    }
+    for command in verification_plan.iter().flat_map(|step| &step.commands) {
+        register_tool_requirement(&mut requirements, ExecutionPhase::Verification, command);
+    }
+
+    requirements.into_values().collect()
+}
+
+fn register_tool_requirement(
+    requirements: &mut BTreeMap<String, ToolRequirement>,
+    phase: ExecutionPhase,
+    command: &ExecutionCommand,
+) {
+    let Some(tool) = command.argv.first().filter(|tool| !tool.starts_with('<')) else {
+        return;
+    };
+    let requirement = requirements
+        .entry(tool.clone())
+        .or_insert_with(|| ToolRequirement {
+            tool: tool.clone(),
+            command_count: 0,
+            mutating_count: 0,
+            verification_count: 0,
+            phases: Vec::new(),
+        });
+    requirement.command_count += 1;
+    if command.mutates {
+        requirement.mutating_count += 1;
+    }
+    if phase == ExecutionPhase::Verification {
+        requirement.verification_count += 1;
+    }
+    if !requirement.phases.contains(&phase) {
+        requirement.phases.push(phase);
     }
 }
 
@@ -21004,6 +21069,18 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::Succeeded);
         assert_eq!(report.execution_results.len(), seen.len());
         assert!(report.execution_results.iter().all(|result| result.success));
+        let exportfs_requirement = report
+            .tool_requirements
+            .iter()
+            .find(|requirement| requirement.tool == "exportfs")
+            .expect("exportfs tool requirement is reported");
+        assert_eq!(exportfs_requirement.command_count, 2);
+        assert_eq!(exportfs_requirement.mutating_count, 1);
+        assert_eq!(exportfs_requirement.verification_count, 1);
+        assert_eq!(
+            exportfs_requirement.phases,
+            [ExecutionPhase::Command, ExecutionPhase::Verification]
+        );
         assert!(seen.iter().any(|argv| {
             argv == &[
                 "exportfs".to_string(),
