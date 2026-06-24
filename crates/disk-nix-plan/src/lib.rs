@@ -2117,6 +2117,11 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
         _ => None,
     };
 
+    if action.context.collection.as_deref() == Some("filesystems") {
+        return current_filesystem_property_value(action, node, property)
+            .or_else(|| property_value_from_node(node, property).map(str::to_string));
+    }
+
     if let Some(aliases) = aliases {
         return aliases
             .iter()
@@ -2156,7 +2161,168 @@ fn comparable_property_value(action: &PlannedAction, property: &str, value: &str
         Some("datasets" | "zvols") => {
             normalize_zfs_property_value(&normalized_property, &normalized_value, value)
         }
+        Some("filesystems") => {
+            normalize_filesystem_property_value(action, &normalized_property, value)
+                .unwrap_or_else(|| value.to_string())
+        }
         _ => value.to_string(),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FilesystemPropertyKind {
+    Label,
+    Uuid,
+    FatVolumeId,
+    NtfsVolumeSerial,
+    ExfatVolumeSerial,
+}
+
+fn current_filesystem_property_value(
+    action: &PlannedAction,
+    node: &Node,
+    property: &str,
+) -> Option<String> {
+    match filesystem_property_kind(action, property)? {
+        FilesystemPropertyKind::Label => node.identity.label.clone().or_else(|| {
+            property_value_from_node(node, "filesystem.label")
+                .or_else(|| property_value_from_node(node, "udev.id-fs-label"))
+                .or_else(|| property_value_from_node(node, "udev.id-fs-label-safe"))
+                .or_else(|| property_value_from_node(node, "ntfs.volume-name"))
+                .map(str::to_string)
+        }),
+        FilesystemPropertyKind::Uuid => node.identity.uuid.clone().or_else(|| {
+            property_value_from_node(node, "filesystem.uuid")
+                .or_else(|| property_value_from_node(node, "udev.id-fs-uuid"))
+                .map(str::to_string)
+        }),
+        FilesystemPropertyKind::FatVolumeId => node.identity.uuid.clone().or_else(|| {
+            property_value_from_node(node, "filesystem.uuid")
+                .or_else(|| property_value_from_node(node, "udev.id-fs-uuid"))
+                .map(str::to_string)
+        }),
+        FilesystemPropertyKind::NtfsVolumeSerial => node
+            .identity
+            .serial
+            .clone()
+            .or_else(|| node.identity.uuid.clone())
+            .or_else(|| property_value_from_node(node, "ntfs.volume-serial").map(str::to_string)),
+        FilesystemPropertyKind::ExfatVolumeSerial => node
+            .identity
+            .serial
+            .clone()
+            .or_else(|| node.identity.uuid.clone())
+            .or_else(|| property_value_from_node(node, "exfat.volume-serial").map(str::to_string)),
+    }
+}
+
+fn filesystem_property_kind(
+    action: &PlannedAction,
+    property: &str,
+) -> Option<FilesystemPropertyKind> {
+    let normalized = normalize_storage_property_name(property);
+    let fs_type = action
+        .context
+        .fs_type
+        .as_deref()
+        .map(|value| value.to_ascii_lowercase());
+    let fs_type = fs_type.as_deref();
+
+    if matches!(
+        normalized.as_str(),
+        "label"
+            | "filesystem-label"
+            | "btrfs-label"
+            | "ext-label"
+            | "fat-label"
+            | "vfat-label"
+            | "ntfs-label"
+            | "exfat-label"
+            | "f2fs-label"
+            | "xfs-label"
+    ) {
+        return Some(FilesystemPropertyKind::Label);
+    }
+
+    if matches!(normalized.as_str(), "serial" | "volume-serial") {
+        return match fs_type {
+            Some("exfat") => Some(FilesystemPropertyKind::ExfatVolumeSerial),
+            _ => Some(FilesystemPropertyKind::NtfsVolumeSerial),
+        };
+    }
+
+    if matches!(normalized.as_str(), "ntfs-serial" | "ntfs-volume-serial") {
+        return Some(FilesystemPropertyKind::NtfsVolumeSerial);
+    }
+
+    if matches!(normalized.as_str(), "exfat-serial" | "exfat-volume-serial") {
+        return Some(FilesystemPropertyKind::ExfatVolumeSerial);
+    }
+
+    if matches!(
+        normalized.as_str(),
+        "volume-id" | "fat-volume-id" | "vfat-volume-id"
+    ) {
+        return Some(FilesystemPropertyKind::FatVolumeId);
+    }
+
+    if matches!(
+        normalized.as_str(),
+        "uuid"
+            | "filesystem-uuid"
+            | "btrfs-uuid"
+            | "ext-uuid"
+            | "fat-uuid"
+            | "vfat-uuid"
+            | "ntfs-uuid"
+            | "exfat-uuid"
+            | "xfs-uuid"
+    ) {
+        return match fs_type {
+            Some("fat" | "fat12" | "fat16" | "fat32" | "msdos" | "vfat") => {
+                Some(FilesystemPropertyKind::FatVolumeId)
+            }
+            Some("ntfs" | "ntfs3") => Some(FilesystemPropertyKind::NtfsVolumeSerial),
+            Some("exfat") => Some(FilesystemPropertyKind::ExfatVolumeSerial),
+            _ => Some(FilesystemPropertyKind::Uuid),
+        };
+    }
+
+    None
+}
+
+fn normalize_filesystem_property_value(
+    action: &PlannedAction,
+    normalized_property: &str,
+    raw_value: &str,
+) -> Option<String> {
+    match filesystem_property_kind(action, normalized_property)? {
+        FilesystemPropertyKind::Label => Some(raw_value.to_string()),
+        FilesystemPropertyKind::Uuid => Some(raw_value.trim().to_ascii_lowercase()),
+        FilesystemPropertyKind::FatVolumeId => normalize_hex_identity(raw_value, 8),
+        FilesystemPropertyKind::NtfsVolumeSerial => normalize_hex_identity(raw_value, 16),
+        FilesystemPropertyKind::ExfatVolumeSerial => normalize_hex_identity(raw_value, 8),
+    }
+}
+
+fn normalize_hex_identity(value: &str, expected_len: usize) -> Option<String> {
+    let trimmed = value.trim();
+    let without_prefix = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed);
+    let normalized: String = without_prefix
+        .chars()
+        .filter(|character| *character != '-')
+        .collect();
+    if normalized.len() == expected_len
+        && normalized
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        Some(normalized.to_ascii_uppercase())
+    } else {
+        Some(normalize_storage_property_name(value))
     }
 }
 
@@ -12381,7 +12547,7 @@ pub fn default_capabilities() -> Vec<Capability> {
 
 #[cfg(test)]
 mod tests {
-    use disk_nix_model::Usage;
+    use disk_nix_model::{Identity, Usage};
 
     use super::*;
 
@@ -16987,6 +17153,185 @@ mod tests {
                 && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
                 && diagnostic.message.contains("zstd")
                 && diagnostic.message.contains("lz4")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_filesystem_identity_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "home": {
+                  "mountpoint": "/home",
+                  "device": "/dev/disk/by-label/home",
+                  "fsType": "ext4",
+                  "properties": {
+                    "filesystem.label": "homefs",
+                    "ext.uuid": "11111111-2222-3333-4444-555555555555"
+                  }
+                },
+                "scratch": {
+                  "mountpoint": "/scratch",
+                  "device": "/dev/disk/by-label/scratch",
+                  "fsType": "xfs",
+                  "properties": {
+                    "xfs.label": "scratch-new"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("filesystem:/home", NodeKind::Filesystem, "/home")
+                .with_path("/home")
+                .with_identity(Identity {
+                    uuid: Some("11111111-2222-3333-4444-555555555555".to_string()),
+                    partuuid: None,
+                    label: Some("homefs".to_string()),
+                    serial: None,
+                    wwn: None,
+                })
+                .with_property("filesystem.type", "ext4"),
+        );
+        graph.add_node(
+            Node::new("filesystem:/scratch", NodeKind::Filesystem, "/scratch")
+                .with_path("/scratch")
+                .with_property("filesystem.type", "xfs")
+                .with_property("filesystem.label", "scratch-old"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 5);
+        assert_eq!(comparison.summary.matched_count, 5);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.actions.len(), 3);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "filesystems:scratch:set-property:xfs.label"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:home:set-property:filesystem.label"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:home:set-property:ext.uuid"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:scratch:set-property:xfs.label"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic.message.contains("scratch-old")
+                && diagnostic.message.contains("scratch-new")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_filesystem_serial_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "efi": {
+                  "mountpoint": "/boot",
+                  "device": "/dev/disk/by-partlabel/EFI",
+                  "fsType": "vfat",
+                  "properties": {
+                    "vfat.uuid": "a1b2-c3d4"
+                  }
+                },
+                "windows": {
+                  "mountpoint": "/mnt/windows",
+                  "device": "/dev/disk/by-label/Windows",
+                  "fsType": "ntfs",
+                  "properties": {
+                    "ntfs.volume-serial": "0123456789ABCDEF"
+                  }
+                },
+                "shared": {
+                  "mountpoint": "/mnt/shared",
+                  "device": "/dev/disk/by-label/Shared",
+                  "fsType": "exfat",
+                  "properties": {
+                    "exfat.uuid": "6EEF-953B"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("filesystem:/boot", NodeKind::Filesystem, "/boot")
+                .with_path("/boot")
+                .with_identity(Identity {
+                    uuid: Some("A1B2-C3D4".to_string()),
+                    partuuid: None,
+                    label: None,
+                    serial: None,
+                    wwn: None,
+                })
+                .with_property("filesystem.type", "vfat"),
+        );
+        graph.add_node(
+            Node::new(
+                "filesystem:/mnt/windows",
+                NodeKind::Filesystem,
+                "/mnt/windows",
+            )
+            .with_path("/mnt/windows")
+            .with_property("filesystem.type", "ntfs")
+            .with_property("ntfs.volume-serial", "01234567-89abcdef"),
+        );
+        graph.add_node(
+            Node::new(
+                "filesystem:/mnt/shared",
+                NodeKind::Filesystem,
+                "/mnt/shared",
+            )
+            .with_path("/mnt/shared")
+            .with_property("filesystem.type", "exfat")
+            .with_property("exfat.volume-serial", "0x6eef953b"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 6);
+        assert_eq!(comparison.summary.matched_count, 6);
+        assert_eq!(comparison.summary.already_satisfied_count, 3);
+        assert_eq!(comparison.summary.suppressed_action_count, 3);
+        assert_eq!(plan.actions.len(), 3);
+        assert!(plan.actions.iter().all(|action| {
+            !action.id.contains(":set-property:")
+                || !matches!(
+                    action.id.as_str(),
+                    "filesystems:efi:set-property:vfat.uuid"
+                        | "filesystems:windows:set-property:ntfs.volume-serial"
+                        | "filesystems:shared:set-property:exfat.uuid"
+                )
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:efi:set-property:vfat.uuid"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:windows:set-property:ntfs.volume-serial"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:shared:set-property:exfat.uuid"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
         }));
     }
 
