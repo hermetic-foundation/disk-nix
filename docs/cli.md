@@ -581,8 +581,9 @@ the number of graph-derived dependency edges as `graphDependencyEdgeCount`.
 
 With `--probe-current`, the CLI also probes the current host and adds
 `topologyComparison`, including matched target counts, missing target counts,
-size diagnostics, filesystem type conflicts, and already-satisfied property,
-size, or remount option checks. Mount actions are also compared with
+size diagnostics, filesystem type conflicts, matching filesystem format types
+that still require destructive review, and already-satisfied property, size, or
+remount option checks. Mount actions are also compared with
 `mount.source` when the current graph has mountpoint data, unmount actions are
 suppressed when the mountpoint is absent, remount actions treat declared
 options as a required subset of current mount options, LVM
@@ -829,7 +830,9 @@ partition geometry, then verify the refreshed table with `parted -lm`.
 Filesystem declarations with `preserveData = false` render destructive
 `mkfs.*` command plans for common filesystem types when a concrete `device` or
 `disk` is declared. Mountpoint-only format declarations remain non-ready rather
-than guessing a backing block device.
+than guessing a backing block device. With `--probe-current`, matching current
+filesystem types are reported, but format commands remain reviewable because
+they overwrite metadata.
 Filesystem shrink command plans render Btrfs allocation checks and
 `btrfs filesystem resize <size> <path>` for declared target sizes. Ext shrink
 plans render `findmnt`, `umount`, `e2fsck`, and `resize2fs` review steps. Ext

@@ -83,7 +83,10 @@ Examples:
 - `preserveData = false` is classified as destructive because it permits
   formatting or replacement. Apply plans render reviewed `mkfs` commands for
   common filesystem types only when a concrete backing `device` or `disk` is
-  declared; mountpoint-only declarations remain non-ready.
+  declared; mountpoint-only declarations remain non-ready. Current-topology
+  comparison reports when the matched filesystem already has the requested
+  type, but destructive format actions remain in the plan for explicit policy
+  and confirmation review.
 - `backingFiles` declarations model file-backed storage origins. Create plans
   require a concrete file path plus desired size, refuse to overwrite an
   existing path with `test ! -e`, and render `truncate --size` for the new
@@ -548,9 +551,11 @@ use this context to build command plans without relying on action-id parsing.
 `disk-nix plan --probe-current --spec <path>` probes the current host and adds
 a `topologyComparison` section to the plan. The comparison matches action
 targets against the storage graph and reports missing targets, current size
-state versus `desiredSize`, filesystem type conflicts, and already-satisfied
-mount, remount, NFS export, iSCSI login, Btrfs subvolume or qgroup destroy, or
-generic snapshot destroy, or property updates where the current graph has enough data. Remount
+state versus `desiredSize`, filesystem type conflicts, matching filesystem
+format types that still require destructive review, and already-satisfied
+mount, remount, NFS export, iSCSI login, Btrfs subvolume or qgroup destroy,
+generic snapshot destroy, or property updates where the current graph has
+enough data. Remount
 reconciliation treats declared options as a required subset of the current
 mount options, allowing kernel-added defaults to remain. Filesystem and NFS
 unmount reconciliation treats an absent mountpoint as already satisfied and

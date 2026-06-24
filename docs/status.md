@@ -52,6 +52,8 @@ behavior across real storage stacks.
   volume/thin-pool create, LVM volume-group create/import/export, and property
   actions when the graph proves they are already satisfied and no warning
   diagnostics are present;
+  matching filesystem format types are reported without suppressing destructive
+  format actions so policy and confirmation gates still apply;
   inactive LVM activation targets, still-active LVM deactivation targets,
   physical-volume create targets without matching PV metadata or with duplicate
   or missing PV metadata, existing exported, partial, or missing-PV
