@@ -50,6 +50,9 @@ fn add_record(graph: &mut StorageGraph, record: ScsiRecord) {
     let mut lun = Node::new(lun_id.clone(), NodeKind::Lun, record.tuple.clone())
         .with_property("scsi.address", record.tuple.clone())
         .with_property("scsi.peripheral-type", record.peripheral_type.clone());
+    if let Some(size_bytes) = record.size.as_deref().and_then(parse_size) {
+        lun = lun.with_size_bytes(size_bytes);
+    }
 
     for (index, label) in ["host", "channel", "target", "lun"].iter().enumerate() {
         if let Some(value) = record.tuple.split(':').nth(index) {
@@ -101,6 +104,9 @@ fn add_record(graph: &mut StorageGraph, record: ScsiRecord) {
             let mut block = Node::new(format!("block:{device}"), NodeKind::PhysicalDisk, device)
                 .with_path(device)
                 .with_property("scsi.address", record.tuple.clone());
+            if let Some(size_bytes) = record.size.as_deref().and_then(parse_size) {
+                block = block.with_size_bytes(size_bytes);
+            }
             if let Some(value) = &record.generic {
                 block = block.with_property("scsi.generic-device", value);
             }
@@ -285,6 +291,38 @@ fn optional_token(token: &&str) -> Option<String> {
     }
 }
 
+fn parse_size(value: &str) -> Option<u64> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    let split_at = value
+        .char_indices()
+        .find_map(|(index, character)| {
+            (!character.is_ascii_digit() && character != '.').then_some(index)
+        })
+        .unwrap_or(value.len());
+    let number = value[..split_at].parse::<f64>().ok()?;
+    let suffix = value[split_at..].trim().to_ascii_lowercase();
+    let multiplier = match suffix.as_str() {
+        "" | "b" => 1.0,
+        "k" | "kb" => 1_000.0,
+        "m" | "mb" => 1_000_000.0,
+        "g" | "gb" => 1_000_000_000.0,
+        "t" | "tb" => 1_000_000_000_000.0,
+        "p" | "pb" => 1_000_000_000_000_000.0,
+        "ki" | "kib" => 1024.0,
+        "mi" | "mib" => 1024.0 * 1024.0,
+        "gi" | "gib" => 1024.0 * 1024.0 * 1024.0,
+        "ti" | "tib" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
+        "pi" | "pib" => 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0,
+        _ => return None,
+    };
+
+    Some((number * multiplier) as u64)
+}
+
 fn normalize_key(key: &str) -> String {
     key.to_ascii_lowercase()
         .chars()
@@ -333,11 +371,18 @@ mod tests {
             .find(|node| node.id.0 == "scsi-lun:1:0:0:0")
             .expect("lun exists");
         assert_eq!(lun.kind, NodeKind::Lun);
+        assert_eq!(lun.size_bytes, Some(1_000_000_000_000));
         assert!(
             lun.properties
                 .iter()
                 .any(|property| property.key == "scsi.queue-depth" && property.value == "32")
         );
+        let block = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdb")
+            .expect("block device exists");
+        assert_eq!(block.size_bytes, Some(1_000_000_000_000));
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0 == "scsi-lun:1:0:0:0"
                 && edge.to.0 == "block:/dev/sdb"
@@ -370,5 +415,13 @@ mod tests {
         assert!(unit_lun.properties.iter().any(|property| {
             property.key == "scsi.unit-name" && property.value == "5000c500a5a461dc"
         }));
+    }
+
+    #[test]
+    fn parses_lsscsi_size_strings() {
+        assert_eq!(parse_size("1.00TB"), Some(1_000_000_000_000));
+        assert_eq!(parse_size("512GiB"), Some(549_755_813_888));
+        assert_eq!(parse_size("4096"), Some(4096));
+        assert_eq!(parse_size("-"), None);
     }
 }

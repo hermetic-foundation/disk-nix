@@ -53,8 +53,8 @@ The current probe layer normalizes:
 - `lsscsi -L -g -s`, `lsscsi -g -s -t -i -w`, and
   `lsscsi -g -s -u -i -w` for SCSI host/channel/target/LUN addresses, block
   and generic devices, by-id and WWN aliases, transport, LU names, capacity
-  strings, queue state, SCSI level, timeout, and LUN-to-block-device
-  relationships
+  strings, byte-normalized LUN and backing-device sizes, queue state, SCSI
+  level, timeout, and LUN-to-block-device relationships
 - `smartctl -a -j` for discovered physical disks to add SMART health,
   model/firmware/serial/WWN identity, user capacity, logical/physical block
   size, rotation rate, form factor, SATA link speed, power-on history,
