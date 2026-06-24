@@ -553,10 +553,10 @@ checking dirty data, and staging replacement cache media without silently
 formatting unknown devices. bcache `operation = "rescan"` reads state,
 cache-mode, dirty-data, and modeled graph relationships without changing
 attachment. bcache sysfs operations require a concrete `/dev/bcache*` target;
-logical cache names can declare `target = "/dev/bcacheN"` or
-`device = "/dev/bcacheN"` to make attach, detach, rescan, and property commands
-ready. Logical cache declarations without a concrete bcache device remain
-marked `needs-domain-implementation`.
+logical cache names can declare `target = "/dev/bcacheN"`,
+`path = "/dev/bcacheN"`, or `device = "/dev/bcacheN"` to make attach, detach,
+rescan, and property commands ready. Logical cache declarations without a
+concrete bcache device remain marked `needs-domain-implementation`.
 Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
 detach operations. Logical loop declarations can supply that target with
 `target` or `path`; `device` is reserved for the backing file or block device

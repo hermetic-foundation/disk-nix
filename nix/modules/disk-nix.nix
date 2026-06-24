@@ -1817,7 +1817,7 @@ in
     caches = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed cache-layer lifecycle declarations emitted into the disk-nix planner spec. bcache command plans require a concrete /dev/bcache* target.";
+      description = "Typed cache-layer lifecycle declarations emitted into the disk-nix planner spec. bcache command plans require a concrete /dev/bcache* target supplied by the declaration key, target, path, or device.";
     };
 
     snapshots = lib.mkOption {

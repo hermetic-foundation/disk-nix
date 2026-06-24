@@ -151,10 +151,10 @@ use logical attribute names when `target` or `path` supplies the concrete
 concrete targets before `apply --execute` can run: swap and NFS exports need
 local paths, loop devices need `/dev/loop*`, MD RAID arrays need `/dev/md*`,
 multipath maps need `mpath*` or `/dev/mapper/*`, bcache operations need
-`/dev/bcache*`, and LVM logical volumes and thin pools need
-canonical `vg/lv` or `vg/pool` targets. Declarations that omit these concrete
-addresses still produce reviewable plans, but their command plans stay
-non-ready instead of guessing from logical keys.
+`/dev/bcache*` through `target`, `path`, or `device`, and LVM logical volumes
+and thin pools need canonical `vg/lv` or `vg/pool` targets. Declarations that
+omit these concrete addresses still produce reviewable plans, but their command
+plans stay non-ready instead of guessing from logical keys.
 For loop devices, `target` or `path` supplies the `/dev/loop*` address and
 `device` remains the backing file or block device used by create plans.
 For LVM logical volumes and thin pools, `target` or `path` supplies the
@@ -687,7 +687,8 @@ Example lifecycle planning through NixOS options:
     caches."tank/l2arc0" = {
       replaceDevices."/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
     };
-    caches."/dev/bcache0" = {
+    caches.writeback = {
+      path = "/dev/bcache0";
       operation = "rescan";
       addDevices = [ "cache-set-uuid" ];
       properties."bcache.cache-mode" = "writethrough";

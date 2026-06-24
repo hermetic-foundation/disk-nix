@@ -20154,6 +20154,116 @@ mod tests {
     }
 
     #[test]
+    fn cache_lifecycle_accepts_path_aliases_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "caches": {
+                  "writeback-cache": {
+                    "path": "/dev/bcache1",
+                    "operation": "rescan",
+                    "addDevices": ["cache-set-uuid"],
+                    "removeDevices": ["cache-set-uuid"],
+                    "properties": {
+                      "bcache.cache-mode": "writearound"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowDeviceReplacement": true,
+                "allowOffline": true,
+                "allowPropertyChanges": true,
+                "allowPotentialDataLoss": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:writeback-cache:add-device:cache-set-uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/attach\"",
+                            "disk-nix-bcache-attach",
+                            "/dev/bcache1",
+                            "cache-set-uuid",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:writeback-cache:set-property:bcache.cache-mode"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"",
+                            "disk-nix-bcache-property",
+                            "/dev/bcache1",
+                            "writearound",
+                            "cache_mode",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:writeback-cache:remove-device:cache-set-uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "printf '1\\n' > \"/sys/block/${1#/dev/}/bcache/detach\"",
+                            "disk-nix-bcache-detach",
+                            "/dev/bcache1",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:writeback-cache:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "/dev/bcache1"])
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "cat \"/sys/block/${1#/dev/}/bcache/$2\"",
+                            "disk-nix-bcache-read",
+                            "/dev/bcache1",
+                            "dirty_data",
+                        ]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "caches:writeback-cache:set-property:bcache.cache-mode"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "cat \"/sys/block/${1#/dev/}/bcache/$2\"",
+                            "disk-nix-bcache-read",
+                            "/dev/bcache1",
+                            "dirty_data",
+                        ]
+                })
+        }));
+    }
+
+    #[test]
     fn lvm_cache_lifecycle_reports_lvm_commands() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

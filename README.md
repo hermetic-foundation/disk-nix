@@ -225,8 +225,8 @@ Cache apply plans include bcache-aware attach, detach, rescan, cache-mode,
 dirty-data, and replacement review steps instead of a generic cache
 placeholder. bcache rescan reads state, cache mode, dirty-data, and graph
 inventory without changing attachment. bcache sysfs commands require a concrete
-`/dev/bcache*` target; logical cache names become ready when `target` or
-`device` declares the backing bcache device path.
+`/dev/bcache*` target; logical cache names become ready when `target`, `path`,
+or `device` declares the backing bcache device path.
 Loop-device create, grow, rescan, and detach plans require a `/dev/loop*`
 target; logical loop names can declare it through `target` or `path`, while
 `device` remains the backing file or block device for create plans.
