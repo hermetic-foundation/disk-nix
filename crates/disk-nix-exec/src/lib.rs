@@ -16729,6 +16729,92 @@ mod tests {
     }
 
     #[test]
+    fn multipath_map_lifecycle_uses_declared_device_as_map_target_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "multipathMaps": {
+                  "root-map": {
+                    "device": "/dev/mapper/mpatha",
+                    "operation": "grow",
+                    "addDevices": ["/dev/sdb"],
+                    "replaceDevices": {
+                      "/dev/sdc": "/dev/sdd"
+                    }
+                  },
+                  "inventory": {
+                    "device": "/dev/mapper/mpatha",
+                    "operation": "rescan"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true,
+                "allowDeviceReplacement": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "multipathmaps:root-map:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["multipathd", "resize", "map", "/dev/mapper/mpatha"]
+                })
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["multipath", "-ll", "/dev/mapper/mpatha"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "multipathMaps:root-map:add-device:/dev/sdb"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["multipathd", "add", "path", "/dev/sdb"])
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["multipath", "-ll", "/dev/mapper/mpatha"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "multipathMaps:root-map:replace-device:/dev/sdc"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["multipathd", "add", "path", "/dev/sdd"])
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["multipathd", "del", "path", "/dev/sdc"])
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["multipath", "-ll", "/dev/mapper/mpatha"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "multipathmaps:inventory:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .filter(|command| command.argv == ["multipath", "-ll", "/dev/mapper/mpatha"])
+                    .count()
+                    == 2
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "multipathmaps:root-map:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/mapper/mpatha", "--json"]
+                })
+        }));
+    }
+
+    #[test]
     fn multipath_map_lifecycle_requires_explicit_map_target_for_execute_readiness() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

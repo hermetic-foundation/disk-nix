@@ -422,8 +422,8 @@ source device, replacement device, or device to remove is declared explicitly.
 Loop-device refresh, rescan, and detach commands require `/dev/loop*` targets.
 Loop rescan is read-only inventory refresh; grow uses `losetup -c` only after
 backing size changes. Multipath map growth requires a concrete map target such
-as `mpatha` or `/dev/mapper/mpatha`; arbitrary logical map names remain
-non-ready.
+as `mpatha` or `/dev/mapper/mpatha`; logical map names can declare that target
+through `target` or `device`.
 ZFS pool apply plans render gated `zpool create` commands from a single
 `device` or an explicit `devices` vdev list, gated `zpool destroy` commands,
 and reviewed topology updates such as `zpool add`, `zpool replace`, and

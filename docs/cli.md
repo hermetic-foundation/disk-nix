@@ -765,7 +765,7 @@ Loop-device refresh, rescan, and detach commands require `/dev/loop*` targets.
 Rescan reads `losetup --json --list` and graph state without changing capacity;
 grow uses `losetup -c` after backing size changes. Multipath map growth
 requires a concrete map target such as `mpatha` or `/dev/mapper/mpatha`;
-arbitrary logical map names remain non-ready.
+logical map names can declare that target through `target` or `device`.
 ZFS pool command plans render policy-gated `zpool create` from a single
 `device` or explicit `devices` vdev list, policy-gated `zpool destroy`, plus
 online topology commands such as `zpool add`, `zpool replace`, `zpool remove`,

@@ -915,7 +915,7 @@ fn lifecycle_target(collection: &str, name: &str, object: &Value) -> Option<Stri
     if let Some(target) = string_field(object, &["target", "path", "mountpoint"]) {
         return Some(target);
     }
-    if collection == "caches" || collection == "mdRaids" {
+    if collection == "caches" || collection == "mdRaids" || collection == "multipathMaps" {
         if let Some(device) = string_field(object, &["device", "disk", "source"])
             .filter(|target| lifecycle_device_can_be_target(collection, target))
         {
@@ -932,6 +932,10 @@ fn lifecycle_device_can_be_target(collection: &str, target: &str) -> bool {
     ) || matches!(
         (collection, target),
         ("mdRaids", target) if target.starts_with("/dev/md")
+    ) || matches!(
+        (collection, target),
+        ("multipathMaps", target)
+            if target.starts_with("mpath") || target.starts_with("/dev/mapper/")
     )
 }
 
