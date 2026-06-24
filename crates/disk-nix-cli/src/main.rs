@@ -19,6 +19,8 @@ use disk_nix_plan::{
     plan_from_json_bytes,
 };
 use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeIssueCategory, ProbeStatus};
+use serde::Serialize;
+use serde_json::Value;
 
 fn main() -> ExitCode {
     let stdout = io::stdout();
@@ -307,6 +309,15 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Normalize a desired storage spec to the current supported contract version.
+    Migrate {
+        /// Desired storage specification path.
+        #[arg(long)]
+        spec: String,
+        /// Emit JSON migration report with the migrated spec.
+        #[arg(long)]
+        json: bool,
+    },
     /// Emit the supported desired-spec JSON contract.
     Schema,
     /// Generate shell completions.
@@ -322,6 +333,17 @@ enum Command {
 enum AppError {
     Message(String),
     Io(io::Error),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MigrationReport {
+    source_version: Option<u64>,
+    target_version: u64,
+    migrated: bool,
+    changes: Vec<String>,
+    warnings: Vec<String>,
+    spec: Value,
 }
 
 impl fmt::Display for AppError {
@@ -774,6 +796,22 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_execution_report(output, &report, false)?;
             }
 
+            Ok(())
+        }
+        Command::Migrate { spec, json } => {
+            let bytes = std::fs::read(&spec)?;
+            let report = migration_report_from_json_bytes(&bytes)
+                .map_err(|error| AppError::Message(format!("failed to migrate {spec}: {error}")))?;
+            if json {
+                writeln!(
+                    output,
+                    "{}",
+                    serde_json::to_string_pretty(&report)
+                        .map_err(|error| AppError::Message(error.to_string()))?
+                )?;
+            } else {
+                print_migration_report(output, &report)?;
+            }
             Ok(())
         }
         Command::Schema => {
@@ -1338,6 +1376,128 @@ fn spec_schema() -> serde_json::Value {
             }
         }
     })
+}
+
+fn migration_report_from_json_bytes(bytes: &[u8]) -> Result<MigrationReport, AppError> {
+    let mut value: Value =
+        serde_json::from_slice(bytes).map_err(|error| AppError::Message(error.to_string()))?;
+    let source_version = migration_source_version(&value)?;
+    let target_version = SUPPORTED_SPEC_VERSION;
+    if source_version.is_some_and(|version| version != target_version) {
+        return Err(AppError::Message(format!(
+            "unsupported disk-nix spec version {}; supported migration target is {target_version}",
+            source_version.expect("checked")
+        )));
+    }
+
+    let mut changes = Vec::new();
+    let mut warnings = Vec::new();
+    ensure_object_version(&mut value, "version", target_version, &mut changes)?;
+    if let Some(spec) = value.get_mut("spec") {
+        ensure_object_version(spec, "spec.version", target_version, &mut changes)?;
+    }
+    if changes.is_empty() {
+        changes.push("spec already declares the current supported contract version".to_string());
+    }
+    warnings.push(
+        "migration does not apply storage mutations; run plan or apply separately after review"
+            .to_string(),
+    );
+    warnings.push(
+        "version 1 migration is intentionally metadata-only and does not rewrite lifecycle semantics"
+            .to_string(),
+    );
+
+    let serialized =
+        serde_json::to_vec(&value).map_err(|error| AppError::Message(error.to_string()))?;
+    plan_from_json_bytes(&serialized)
+        .map_err(|error| AppError::Message(format!("migrated spec is invalid: {error}")))?;
+
+    Ok(MigrationReport {
+        source_version,
+        target_version,
+        migrated: !changes
+            .iter()
+            .any(|change| change == "spec already declares the current supported contract version"),
+        changes,
+        warnings,
+        spec: value,
+    })
+}
+
+fn migration_source_version(value: &Value) -> Result<Option<u64>, AppError> {
+    let top_level = optional_version_field(value, "version")?;
+    let spec = value
+        .get("spec")
+        .map(|spec| optional_version_field(spec, "spec.version"))
+        .transpose()?
+        .flatten();
+    if let (Some(top_level), Some(spec)) = (top_level, spec) {
+        if top_level != spec {
+            return Err(AppError::Message(format!(
+                "conflicting disk-nix spec versions: top-level version {top_level}, spec.version {spec}"
+            )));
+        }
+    }
+    Ok(top_level.or(spec))
+}
+
+fn optional_version_field(value: &Value, location: &str) -> Result<Option<u64>, AppError> {
+    let Some(version) = value.get("version") else {
+        return Ok(None);
+    };
+    version.as_u64().map(Some).ok_or_else(|| {
+        AppError::Message(format!(
+            "disk-nix spec version at {location} must be an integer"
+        ))
+    })
+}
+
+fn ensure_object_version(
+    value: &mut Value,
+    location: &str,
+    target_version: u64,
+    changes: &mut Vec<String>,
+) -> Result<(), AppError> {
+    let Value::Object(object) = value else {
+        return Err(AppError::Message(format!(
+            "disk-nix spec at {location} must be an object to add version metadata"
+        )));
+    };
+    match object.get("version").and_then(Value::as_u64) {
+        Some(version) if version == target_version => Ok(()),
+        Some(version) => Err(AppError::Message(format!(
+            "unsupported disk-nix spec version {version}; supported migration target is {target_version}"
+        ))),
+        None => {
+            object.insert("version".to_string(), Value::from(target_version));
+            changes.push(format!("set {location} to {target_version}"));
+            Ok(())
+        }
+    }
+}
+
+fn print_migration_report(output: &mut impl Write, report: &MigrationReport) -> io::Result<()> {
+    writeln!(
+        output,
+        "Migration: {:?} -> {}",
+        report.source_version, report.target_version
+    )?;
+    writeln!(output, "migrated: {}", report.migrated)?;
+    writeln!(output, "Changes:")?;
+    for change in &report.changes {
+        writeln!(output, "- {change}")?;
+    }
+    writeln!(output, "Warnings:")?;
+    for warning in &report.warnings {
+        writeln!(output, "- {warning}")?;
+    }
+    writeln!(output, "Migrated spec:")?;
+    writeln!(
+        output,
+        "{}",
+        serde_json::to_string_pretty(&report.spec).map_err(io::Error::other)?
+    )
 }
 
 fn prepare_apply_report(
@@ -4508,14 +4668,15 @@ mod tests {
         is_lvm_node, is_mapping_node, is_multipath_node, is_network_storage_node, is_nfs_node,
         is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node,
         is_swap_node, is_vdo_node, is_volume_node, is_zfs_node, is_zram_node, iscsi_lun_count,
-        member_count, mount_details, nfs_mount_count, print_backing_files, print_bcachefs,
-        print_btrfs, print_cache, print_complex_filesystems, print_devices, print_dm,
-        print_encryption, print_filesystems, print_filtered_json, print_inspect,
-        print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm, print_mappings,
-        print_mounts, print_multipath, print_network_storage, print_nfs, print_nvme,
-        print_partitions, print_pools, print_probe_reports, print_raid, print_snapshots,
-        print_swap, print_usage, print_vdo, print_volumes, print_zfs, print_zram, snapshot_source,
-        usage_details, usage_percent, zfs_child_count,
+        member_count, migration_report_from_json_bytes, mount_details, nfs_mount_count,
+        print_backing_files, print_bcachefs, print_btrfs, print_cache, print_complex_filesystems,
+        print_devices, print_dm, print_encryption, print_filesystems, print_filtered_json,
+        print_inspect, print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm,
+        print_mappings, print_migration_report, print_mounts, print_multipath,
+        print_network_storage, print_nfs, print_nvme, print_partitions, print_pools,
+        print_probe_reports, print_raid, print_snapshots, print_swap, print_usage, print_vdo,
+        print_volumes, print_zfs, print_zram, snapshot_source, usage_details, usage_percent,
+        zfs_child_count,
     };
 
     #[test]
@@ -4538,6 +4699,158 @@ mod tests {
         assert!(output.contains("permission-denied"));
         assert!(output.contains("remediation:"));
         assert!(output.contains("privileges"));
+    }
+
+    #[test]
+    fn migration_report_adds_current_version_to_direct_specs() {
+        let report = migration_report_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "ext4"
+                }
+              }
+            }"#,
+        )
+        .expect("versionless spec should migrate");
+
+        assert_eq!(report.source_version, None);
+        assert_eq!(report.target_version, 1);
+        assert!(report.migrated);
+        assert_eq!(report.spec["version"], 1);
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| change == "set version to 1")
+        );
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("does not apply storage mutations"))
+        );
+    }
+
+    #[test]
+    fn migration_report_adds_wrapper_and_spec_versions() {
+        let report = migration_report_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "root": {
+                    "mountpoint": "/",
+                    "fsType": "ext4"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("wrapper spec should migrate");
+
+        assert!(report.migrated);
+        assert_eq!(report.spec["version"], 1);
+        assert_eq!(report.spec["spec"]["version"], 1);
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| change == "set version to 1")
+        );
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| change == "set spec.version to 1")
+        );
+    }
+
+    #[test]
+    fn migration_report_keeps_explicit_current_version() {
+        let report = migration_report_from_json_bytes(
+            br#"{
+              "version": 1,
+              "filesystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "ext4"
+                }
+              }
+            }"#,
+        )
+        .expect("current version should validate");
+
+        assert_eq!(report.source_version, Some(1));
+        assert!(!report.migrated);
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| change.contains("already declares"))
+        );
+    }
+
+    #[test]
+    fn migration_report_rejects_future_and_conflicting_versions() {
+        let future = migration_report_from_json_bytes(
+            br#"{
+              "version": 2,
+              "filesystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "ext4"
+                }
+              }
+            }"#,
+        )
+        .expect_err("future version should not migrate implicitly");
+        assert!(
+            future
+                .to_string()
+                .contains("unsupported disk-nix spec version 2")
+        );
+
+        let conflict = migration_report_from_json_bytes(
+            br#"{
+              "version": 1,
+              "spec": {
+                "version": 2
+              }
+            }"#,
+        )
+        .expect_err("conflicting versions should be rejected");
+        assert!(
+            conflict
+                .to_string()
+                .contains("conflicting disk-nix spec versions")
+        );
+    }
+
+    #[test]
+    fn migration_report_human_output_includes_migrated_spec() {
+        let report = migration_report_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "ext4"
+                }
+              }
+            }"#,
+        )
+        .expect("spec should migrate");
+
+        let mut output = Vec::new();
+        print_migration_report(&mut output, &report).expect("migration report renders");
+        let output = String::from_utf8(output).expect("migration output is utf8");
+        assert!(output.contains("Migration: None -> 1"));
+        assert!(output.contains("migrated: true"));
+        assert!(output.contains("Migrated spec:"));
+        assert!(output.contains(r#""version": 1"#));
     }
 
     #[test]

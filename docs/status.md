@@ -126,7 +126,8 @@ manual-review guidance, or non-ready command plans instead of guessing.
   tool-output variant still need expansion.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
-- Implemented migration tooling and tests for future spec versions. The parser
-  now validates version `1` and the compatibility policy documents migration and
-  deprecation expectations, but no future-version migrator exists yet because no
+- Future spec-version field mappings. The parser validates version `1`,
+  `disk-nix migrate` now emits a reviewable current-version normalization
+  report, and the compatibility policy documents migration and deprecation
+  expectations, but no version-to-version field mapping exists yet because no
   version `2` contract exists.

@@ -128,6 +128,7 @@ dependencies = [
  "disk-nix-model",
  "disk-nix-plan",
  "disk-nix-probe",
+ "serde",
  "serde_json",
 ]
 

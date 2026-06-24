@@ -73,6 +73,8 @@ disk-nix probe-status
 disk-nix probe-status --json
 disk-nix capabilities
 disk-nix capabilities --json
+disk-nix migrate --spec ./examples/lifecycle-update.json
+disk-nix migrate --spec ./examples/lifecycle-update.json --json
 disk-nix devices
 disk-nix partitions
 disk-nix filesystems
@@ -152,7 +154,8 @@ those artifacts directly.
 `schema` emits the supported desired-spec JSON contract for editor integration
 and automation. The current contract is version `1`; omitted versions are
 treated as version `1`, and unsupported future versions are rejected before
-planning. The Nix package also installs it at
+planning. `migrate --spec` renders a reviewable migration report and normalized
+version `1` spec without applying storage changes. The Nix package also installs it at
 `share/disk-nix/schema/disk-nix-spec.schema.json`.
 
 See [docs/cli.md](docs/cli.md) for the command reference and JSON contracts,

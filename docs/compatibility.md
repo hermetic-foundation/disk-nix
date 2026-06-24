@@ -71,6 +71,13 @@ device-removal behavior. If a migration changes mutation semantics, the migrated
 plan must require normal policy gates and should prefer a blocked or non-ready
 report with advice over guessing.
 
+`disk-nix migrate --spec <file>` is the supported migration entry point. For
+the version `1` contract it emits a report plus a normalized spec with explicit
+version metadata and performs no semantic rewrites. This gives automation a
+stable command to call before future version-to-version mappings exist. Future
+or conflicting versions remain hard errors until their field mappings, examples,
+tests, and safety notes are implemented.
+
 ## JSON output contracts
 
 JSON output is the automation interface. This includes:

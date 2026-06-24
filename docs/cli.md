@@ -157,6 +157,22 @@ The Nix package installs the same generated schema at
 See [compatibility.md](compatibility.md) for the versioning, migration, JSON,
 CLI text, NixOS option, and generated-artifact compatibility policy.
 
+## Spec Migration
+
+`migrate` renders a reviewable migration report and normalized spec without
+planning or applying storage changes:
+
+```sh
+disk-nix migrate --spec ./examples/lifecycle-update.json
+disk-nix migrate --spec ./examples/lifecycle-update.json --json
+```
+
+For the current version `1` contract, migration is metadata-only. It adds
+explicit `version = 1` fields to direct specs and NixOS-module wrapper specs
+when they are omitted, validates the migrated document with the planner parser,
+and reports warnings that no lifecycle semantics were rewritten. Future or
+conflicting versions are rejected instead of being guessed.
+
 ## Focused Views
 
 Focused commands filter the graph for common workflows:
