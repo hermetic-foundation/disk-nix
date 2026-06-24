@@ -250,14 +250,20 @@ fn scsi_coordinates(host_path: &str) -> Vec<(String, String)> {
 }
 
 fn path_state_columns(state: &[String]) -> Vec<(String, String)> {
-    [
+    let mut columns: Vec<(String, String)> = [
         ("multipath.dm-state", state.first()),
         ("multipath.checker-state", state.get(1)),
         ("multipath.online-state", state.get(2)),
     ]
     .into_iter()
     .filter_map(|(key, value)| value.map(|value| (key.to_string(), value.clone())))
-    .collect()
+    .collect();
+
+    if state.len() > 3 {
+        columns.push(("multipath.path-flags".to_string(), state[3..].join(" ")));
+    }
+
+    columns
 }
 
 impl MultipathPath {
@@ -363,9 +369,9 @@ mod tests {
 mpatha (3600508b400105e210000900000490000) dm-2 IBM,2145
 size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
 |-+- policy='service-time 0' prio=50 status=active
-| `- 2:0:0:1 sdb 8:16 active ready running
+| `- 2:0:0:1 sdb 8:16 active ready running ghost
 `-+- policy='service-time 0' prio=10 status=enabled
-  `- 3:0:0:1 sdc 8:32 active ready running
+  `- 3:0:0:1 sdc 8:32 active ready running faulty shaky
 "#;
 
     #[test]
@@ -443,6 +449,12 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
         assert!(active_path.properties.iter().any(|property| {
             property.key == "multipath.online-state" && property.value == "running"
         }));
+        assert!(
+            active_path
+                .properties
+                .iter()
+                .any(|property| property.key == "multipath.path-flags" && property.value == "ghost")
+        );
         let enabled_path = graph
             .nodes
             .iter()
@@ -455,6 +467,9 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
         );
         assert!(enabled_path.properties.iter().any(|property| {
             property.key == "multipath.group-status" && property.value == "enabled"
+        }));
+        assert!(enabled_path.properties.iter().any(|property| {
+            property.key == "multipath.path-flags" && property.value == "faulty shaky"
         }));
         assert_eq!(
             graph

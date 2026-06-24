@@ -2935,6 +2935,7 @@ fn usage_details(node: &Node) -> String {
         ("multipath.dm-state", "dm-state"),
         ("multipath.checker-state", "checker-state"),
         ("multipath.online-state", "online-state"),
+        ("multipath.path-flags", "path-flags"),
         ("multipath.path-state", "path-state"),
         ("md.version", "md-version"),
         ("md.level", "level"),
@@ -3921,7 +3922,8 @@ mod tests {
                 .with_path("/dev/sdb")
                 .with_property("multipath.host-path", "2:0:0:1")
                 .with_property("major-minor", "8:16")
-                .with_property("multipath.path-state", "active ready running"),
+                .with_property("multipath.path-flags", "ghost")
+                .with_property("multipath.path-state", "active ready running ghost"),
         );
 
         let mut output = Vec::new();
@@ -3970,9 +3972,9 @@ mod tests {
         assert!(output.contains("loop-backing=true"));
         assert!(output.contains("swap-active=true swap-type=partition swap-priority=100"));
         assert!(output.contains("member-state=active sync"));
-        assert!(
-            output.contains("host-path=2:0:0:1 major-minor=8:16 path-state=active ready running")
-        );
+        assert!(output.contains(
+            "host-path=2:0:0:1 major-minor=8:16 path-flags=ghost path-state=active ready running ghost"
+        ));
         assert!(output.contains("/var/lib/images/root.img"));
     }
 
@@ -5780,7 +5782,8 @@ mod tests {
                 .with_property("multipath.dm-state", "active")
                 .with_property("multipath.checker-state", "ready")
                 .with_property("multipath.online-state", "running")
-                .with_property("multipath.path-state", "active ready running"),
+                .with_property("multipath.path-flags", "ghost")
+                .with_property("multipath.path-state", "active ready running ghost"),
         );
         graph.add_node(
             Node::new("block:/dev/sdc", NodeKind::PhysicalDisk, "/dev/sdc")
@@ -5797,7 +5800,8 @@ mod tests {
                 .with_property("multipath.dm-state", "active")
                 .with_property("multipath.checker-state", "ready")
                 .with_property("multipath.online-state", "running")
-                .with_property("multipath.path-state", "active ready running"),
+                .with_property("multipath.path-flags", "faulty shaky")
+                .with_property("multipath.path-state", "active ready running faulty shaky"),
         );
         graph.add_edge(Edge::new(
             "block:/dev/sdb",
@@ -5828,8 +5832,14 @@ mod tests {
         assert!(output.contains("scsi-host=2 scsi-channel=0 scsi-id=0 scsi-lun=1"));
         assert!(output.contains("scsi-lun=1 major-minor=8:16"));
         assert!(output.contains("group-policy=service-time 0 group-prio=50 group-status=active"));
-        assert!(output.contains("dm-state=active checker-state=ready online-state=running"));
-        assert!(output.contains("path-state=active ready running"));
+        assert!(
+            output.contains(
+                "dm-state=active checker-state=ready online-state=running path-flags=ghost"
+            )
+        );
+        assert!(output.contains("path-state=active ready running ghost"));
+        assert!(output.contains("path-flags=faulty shaky"));
+        assert!(output.contains("path-state=active ready running faulty shaky"));
         assert!(output.contains("/dev/sdc"));
         assert!(output.contains("host-path=3:0:0:1 scsi-host=3"));
         assert!(output.contains("scsi-host=3 scsi-channel=0 scsi-id=0 scsi-lun=1"));

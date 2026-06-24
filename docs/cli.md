@@ -205,8 +205,8 @@ Use these commands for:
   including model/vendor, transport, rotational, NVMe model/firmware/namespace
   geometry, partition table/number, filesystem type, loop
   backing/offset/autoclear metadata, multipath path host/major-minor, parsed
-  SCSI coordinates, and split dm/checker/online state details, MD RAID member
-  number/major/minor/raid-device/state, active swap
+  SCSI coordinates, split dm/checker/online state details, and extra path
+  flags, MD RAID member number/major/minor/raid-device/state, active swap
   state/type/priority, and udev by-id/by-path links, encoded labels,
   filesystem UUID sub-identifiers,
   partition table metadata, major/minor numbers, and device-mapper flags when
@@ -310,7 +310,7 @@ Use these commands for:
   device, vendor/product, size, features, hardware handler, write protection,
   path count, host path, SCSI host/channel/id/LUN coordinates, major/minor,
   path-group policy, priority, group status, dm/checker/online state columns,
-  and raw path state when `multipath -ll` exposes them
+  extra path flags, and raw path state when `multipath -ll` exposes them
 - `nvme`: NVMe namespaces, including path, serial, model, firmware, namespace
   index/id, generic namespace path, subsystem, controller, controller id,
   transport, address, namespace capacity, LBA format, maximum LBA, sector size,
