@@ -55,7 +55,9 @@ behavior across real storage stacks.
   against native `vdo.*` and LVM `lvm.vdo-*` metadata with boolean
   compression/deduplication normalization, and cache property declarations
   reconciled against bcache `bcache.*` and LVM cache `lvm.*` metadata with
-  cache-mode spelling normalization, and ZFS dataset/zvol property declarations
+  cache-mode spelling normalization, Btrfs qgroup referenced/exclusive limit
+  declarations reconciled against probed `btrfs.max-*` metadata with
+  unlimited-value normalization, and ZFS dataset/zvol property declarations
   reconciled against probed `zfs.*` metadata with common on/off normalization,
   and filesystem identity property declarations reconciled against probed node
   identity plus filesystem label, UUID, FAT volume-ID, NTFS serial, and exFAT

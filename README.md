@@ -376,9 +376,11 @@ Btrfs qgroup lifecycle plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` updates for referenced and
 exclusive byte limits from `btrfsQgroups` declarations. Qgroup
 `operation = "rescan"` renders read-only quota hierarchy, limit, usage, and
-graph inspection commands. Executable qgroup create, destroy, limit, and rescan
-plans require a mounted filesystem path declared through `target`, `path`, or
-`mountpoint`.
+graph inspection commands. Current-topology probing reconciles qgroup
+referenced and exclusive limit aliases against probed `btrfs.max-*` metadata,
+normalizing unlimited values before suppressing already-satisfied limit
+updates. Executable qgroup create, destroy, limit, and rescan plans require a
+mounted filesystem path declared through `target`, `path`, or `mountpoint`.
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit. Swap
 grow and format commands require a path-shaped swap target such as `/swapfile`

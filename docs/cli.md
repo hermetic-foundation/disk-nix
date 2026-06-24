@@ -1163,11 +1163,12 @@ read-only quota hierarchy, referenced/exclusive usage, limits, and graph
 inspection. With current-topology probing, concrete numeric qgroup destroy
 actions such as `0/257` are suppressed only when the qgroup is already absent;
 concrete numeric qgroup create actions are suppressed when the matched node is
-already a Btrfs qgroup. Existing non-qgroup matches stay actionable for create
-with warnings; present qgroups stay actionable for destroy with warnings that
-include referenced and exclusive usage, limits, parent, or child metadata when
-available. Logical qgroup names remain actionable unless a graph node actually
-matches them.
+already a Btrfs qgroup, and qgroup referenced/exclusive limit properties are
+suppressed when declared aliases match probed `btrfs.max-*` metadata. Existing
+non-qgroup matches stay actionable for create with warnings; present qgroups
+stay actionable for destroy with warnings that include referenced and exclusive
+usage, limits, parent, or child metadata when available. Logical qgroup names
+remain actionable unless a graph node actually matches them.
 Qgroup create, destroy, limit, and rescan plans remain non-ready until the
 mounted filesystem path is declared through `target`, `path`, or `mountpoint`.
 The capability inventory advertises qgroup create, limit-property updates,

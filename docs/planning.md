@@ -347,6 +347,10 @@ Examples:
 - Btrfs qgroup `properties.limit` or `properties.maxReferenced` render
   `btrfs qgroup limit <size|none> <qgroupid> <path>`;
   `properties.maxExclusive` renders the exclusive limit form with `-e`.
+  Current-topology comparison reconciles those aliases against probed
+  `btrfs.max-referenced` and `btrfs.max-exclusive` metadata, normalizing
+  `none`, `null`, and `unlimited` spellings before suppressing
+  already-satisfied limit updates.
   `operation = "create"` and `destroy = true` render Btrfs qgroup create and
   destroy commands when a filesystem path is declared through `target`, `path`,
   or `mountpoint`.
