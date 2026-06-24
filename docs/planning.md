@@ -70,13 +70,14 @@ Examples:
   grow plans require a concrete file path plus desired size before rendering
   `truncate --size`, leaving loop, swap, and filesystem refresh as explicit
   follow-up actions.
-- `dmMaps` declarations model device-mapper refreshes and reviewed mapper
-  renames. Rescan plans inspect map identity, dependencies, table, live status,
-  and graph consumers; rename plans are offline-required because every
-  dependent LUKS, LVM, VDO, multipath, filesystem, mount, or service consumer
-  must move to the new mapper name together. Other mutating mapper lifecycle is
-  intentionally left to LUKS, LVM, VDO, multipath, or cache-specific
-  declarations.
+- `dmMaps` declarations model device-mapper refreshes, reviewed mapper renames,
+  and explicit mapper removal. Rescan plans inspect map identity, dependencies,
+  table, live status, and graph consumers; rename plans are offline-required
+  because every dependent LUKS, LVM, VDO, multipath, filesystem, mount, or
+  service consumer must move to the new mapper name together. Destroy plans are
+  destructive and render `dmsetup remove` only after identity, dependency, and
+  status inspection; prefer LUKS, LVM, VDO, multipath, or cache-specific
+  teardown when another domain owns the mapper.
 - LUKS keyslot and token add/change operations are offline-required header
   updates. Keyslot or token removal is potential-data-loss because deleting the
   last usable unlock path can make encrypted data inaccessible.

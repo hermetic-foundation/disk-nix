@@ -1917,7 +1917,7 @@ in
     dmMaps = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed device-mapper lifecycle declarations emitted into the disk-nix planner spec. Rescan command plans require a concrete /dev/mapper/* or /dev/dm-* target through the declaration key, target, or path.";
+      description = "Typed device-mapper lifecycle declarations emitted into the disk-nix planner spec. Rescan, rename, and destroy command plans require a concrete /dev/mapper/* or /dev/dm-* target through the declaration key, target, or path.";
     };
 
     mdRaids = lib.mkOption {

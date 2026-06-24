@@ -618,6 +618,10 @@
                 target = "/dev/mapper/cryptswap";
                 renameTo = "cryptswap-retired";
               };
+              dmMaps.oldmap = {
+                operation = "destroy";
+                target = "/dev/mapper/oldmap";
+              };
               mdRaids.root = {
                 target = "/dev/md/root";
                 raidLevel = "1";
@@ -1594,6 +1598,8 @@
                     and .spec.dmMaps.cryptswap.operation == "rename"
                     and .spec.dmMaps.cryptswap.target == "/dev/mapper/cryptswap"
                     and .spec.dmMaps.cryptswap.renameTo == "cryptswap-retired"
+                    and .spec.dmMaps.oldmap.operation == "destroy"
+                    and .spec.dmMaps.oldmap.target == "/dev/mapper/oldmap"
                     and .spec.mdRaids.root.target == "/dev/md/root"
                     and .spec.mdRaids.root.raidLevel == "1"
                     and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-a") != null)

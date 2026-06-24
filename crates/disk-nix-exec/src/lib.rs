@@ -1242,6 +1242,16 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Destroy if collection == Some("dmMaps") => (
+            vec![dmsetup_ls_tree_command(
+                "verify device-mapper inventory after removal",
+            )],
+            vec![
+                "removed device-mapper map no longer appears in dmsetup inventory".to_string(),
+                "dependent mounts, LUKS, LVM, VDO, multipath, cache, or filesystem consumers were removed or moved first"
+                    .to_string(),
+            ],
+        ),
         Operation::Create | Operation::Grow if collection == Some("partitions") => (
             vec![
                 command(
@@ -3470,6 +3480,24 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "device-mapper rename changes the visible mapper path and can break consumers until declarations are updated"
                         .to_string(),
                     "prefer LUKS, LVM, VDO, multipath, or cache-specific rename workflows when the mapper is owned by a higher-level domain"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("dmMaps") => {
+            let target = dm_map_target_path(action);
+            (
+                vec![
+                    dmsetup_info_command(target, "inspect device-mapper identity before removal"),
+                    dmsetup_deps_command(target),
+                    dmsetup_status_command(target),
+                    dmsetup_remove_command(target),
+                ],
+                vec![
+                    "device-mapper removal destroys the live map and can make dependent data inaccessible"
+                        .to_string(),
+                    "prefer domain-specific LUKS, LVM, VDO, multipath, or cache teardown when the mapper is owned elsewhere"
                         .to_string(),
                 ],
                 true,
@@ -11861,6 +11889,27 @@ fn missing_dm_map_rename_inputs(
     missing
 }
 
+fn dmsetup_remove_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["dmsetup", "remove", target],
+            true,
+            "remove the reviewed device-mapper map",
+        ),
+        None => command_with_readiness(
+            ["dmsetup", "remove", "<dm-map>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device-mapper path"],
+            "remove the device-mapper map after selecting a concrete mapper path",
+        ),
+    }
+}
+
+fn dmsetup_ls_tree_command(description: &'static str) -> ExecutionCommand {
+    command(["dmsetup", "ls", "--tree"], false, description)
+}
+
 fn dmsetup_deps_command(target: Option<&str>) -> ExecutionCommand {
     match target {
         Some(target) => command(
@@ -20180,6 +20229,103 @@ mod tests {
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs
                             == ["device-mapper path", "new device-mapper name"]
+                })
+        }));
+    }
+
+    #[test]
+    fn dm_map_destroy_reports_dmsetup_remove_command() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "dmMaps": {
+                  "oldmap": {
+                    "operation": "destroy",
+                    "target": "/dev/mapper/oldmap"
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "dmmaps:oldmap:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "dmsetup",
+                            "info",
+                            "-c",
+                            "--noheadings",
+                            "-o",
+                            "name,uuid,major,minor,open,segments,events",
+                            "/dev/mapper/oldmap",
+                        ]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["dmsetup", "deps", "-o", "devname", "/dev/mapper/oldmap"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["dmsetup", "status", "/dev/mapper/oldmap"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["dmsetup", "remove", "/dev/mapper/oldmap"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "dmmaps:oldmap:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["dmsetup", "ls", "--tree"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
+    fn dm_map_destroy_requires_concrete_mapper_path_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "dmMaps": {
+                  "oldmap": {
+                    "operation": "destroy"
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "dmmaps:oldmap:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["dmsetup", "remove", "<dm-map>"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["device-mapper path"]
                 })
         }));
     }

@@ -3753,6 +3753,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Destroy if collection == "dmMaps" => (
+            RiskClass::Destructive,
+            true,
+            Some(Advice {
+                summary: "device-mapper removal deletes the live map and can make dependent data inaccessible"
+                    .to_string(),
+                alternatives: vec![
+                    "prefer LUKS, LVM, VDO, multipath, or cache-specific close/deactivate/detach declarations when the map is owned by another domain"
+                        .to_string(),
+                    "run dmMaps.<name>.operation = \"rescan\" and review dmsetup status before removal"
+                        .to_string(),
+                    "unmount filesystems and stop services before removing the mapper".to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::Export if collection == "exports" => (
             RiskClass::Online,
             false,
@@ -5790,6 +5805,20 @@ pub fn default_capabilities() -> Vec<Capability> {
                         .to_string(),
                     "prefer the owning LUKS, LVM, VDO, multipath, or cache declaration when the map is domain-managed"
                         .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::DeviceMapper,
+            operation: Operation::Destroy,
+            risk: RiskClass::Destructive,
+            advice: Some(Advice {
+                summary: "device-mapper removal deletes the live map and can make dependent data inaccessible"
+                    .to_string(),
+                alternatives: vec![
+                    "use domain-specific LUKS, LVM, VDO, multipath, or cache teardown when available"
+                        .to_string(),
+                    "review dmsetup status and dependent mounts before removal".to_string(),
                 ],
             }),
         },
@@ -8022,6 +8051,11 @@ mod tests {
                 NodeKind::DeviceMapper,
                 Operation::Rename,
                 RiskClass::OfflineRequired,
+            ),
+            (
+                NodeKind::DeviceMapper,
+                Operation::Destroy,
+                RiskClass::Destructive,
             ),
             (NodeKind::CacheDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::VdoVolume, Operation::Rescan, RiskClass::Online),
@@ -10726,7 +10760,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_classifies_device_mapper_rescan_lifecycle() {
+    fn plan_classifies_device_mapper_lifecycle() {
         let plan = plan_from_json_bytes(
             br#"{
               "dmMaps": {
@@ -10738,15 +10772,19 @@ mod tests {
                   "operation": "rename",
                   "target": "/dev/mapper/cryptswap",
                   "renameTo": "cryptswap-retired"
+                },
+                "oldmap": {
+                  "operation": "destroy",
+                  "target": "/dev/mapper/oldmap"
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.action_count, 3);
         assert_eq!(plan.summary.offline_required_count, 1);
-        assert_eq!(plan.summary.destructive_count, 0);
+        assert_eq!(plan.summary.destructive_count, 1);
         let rescan = plan
             .actions
             .iter()
@@ -10781,6 +10819,24 @@ mod tests {
             Some("cryptswap-retired")
         );
         assert!(!rename.destructive);
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "dmmaps:oldmap:destroy")
+            .expect("device-mapper destroy action exists");
+        assert_eq!(destroy.operation, Operation::Destroy);
+        assert_eq!(destroy.risk, RiskClass::Destructive);
+        assert_eq!(
+            destroy.context.target.as_deref(),
+            Some("/dev/mapper/oldmap")
+        );
+        assert!(destroy.destructive);
+        assert!(
+            destroy
+                .advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("device-mapper removal"))
+        );
     }
 
     #[test]

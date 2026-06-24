@@ -255,9 +255,10 @@ Device-mapper map rescan plans use `dmMaps` declarations and render read-only
 `dmsetup info`, `dmsetup deps -o devname`, `dmsetup table`, `dmsetup status`,
 and graph inspection commands. `operation = "rename"` renders reviewed
 `dmsetup rename` commands for concrete mapper paths and remains offline-required
-because dependent consumers must be updated together; other mutating mapper
-lifecycle remains modeled through LUKS, LVM, VDO, multipath, or cache-specific
-declarations.
+because dependent consumers must be updated together. `operation = "destroy"`
+or `destroy = true` renders policy-gated `dmsetup remove` only after identity,
+dependency, and status inspection; prefer LUKS, LVM, VDO, multipath, or
+cache-specific teardown when another domain owns the mapper.
 LVM cache apply plans use separate `lvmCaches` declarations and render
 `lvconvert --type cache`, `lvconvert --uncache`, and `lvchange --cachemode` or
 `--cachepolicy` commands when an origin `vg/lv` and cache-pool LV are declared.
