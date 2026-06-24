@@ -1760,7 +1760,7 @@ fn current_node_summary(node: &Node) -> CurrentNodeSummary {
 }
 
 fn size_diagnostic(action: &PlannedAction, node: &Node, query: &str) -> Option<TopologyDiagnostic> {
-    let desired = action.context.desired_size.as_deref()?;
+    let desired = size_diagnostic_desired_size(action)?;
     let desired_bytes = parse_size_bytes(desired)?;
     let current_bytes = node.size_bytes?;
 
@@ -1797,6 +1797,18 @@ fn size_diagnostic(action: &PlannedAction, node: &Node, query: &str) -> Option<T
         query: query.to_string(),
         message,
         current: Some(current_node_summary(node)),
+    })
+}
+
+fn size_diagnostic_desired_size(action: &PlannedAction) -> Option<&str> {
+    action.context.desired_size.as_deref().or_else(|| {
+        if action.operation == Operation::Grow
+            && action.context.collection.as_deref() == Some("partitions")
+        {
+            action.context.end.as_deref()
+        } else {
+            None
+        }
     })
 }
 
@@ -15836,6 +15848,107 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "backingfiles:/var/lib/images/root.img:grow"
                 && diagnostic.kind == TopologyDiagnosticKind::SizeAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_partition_grow_from_end_size() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "partitions": {
+                "root": {
+                  "operation": "grow",
+                  "target": "/dev/disk/by-partuuid/root",
+                  "device": "/dev/disk/by-id/nvme-root",
+                  "partitionNumber": 2,
+                  "end": "64GiB"
+                },
+                "data": {
+                  "operation": "grow",
+                  "target": "/dev/disk/by-partuuid/data",
+                  "device": "/dev/disk/by-id/nvme-root",
+                  "partitionNumber": 3,
+                  "end": "128GiB"
+                },
+                "max": {
+                  "operation": "grow",
+                  "target": "/dev/disk/by-partuuid/max",
+                  "device": "/dev/disk/by-id/nvme-root",
+                  "partitionNumber": 4,
+                  "end": "100%"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "partition:/dev/disk/by-partuuid/root",
+                NodeKind::Partition,
+                "/dev/disk/by-partuuid/root",
+            )
+            .with_path("/dev/disk/by-partuuid/root")
+            .with_size_bytes(80 * 1024 * 1024 * 1024),
+        );
+        graph.add_node(
+            Node::new(
+                "partition:/dev/disk/by-partuuid/data",
+                NodeKind::Partition,
+                "/dev/disk/by-partuuid/data",
+            )
+            .with_path("/dev/disk/by-partuuid/data")
+            .with_size_bytes(64 * 1024 * 1024 * 1024),
+        );
+        graph.add_node(
+            Node::new(
+                "partition:/dev/disk/by-partuuid/max",
+                NodeKind::Partition,
+                "/dev/disk/by-partuuid/max",
+            )
+            .with_path("/dev/disk/by-partuuid/max")
+            .with_size_bytes(64 * 1024 * 1024 * 1024),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.summary.action_count, 2);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "partitions:root:grow")
+        );
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "partitions:data:grow" && action.operation == Operation::Grow
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "partitions:max:grow" && action.operation == Operation::Grow
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "partitions:root:grow"
+                && diagnostic.kind == TopologyDiagnosticKind::SizeAlreadySatisfied
+                && diagnostic.message.contains("desired size 64GiB")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "partitions:data:grow"
+                && diagnostic.kind == TopologyDiagnosticKind::SizeBelowDesired
+                && diagnostic.message.contains("desired size 128GiB")
+        }));
+        assert!(!comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "partitions:max:grow"
+                && matches!(
+                    diagnostic.kind,
+                    TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::SizeBelowDesired
+                        | TopologyDiagnosticKind::SizeConflict
+                )
         }));
     }
 
