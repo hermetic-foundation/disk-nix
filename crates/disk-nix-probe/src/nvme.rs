@@ -274,6 +274,104 @@ pub fn normalize_nvme_id_ctrl_json(
     Ok(graph)
 }
 
+pub fn normalize_nvme_smart_log_json(
+    controller: &str,
+    bytes: &[u8],
+) -> Result<StorageGraph, ProbeError> {
+    let value: Value = serde_json::from_slice(bytes).map_err(|error| {
+        ProbeError::Adapter(format!(
+            "failed to parse nvme smart-log JSON for {controller}: {error}"
+        ))
+    })?;
+    let name = controller.trim_start_matches("/dev/");
+    let mut node = Node::new(
+        nvme_controller_id(name),
+        NodeKind::NvmeController,
+        name.to_string(),
+    )
+    .with_path(controller_path(name))
+    .with_property("nvme.controller", name.to_string());
+
+    for (key, property) in [
+        ("critical_warning", "nvme.smart.critical-warning"),
+        ("temperature", "nvme.smart.temperature-kelvin"),
+        ("avail_spare", "nvme.smart.available-spare-percent"),
+        ("spare_thresh", "nvme.smart.spare-threshold-percent"),
+        ("percent_used", "nvme.smart.percent-used"),
+        ("data_units_read", "nvme.smart.data-units-read"),
+        ("data_units_written", "nvme.smart.data-units-written"),
+        ("host_read_commands", "nvme.smart.host-read-commands"),
+        ("host_write_commands", "nvme.smart.host-write-commands"),
+        ("controller_busy_time", "nvme.smart.controller-busy-time"),
+        ("power_cycles", "nvme.smart.power-cycles"),
+        ("power_on_hours", "nvme.smart.power-on-hours"),
+        ("unsafe_shutdowns", "nvme.smart.unsafe-shutdowns"),
+        ("media_errors", "nvme.smart.media-errors"),
+        ("num_err_log_entries", "nvme.smart.error-log-entries"),
+        ("warning_temp_time", "nvme.smart.warning-temperature-time"),
+        (
+            "critical_comp_time",
+            "nvme.smart.critical-composite-temperature-time",
+        ),
+        (
+            "temperature_sensor_1",
+            "nvme.smart.temperature-sensor-1-kelvin",
+        ),
+        (
+            "temperature_sensor_2",
+            "nvme.smart.temperature-sensor-2-kelvin",
+        ),
+        (
+            "temperature_sensor_3",
+            "nvme.smart.temperature-sensor-3-kelvin",
+        ),
+        (
+            "temperature_sensor_4",
+            "nvme.smart.temperature-sensor-4-kelvin",
+        ),
+        (
+            "temperature_sensor_5",
+            "nvme.smart.temperature-sensor-5-kelvin",
+        ),
+        (
+            "temperature_sensor_6",
+            "nvme.smart.temperature-sensor-6-kelvin",
+        ),
+        (
+            "temperature_sensor_7",
+            "nvme.smart.temperature-sensor-7-kelvin",
+        ),
+        (
+            "temperature_sensor_8",
+            "nvme.smart.temperature-sensor-8-kelvin",
+        ),
+        (
+            "thm_temp1_trans_count",
+            "nvme.smart.thermal-temp1-transition-count",
+        ),
+        (
+            "thm_temp2_trans_count",
+            "nvme.smart.thermal-temp2-transition-count",
+        ),
+        (
+            "thm_temp1_total_time",
+            "nvme.smart.thermal-temp1-total-time",
+        ),
+        (
+            "thm_temp2_total_time",
+            "nvme.smart.thermal-temp2-total-time",
+        ),
+    ] {
+        if let Some(value) = field_string(&value, key) {
+            node = node.with_property(property, value);
+        }
+    }
+
+    let mut graph = StorageGraph::empty();
+    graph.add_node(node);
+    Ok(graph)
+}
+
 fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
     let Some(path) = device.device_path else {
         return;
@@ -585,6 +683,34 @@ mod tests {
 }
 "#;
 
+    const NVME_SMART_LOG: &[u8] = br#"
+{
+  "critical_warning": 0,
+  "temperature": 301,
+  "avail_spare": 100,
+  "spare_thresh": 10,
+  "percent_used": 2,
+  "data_units_read": 123456,
+  "data_units_written": 654321,
+  "host_read_commands": 1000000,
+  "host_write_commands": 2000000,
+  "controller_busy_time": 17,
+  "power_cycles": 42,
+  "power_on_hours": 1200,
+  "unsafe_shutdowns": 3,
+  "media_errors": 0,
+  "num_err_log_entries": 4,
+  "warning_temp_time": 0,
+  "critical_comp_time": 0,
+  "temperature_sensor_1": 300,
+  "temperature_sensor_2": 302,
+  "thm_temp1_trans_count": 1,
+  "thm_temp2_trans_count": 0,
+  "thm_temp1_total_time": 8,
+  "thm_temp2_total_time": 0
+}
+"#;
+
     #[test]
     fn normalizes_nvme_list_json() {
         let graph = normalize_nvme_list_json(NVME_LIST).expect("fixture should parse");
@@ -762,6 +888,40 @@ mod tests {
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.subsystem"
                 && property.value == "nqn.2014-08.org.nvmexpress:uuid:12345678"
+        }));
+    }
+
+    #[test]
+    fn normalizes_nvme_smart_log_json() {
+        let graph = normalize_nvme_smart_log_json("/dev/nvme0", NVME_SMART_LOG)
+            .expect("fixture should parse");
+
+        let node = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::NvmeController)
+            .expect("controller node should exist");
+
+        assert_eq!(node.name, "nvme0");
+        assert_eq!(node.path.as_deref(), Some("/dev/nvme0"));
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "nvme.smart.temperature-kelvin"
+                    && property.value == "301")
+        );
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "nvme.smart.percent-used" && property.value == "2")
+        );
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "nvme.smart.media-errors" && property.value == "0")
+        );
+        assert!(node.properties.iter().any(|property| {
+            property.key == "nvme.smart.temperature-sensor-2-kelvin" && property.value == "302"
         }));
     }
 }

@@ -15,8 +15,8 @@ storage stacks:
 - ZFS pools, vdevs, datasets, zvols, snapshots, snapshot hold reference counts,
   compression/dedup/checksum/copies/cache/sync/record-size/quota/reservation/encryption
   properties, POSIX metadata policy, and cache, log, and special vdevs
-- MD RAID, multipath, NVMe controllers/namespaces, iSCSI sessions/targets/LUNs,
-  and NFS
+- MD RAID, multipath, NVMe controllers/namespaces/health, iSCSI
+  sessions/targets/LUNs, and NFS
 - safe lifecycle operations such as grow, replace, rebalance, filesystem checks,
   property updates, and migration advice
 

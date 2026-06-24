@@ -2620,6 +2620,34 @@ fn usage_details(node: &Node) -> String {
             "sanitize-capabilities",
         ),
         ("nvme.id-ctrl.ana-capabilities", "ana-capabilities"),
+        ("nvme.smart.critical-warning", "critical-warning"),
+        ("nvme.smart.temperature-kelvin", "temperature-k"),
+        (
+            "nvme.smart.available-spare-percent",
+            "available-spare-percent",
+        ),
+        (
+            "nvme.smart.spare-threshold-percent",
+            "spare-threshold-percent",
+        ),
+        ("nvme.smart.percent-used", "percent-used"),
+        ("nvme.smart.data-units-read", "data-units-read"),
+        ("nvme.smart.data-units-written", "data-units-written"),
+        ("nvme.smart.host-read-commands", "host-read-commands"),
+        ("nvme.smart.host-write-commands", "host-write-commands"),
+        ("nvme.smart.controller-busy-time", "controller-busy-time"),
+        ("nvme.smart.power-cycles", "power-cycles"),
+        ("nvme.smart.power-on-hours", "power-on-hours"),
+        ("nvme.smart.unsafe-shutdowns", "unsafe-shutdowns"),
+        ("nvme.smart.media-errors", "media-errors"),
+        ("nvme.smart.error-log-entries", "error-log-entries"),
+        ("nvme.smart.warning-temperature-time", "warning-temp-time"),
+        (
+            "nvme.smart.critical-composite-temperature-time",
+            "critical-temp-time",
+        ),
+        ("nvme.smart.temperature-sensor-1-kelvin", "temp-sensor-1-k"),
+        ("nvme.smart.temperature-sensor-2-kelvin", "temp-sensor-2-k"),
         ("lsblk.type", "lsblk-type"),
         ("lsblk.logical-sector-size", "logical-sector"),
         ("lsblk.physical-sector-size", "physical-sector"),
@@ -6046,7 +6074,19 @@ mod tests {
                 .with_property("nvme.id-ctrl.oncs", "95")
                 .with_property("nvme.id-ctrl.volatile-write-cache", "1")
                 .with_property("nvme.id-ctrl.sanitize-capabilities", "7")
-                .with_property("nvme.id-ctrl.ana-capabilities", "3"),
+                .with_property("nvme.id-ctrl.ana-capabilities", "3")
+                .with_property("nvme.smart.critical-warning", "0")
+                .with_property("nvme.smart.temperature-kelvin", "301")
+                .with_property("nvme.smart.available-spare-percent", "100")
+                .with_property("nvme.smart.percent-used", "2")
+                .with_property("nvme.smart.data-units-read", "123456")
+                .with_property("nvme.smart.data-units-written", "654321")
+                .with_property("nvme.smart.power-on-hours", "1200")
+                .with_property("nvme.smart.unsafe-shutdowns", "3")
+                .with_property("nvme.smart.media-errors", "0")
+                .with_property("nvme.smart.error-log-entries", "4")
+                .with_property("nvme.smart.temperature-sensor-1-kelvin", "300")
+                .with_property("nvme.smart.temperature-sensor-2-kelvin", "302"),
         );
         graph.add_node(
             Node::new(
@@ -6118,6 +6158,13 @@ mod tests {
         );
         assert!(output.contains("namespace-count=16 oncs=95 volatile-write-cache=1"));
         assert!(output.contains("sanitize-capabilities=7 ana-capabilities=3"));
+        assert!(
+            output.contains("critical-warning=0 temperature-k=301 available-spare-percent=100")
+        );
+        assert!(output.contains("percent-used=2 data-units-read=123456"));
+        assert!(output.contains("data-units-written=654321"));
+        assert!(output.contains("power-on-hours=1200 unsafe-shutdowns=3 media-errors=0"));
+        assert!(output.contains("error-log-entries=4 temp-sensor-1-k=300 temp-sensor-2-k=302"));
         assert!(output.contains("/dev/nvme0n1"));
         assert!(output.contains("SERIAL123"));
         assert!(output.contains("nvme0"));

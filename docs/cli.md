@@ -47,8 +47,9 @@ Nodes are merged by id when multiple probe adapters report complementary
 information. NVMe probing keeps controller, subsystem, transport, namespace id,
 namespace UUID, NGUID, EUI-64, ANA state, LBA format, formatted LBA descriptor,
 namespace feature/capacity counters, controller capabilities/capacity, sector
-size, capacity, and usage metadata from `nvme list --output-format=json`,
-`nvme id-ns -o json`, and `nvme id-ctrl -o json` when available.
+size, capacity, usage, and SMART/health telemetry from
+`nvme list --output-format=json`, `nvme id-ns -o json`,
+`nvme id-ctrl -o json`, and `nvme smart-log -o json` when available.
 exFAT probing uses `tune.exfat` and `dump.exfat` when available to add label,
 GUID, serial, tool version, sector, cluster, size, used-cluster, and free-space
 metadata beyond generic `blkid` fields. NTFS probing uses `ntfsinfo -m` when
@@ -323,8 +324,10 @@ Use these commands for:
   controller id, transport, address, namespace capacity, LBA format, maximum
   LBA, sector size, formatted LBA descriptor, namespace feature/capacity
   counters, controller capabilities/capacity, physical size, used bytes, free
-  bytes, and utilization when `nvme list -o json`, `nvme id-ns -o json`, and
-  `nvme id-ctrl -o json` expose them
+  bytes, utilization, temperature, spare capacity, media errors, unsafe
+  shutdowns, error-log count, and power-on telemetry when `nvme list -o json`,
+  `nvme id-ns -o json`, `nvme id-ctrl -o json`, and
+  `nvme smart-log -o json` expose them
 - `raid`: MD RAID arrays and member devices, including array UUID, scan-level
   metadata version, array name, spare count, device hints, active detail
   metadata version, level, state, size, raid, total, array, active, working,

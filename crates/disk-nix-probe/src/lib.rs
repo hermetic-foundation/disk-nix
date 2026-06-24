@@ -1073,6 +1073,7 @@ fn collect_nvme(result: &mut ProbeResult) {
                 let namespace_paths: Vec<String> = graph
                     .nodes
                     .iter()
+                    .filter(|node| node.kind == disk_nix_model::NodeKind::NvmeNamespace)
                     .filter_map(|node| node.path.clone())
                     .collect();
                 let controllers: Vec<String> = graph
@@ -1094,7 +1095,8 @@ fn collect_nvme(result: &mut ProbeResult) {
                     )),
                 });
                 collect_nvme_namespace_details(result, namespace_paths);
-                collect_nvme_controller_details(result, controllers);
+                collect_nvme_controller_details(result, controllers.clone());
+                collect_nvme_smart_logs(result, controllers);
             }
             Err(error) => result.reports.push(ProbeReport {
                 adapter: "nvme".to_string(),
@@ -1111,6 +1113,59 @@ fn collect_nvme(result: &mut ProbeResult) {
             },
             message: Some(message),
         }),
+    }
+}
+
+fn collect_nvme_smart_logs(result: &mut ProbeResult, controllers: Vec<String>) {
+    let mut node_count = 0_usize;
+    let mut failures = Vec::new();
+    for controller in controllers {
+        let controller_path = if controller.starts_with("/dev/") {
+            controller.clone()
+        } else {
+            format!("/dev/{controller}")
+        };
+        match run_report(
+            "nvme",
+            &["smart-log", controller_path.as_str(), "-o", "json"],
+        ) {
+            Ok(output) => match nvme::normalize_nvme_smart_log_json(&controller_path, &output) {
+                Ok(graph) => {
+                    node_count += graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                }
+                Err(error) => failures.push(format!("{controller_path}: {error}")),
+            },
+            Err(message) => failures.push(format!("{controller_path}: {message}")),
+        }
+    }
+
+    if node_count > 0 {
+        result.reports.push(ProbeReport {
+            adapter: "nvme-smart-log".to_string(),
+            status: if failures.is_empty() {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(format!(
+                "normalized {node_count} graph nodes from NVMe SMART log JSON{}",
+                if failures.is_empty() {
+                    String::new()
+                } else {
+                    format!("; {} SMART probes failed", failures.len())
+                }
+            )),
+        });
+    } else if !failures.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "nvme-smart-log".to_string(),
+            status: ProbeStatus::Partial,
+            message: Some(format!(
+                "NVMe SMART log probes failed: {}",
+                failures.join("; ")
+            )),
+        });
     }
 }
 

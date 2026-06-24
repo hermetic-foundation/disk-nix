@@ -102,6 +102,10 @@ The current probe layer normalizes:
   subsystem NQN, controller id, capacity, namespace count, optional command
   support, volatile write cache, sanitize, ANA, thermal, and queue capability
   metadata when controllers are discovered by `nvme list`
+- `nvme smart-log -o json` for NVMe controller health, temperature, spare
+  capacity, lifetime usage, host I/O counters, power cycles, power-on hours,
+  unsafe shutdowns, media errors, error-log counts, warning/critical temperature
+  time, and temperature sensor readings
 - LUKS mapper status through `cryptsetup status` for active/in-use state,
   backing device, cipher, key size, key location, sector size/count, offset, and
   access mode; LUKS header metadata through `cryptsetup luksDump` for version,
@@ -186,7 +190,9 @@ The current probe layer normalizes:
   usage, LBA format, maximum LBA, and sector size; `nvme id-ns -o json` adds
   namespace feature/capacity counters and formatted LBA descriptor metadata,
   while `nvme id-ctrl -o json` adds controller capability, namespace count,
-  queue, cache, sanitize, ANA, thermal, and capacity metadata
+  queue, cache, sanitize, ANA, thermal, and capacity metadata, and
+  `nvme smart-log -o json` adds controller health, error, temperature, lifetime
+  usage, and power telemetry
 
 LVM probing may report `partial` when the process lacks permission to talk to
 device-mapper. That should not prevent the rest of discovery from succeeding.
