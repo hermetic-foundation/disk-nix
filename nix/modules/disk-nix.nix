@@ -35,6 +35,7 @@ let
     nvme-cli
     openiscsi
     parted
+    smartmontools
     util-linux
     vdo
     xfsprogs
@@ -1004,6 +1005,7 @@ in
           nvme-cli
           openiscsi
           parted
+          smartmontools
           util-linux
           vdo
           xfsprogs

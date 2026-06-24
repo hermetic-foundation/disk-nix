@@ -24,6 +24,7 @@ mod nfs;
 mod ntfs;
 mod nvme;
 mod parted;
+mod smartctl;
 mod swaps;
 mod udev;
 mod vdo;
@@ -94,6 +95,7 @@ impl ProbeAdapter for LinuxProbe {
         let mut result = ProbeResult::empty();
 
         collect_lsblk(&mut result);
+        collect_smartctl(&mut result);
         collect_blkid(&mut result);
         collect_parted(&mut result);
         collect_udev(&mut result);
@@ -124,6 +126,71 @@ impl ProbeAdapter for LinuxProbe {
         collect_nvme(&mut result);
 
         Ok(result)
+    }
+}
+
+fn collect_smartctl(result: &mut ProbeResult) {
+    let disk_paths: Vec<String> = result
+        .graph
+        .nodes
+        .iter()
+        .filter(|node| node.kind == disk_nix_model::NodeKind::PhysicalDisk)
+        .filter_map(|node| node.path.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    if disk_paths.is_empty() {
+        return;
+    }
+
+    let mut node_count = 0_usize;
+    let mut unavailable = false;
+    let mut failures = Vec::new();
+    for path in disk_paths {
+        match run_report("smartctl", &["-a", "-j", path.as_str()]) {
+            Ok(output) => match smartctl::normalize_smartctl_json(&path, &output) {
+                Ok(graph) => {
+                    node_count += graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                }
+                Err(error) => failures.push(format!("{path}: {error}")),
+            },
+            Err(message) => {
+                if message.contains("not found") || message.contains("No such file") {
+                    unavailable = true;
+                }
+                failures.push(format!("{path}: {message}"));
+            }
+        }
+    }
+
+    if node_count > 0 {
+        result.reports.push(ProbeReport {
+            adapter: "smartctl".to_string(),
+            status: if failures.is_empty() {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(format!(
+                "normalized {node_count} graph nodes from smartctl JSON{}",
+                if failures.is_empty() {
+                    String::new()
+                } else {
+                    format!("; {} smartctl probes failed", failures.len())
+                }
+            )),
+        });
+    } else if !failures.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "smartctl".to_string(),
+            status: if unavailable {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(format!("smartctl probes failed: {}", failures.join("; "))),
+        });
     }
 }
 

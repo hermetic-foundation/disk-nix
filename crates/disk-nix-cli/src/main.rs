@@ -2551,6 +2551,55 @@ fn usage_details(node: &Node) -> String {
         ("vendor", "vendor"),
         ("transport", "transport"),
         ("rotational", "rotational"),
+        ("smartctl.health.passed", "smart-health-passed"),
+        ("smartctl.device-type", "smart-device-type"),
+        ("smartctl.protocol", "smart-protocol"),
+        ("smartctl.model", "smart-model"),
+        ("smartctl.model-family", "smart-family"),
+        ("smartctl.vendor", "smart-vendor"),
+        ("smartctl.product", "smart-product"),
+        ("smartctl.firmware-version", "smart-firmware"),
+        ("smartctl.serial", "smart-serial"),
+        ("smartctl.wwn-naa", "smart-wwn-naa"),
+        ("smartctl.wwn-oui", "smart-wwn-oui"),
+        ("smartctl.wwn-id", "smart-wwn-id"),
+        ("smartctl.user-capacity-bytes", "smart-capacity"),
+        ("smartctl.logical-block-size", "smart-logical-block"),
+        ("smartctl.physical-block-size", "smart-physical-block"),
+        ("smartctl.rotation-rate-rpm", "smart-rpm"),
+        ("smartctl.form-factor", "smart-form-factor"),
+        ("smartctl.sata-version", "sata-version"),
+        (
+            "smartctl.interface-speed-current",
+            "interface-speed-current",
+        ),
+        ("smartctl.interface-speed-max", "interface-speed-max"),
+        ("smartctl.power-on-hours", "smart-power-on-hours"),
+        ("smartctl.power-cycle-count", "smart-power-cycles"),
+        (
+            "smartctl.temperature-current-celsius",
+            "smart-temperature-c",
+        ),
+        (
+            "smartctl.temperature-highest-celsius",
+            "smart-temperature-highest-c",
+        ),
+        (
+            "smartctl.temperature-lowest-celsius",
+            "smart-temperature-lowest-c",
+        ),
+        (
+            "smartctl.attribute.reallocated-sector-ct.raw",
+            "reallocated-sectors",
+        ),
+        (
+            "smartctl.attribute.current-pending-sector.raw",
+            "pending-sectors",
+        ),
+        (
+            "smartctl.attribute.offline-uncorrectable.raw",
+            "offline-uncorrectable",
+        ),
         ("nvme.generic-path", "generic"),
         ("nvme.model", "nvme-model"),
         ("nvme.product", "product"),
@@ -4070,6 +4119,19 @@ mod tests {
         graph.add_node(
             Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
                 .with_path("/dev/sdb")
+                .with_property("smartctl.health.passed", "true")
+                .with_property("smartctl.device-type", "sat")
+                .with_property("smartctl.protocol", "ATA")
+                .with_property("smartctl.model", "Example SSD")
+                .with_property("smartctl.serial", "SATA123")
+                .with_property("smartctl.user-capacity-bytes", "1000204886016")
+                .with_property("smartctl.logical-block-size", "512")
+                .with_property("smartctl.physical-block-size", "4096")
+                .with_property("smartctl.rotation-rate-rpm", "0")
+                .with_property("smartctl.power-on-hours", "4242")
+                .with_property("smartctl.power-cycle-count", "12")
+                .with_property("smartctl.temperature-current-celsius", "31")
+                .with_property("smartctl.attribute.reallocated-sector-ct.raw", "0")
                 .with_property("multipath.host-path", "2:0:0:1")
                 .with_property("major-minor", "8:16")
                 .with_property("multipath.path-flags", "ghost")
@@ -4135,6 +4197,18 @@ mod tests {
         assert!(output.contains("loop-backing=true"));
         assert!(output.contains("swap-active=true swap-type=partition swap-priority=100"));
         assert!(output.contains("member-state=active sync"));
+        assert!(output.contains(
+            "smart-health-passed=true smart-device-type=sat smart-protocol=ATA smart-model=Example SSD"
+        ));
+        assert!(
+            output.contains(
+                "smart-serial=SATA123 smart-capacity=1000204886016 smart-logical-block=512"
+            )
+        );
+        assert!(output.contains("smart-physical-block=4096 smart-rpm=0 smart-power-on-hours=4242"));
+        assert!(
+            output.contains("smart-power-cycles=12 smart-temperature-c=31 reallocated-sectors=0")
+        );
         assert!(output.contains(
             "host-path=2:0:0:1 major-minor=8:16 path-flags=ghost path-state=active ready running ghost"
         ));
