@@ -72,6 +72,11 @@ impl ProbeReport {
                 .unwrap_or(ProbeIssueCategory::InaccessibleData),
         }
     }
+
+    #[must_use]
+    pub fn remediation(&self) -> Vec<String> {
+        remediation_for_category(&self.adapter, self.category())
+    }
 }
 
 impl Serialize for ProbeReport {
@@ -79,10 +84,12 @@ impl Serialize for ProbeReport {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("ProbeReport", 4)?;
+        let remediation = self.remediation();
+        let mut state = serializer.serialize_struct("ProbeReport", 5)?;
         state.serialize_field("adapter", &self.adapter)?;
         state.serialize_field("status", &self.status)?;
         state.serialize_field("category", &self.category())?;
+        state.serialize_field("remediation", &remediation)?;
         state.serialize_field("message", &self.message)?;
         state.end()
     }
@@ -2139,8 +2146,13 @@ fn probe_category_for_message(message: &str) -> ProbeIssueCategory {
     if lower.contains("not found") || lower.contains("no such file") {
         ProbeIssueCategory::MissingTool
     } else if lower.contains("permission denied")
+        || lower.contains("access denied")
         || lower.contains("operation not permitted")
         || lower.contains("not permitted")
+        || lower.contains("must be root")
+        || lower.contains("requires root")
+        || lower.contains("insufficient privileges")
+        || lower.contains("insufficient privilege")
     {
         ProbeIssueCategory::PermissionDenied
     } else if lower.contains("inaccessible") || lower.contains("failed to access") {
@@ -2159,6 +2171,33 @@ fn probe_category_for_status(status: &ProbeStatus, message: &str) -> ProbeIssueC
         ProbeIssueCategory::ParseFailed
     } else {
         category
+    }
+}
+
+fn remediation_for_category(adapter: &str, category: ProbeIssueCategory) -> Vec<String> {
+    match category {
+        ProbeIssueCategory::None => Vec::new(),
+        ProbeIssueCategory::MissingTool => vec![
+            format!("install or expose the command-line tools required by the {adapter} adapter"),
+            "on NixOS, include the matching storage tool package in services.disk-nix.toolPackages"
+                .to_string(),
+        ],
+        ProbeIssueCategory::PermissionDenied => vec![
+            format!("rerun {adapter} probing with privileges that can read the relevant storage metadata"),
+            "check device node permissions, udev rules, container sandboxing, and LSM policy before treating the topology as complete".to_string(),
+        ],
+        ProbeIssueCategory::ParseFailed => vec![
+            format!("capture the raw {adapter} command output for fixture coverage"),
+            "check whether the installed tool version changed its output format".to_string(),
+        ],
+        ProbeIssueCategory::InaccessibleData => vec![
+            format!("verify the kernel surface, service, mountpoint, or device required by the {adapter} adapter is present"),
+            "load the relevant kernel module or start the relevant storage service before probing again".to_string(),
+        ],
+        ProbeIssueCategory::CommandFailed => vec![
+            format!("rerun the failing {adapter} command manually and inspect its exit status and stderr"),
+            "treat this storage domain as degraded until the command failure is understood".to_string(),
+        ],
     }
 }
 
@@ -2256,7 +2295,10 @@ mod tests {
             ProbeReport {
                 adapter: "lvm".to_string(),
                 status: ProbeStatus::Partial,
-                message: Some("permission denied while reading device mapper state".to_string()),
+                message: Some(
+                    "must be root or have sufficient privileges to read device mapper state"
+                        .to_string(),
+                ),
             },
             ProbeReport {
                 adapter: "lsblk".to_string(),
@@ -2280,6 +2322,31 @@ mod tests {
         assert_eq!(reports[2].category(), ProbeIssueCategory::ParseFailed);
         assert_eq!(reports[3].category(), ProbeIssueCategory::CommandFailed);
         assert_eq!(reports[4].category(), ProbeIssueCategory::None);
+        assert!(
+            reports[0]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("services.disk-nix.toolPackages") })
+        );
+        assert!(
+            reports[1]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("privileges") })
+        );
+        assert!(
+            reports[2]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("fixture coverage") })
+        );
+        assert!(
+            reports[3]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("exit status") })
+        );
+        assert!(reports[4].remediation().is_empty());
 
         let json = serde_json::to_string(&reports).expect("reports should serialize");
         assert!(json.contains(r#""category":"missing-tool""#));
@@ -2287,5 +2354,7 @@ mod tests {
         assert!(json.contains(r#""category":"parse-failed""#));
         assert!(json.contains(r#""category":"command-failed""#));
         assert!(json.contains(r#""category":"none""#));
+        assert!(json.contains(r#""remediation":["#));
+        assert!(json.contains("services.disk-nix.toolPackages"));
     }
 }

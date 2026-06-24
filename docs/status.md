@@ -35,6 +35,9 @@ behavior across real storage stacks.
   renderer tool requirement inventories with PATH availability and per-tool
   package remediation hints, optional current-topology probing, missing-tool
   refusal before execution, and sequential execution of ready commands.
+- Probe-status reports include structured issue categories and remediation
+  hints for missing tools, permission barriers, parse failures, inaccessible
+  kernel/service data, and generic command failures.
 - Current-topology reconciliation suppresses safe no-op grow, shrink, and
   property actions when the graph proves they are already satisfied and no
   warning diagnostics are present.
@@ -102,8 +105,8 @@ manual-review guidance, or non-ready command plans instead of guessing.
 - Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output
   formats. Probe reports now expose structured degradation categories, but
-  privilege diagnostics and distribution-specific tool output checks still need
-  expansion.
+  adapter-specific privilege checks and distribution-specific tool output
+  checks still need expansion.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
 - Implemented migration tooling and tests for future spec versions. The parser

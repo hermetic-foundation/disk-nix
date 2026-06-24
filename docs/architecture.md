@@ -73,8 +73,8 @@ Adapter status is visible in `disk-nix topology` and machine-readable through
 from one that is degraded by missing tools or insufficient privileges. Probe
 reports also include a structured category such as `missing-tool`,
 `permission-denied`, `command-failed`, `parse-failed`, or `inaccessible-data`
-so automation can choose a remediation path without scraping free-form
-messages.
+plus structured remediation hints, so automation can choose a remediation path
+without scraping free-form messages.
 
 ## Safety model
 

@@ -1575,6 +1575,9 @@ fn print_probe_reports(
                 report.adapter, status, category
             )?;
         }
+        for remediation in report.remediation() {
+            writeln!(output, "    remediation: {remediation}")?;
+        }
     }
 
     Ok(())
@@ -4496,6 +4499,7 @@ fn human_bytes(value: Option<u64>) -> String {
 #[cfg(test)]
 mod tests {
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
+    use disk_nix_probe::{ProbeReport, ProbeStatus};
 
     use super::{
         confirmation_file_accepts, consumer_count, is_backing_file_node, is_bcachefs_node,
@@ -4509,9 +4513,9 @@ mod tests {
         print_encryption, print_filesystems, print_filtered_json, print_inspect,
         print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm, print_mappings,
         print_mounts, print_multipath, print_network_storage, print_nfs, print_nvme,
-        print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
-        print_vdo, print_volumes, print_zfs, print_zram, snapshot_source, usage_details,
-        usage_percent, zfs_child_count,
+        print_partitions, print_pools, print_probe_reports, print_raid, print_snapshots,
+        print_swap, print_usage, print_vdo, print_volumes, print_zfs, print_zram, snapshot_source,
+        usage_details, usage_percent, zfs_child_count,
     };
 
     #[test]
@@ -4519,6 +4523,21 @@ mod tests {
         assert!(confirmation_file_accepts("disk-nix confirm\n"));
         assert!(confirmation_file_accepts("# reviewed\ndisk-nix confirm\n"));
         assert!(confirmation_file_accepts("  disk-nix confirm  \n"));
+    }
+
+    #[test]
+    fn probe_status_output_includes_remediation_hints() {
+        let reports = vec![ProbeReport {
+            adapter: "lvm".to_string(),
+            status: ProbeStatus::Partial,
+            message: Some("permission denied while reading device mapper state".to_string()),
+        }];
+        let mut output = Vec::new();
+        print_probe_reports(&mut output, &reports).expect("probe reports should render");
+        let output = String::from_utf8(output).expect("probe status output is utf8");
+        assert!(output.contains("permission-denied"));
+        assert!(output.contains("remediation:"));
+        assert!(output.contains("privileges"));
     }
 
     #[test]
