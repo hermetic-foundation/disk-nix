@@ -402,7 +402,8 @@ attachment, cache-mode property changes, read-only rescans, dirty-data checks,
 and replacement scaffolding that remains marked as needing domain
 implementation until the replacement cache device and new cache-set UUID are
 verified. bcache sysfs operations require a concrete `/dev/bcache*` target;
-logical cache declaration names stay non-ready.
+logical cache declaration names become ready when `target` or `device` declares
+the backing bcache device path.
 LVM cache command plans include read-only `lvs` status refresh for
 `lvmCaches.<origin>.operation = "rescan"` before any later mode, detach, or
 replacement work.

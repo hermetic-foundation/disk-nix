@@ -879,7 +879,7 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
     ActionContext {
         collection: Some(collection.to_string()),
         name: Some(name.to_string()),
-        target: string_field(object, &["target", "path", "mountpoint"]).or(Some(name.to_string())),
+        target: lifecycle_target(collection, name, object),
         device: string_field(object, &["device", "disk", "source"]),
         devices: string_array_field(object, &["devices", "addDevices"]),
         rename_to: string_field(object, &["renameTo", "renameTarget", "newName"]),
@@ -909,6 +909,20 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         property_assignments: property_assignments(object),
         ..ActionContext::default()
     }
+}
+
+fn lifecycle_target(collection: &str, name: &str, object: &Value) -> Option<String> {
+    if let Some(target) = string_field(object, &["target", "path", "mountpoint"]) {
+        return Some(target);
+    }
+    if collection == "caches" {
+        if let Some(device) = string_field(object, &["device", "disk", "source"])
+            .filter(|target| target.starts_with("/dev/bcache"))
+        {
+            return Some(device);
+        }
+    }
+    Some(name.to_string())
 }
 
 fn string_field(object: &Value, keys: &[&str]) -> Option<String> {

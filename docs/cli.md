@@ -553,7 +553,10 @@ checking dirty data, and staging replacement cache media without silently
 formatting unknown devices. bcache `operation = "rescan"` reads state,
 cache-mode, dirty-data, and modeled graph relationships without changing
 attachment. bcache sysfs operations require a concrete `/dev/bcache*` target;
-logical cache names remain marked `needs-domain-implementation`.
+logical cache names can declare `target = "/dev/bcacheN"` or
+`device = "/dev/bcacheN"` to make attach, detach, rescan, and property commands
+ready. Logical cache declarations without a concrete bcache device remain
+marked `needs-domain-implementation`.
 Btrfs filesystem device-removal plans use Btrfs allocation inspection and
 domain-specific `btrfs device remove` rendering, but the mutating command is
 blocked by default until `allowPotentialDataLoss=true` is set.

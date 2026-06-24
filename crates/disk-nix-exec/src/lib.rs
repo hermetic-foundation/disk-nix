@@ -543,6 +543,7 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         .or(action.context.name.as_deref())
         .or_else(|| parts.get(1).copied())
         .unwrap_or("<target>");
+    let cache_target = bcache_target_path(action).unwrap_or(target);
     let mountpoint = action.context.mountpoint.as_deref();
     let fs_type = action.context.fs_type.as_deref();
     let desired_size = action.context.desired_size.as_deref();
@@ -1768,13 +1769,17 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
             (
                 vec![
                     command(
-                        ["disk-nix", "inspect", target, "--json"],
+                        ["disk-nix", "inspect", cache_target, "--json"],
                         false,
                         "verify modeled cache layer relationships after cache update",
                     ),
-                    bcache_sysfs_read_command(target, "state", "verify bcache state after update"),
                     bcache_sysfs_read_command(
-                        target,
+                        cache_target,
+                        "state",
+                        "verify bcache state after update",
+                    ),
+                    bcache_sysfs_read_command(
+                        cache_target,
                         "dirty_data",
                         "verify dirty data after cache update",
                     ),
@@ -2778,6 +2783,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         .as_deref()
         .or(action.context.name.as_deref())
         .or_else(|| parts.get(1).copied());
+    let cache_target = bcache_target_path(action);
     match action.operation {
         Operation::Grow
             if collection == Some("filesystems") || action.id.starts_with("filesystem:") =>
@@ -4002,7 +4008,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::AddDevice => {
-            let target = target.unwrap_or("<target>");
+            let target = if collection == Some("caches") {
+                cache_target.unwrap_or("<cache-device>")
+            } else {
+                target.unwrap_or("<target>")
+            };
             let fs_type = action.context.fs_type.as_deref();
             let device = action
                 .context
@@ -4213,7 +4223,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::SetProperty => {
-            let target = target.unwrap_or("<target>");
+            let target = if collection == Some("caches") {
+                cache_target.unwrap_or("<cache-device>")
+            } else {
+                target.unwrap_or("<target>")
+            };
             let Some(property) = action.context.property.as_deref() else {
                 return (
                     vec![command(
@@ -6296,7 +6310,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             }
         }
         Operation::RemoveDevice if collection == Some("caches") => {
-            let target = target.unwrap_or("<cache-device>");
+            let target = cache_target.unwrap_or("<cache-device>");
             (
                 vec![
                     bcache_sysfs_read_command(
@@ -6316,7 +6330,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Rescan if collection == Some("caches") => {
-            let target = target.unwrap_or("<cache-device>");
+            let target = cache_target.unwrap_or("<cache-device>");
             (
                 vec![
                     command(
@@ -8596,6 +8610,17 @@ fn normalize_boolish_btrfs_property_value(value: &str) -> String {
 
 fn is_bcache_target(target: &str) -> bool {
     target.starts_with("/dev/bcache")
+}
+
+fn bcache_target_path(action: &PlannedAction) -> Option<&str> {
+    [
+        action.context.target.as_deref(),
+        action.context.device.as_deref(),
+        action.context.name.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .find(|target| is_bcache_target(target))
 }
 
 fn lvm_cache_attach_command(target: Option<&str>, cache_pool: Option<&str>) -> ExecutionCommand {
@@ -18664,6 +18689,108 @@ mod tests {
                             "/dev/bcache0",
                             "dirty_data",
                         ]
+                })
+        }));
+    }
+
+    #[test]
+    fn cache_lifecycle_uses_declared_bcache_target_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "caches": {
+                  "cache0": {
+                    "device": "/dev/bcache0",
+                    "operation": "rescan",
+                    "addDevices": ["cache-set-uuid"],
+                    "removeDevices": ["cache-set-uuid"],
+                    "properties": {
+                      "bcache.cache-mode": "writethrough"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowDeviceReplacement": true,
+                "allowOffline": true,
+                "allowPropertyChanges": true,
+                "allowPotentialDataLoss": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:cache0:add-device:cache-set-uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/attach\"",
+                            "disk-nix-bcache-attach",
+                            "/dev/bcache0",
+                            "cache-set-uuid",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:cache0:set-property:bcache.cache-mode"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"",
+                            "disk-nix-bcache-property",
+                            "/dev/bcache0",
+                            "writethrough",
+                            "cache_mode",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:cache0:remove-device:cache-set-uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "printf '1\\n' > \"/sys/block/${1#/dev/}/bcache/detach\"",
+                            "disk-nix-bcache-detach",
+                            "/dev/bcache0",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:cache0:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "/dev/bcache0"])
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "cat \"/sys/block/${1#/dev/}/bcache/$2\"",
+                            "disk-nix-bcache-read",
+                            "/dev/bcache0",
+                            "dirty_data",
+                        ]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "caches:cache0:add-device:cache-set-uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/bcache0", "--json"]
                 })
         }));
     }

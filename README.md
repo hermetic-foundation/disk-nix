@@ -225,8 +225,8 @@ Cache apply plans include bcache-aware attach, detach, rescan, cache-mode,
 dirty-data, and replacement review steps instead of a generic cache
 placeholder. bcache rescan reads state, cache mode, dirty-data, and graph
 inventory without changing attachment. bcache sysfs commands require a concrete
-`/dev/bcache*` target; logical cache names remain non-ready until the backing
-bcache device path is declared.
+`/dev/bcache*` target; logical cache names become ready when `target` or
+`device` declares the backing bcache device path.
 LVM cache apply plans use separate `lvmCaches` declarations and render
 `lvconvert --type cache`, `lvconvert --uncache`, and `lvchange --cachemode` or
 `--cachepolicy` commands when an origin `vg/lv` and cache-pool LV are declared.
