@@ -238,6 +238,8 @@ pub enum TopologyDiagnosticKind {
     SizeAlreadySatisfied,
     SizeConflict,
     FilesystemTypeConflict,
+    IscsiLoginAlreadySatisfied,
+    IscsiLoginRequired,
     MountAlreadySatisfied,
     MountSourceConflict,
     PropertyAlreadySatisfied,
@@ -722,6 +724,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                 matches!(
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::PropertyAlreadySatisfied
                 )
@@ -1278,7 +1281,11 @@ fn already_satisfied_action_ids(
     for action in actions {
         if !matches!(
             action.operation,
-            Operation::Grow | Operation::Shrink | Operation::Mount | Operation::SetProperty
+            Operation::Grow
+                | Operation::Shrink
+                | Operation::Login
+                | Operation::Mount
+                | Operation::SetProperty
         ) {
             continue;
         }
@@ -1291,6 +1298,7 @@ fn already_satisfied_action_ids(
             already_satisfied |= matches!(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
+                    | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::PropertyAlreadySatisfied
             );
@@ -1335,6 +1343,7 @@ fn topology_diagnostics_for_action(
 
     diagnostics.extend(size_diagnostic(action, node, &query));
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
+    diagnostics.extend(iscsi_login_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics
@@ -1488,6 +1497,56 @@ fn mount_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn iscsi_login_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Login
+        || action.context.collection.as_deref() != Some("iscsiSessions")
+    {
+        return None;
+    }
+
+    let logged_in = property_value_from_node(node, "iscsi.connection-state")
+        .or_else(|| property_value_from_node(node, "iscsi.session-state"))
+        .is_some_and(is_logged_in_iscsi_state);
+    let (level, kind, message) = if logged_in {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::IscsiLoginAlreadySatisfied,
+            format!("iSCSI target {query} already has a logged-in session"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::IscsiLoginRequired,
+            format!("iSCSI target {query} is known but no logged-in session was matched"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn is_logged_in_iscsi_state(value: &str) -> bool {
+    let normalized = value
+        .trim()
+        .chars()
+        .filter(|character| {
+            !character.is_ascii_whitespace() && *character != '-' && *character != '_'
+        })
+        .collect::<String>()
+        .to_ascii_lowercase();
+    normalized == "loggedin"
 }
 
 fn property_value_from_node<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
@@ -12190,6 +12249,86 @@ mod tests {
             diagnostic.action_id == "filesystems:backup:mount"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::MountSourceConflict
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_logged_in_iscsi_session() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "operation": "login",
+                  "portal": "192.0.2.10:3260"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "iscsi-session:12",
+                NodeKind::IscsiSession,
+                "iscsi-session:12",
+            )
+            .with_property("iscsi.target", "iqn.2026-06.example:storage.root")
+            .with_property("iscsi.session-state", "LOGGED_IN"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.root:login"
+                && diagnostic.kind == TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_iscsi_login_when_target_is_not_logged_in() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "operation": "login",
+                  "portal": "192.0.2.10:3260"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "iscsi-target:iqn.2026-06.example:storage.root",
+                NodeKind::IscsiTarget,
+                "iqn.2026-06.example:storage.root",
+            )
+            .with_property("iscsi.node-configured", "true"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.root:login"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::IscsiLoginRequired
         }));
     }
 
