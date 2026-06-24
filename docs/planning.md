@@ -460,10 +460,10 @@ Volume group `operation = "rescan"` refreshes LVM metadata with
 the VG.
 LVM physical volume command plans use `pvcreate`, `pvresize`,
 `pvscan --cache`, and `pvremove` for `physicalVolumes` lifecycle declarations.
-Create, grow, and remove plans require a concrete path-shaped target or
-`device`; rescan can refresh all visible PV metadata when no path-shaped target
-is declared. PV removal advice recommends `pvmove` plus `vgreduce` before
-`pvremove`.
+Create, grow, and remove plans require a concrete path-shaped declaration key,
+`target`, `path`, or `device`; rescan can refresh all visible PV metadata when
+no path-shaped target is declared. PV removal advice recommends `pvmove` plus
+`vgreduce` before `pvremove`.
 LUKS keyslot and token command plans use explicit `add-key`, `remove-key`,
 `import-token`, and `remove-token` lifecycle declarations for
 `cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and

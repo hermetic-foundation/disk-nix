@@ -1697,7 +1697,7 @@ in
     physicalVolumes = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed LVM physical-volume lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a concrete block device path.";
+      description = "Typed LVM physical-volume lifecycle declarations emitted into the disk-nix planner spec. Executable create, grow, and remove plans require a concrete block device path through the declaration key, target, path, or device.";
     };
 
     luksKeyslots = lib.mkOption {

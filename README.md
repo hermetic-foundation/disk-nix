@@ -407,6 +407,10 @@ LVM logical volume apply plans render reviewed `lvcreate` and gated
 missing `vg/lv` targets or sizes. Grow and remove commands also require that
 canonical `vg/lv` target form before they are executable. `operation = "rescan"`
 renders read-only `lvs` and graph inspection for LV status refresh.
+LVM physical volume apply plans render reviewed `pvcreate`, `pvresize`,
+`pvscan --cache`, and gated `pvremove` steps. Create, grow, and remove plans
+require a concrete block path from the declaration key, `target`, `path`, or
+`device`; rescan can refresh all PVs when no path is declared.
 LVM thin-pool apply plans render reviewed `lvcreate --type thin-pool`,
 `lvextend`, and gated `lvremove` steps, with unresolved markers for missing
 `vg/pool` targets or sizes. Thin-pool grow and remove commands likewise

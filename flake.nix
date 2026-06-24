@@ -451,8 +451,9 @@
               vdoVolumes.warmArchive.operation = "start";
               vdoVolumes.coldArchive.operation = "stop";
               vdoVolumes.refreshArchive.operation = "rescan";
-              physicalVolumes."/dev/disk/by-id/nvme-pv-grow" = {
+              physicalVolumes.nvmePvGrow = {
                 operation = "grow";
+                path = "/dev/disk/by-id/nvme-pv-grow";
               };
               physicalVolumes."/dev/disk/by-id/nvme-pv-refresh" = {
                 operation = "rescan";
@@ -1374,7 +1375,8 @@
                     and .spec.vdoVolumes.warmArchive.operation == "start"
                     and .spec.vdoVolumes.coldArchive.operation == "stop"
                     and .spec.vdoVolumes.refreshArchive.operation == "rescan"
-                    and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
+                    and .spec.physicalVolumes.nvmePvGrow.operation == "grow"
+                    and .spec.physicalVolumes.nvmePvGrow.path == "/dev/disk/by-id/nvme-pv-grow"
                     and .spec.physicalVolumes."/dev/disk/by-id/nvme-pv-refresh".operation == "rescan"
                     and .spec.luksKeyslots."cryptroot:1".operation == "add-key"
                     and .spec.luksKeyslots."cryptroot:1".device == "/dev/disk/by-id/root-luks"

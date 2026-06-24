@@ -723,9 +723,9 @@ for LV size, attributes, and dependent mappings.
 LVM physical volume command plans render `pvcreate`, `pvresize`, explicit
 `operation = "rescan"` plans through `pvscan --cache`, and policy-gated
 `pvremove` for `physicalVolumes` lifecycle declarations. Create, grow, and
-remove plans require a concrete block-device path such as `/dev/disk/by-id/*`;
-rescan can refresh all visible PV metadata when no path-shaped target is
-declared.
+remove plans require a concrete block-device path such as `/dev/disk/by-id/*`
+from the declaration key, `target`, `path`, or `device`; rescan can refresh all
+visible PV metadata when no path-shaped target is declared.
 LUKS keyslot and token command plans render explicit `operation = "add-key"`,
 `operation = "remove-key"`, `operation = "import-token"`, and
 `operation = "remove-token"` declarations as `cryptsetup luksAddKey`,

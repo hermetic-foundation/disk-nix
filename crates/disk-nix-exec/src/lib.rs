@@ -17603,6 +17603,61 @@ mod tests {
     }
 
     #[test]
+    fn lvm_physical_volume_lifecycle_accepts_path_aliases_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "physicalVolumes": {
+                  "new-pv": {
+                    "operation": "create",
+                    "path": "/dev/disk/by-id/nvme-pv-new"
+                  },
+                  "grow-pv": {
+                    "operation": "grow",
+                    "target": "/dev/disk/by-id/nvme-pv-grow"
+                  },
+                  "old-pv": {
+                    "destroy": true,
+                    "device": "/dev/disk/by-id/nvme-pv-old"
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:new-pv:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["pvcreate", "/dev/disk/by-id/nvme-pv-new"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:grow-pv:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["pvresize", "/dev/disk/by-id/nvme-pv-grow"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "physicalvolumes:old-pv:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["pvremove", "--yes", "/dev/disk/by-id/nvme-pv-old"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
     fn lvm_snapshot_lifecycle_reports_lvm_commands() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
