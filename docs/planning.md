@@ -163,9 +163,10 @@ Examples:
   preferred over `vgcreate`/`vgremove` when moving existing disks between hosts.
 - ZFS pool creation and destruction are destructive because they write labels
   to vdev devices or remove all contained datasets and zvols; create command
-  plans accept either a single `device` or an explicit `devices` vdev list.
-  Preflight inspection targets path-like vdev entries, while topology keywords
-  such as `mirror` stay in the rendered `zpool create` command. Import/export
+  plans accept either a single `device` or an explicit `devices` vdev list, and
+  declared pool `properties` render as create-time `zpool create -o key=value`
+  options. Preflight inspection targets path-like vdev entries, while topology
+  keywords such as `mirror` stay in the rendered `zpool create` command. Import/export
   is preferred when moving an existing pool. `operation = "import"` and
   `operation = "export"` are offline-required, non-destructive pool lifecycle
   operations; `readOnly = true` renders a reviewed read-only import. Pool device replacement is

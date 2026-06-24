@@ -465,10 +465,11 @@ controller path such as `/dev/nvme0`; logical namespace names can declare it
 through `target`, `path`, or `device`. Delete plans detach the namespace first
 when controller metadata is present.
 ZFS pool apply plans render gated `zpool create` commands from a single
-`device` or an explicit `devices` vdev list, gated `zpool destroy` commands,
-and reviewed topology updates such as `zpool add`, `zpool replace`, and
-`zpool remove`. Pool create preflight inspects path-like vdev entries before
-rendering the mutating command.
+`device` or an explicit `devices` vdev list, with declared pool `properties`
+rendered as create-time `-o key=value` options. They also render gated
+`zpool destroy` commands and reviewed topology updates such as `zpool add`,
+`zpool replace`, and `zpool remove`. Pool create preflight inspects path-like
+vdev entries before rendering the mutating command.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
 Use `--report-out` with either command to persist the JSON report for review

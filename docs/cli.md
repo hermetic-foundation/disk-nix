@@ -802,10 +802,12 @@ grow uses `losetup -c` after backing size changes. Multipath map growth
 requires a concrete map target such as `mpatha` or `/dev/mapper/mpatha`;
 logical map names can declare that target through `target` or `device`.
 ZFS pool command plans render policy-gated `zpool create` from a single
-`device` or explicit `devices` vdev list, policy-gated `zpool destroy`, plus
-online topology commands such as `zpool add`, `zpool replace`, `zpool remove`,
-and scrub. Pool create preflight inspects declared path-like vdev entries
-instead of topology keywords such as `mirror`. Pool import/export lifecycle
+`device` or explicit `devices` vdev list, including declared pool `properties`
+as create-time `-o key=value` options. They also render policy-gated
+`zpool destroy`, plus online topology commands such as `zpool add`,
+`zpool replace`, `zpool remove`, and scrub. Pool create preflight inspects
+declared path-like vdev entries instead of topology keywords such as `mirror`.
+Pool import/export lifecycle
 declarations render `zpool import`, optional
 `zpool import -o readonly=on <pool>` for `readOnly = true`, and
 `zpool export <pool>` command plans.

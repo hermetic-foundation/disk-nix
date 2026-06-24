@@ -4685,7 +4685,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             let device = action.context.device.as_deref();
             let devices = pool_create_devices(device, &action.context.devices);
             let mut commands = zfs_pool_preflight_commands(&devices);
-            commands.push(zfs_pool_create_command(target, &devices));
+            commands.push(zfs_pool_create_command(
+                target,
+                &devices,
+                &action.context.property_assignments,
+            ));
             (
                 commands,
                 vec![
@@ -9920,26 +9924,41 @@ fn pool_create_devices(device: Option<&str>, devices: &[String]) -> Vec<String> 
     }
 }
 
-fn zfs_pool_create_command(target: &str, devices: &[String]) -> ExecutionCommand {
+fn zfs_pool_create_argv(
+    target: &str,
+    devices: &[String],
+    property_assignments: &[String],
+) -> Vec<String> {
+    let mut argv = vec!["zpool".to_string(), "create".to_string()];
+    for assignment in property_assignments {
+        argv.extend(["-o".to_string(), assignment.clone()]);
+    }
+    argv.push(target.to_string());
+    argv.extend(devices.iter().cloned());
+    argv
+}
+
+fn zfs_pool_create_command(
+    target: &str,
+    devices: &[String],
+    property_assignments: &[String],
+) -> ExecutionCommand {
     if devices.is_empty() {
-        command_with_readiness(
-            ["zpool", "create", target, "<vdev-device>"],
+        let mut argv = zfs_pool_create_argv(target, devices, property_assignments);
+        argv.push("<vdev-device>".to_string());
+        command_vec_with_readiness(
+            argv,
             true,
             CommandReadiness::NeedsDomainImplementation,
             ["vdev device or topology"],
             "create a ZFS pool after selecting the vdev topology",
         )
     } else {
-        let mut argv = vec![
-            "zpool".to_string(),
-            "create".to_string(),
-            target.to_string(),
-        ];
-        argv.extend(devices.iter().cloned());
+        let argv = zfs_pool_create_argv(target, devices, property_assignments);
         command_vec(
             argv,
             true,
-            "create a ZFS pool on the reviewed vdev device set",
+            "create a ZFS pool on the reviewed vdev device set with declared pool properties",
         )
     }
 }
@@ -20168,7 +20187,11 @@ mod tests {
                     "mirror",
                     "/dev/disk/by-id/mirror-a",
                     "/dev/disk/by-id/mirror-b"
-                  ]
+                  ],
+                  "properties": {
+                    "ashift": "12",
+                    "autotrim": "on"
+                  }
                 },
                 "tank": {
                   "operation": "rebalance",
@@ -20228,6 +20251,10 @@ mod tests {
                     == [
                         "zpool",
                         "create",
+                        "-o",
+                        "ashift=12",
+                        "-o",
+                        "autotrim=on",
                         "mirrorpool",
                         "mirror",
                         "/dev/disk/by-id/mirror-a",
