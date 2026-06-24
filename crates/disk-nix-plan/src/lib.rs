@@ -342,6 +342,7 @@ pub enum TopologyDiagnosticKind {
     SnapshotRenameSourceMissing,
     SnapshotRollbackPointAvailable,
     SnapshotRollbackPointMissing,
+    VdoCreateTargetPresent,
     VdoDestroyAlreadySatisfied,
     VdoDestroyRequired,
     VdoGrowRequired,
@@ -1698,6 +1699,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(swap_format_present_diagnostic(action, node, &query));
     diagnostics.extend(luks_format_present_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
+    diagnostics.extend(vdo_create_present_diagnostic(action, node, &query));
     diagnostics.extend(vdo_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(vdo_grow_diagnostic(action, node, &query));
     diagnostics.extend(vdo_start_diagnostic(action, node, &query));
@@ -4501,6 +4503,46 @@ fn vdo_destroy_present_diagnostic(
         action_id: action.id.clone(),
         level: TopologyDiagnosticLevel::Warning,
         kind: TopologyDiagnosticKind::VdoDestroyRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn vdo_create_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Create
+        || action.context.collection.as_deref() != Some("vdoVolumes")
+    {
+        return None;
+    }
+
+    let message = if node.kind == NodeKind::VdoVolume {
+        let details = vdo_destroy_details(node);
+        if details.is_empty() {
+            format!(
+                "VDO create target {query} already has VDO metadata; create remains destructive and requires review"
+            )
+        } else {
+            format!(
+                "VDO create target {query} already has VDO metadata with {}; create remains destructive and requires review",
+                details.join(", ")
+            )
+        }
+    } else {
+        format!(
+            "VDO create target {query} matched current {} node {}; create remains destructive and requires review",
+            node.kind, node.name
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::VdoCreateTargetPresent,
         query: query.to_string(),
         message,
         current: Some(current_node_summary(node)),
@@ -18675,6 +18717,75 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "vdovolumes:vg0/archive:stop"
                 && diagnostic.kind == TopologyDiagnosticKind::VdoStopAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reports_vdo_create_target_metadata() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/vdo-backing",
+                  "desiredSize": "2TiB"
+                },
+                "data": {
+                  "operation": "create",
+                  "target": "/dev/disk/by-label/data"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_path("/dev/mapper/archive")
+                .with_property("vdo.operating-mode", "normal")
+                .with_property("vdo.storage-device", "/dev/disk/by-id/vdo-backing")
+                .with_property("vdo.logical-size", "2TiB")
+                .with_property("vdo.write-policy", "sync"),
+        );
+        graph.add_node(
+            Node::new(
+                "filesystem:/dev/disk/by-label/data",
+                NodeKind::Filesystem,
+                "/dev/disk/by-label/data",
+            )
+            .with_path("/dev/disk/by-label/data")
+            .with_property("filesystem.type", "xfs"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.matched_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 2);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:archive:create"
+                && diagnostic.query == "archive"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::VdoCreateTargetPresent
+                && diagnostic.message.contains("operating mode normal")
+                && diagnostic
+                    .message
+                    .contains("backing device /dev/disk/by-id/vdo-backing")
+                && diagnostic.message.contains("logical size 2TiB")
+                && diagnostic.message.contains("write policy sync")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:data:create"
+                && diagnostic.query == "/dev/disk/by-label/data"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::VdoCreateTargetPresent
+                && diagnostic.message.contains("filesystem")
         }));
     }
 
