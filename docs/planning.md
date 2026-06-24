@@ -228,12 +228,14 @@ Examples:
   plans accept either a single `device` or an explicit `devices` vdev list, and
   declared pool `properties` render as create-time `zpool create -o key=value`
   options. Preflight inspection targets path-like vdev entries, while topology
-  keywords such as `mirror` stay in the rendered `zpool create` command. Import/export
-  is preferred when moving an existing pool. `operation = "import"` and
-  `operation = "export"` are offline-required, non-destructive pool lifecycle
-  operations; `readOnly = true` renders a reviewed read-only import.
-  Current-topology comparison suppresses import actions only when `zfs.state`
-  and `zfs.health` are both `ONLINE`; visible degraded or faulted pools stay
+  keywords such as `mirror` stay in the rendered `zpool create` command.
+  Current-topology comparison suppresses pool create only when the matched pool
+  is already visible with `zfs.state` and `zfs.health` both `ONLINE`; visible
+  degraded, faulted, or wrong-kind matches stay actionable with warnings.
+  Import/export is preferred when moving an existing pool. `operation = "import"` and `operation = "export"` are offline-required, non-destructive
+  pool lifecycle operations; `readOnly = true` renders a reviewed read-only
+  import. Current-topology comparison suppresses import actions only when
+  `zfs.state` and `zfs.health` are both `ONLINE`; visible degraded or faulted pools stay
   planned with a warning. Pool device replacement is
   offline-required, and device removal remains potential-data-loss unless pool
   topology, free space, and evacuation support have been verified.

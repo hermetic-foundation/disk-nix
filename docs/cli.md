@@ -1049,8 +1049,10 @@ as create-time `-o key=value` options. They also render policy-gated
 `zpool destroy`, plus online topology commands such as `zpool add`,
 `zpool replace`, `zpool remove`, and scrub. Pool create preflight inspects
 declared path-like vdev entries instead of topology keywords such as `mirror`.
-Pool import/export lifecycle
-declarations render `zpool import`, optional
+Current-topology probing suppresses pool create only when the matched pool is
+already visible with `zfs.state = ONLINE` and `zfs.health = ONLINE`; degraded,
+faulted, or wrong-kind matches stay actionable with warnings. Pool
+import/export lifecycle declarations render `zpool import`, optional
 `zpool import -o readonly=on <pool>` for `readOnly = true`, and
 `zpool export <pool>` command plans. Current-topology probing suppresses a pool
 import only when the current pool is visible with `zfs.state = ONLINE` and

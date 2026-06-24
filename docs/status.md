@@ -43,16 +43,17 @@ behavior across real storage stacks.
   close, loop create/destroy, LUN attach/detach, NVMe namespace attach/detach,
   backing-file create/grow, LVM physical-volume create, swap
   deactivate/destroy, mount, unmount, remount, NFS export/unexport, VDO start,
-  VDO stop, MD assemble, ZFS pool import, ZFS dataset/zvol create, Btrfs
-  subvolume create, Btrfs qgroup create, LVM volume/thin-pool create, LVM
-  volume-group create/import/export, and property actions when the graph proves
-  they are already satisfied and no warning diagnostics are present;
+  VDO stop, MD assemble, ZFS pool create/import, ZFS dataset/zvol create,
+  Btrfs subvolume create, Btrfs qgroup create, LVM volume/thin-pool create,
+  LVM volume-group create/import/export, and property actions when the graph
+  proves they are already satisfied and no warning diagnostics are present;
   inactive LVM activation targets, still-active LVM deactivation targets,
   physical-volume create targets without matching PV metadata or with duplicate
   or missing PV metadata, existing exported, partial, or missing-PV
   volume-group create targets, existing LVM volume, thin-pool, or ZFS zvol
-  create targets with different or unknown current size, ZFS dataset/zvol or
-  Btrfs subvolume/qgroup create targets that match a different node kind,
+  create targets with different or unknown current size, ZFS pool create targets
+  that are not online and healthy, ZFS pool/dataset/zvol or Btrfs
+  subvolume/qgroup create targets that match a different node kind,
   still-exported LVM volume-group imports, still-imported LVM volume-group
   exports, inactive LUKS open targets, active LUKS close targets, loop devices
   mapped to different backing files, backing-file create targets with different

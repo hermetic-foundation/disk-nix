@@ -331,6 +331,8 @@ pub enum TopologyDiagnosticKind {
     ZfsObjectCreateRequired,
     ZfsObjectDestroyAlreadySatisfied,
     ZfsObjectDestroyRequired,
+    ZfsPoolCreateAlreadySatisfied,
+    ZfsPoolCreateRequired,
     ZfsPoolImportAlreadySatisfied,
     ZfsPoolImportRequired,
 }
@@ -856,6 +858,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::VdoStopAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
+                        | TopologyDiagnosticKind::ZfsPoolCreateAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
                 )
             })
@@ -1491,6 +1494,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::VdoStopAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
+                    | TopologyDiagnosticKind::ZfsPoolCreateAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
             );
             has_warning |= diagnostic.level == TopologyDiagnosticLevel::Warning;
@@ -1633,6 +1637,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(vdo_stop_diagnostic(action, node, &query));
     diagnostics.extend(zfs_object_create_present_diagnostic(action, node, &query));
     diagnostics.extend(zfs_object_destroy_present_diagnostic(action, node, &query));
+    diagnostics.extend(zfs_pool_create_diagnostic(action, node, &query));
     diagnostics.extend(zfs_pool_import_diagnostic(action, node, &query));
     diagnostics
 }
@@ -3941,6 +3946,86 @@ fn zfs_snapshot_destroy_details(node: &Node) -> Vec<String> {
         details.push(format!("user references {userrefs}"));
     }
     details
+}
+
+fn zfs_pool_create_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Create
+        || action.context.collection.as_deref() != Some("pools")
+    {
+        return None;
+    }
+
+    if node.kind != NodeKind::ZfsPool {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::ZfsPoolCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a ZFS pool; zpool create remains actionable",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let state = property_value_from_node(node, "zfs.state");
+    let health = property_value_from_node(node, "zfs.health");
+    let online =
+        state.is_some_and(zfs_status_is_online) && health.is_some_and(zfs_status_is_online);
+    if !online {
+        let state = state.unwrap_or("unknown");
+        let health = health.unwrap_or("unknown");
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::ZfsPoolCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "ZFS pool {query} already exists, but pool state needs review before treating create as satisfied: state={state}, health={health}"
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let details = zfs_pool_details(node);
+    let message = if details.is_empty() {
+        format!("ZFS pool {query} already exists and is online")
+    } else {
+        format!(
+            "ZFS pool {query} already exists and is online with {}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::ZfsPoolCreateAlreadySatisfied,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn zfs_pool_details(node: &Node) -> Vec<String> {
+    [
+        ("zfs.state", "state"),
+        ("zfs.health", "health"),
+        ("zfs.pool-capacity", "capacity"),
+        ("zfs.pool-dedupratio", "dedup ratio"),
+        ("zfs.pool-fragmentation", "fragmentation"),
+        ("zfs.pool-altroot", "altroot"),
+    ]
+    .into_iter()
+    .filter_map(|(property, label)| {
+        property_value_from_node(node, property).map(|value| format!("{label} {value}"))
+    })
+    .collect()
 }
 
 fn zfs_pool_import_diagnostic(
@@ -17265,6 +17350,82 @@ mod tests {
             diagnostic.action_id == "mdraids:existing:assemble"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::MdAssembleRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_zfs_pool_create() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "pools": {
+                "tank": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/pool-vdev0"
+                },
+                "vault": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/pool-vdev1"
+                },
+                "archive": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/pool-vdev2"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zfs-pool:tank", NodeKind::ZfsPool, "tank")
+                .with_property("zfs.state", "ONLINE")
+                .with_property("zfs.health", "ONLINE")
+                .with_property("zfs.pool-capacity", "40%")
+                .with_property("zfs.pool-fragmentation", "12%"),
+        );
+        graph.add_node(
+            Node::new("zfs-pool:vault", NodeKind::ZfsPool, "vault")
+                .with_property("zfs.state", "ONLINE")
+                .with_property("zfs.health", "DEGRADED"),
+        );
+        graph.add_node(Node::new(
+            "zfs-dataset:archive",
+            NodeKind::ZfsDataset,
+            "archive",
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.summary.action_count, 2);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "pools:tank:create")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "pools:tank:create"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsPoolCreateAlreadySatisfied
+                && diagnostic.message.contains("capacity 40%")
+                && diagnostic.message.contains("fragmentation 12%")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "pools:vault:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsPoolCreateRequired
+                && diagnostic.message.contains("state=ONLINE")
+                && diagnostic.message.contains("health=DEGRADED")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "pools:archive:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsPoolCreateRequired
+                && diagnostic.message.contains("not a ZFS pool")
         }));
     }
 
