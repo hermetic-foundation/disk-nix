@@ -1443,8 +1443,11 @@ fn collect_btrfs(result: &mut ProbeResult) {
             "btrfs",
             &["subvolume", "list", "-p", "-u", "-q", "-R", "-c", &target],
         );
-        let qgroups =
-            run_report("btrfs", &["qgroup", "show", "--raw", "-reF", &target]).unwrap_or_default();
+        let qgroups = run_report(
+            "btrfs",
+            &["qgroup", "show", "--raw", "-reF", "-p", "-c", &target],
+        )
+        .unwrap_or_default();
 
         match (show, usage, subvolumes) {
             (Ok(show), Ok(usage), Ok(subvolumes)) => reports.push(btrfs::BtrfsReport {
