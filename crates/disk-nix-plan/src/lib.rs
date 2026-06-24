@@ -2092,6 +2092,25 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
             }
             _ => &[property],
         }),
+        Some("pools") => Some(match normalized.as_str() {
+            "altroot" => &["zfs.pool-altroot", "zfs.altroot", property],
+            "ashift" => &["zfs.pool-ashift", "zfs.ashift", property],
+            "autotrim" | "auto-trim" => &["zfs.pool-autotrim", "zfs.autotrim", property],
+            "autoexpand" | "auto-expand" => &["zfs.pool-autoexpand", "zfs.autoexpand", property],
+            "autoreplace" | "auto-replace" => {
+                &["zfs.pool-autoreplace", "zfs.autoreplace", property]
+            }
+            "bootfs" | "boot-fs" => &["zfs.pool-bootfs", "zfs.bootfs", property],
+            "cachefile" | "cache-file" => &["zfs.pool-cachefile", "zfs.cachefile", property],
+            "comment" => &["zfs.pool-comment", "zfs.comment", property],
+            "delegation" => &["zfs.pool-delegation", "zfs.delegation", property],
+            "failmode" | "fail-mode" => &["zfs.pool-failmode", "zfs.failmode", property],
+            "listsnapshots" | "list-snapshots" => {
+                &["zfs.pool-listsnapshots", "zfs.listsnapshots", property]
+            }
+            "multihost" | "multi-host" => &["zfs.pool-multihost", "zfs.multihost", property],
+            _ => &[property],
+        }),
         Some("datasets" | "zvols") => Some(match normalized.as_str() {
             "mountpoint" => &["zfs.mountpoint", property],
             "compression" => &["zfs.compression", property],
@@ -2173,6 +2192,9 @@ fn comparable_property_value(action: &PlannedAction, property: &str, value: &str
             }
             _ => value.to_string(),
         },
+        Some("pools") => {
+            normalize_zfs_pool_property_value(&normalized_property, &normalized_value, value)
+        }
         Some("datasets" | "zvols") => {
             normalize_zfs_property_value(&normalized_property, &normalized_value, value)
         }
@@ -2487,6 +2509,23 @@ fn normalize_cache_property_value(property: &str, value: &str) -> String {
             value.replace('-', "")
         }
         _ => value.to_string(),
+    }
+}
+
+fn normalize_zfs_pool_property_value(
+    property: &str,
+    normalized_value: &str,
+    raw_value: &str,
+) -> String {
+    match property {
+        "autotrim" | "auto-trim" | "autoexpand" | "auto-expand" | "autoreplace"
+        | "auto-replace" | "delegation" | "listsnapshots" | "list-snapshots" | "multihost"
+        | "multi-host" => normalize_zfs_boolean_property_value(normalized_value)
+            .map(str::to_string)
+            .unwrap_or_else(|| normalized_value.to_string()),
+        "altroot" | "ashift" | "bootfs" | "boot-fs" | "cachefile" | "cache-file" | "comment"
+        | "failmode" | "fail-mode" => normalized_value.to_string(),
+        _ => raw_value.to_string(),
     }
 }
 
@@ -20709,6 +20748,75 @@ mod tests {
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsPoolCreateRequired
                 && diagnostic.message.contains("not a ZFS pool")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_zfs_pool_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "pools": {
+                "tank": {
+                  "properties": {
+                    "autotrim": true,
+                    "autoExpand": "enabled",
+                    "altroot": "/mnt/rescue"
+                  }
+                },
+                "vault": {
+                  "properties": {
+                    "autotrim": "off"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zfs-pool:tank", NodeKind::ZfsPool, "tank")
+                .with_property("zfs.pool-autotrim", "on")
+                .with_property("zfs.pool-autoexpand", "on")
+                .with_property("zfs.pool-altroot", "/mnt/rescue"),
+        );
+        graph.add_node(
+            Node::new("zfs-pool:vault", NodeKind::ZfsPool, "vault")
+                .with_property("zfs.autotrim", "on"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 4);
+        assert_eq!(comparison.summary.matched_count, 4);
+        assert_eq!(comparison.summary.already_satisfied_count, 3);
+        assert_eq!(comparison.summary.suppressed_action_count, 3);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "pools:vault:set-property:autotrim"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "pools:tank:set-property:autotrim"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "pools:tank:set-property:autoExpand"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "pools:tank:set-property:altroot"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "pools:vault:set-property:autotrim"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic.message.contains("on")
+                && diagnostic.message.contains("off")
         }));
     }
 
