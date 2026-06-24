@@ -797,6 +797,46 @@
             };
           }
         ];
+        nixosModuleCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              filesystems.local = {
+                device = "/dev/disk/by-label/local";
+                fsType = "xfs";
+                mountpoint = "/srv/collision";
+              };
+              filesystems.secondary = {
+                device = "/dev/disk/by-label/secondary";
+                fsType = "ext4";
+                mountpoint = "/srv/collision";
+              };
+              swaps.primary.path = "/dev/disk/by-label/swap-collision";
+              swaps.secondary.target = "/dev/disk/by-label/swap-collision";
+              luks.devices.primary = {
+                target = "crypt-collision";
+                device = "/dev/disk/by-id/primary-luks";
+              };
+              luks.devices.secondary = {
+                mapper = "crypt-collision";
+                device = "/dev/disk/by-id/secondary-luks";
+              };
+              exports.primary = {
+                path = "/srv/export-collision";
+                client = "192.0.2.0/24";
+                options = "rw,sync";
+              };
+              exports.secondary = {
+                target = "/srv/export-collision";
+                client = "192.0.2.0/24";
+                options = "ro,sync";
+              };
+            };
+          }
+        ];
       in
       {
         formatter = formatProgram;
@@ -1737,6 +1777,11 @@
                 printf '%s\n' "$installWantedBy" | jq -e 'index("multi-user.target") != null'
                 touch "$out"
               '';
+          nixosModuleAssertions = pkgs.runCommand "disk-nix-nixos-module-assertions-check" { } ''
+            collisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleCollisionTest.config.system.build.toplevel).success))}
+            test "$collisionSuccess" = false
+            touch "$out"
+          '';
         };
 
         devShells.default = pkgs.mkShell {

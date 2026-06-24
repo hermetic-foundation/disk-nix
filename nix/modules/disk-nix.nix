@@ -1018,6 +1018,10 @@ let
   activeIscsiSessionPortals = lib.filter (portal: portal != null) (
     map (session: session.portal) (lib.attrValues activeIscsiSessions)
   );
+  activeFilesystemMountpoints =
+    (map (filesystem: filesystem.mountpoint) (lib.attrValues activeFilesystems))
+    ++ (map (mount: mount.mountpoint) (lib.attrValues activeNfsMounts));
+  activeSwapDevicePaths = map swapDevicePath (lib.attrValues activeSwaps);
   iscsiDiscoverPortal =
     if cfg.iscsi.discoverPortal != null then
       cfg.iscsi.discoverPortal
@@ -1073,6 +1077,19 @@ let
           _: export: export.client != null && export.options != null && !isDestroyLifecycle export
         ) cfg.exports
       );
+  activeNfsExportSelectors = lib.mapAttrsToList (
+    name: export:
+    let
+      exportPath =
+        if export.path != null then
+          export.path
+        else if export.target != null then
+          export.target
+        else
+          name;
+    in
+    "${exportPath} ${export.client}"
+  ) (lib.filterAttrs (_: export: export.client != null && !isDestroyLifecycle export) cfg.exports);
   supportedFilesystemTypes = lib.unique (
     (map (filesystem: filesystem.fsType) (lib.attrValues activeFilesystems))
     ++ (map (mount: mount.fsType) (lib.attrValues activeNfsMounts))
@@ -2245,6 +2262,19 @@ in
       {
         assertion = lib.length activeLuksMapperNames == lib.length (lib.unique activeLuksMapperNames);
         message = "services.disk-nix.luks.devices entries must resolve to unique mapper names.";
+      }
+      {
+        assertion =
+          lib.length activeFilesystemMountpoints == lib.length (lib.unique activeFilesystemMountpoints);
+        message = "services.disk-nix.filesystems and services.disk-nix.nfs.mounts entries must resolve to unique active mountpoints.";
+      }
+      {
+        assertion = lib.length activeSwapDevicePaths == lib.length (lib.unique activeSwapDevicePaths);
+        message = "services.disk-nix.swaps entries must resolve to unique active swap device paths.";
+      }
+      {
+        assertion = lib.length activeNfsExportSelectors == lib.length (lib.unique activeNfsExportSelectors);
+        message = "services.disk-nix.exports entries must resolve to unique active export path/client pairs.";
       }
     ];
   };

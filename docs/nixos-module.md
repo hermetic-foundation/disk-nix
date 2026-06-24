@@ -85,6 +85,10 @@ or `destroy = true` stays in the generated disk-nix spec, but is not re-added
 to NixOS `swapDevices` or `boot.initrd.luks.devices`. LUKS `operation = "close"`
 is treated the same way: it remains a reviewed disk-nix mapper teardown without
 re-declaring the mapper for initrd unlock.
+The module fails evaluation for ambiguous active declarations that would
+otherwise overwrite generated NixOS state: duplicate local/NFS mountpoints,
+duplicate concrete swap paths, duplicate LUKS mapper names, and duplicate NFS
+export path/client pairs.
 Typed zram declarations are modeled separately from persistent swap devices.
 `services.disk-nix.zram.enable = true` emits `spec.zram` for inventory and
 lifecycle context, and derives NixOS `zramSwap` so `/dev/zram*` devices are
