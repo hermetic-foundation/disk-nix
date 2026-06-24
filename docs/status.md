@@ -55,7 +55,8 @@ behavior across real storage stacks.
   against native `vdo.*` and LVM `lvm.vdo-*` metadata with boolean
   compression/deduplication normalization, and cache property declarations
   reconciled against bcache `bcache.*` and LVM cache `lvm.*` metadata with
-  cache-mode spelling normalization;
+  cache-mode spelling normalization, and ZFS dataset/zvol property declarations
+  reconciled against probed `zfs.*` metadata with common on/off normalization;
   matching filesystem format types are reported without suppressing destructive
   format actions so policy and confirmation gates still apply;
   swap format targets report existing swap metadata or non-swap node kinds

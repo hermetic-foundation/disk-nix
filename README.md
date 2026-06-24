@@ -267,6 +267,10 @@ attach/detach/rescan/replacement workflows.
 ZFS dataset and zvol `operation = "rescan"` plans are online read-only
 refreshes that render focused `zfs list`, `zfs get`, and graph inspection
 commands before later property, growth, promotion, or destruction work.
+Current-topology probing reconciles dataset and zvol property declarations
+against probed `zfs.*` metadata, including mountpoint, compression, volsize,
+cache, and on/off property aliases, so matching `zfs set` updates are
+suppressed while drift remains actionable.
 Cache apply plans include bcache-aware attach, detach, rescan, cache-mode,
 dirty-data, and replacement review steps instead of a generic cache
 placeholder. bcache replacement renders deterministic `make-bcache --cset-uuid`,

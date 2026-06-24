@@ -1126,6 +1126,9 @@ create actions when the matched node is already a ZFS zvol and any declared
 desired size is already satisfied, and suppresses destroy actions only when the
 zvol is already absent. Existing non-zvol matches or existing zvols with
 different or unknown current size stay actionable for create with warnings;
+dataset and zvol property comparison maps declarations onto probed `zfs.*`
+metadata, including mountpoint, compression, volsize, cache, and common on/off
+properties, before suppressing already-satisfied `zfs set` updates.
 present zvols stay actionable for destroy with warnings that include volsize,
 origin, usage, reservation, encryption, or compression metadata when available.
 Zvol clone promotion uses the same reviewed `zfs promote` lifecycle path.

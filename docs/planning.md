@@ -275,7 +275,10 @@ Examples:
   is already absent. Existing non-dataset matches stay actionable for create
   with warnings; present targets remain actionable for destroy with warnings
   that include available mountpoint, quota, reservation, encryption, key status,
-  origin, usage, or compression metadata.
+  origin, usage, or compression metadata. Property comparison maps declared
+  dataset keys such as `mountpoint`, `compression`, `quota`, `reservation`,
+  `atime`, and cache properties onto probed `zfs.*` metadata, normalizing common
+  on/off spellings before suppressing already-satisfied `zfs set` actions.
 - zvol creation, growth, and property updates are online operations, with
   advice to verify pool capacity, reservation policy, and downstream block
   consumers. zvol `properties = { ... }` render create-time `-o key=value`
@@ -284,10 +287,14 @@ Examples:
   Current-topology comparison suppresses concrete zvol create actions when the
   matched node is already a ZFS zvol and any declared desired size is already
   satisfied, and suppresses destroy actions only when the `pool/name` target is
-  already absent. Existing non-zvol matches or existing zvols with different or
-  unknown current size stay actionable for create with warnings; present zvols
-  remain actionable for destroy with warnings that include available volsize,
-  origin, usage, reservation, encryption, or compression metadata.
+  already absent. Property comparison maps declared zvol keys such as
+  `volSize`, `dedup`, `primaryCache`, and `secondaryCache` onto probed
+  `zfs.*` metadata and normalizes common on/off spellings before suppressing
+  already-satisfied property updates. Existing non-zvol matches or existing
+  zvols with different or unknown current size stay actionable for create with
+  warnings; present zvols remain actionable for destroy with warnings that
+  include available volsize, origin, usage, reservation, encryption, or
+  compression metadata.
 - MD RAID creation and destruction are destructive because they write array
   metadata or remove array identity. Assemble and stop are offline-required but
   non-destructive: they activate or deactivate existing array metadata while
