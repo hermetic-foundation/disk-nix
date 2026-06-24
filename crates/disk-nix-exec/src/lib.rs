@@ -17879,6 +17879,73 @@ mod tests {
     }
 
     #[test]
+    fn loop_device_lifecycle_accepts_path_aliases_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "loopDevices": {
+                  "root-image": {
+                    "operation": "create",
+                    "path": "/dev/loop7",
+                    "device": "/var/lib/images/root.img"
+                  },
+                  "grown-image": {
+                    "operation": "grow",
+                    "target": "/dev/loop8"
+                  },
+                  "inventory-image": {
+                    "operation": "rescan",
+                    "path": "/dev/loop10"
+                  },
+                  "old-image": {
+                    "operation": "destroy",
+                    "target": "/dev/loop9"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "loopdevices:root-image:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["losetup", "/dev/loop7", "/var/lib/images/root.img"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "loopdevices:grown-image:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["losetup", "-c", "/dev/loop8"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "loopdevices:inventory-image:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["losetup", "--json", "--list", "/dev/loop10"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "loopdevices:old-image:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["losetup", "--detach", "/dev/loop9"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
     fn blocked_reports_do_not_render_scripts() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

@@ -153,6 +153,8 @@ operations need `/dev/bcache*`, and LVM logical volumes and thin pools need
 canonical `vg/lv` or `vg/pool` targets. Declarations that omit these concrete
 addresses still produce reviewable plans, but their command plans stay
 non-ready instead of guessing from logical keys.
+For loop devices, `target` or `path` supplies the `/dev/loop*` address and
+`device` remains the backing file or block device used by create plans.
 MD RAID assemble, stop, member add, replacement, and removal declarations use
 the same explicit array target requirement as create and grow plans. Assemble
 also requires explicit reviewed member devices. MD RAID rescan declarations can
@@ -624,8 +626,9 @@ Example lifecycle planning through NixOS options:
       device = "/dev/disk/by-id/root-luks";
       tokenId = "1";
     };
-    loopDevices."/dev/loop7" = {
+    loopDevices.rootImage = {
       operation = "create";
+      path = "/dev/loop7";
       device = "/var/lib/images/root.img";
     };
     loopDevices."/dev/loop10".operation = "rescan";

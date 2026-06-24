@@ -580,8 +580,9 @@
                 properties."lvm.cache-mode" = "writethrough";
               };
               lvmCaches."vg0/archive".operation = "rescan";
-              loopDevices."/dev/loop7" = {
+              loopDevices.rootImage = {
                 operation = "create";
+                path = "/dev/loop7";
                 device = "/var/lib/images/root.img";
               };
               loopDevices."/dev/loop10".operation = "rescan";
@@ -1417,8 +1418,9 @@
                     and .spec.lvmCaches."vg0/root".properties."lvm.cache-mode" == "writethrough"
                     and .spec.lvmCaches."vg0/archive".operation == "rescan"
                     and .spec.volumes."vg0/archive".operation == "deactivate"
-                    and .spec.loopDevices."/dev/loop7".operation == "create"
-                    and .spec.loopDevices."/dev/loop7".device == "/var/lib/images/root.img"
+                    and .spec.loopDevices.rootImage.operation == "create"
+                    and .spec.loopDevices.rootImage.path == "/dev/loop7"
+                    and .spec.loopDevices.rootImage.device == "/var/lib/images/root.img"
                     and .spec.loopDevices."/dev/loop10".operation == "rescan"
                     and .spec.mdRaids.root.target == "/dev/md/root"
                     and .spec.mdRaids.root.raidLevel == "1"

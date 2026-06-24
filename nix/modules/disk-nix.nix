@@ -1739,7 +1739,7 @@ in
     loopDevices = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed loop-device lifecycle declarations emitted into the disk-nix planner spec. Refresh and detach command plans require a /dev/loop* target.";
+      description = "Typed loop-device lifecycle declarations emitted into the disk-nix planner spec. Refresh, grow, and detach command plans require a /dev/loop* target through the declaration key, target, or path.";
     };
 
     mdRaids = lib.mkOption {

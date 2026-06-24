@@ -557,6 +557,10 @@ logical cache names can declare `target = "/dev/bcacheN"` or
 `device = "/dev/bcacheN"` to make attach, detach, rescan, and property commands
 ready. Logical cache declarations without a concrete bcache device remain
 marked `needs-domain-implementation`.
+Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
+detach operations. Logical loop declarations can supply that target with
+`target` or `path`; `device` is reserved for the backing file or block device
+used by create plans.
 Btrfs filesystem device-removal plans use Btrfs allocation inspection and
 domain-specific `btrfs device remove` rendering, but the mutating command is
 blocked by default until `allowPotentialDataLoss=true` is set.

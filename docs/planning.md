@@ -406,6 +406,10 @@ implementation until the replacement cache device and new cache-set UUID are
 verified. bcache sysfs operations require a concrete `/dev/bcache*` target;
 logical cache declaration names become ready when `target` or `device` declares
 the backing bcache device path.
+Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
+detach operations. Logical loop declaration names can supply that target with
+`target` or `path`; `device` remains the backing file or block device for
+create plans.
 LVM cache command plans include read-only `lvs` status refresh for
 `lvmCaches.<origin>.operation = "rescan"` before any later mode, detach, or
 replacement work.
