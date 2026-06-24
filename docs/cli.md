@@ -316,9 +316,10 @@ Use these commands for:
 - `nfs`: NFS exports and client mounts, including source, server/export split,
   NFS protocol version, transport and mount transport, security flavor,
   client/server addresses, port/mount address, read/write transfer sizes,
-  timeout/retransmit settings, local locking, lookup cache, FS-Cache, age, and
-  export-to-client mount relationships when `findmnt` or NFS mount probes
-  expose them
+  timeout/retransmit settings, local locking, lookup cache, FS-Cache,
+  capability flags, transfer multipliers, directory transfer/block sizing,
+  RPC security flavor identifiers, age, and export-to-client mount
+  relationships when `findmnt` or NFS mount probes expose them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them

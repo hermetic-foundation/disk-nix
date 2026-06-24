@@ -2872,6 +2872,12 @@ fn usage_details(node: &Node) -> String {
         ("nfs.fsc", "fsc"),
         ("nfs.age", "age"),
         ("nfs.namlen", "namlen"),
+        ("nfs.caps", "caps"),
+        ("nfs.wtmult", "wtmult"),
+        ("nfs.dtsize", "dtsize"),
+        ("nfs.bsize", "bsize"),
+        ("nfs.flavor", "flavor"),
+        ("nfs.pseudoflavor", "pseudoflavor"),
         ("nfs.hard", "hard"),
         ("nfs.soft", "soft"),
         ("nfs.noresvport", "noresvport"),
@@ -4806,6 +4812,12 @@ mod tests {
                 .with_property("nfs.local-lock", "none")
                 .with_property("nfs.lookupcache", "positive")
                 .with_property("nfs.fsc", "true")
+                .with_property("nfs.caps", "0x3fffdf")
+                .with_property("nfs.wtmult", "512")
+                .with_property("nfs.dtsize", "32768")
+                .with_property("nfs.bsize", "0")
+                .with_property("nfs.flavor", "1")
+                .with_property("nfs.pseudoflavor", "1")
                 .with_property("nfs.age", "123"),
         );
         graph.add_edge(Edge::new(
@@ -4845,6 +4857,8 @@ mod tests {
         assert!(output.contains("mountaddr=10.0.0.10 mountvers=3 mountproto=tcp"));
         assert!(output.contains("rsize=1048576 wsize=1048576 timeo=600 retrans=2"));
         assert!(output.contains("local-lock=none lookupcache=positive fsc=true age=123"));
+        assert!(output.contains("caps=0x3fffdf wtmult=512 dtsize=32768 bsize=0"));
+        assert!(output.contains("flavor=1 pseudoflavor=1"));
     }
 
     #[test]
@@ -4917,6 +4931,12 @@ mod tests {
                 .with_property("nfs.local-lock", "none")
                 .with_property("nfs.lookupcache", "positive")
                 .with_property("nfs.fsc", "true")
+                .with_property("nfs.caps", "0x3fffdf")
+                .with_property("nfs.wtmult", "512")
+                .with_property("nfs.dtsize", "32768")
+                .with_property("nfs.bsize", "0")
+                .with_property("nfs.flavor", "1")
+                .with_property("nfs.pseudoflavor", "1")
                 .with_property("nfs.age", "123"),
         );
 
@@ -4947,6 +4967,8 @@ mod tests {
         assert!(output.contains("mountaddr=10.0.0.10 mountvers=3 mountproto=tcp"));
         assert!(output.contains("rsize=1048576 wsize=1048576 timeo=600 retrans=2"));
         assert!(output.contains("local-lock=none lookupcache=positive fsc=true age=123"));
+        assert!(output.contains("caps=0x3fffdf wtmult=512 dtsize=32768 bsize=0"));
+        assert!(output.contains("flavor=1 pseudoflavor=1"));
     }
 
     #[test]

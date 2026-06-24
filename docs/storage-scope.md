@@ -135,7 +135,9 @@ The current probe layer normalizes:
 - NFS mount metadata through `nfsstat -m` for server, export, alternate
   `target from source` records, protocol version, transport and mount
   transport, port/mount address, transfer sizes, timeout/retransmit settings,
-  local locking, lookup cache, FS-Cache, age, and mount options
+  local locking, lookup cache, FS-Cache, capability flags, transfer
+  multipliers, directory transfer/block sizing, RPC security flavor
+  identifiers, age, and mount options
 - MD RAID arrays through `mdadm --detail --scan` and `mdadm --detail <array>`
   for array UUID, level, state, size, device counts, and member number,
   major/minor, raid-device, and state

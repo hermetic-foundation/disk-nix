@@ -159,6 +159,8 @@ mod tests {
     const NFSSTAT: &[u8] = br#"
 storage.example:/export/home mounted on /home:
    Flags: rw,relatime,vers=4.2,rsize=1048576,wsize=1048576,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=sys,clientaddr=10.0.0.20,local_lock=none,addr=10.0.0.10,port=2049,mountaddr=10.0.0.10,mountvers=3,mountproto=tcp,lookupcache=positive,fsc
+   Caps: caps=0x3fffdf,wtmult=512,dtsize=32768,bsize=0
+   Sec: flavor=1,pseudoflavor=1
    Age: 123
 
 /mnt/backups from 10.0.0.11:/srv/backups
@@ -210,6 +212,30 @@ storage.example:/export/home mounted on /home:
                     .properties
                     .iter()
                     .any(|property| property.key == "nfs.mountproto" && property.value == "tcp")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.caps" && property.value == "0x3fffdf")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.wtmult" && property.value == "512")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.dtsize" && property.value == "32768")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.bsize" && property.value == "0")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.flavor" && property.value == "1")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.pseudoflavor" && property.value == "1")
         }));
         assert!(graph.nodes.iter().any(|node| {
             node.name == "/mnt/backups"
