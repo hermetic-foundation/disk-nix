@@ -87,8 +87,8 @@ is treated the same way: it remains a reviewed disk-nix mapper teardown without
 re-declaring the mapper for initrd unlock.
 The module fails evaluation for ambiguous active declarations that would
 otherwise overwrite generated NixOS state: duplicate local/NFS mountpoints,
-duplicate concrete swap paths, duplicate LUKS mapper names, and duplicate NFS
-export path/client pairs.
+duplicate concrete swap paths, duplicate LUKS mapper names, duplicate concrete
+snapshot identities, and duplicate NFS export path/client pairs.
 Typed zram declarations are modeled separately from persistent swap devices.
 `services.disk-nix.zram.enable = true` emits `spec.zram` for inventory and
 lifecycle context, and derives NixOS `zramSwap` so `/dev/zram*` devices are
@@ -365,7 +365,8 @@ Typed lifecycle declarations are available for:
 Active path-addressed declarations must resolve to unique concrete targets.
 The module rejects duplicate filesystem mountpoints, swap paths, LUKS mapper
 names, backing-file paths, device-mapper `/dev/mapper/*` or `/dev/dm-*`
-targets, and NFS export path/client pairs before generating an apply plan.
+targets, concrete snapshot identities, and NFS export path/client pairs before
+generating an apply plan.
 
 `volumeGroups.<name>.operation = "import"` and `"export"` render reviewed
 `vgimport <name>` and `vgexport <name>` plans for moving existing VGs without

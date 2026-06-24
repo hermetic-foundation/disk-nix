@@ -927,6 +927,25 @@
             };
           }
         ];
+        nixosModuleSnapshotCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              snapshots."/mnt/persist/@home-before" = {
+                target = "/mnt/persist/@home";
+                readOnly = true;
+              };
+              snapshots.homeBeforeAlias = {
+                target = "/mnt/persist/@home";
+                snapshotPath = "/mnt/persist/@home-before";
+                operation = "rescan";
+              };
+            };
+          }
+        ];
       in
       {
         formatter = formatProgram;
@@ -1939,9 +1958,11 @@
             collisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleCollisionTest.config.system.build.toplevel).success))}
             backingFileCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBackingFileCollisionTest.config.system.build.toplevel).success))}
             dmMapCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDmMapCollisionTest.config.system.build.toplevel).success))}
+            snapshotCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleSnapshotCollisionTest.config.system.build.toplevel).success))}
             test "$collisionSuccess" = false
             test "$backingFileCollisionSuccess" = false
             test "$dmMapCollisionSuccess" = false
+            test "$snapshotCollisionSuccess" = false
             touch "$out"
           '';
         };

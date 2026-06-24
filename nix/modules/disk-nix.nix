@@ -1064,6 +1064,27 @@ let
   activeDmMapTargets = lib.filter (target: target != null && isDmMapTarget target) (
     lib.mapAttrsToList lifecyclePathTarget activeDmMaps
   );
+  snapshotIdentity =
+    name: snapshot:
+    if snapshot.name != null then
+      snapshot.name
+    else if snapshot.snapshotName != null then
+      snapshot.snapshotName
+    else if snapshot."snapshot-name" != null then
+      snapshot."snapshot-name"
+    else if snapshot.path != null then
+      snapshot.path
+    else if snapshot.snapshotPath != null then
+      snapshot.snapshotPath
+    else if snapshot."snapshot-path" != null then
+      snapshot."snapshot-path"
+    else if lib.hasPrefix "/" name || lib.hasInfix "@" name then
+      name
+    else
+      null;
+  activeSnapshotIdentities = lib.filter (identity: identity != null) (
+    lib.mapAttrsToList snapshotIdentity activeSnapshots
+  );
   iscsiDiscoverPortal =
     if cfg.iscsi.discoverPortal != null then
       cfg.iscsi.discoverPortal
@@ -2335,6 +2356,10 @@ in
       {
         assertion = lib.length activeDmMapTargets == lib.length (lib.unique activeDmMapTargets);
         message = "services.disk-nix.dmMaps entries must resolve to unique active /dev/mapper/* or /dev/dm-* targets.";
+      }
+      {
+        assertion = lib.length activeSnapshotIdentities == lib.length (lib.unique activeSnapshotIdentities);
+        message = "services.disk-nix.snapshots entries must resolve to unique active concrete snapshot identities.";
       }
       {
         assertion = lib.length activeNfsExportSelectors == lib.length (lib.unique activeNfsExportSelectors);
