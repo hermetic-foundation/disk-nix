@@ -14,6 +14,7 @@ storage stacks:
 - Btrfs filesystems, devices, subvolumes, snapshots, qgroups, and usage
 - bcachefs filesystems, member devices, usage, and topology updates
 - ZFS pools, vdevs, datasets, zvols, snapshots, snapshot hold reference counts,
+  pool properties such as autotrim/autoexpand/cachefile, dataset and zvol
   compression/dedup/checksum/copies/cache/sync/record-size/quota/reservation/encryption
   properties, POSIX metadata policy, and cache, log, and special vdevs
 - MD RAID, multipath, SCSI/LUN inventory, NVMe controllers/namespaces/health,

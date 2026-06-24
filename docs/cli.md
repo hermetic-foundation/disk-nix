@@ -309,11 +309,13 @@ Use these commands for:
   member count, data-type accounting, member labels, member state, member free
   and capacity counters, and one-hop member relationships
 - `zfs`: ZFS pools, vdevs, datasets, snapshots, and zvols, including pool
-  health/state, capacity, dedup ratio, fragmentation, altroot, status/action
-  advisories, scan/error summaries, vdev roles and error counters, dataset
-  compression, dedup, checksum, copies, sync, cache policy, record size, quota,
-  reservation, encryption, key status, POSIX metadata policy, snapshot user
-  references, zvol volume size, origin, and pool/dataset/snapshot child
+  health/state, capacity, dedup ratio, fragmentation, altroot, ashift,
+  autotrim, autoexpand, autoreplace, bootfs, cachefile, delegation, failmode,
+  listsnapshots, multihost, status/action advisories, scan/error summaries,
+  vdev roles and error counters, dataset compression, dedup, checksum, copies,
+  sync, cache policy, record size, quota, reservation, encryption, key status,
+  POSIX metadata policy, snapshot user references, zvol volume size, origin,
+  and pool/dataset/snapshot child
   relationships when `zpool` and `zfs` probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, bcachefs, ZFS, zvols,
   LUNs, and exports, including LVM origin/pool/data metadata, activation state,
@@ -1108,8 +1110,8 @@ already visible with `zfs.state = ONLINE` and `zfs.health = ONLINE`; degraded,
 faulted, or wrong-kind matches stay actionable with warnings. Pool property
 comparison maps declarations such as `autotrim`, `autoExpand`, `altroot`, and
 `cachefile` onto `zfs.*` or pool-scoped `zfs.pool-*` metadata before suppressing
-already-satisfied `zpool set` updates. Pool
-import/export lifecycle declarations render `zpool import`, optional
+already-satisfied `zpool set` updates. Pool import/export lifecycle
+declarations render `zpool import`, optional
 `zpool import -o readonly=on <pool>` for `readOnly = true`, and
 `zpool export <pool>` command plans. Current-topology probing suppresses a pool
 import only when the current pool is visible with `zfs.state = ONLINE` and
