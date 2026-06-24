@@ -567,8 +567,8 @@ size diagnostics, filesystem type conflicts, and already-satisfied property,
 size, or remount option checks. Mount actions are also compared with
 `mount.source` when the current graph has mountpoint data, remount actions
 treat declared options as a required subset of current mount options, LVM
-activation actions are compared with `lvm.active`, LUKS open actions are
-compared with `cryptsetup.active`, NFS export actions are compared with
+activation actions are compared with `lvm.active`, LUKS open and close actions
+are compared with `cryptsetup.active`, NFS export actions are compared with
 `nfs.export-client` and `nfs.export-option-*` properties, VDO start actions are
 compared with `vdo.operating-mode`, MD assemble actions are compared with
 `md.state`, `md.degraded-devices`, and `md.failed-devices`, ZFS pool import
@@ -577,14 +577,15 @@ import/export actions are compared with `lvm.vg-exported`, and iSCSI login
 actions are compared with current session state across all matching
 target/session nodes when metadata is available. Safe already-satisfied grow,
 shrink, iSCSI login, LVM activation, LVM volume-group import/export, LUKS open,
-mount, remount, NFS export, VDO start, MD assemble, ZFS pool import, and
-property actions that have no warning diagnostics are suppressed from the
+LUKS close, mount, remount, NFS export, VDO start, MD assemble, ZFS pool import,
+and property actions that have no warning diagnostics are suppressed from the
 actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
-still-exported LVM volume groups, inactive LUKS mappers, non-normal VDO modes,
-degraded or failed MD arrays, degraded ZFS pools, mountpoints using a different
-source, export client/option differences, or known iSCSI targets without a
-logged-in session stay actionable with a warning diagnostic.
+still-exported LVM volume groups, inactive LUKS open targets, active LUKS close
+targets, non-normal VDO modes, degraded or failed MD arrays, degraded ZFS
+pools, mountpoints using a different source, export client/option differences,
+or known iSCSI targets without a logged-in session stay actionable with a
+warning diagnostic.
 
 ## Apply Evaluation
 

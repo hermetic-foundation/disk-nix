@@ -39,15 +39,16 @@ behavior across real storage stacks.
   hints for missing tools, permission barriers, parse failures, inaccessible
   kernel/service data, and generic command failures.
 - Current-topology reconciliation suppresses safe no-op grow, shrink, iSCSI
-  login, LVM logical-volume activation, LUKS open, mount, remount, NFS export,
-  VDO start, MD assemble, ZFS pool import, LVM volume-group import/export, and
-  property actions when the graph proves they are already satisfied and no
-  warning diagnostics are present; inactive LVM objects, still-exported LVM
-  volume-group imports, still-imported LVM volume-group exports, inactive LUKS
-  mappers, non-normal VDO operating modes, degraded or failed MD arrays,
-  degraded ZFS pools, mount source mismatches, remount option differences,
-  export client/option differences, and known iSCSI targets without logged-in
-  sessions remain actionable warnings.
+  login, LVM logical-volume activation, LUKS open, LUKS close, mount, remount,
+  NFS export, VDO start, MD assemble, ZFS pool import, LVM volume-group
+  import/export, and property actions when the graph proves they are already
+  satisfied and no warning diagnostics are present; inactive LVM objects,
+  still-exported LVM volume-group imports, still-imported LVM volume-group
+  exports, inactive LUKS open targets, active LUKS close targets, non-normal VDO
+  operating modes, degraded or failed MD arrays, degraded ZFS pools, mount
+  source mismatches, remount option differences, export client/option
+  differences, and known iSCSI targets without logged-in sessions remain
+  actionable warnings.
 - NixOS module options for steady-state resources plus imperative lifecycle
   declarations emitted into `/etc/disk-nix/spec.json`, with a generated
   `/etc/disk-nix/steady-state.json` inventory of native NixOS mounts, swaps,

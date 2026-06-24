@@ -149,7 +149,8 @@ Examples:
   tears down the mapper without removing the header. LUKS format operations or
   `preserveData = false` are destructive. Current-topology
   comparison suppresses `operation = "open"` only when `cryptsetup.active`
-  proves the mapper is already active. LUKS growth and mapper close are
+  proves the mapper is already active and suppresses `operation = "close"` only
+  when it proves the mapper is inactive. LUKS growth and mapper close are
   offline-required because backing capacity, mapper state, and dependent
   consumers must be coordinated. LUKS header label, subsystem, and UUID
   property updates are offline-required identity metadata changes rendered
@@ -458,9 +459,9 @@ remain.
 LVM activation reconciliation uses `lvm.active` topology metadata to suppress
 already-active `volumes`, `thinPools`, and `lvmSnapshots` activation actions
 and to warn when a matched LVM object is known but inactive.
-LUKS open reconciliation uses `cryptsetup.active` topology metadata to suppress
-mapper opens that are already active and to warn when a matched mapper is
-known but inactive.
+LUKS open/close reconciliation uses `cryptsetup.active` topology metadata to
+suppress mapper opens that are already active and mapper closes that are
+already inactive; opposite-state mappers remain actionable with a warning.
 VDO start reconciliation uses `vdo.operating-mode` topology metadata to
 suppress start actions only when the volume is already in `normal` mode; other
 known modes stay actionable with a warning.
