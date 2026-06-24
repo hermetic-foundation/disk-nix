@@ -1781,7 +1781,7 @@ in
     nvmeNamespaces = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed NVMe namespace lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a /dev/nvme* controller target and namespace metadata for attach or delete operations.";
+      description = "Typed NVMe namespace lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a /dev/nvme* controller path through the declaration key, target, path, or device, plus namespace metadata for attach or delete operations.";
     };
 
     exports = lib.mkOption {

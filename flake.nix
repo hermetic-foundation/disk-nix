@@ -648,8 +648,9 @@
                   "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4"
                 ];
               };
-              nvmeNamespaces."/dev/nvme0" = {
+              nvmeNamespaces.rootNamespace = {
                 operation = "create";
+                path = "/dev/nvme0";
                 desiredSize = "100G";
                 namespaceId = "4";
                 controllers = "0x1";
@@ -1332,10 +1333,11 @@
                     and (.spec.luns."iqn.2026-06.example:storage/old:3".devices | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3") != null)
                     and .spec.luns."iqn.2026-06.example:storage/rescan:4".operation == "rescan"
                     and (.spec.luns."iqn.2026-06.example:storage/rescan:4".paths | index("/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-4") != null)
-                    and .spec.nvmeNamespaces."/dev/nvme0".operation == "create"
-                    and .spec.nvmeNamespaces."/dev/nvme0".desiredSize == "100G"
-                    and .spec.nvmeNamespaces."/dev/nvme0".namespaceId == "4"
-                    and .spec.nvmeNamespaces."/dev/nvme0".controllers == "0x1"
+                    and .spec.nvmeNamespaces.rootNamespace.operation == "create"
+                    and .spec.nvmeNamespaces.rootNamespace.path == "/dev/nvme0"
+                    and .spec.nvmeNamespaces.rootNamespace.desiredSize == "100G"
+                    and .spec.nvmeNamespaces.rootNamespace.namespaceId == "4"
+                    and .spec.nvmeNamespaces.rootNamespace.controllers == "0x1"
                     and .spec.nvmeNamespaces."/dev/nvme1".operation == "rescan"
                     and .spec.nvmeNamespaces."/dev/nvme2".nsid == "7"
                     and .spec.nvmeNamespaces."/dev/nvme2".controllerId == "0x2"

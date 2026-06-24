@@ -710,8 +710,9 @@ non-ready.
 NVMe namespace command plans render `nvme create-ns`, `nvme attach-ns`,
 explicit `operation = "rescan"` plans through `nvme ns-rescan`,
 `nvme detach-ns`, and `nvme delete-ns`. Executable create plans require a
-`/dev/nvme*` controller target and `desiredSize`; attach and delete flows also
-require `namespaceId` plus `controllers` where detach or attach is involved.
+`/dev/nvme*` controller path from the declaration key, `target`, `path`, or
+`device`, plus `desiredSize`; attach and delete flows also require
+`namespaceId` plus `controllers` where detach or attach is involved.
 Namespace growth is modeled as a host rescan after a controller-side namespace
 size change.
 LVM logical volume command plans render concrete `lvcreate` commands when a

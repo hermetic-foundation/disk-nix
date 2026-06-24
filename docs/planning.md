@@ -483,9 +483,9 @@ explicit `operation = "rescan"` plans through `nvme ns-rescan`,
 controller namespace-management operations. Rescan is online and refreshes
 host namespace inventory. Grow is offline-required and means host namespace
 rescan after controller-side resize or replacement. Executable create plans
-require a `/dev/nvme*` controller target and `desiredSize`; attach and delete
-flows require `namespaceId` plus `controllers` when attachment state is
-changed.
+require a `/dev/nvme*` controller path from the declaration key, `target`,
+`path`, or `device`, plus `desiredSize`; attach and delete flows require
+`namespaceId` plus `controllers` when attachment state is changed.
 Swap grow, format, label, UUID, and rescan command plans require a path-shaped
 swap target. Label and UUID updates render `swaplabel --label` and
 `swaplabel --uuid`; `operation = "rescan"` renders read-only `swapon --show`,

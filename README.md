@@ -430,6 +430,10 @@ Loop rescan is read-only inventory refresh; grow uses `losetup -c` only after
 backing size changes. Multipath map growth requires a concrete map target such
 as `mpatha` or `/dev/mapper/mpatha`; logical map names can declare that target
 through `target` or `device`.
+NVMe namespace create, rescan, grow, attach, and delete plans require a
+controller path such as `/dev/nvme0`; logical namespace names can declare it
+through `target`, `path`, or `device`. Delete plans detach the namespace first
+when controller metadata is present.
 ZFS pool apply plans render gated `zpool create` commands from a single
 `device` or an explicit `devices` vdev list, gated `zpool destroy` commands,
 and reviewed topology updates such as `zpool add`, `zpool replace`, and

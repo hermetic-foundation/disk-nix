@@ -18503,6 +18503,85 @@ mod tests {
     }
 
     #[test]
+    fn nvme_namespace_lifecycle_accepts_controller_path_aliases() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "nvmeNamespaces": {
+                  "logical-create": {
+                    "operation": "create",
+                    "path": "/dev/nvme0",
+                    "desiredSize": "100G",
+                    "namespaceId": "4",
+                    "controllers": "0x1"
+                  },
+                  "logical-grow": {
+                    "operation": "grow",
+                    "device": "/dev/nvme1"
+                  },
+                  "logical-detach": {
+                    "destroy": true,
+                    "target": "/dev/nvme2",
+                    "namespaceId": "7",
+                    "controllers": "0x2"
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:logical-create:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "nvme",
+                            "create-ns",
+                            "/dev/nvme0",
+                            "--nsze-si",
+                            "100G",
+                            "--ncap-si",
+                            "100G",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:logical-grow:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "ns-rescan", "/dev/nvme1"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:logical-detach:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "nvme",
+                            "detach-ns",
+                            "/dev/nvme2",
+                            "--namespace-id",
+                            "7",
+                            "--controllers",
+                            "0x2",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
     fn lun_attach_and_grow_without_stable_path_reports_unresolved_input() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
