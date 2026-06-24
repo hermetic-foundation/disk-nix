@@ -195,9 +195,15 @@ fn add_session(graph: &mut StorageGraph, session: IscsiSession) {
     );
     if let Some(portal) = &session.portal {
         session_node = session_node.with_property("iscsi.portal", portal.clone());
+        for (key, value) in portal_parts("iscsi.portal", portal) {
+            session_node = session_node.with_property(key, value);
+        }
     }
     if let Some(portal) = &session.persistent_portal {
         session_node = session_node.with_property("iscsi.persistent-portal", portal.clone());
+        for (key, value) in portal_parts("iscsi.persistent-portal", portal) {
+            session_node = session_node.with_property(key, value);
+        }
     }
     if let Some(tag) = &session.target_portal_group_tag {
         session_node = session_node.with_property("iscsi.target-portal-group-tag", tag.clone());
@@ -335,6 +341,57 @@ fn parse_key_value(value: &str) -> Option<(String, String)> {
     let (key, value) = value.split_once(':')?;
     let value = value.trim();
     (!value.is_empty()).then(|| (key.trim().to_string(), value.to_string()))
+}
+
+fn portal_parts(prefix: &str, portal: &str) -> Vec<(String, String)> {
+    let Some((endpoint, tpgt)) = portal.rsplit_once(',') else {
+        return endpoint_parts(prefix, portal);
+    };
+    let mut parts = endpoint_parts(prefix, endpoint);
+    if !tpgt.trim().is_empty() {
+        parts.push((format!("{prefix}-tpgt"), tpgt.trim().to_string()));
+    }
+    parts
+}
+
+fn endpoint_parts(prefix: &str, endpoint: &str) -> Vec<(String, String)> {
+    let endpoint = endpoint.trim();
+    if endpoint.is_empty() {
+        return Vec::new();
+    }
+
+    if let Some((host, port)) = bracketed_endpoint(endpoint) {
+        return vec![
+            (format!("{prefix}-address"), host.to_string()),
+            (format!("{prefix}-port"), port.to_string()),
+        ];
+    }
+
+    if endpoint.matches(':').count() == 1 {
+        let Some((host, port)) = endpoint.rsplit_once(':') else {
+            return vec![(format!("{prefix}-address"), endpoint.to_string())];
+        };
+        if !host.is_empty()
+            && !port.is_empty()
+            && port.chars().all(|character| character.is_ascii_digit())
+        {
+            return vec![
+                (format!("{prefix}-address"), host.to_string()),
+                (format!("{prefix}-port"), port.to_string()),
+            ];
+        }
+    }
+
+    vec![(format!("{prefix}-address"), endpoint.to_string())]
+}
+
+fn bracketed_endpoint(endpoint: &str) -> Option<(&str, &str)> {
+    let host = endpoint.strip_prefix('[')?.split_once(']')?.0;
+    let port = endpoint.strip_prefix('[')?.split_once("]:")?.1.trim();
+    (!host.is_empty()
+        && !port.is_empty()
+        && port.chars().all(|character| character.is_ascii_digit()))
+    .then_some((host, port))
 }
 
 fn parse_host_line(value: &str) -> (Option<String>, Option<String>) {
@@ -476,6 +533,27 @@ Target: iqn.2026-06.example:storage.disk1
                         && property.value == "10.0.0.10:3260,1"
                 })
                 && node.properties.iter().any(|property| {
+                    property.key == "iscsi.portal-address" && property.value == "10.0.0.10"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.portal-port" && property.value == "3260")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.portal-tpgt" && property.value == "1")
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.persistent-portal-address"
+                        && property.value == "10.0.0.10"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.persistent-portal-port" && property.value == "3260"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.persistent-portal-tpgt" && property.value == "1"
+                })
+                && node.properties.iter().any(|property| {
                     property.key == "iscsi.connection-state" && property.value == "LOGGED IN"
                 })
                 && node.properties.iter().any(|property| {
@@ -533,6 +611,28 @@ Target: iqn.2026-06.example:storage.disk1
                 .edges
                 .iter()
                 .any(|edge| edge.relationship == Relationship::Backs)
+        );
+    }
+
+    #[test]
+    fn parses_bracketed_ipv6_iscsi_portal_parts() {
+        assert_eq!(
+            portal_parts("iscsi.portal", "[2001:db8::10]:3260,2"),
+            vec![
+                (
+                    "iscsi.portal-address".to_string(),
+                    "2001:db8::10".to_string()
+                ),
+                ("iscsi.portal-port".to_string(), "3260".to_string()),
+                ("iscsi.portal-tpgt".to_string(), "2".to_string())
+            ]
+        );
+        assert_eq!(
+            portal_parts("iscsi.portal", "2001:db8::10"),
+            vec![(
+                "iscsi.portal-address".to_string(),
+                "2001:db8::10".to_string()
+            )]
         );
     }
 }

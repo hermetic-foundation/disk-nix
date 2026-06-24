@@ -2828,7 +2828,16 @@ fn usage_details(node: &Node) -> String {
         ("md.member-raid-device", "member-raid-device"),
         ("md.member-state", "member-state"),
         ("iscsi.portal", "portal"),
+        ("iscsi.portal-address", "portal-address"),
+        ("iscsi.portal-port", "portal-port"),
+        ("iscsi.portal-tpgt", "portal-tpgt"),
         ("iscsi.persistent-portal", "persistent-portal"),
+        (
+            "iscsi.persistent-portal-address",
+            "persistent-portal-address",
+        ),
+        ("iscsi.persistent-portal-port", "persistent-portal-port"),
+        ("iscsi.persistent-portal-tpgt", "persistent-portal-tpgt"),
         ("iscsi.target-portal-group-tag", "tpgt"),
         ("iscsi.connection-state", "connection-state"),
         ("iscsi.session-state", "session-state"),
@@ -4764,7 +4773,13 @@ mod tests {
                 "iscsi-session:12",
             )
             .with_property("iscsi.portal", "10.0.0.10:3260,1")
+            .with_property("iscsi.portal-address", "10.0.0.10")
+            .with_property("iscsi.portal-port", "3260")
+            .with_property("iscsi.portal-tpgt", "1")
             .with_property("iscsi.persistent-portal", "10.0.0.11:3260,1")
+            .with_property("iscsi.persistent-portal-address", "10.0.0.11")
+            .with_property("iscsi.persistent-portal-port", "3260")
+            .with_property("iscsi.persistent-portal-tpgt", "1")
             .with_property("iscsi.target-portal-group-tag", "1")
             .with_property("iscsi.connection-state", "LOGGED IN")
             .with_property("iscsi.connection-cid", "0")
@@ -4830,7 +4845,12 @@ mod tests {
         assert!(output.contains("iscsi-session:12"));
         assert!(output.contains("10.0.0.10:3260,1"));
         assert!(output.contains("LOGGED IN"));
-        assert!(output.contains("persistent-portal=10.0.0.11:3260,1"));
+        assert!(output.contains("portal-address=10.0.0.10 portal-port=3260 portal-tpgt=1"));
+        assert!(
+            output
+                .contains("persistent-portal=10.0.0.11:3260,1 persistent-portal-address=10.0.0.11")
+        );
+        assert!(output.contains("persistent-portal-port=3260 persistent-portal-tpgt=1"));
         assert!(output.contains("tpgt=1 connection-state=LOGGED IN"));
         assert!(output.contains("cid=0 connection-detail-state=LOGGED IN"));
         assert!(output.contains("local-address=10.0.0.20 peer-address=10.0.0.10"));
@@ -4933,7 +4953,13 @@ mod tests {
         graph.add_node(
             Node::new("iscsi-session:1", NodeKind::IscsiSession, "iscsi-session:1")
                 .with_property("iscsi.portal", "10.0.0.10:3260,1")
+                .with_property("iscsi.portal-address", "10.0.0.10")
+                .with_property("iscsi.portal-port", "3260")
+                .with_property("iscsi.portal-tpgt", "1")
                 .with_property("iscsi.persistent-portal", "10.0.0.11:3260,1")
+                .with_property("iscsi.persistent-portal-address", "10.0.0.11")
+                .with_property("iscsi.persistent-portal-port", "3260")
+                .with_property("iscsi.persistent-portal-tpgt", "1")
                 .with_property("iscsi.connection-state", "LOGGED IN")
                 .with_property("iscsi.session-state", "LOGGED_IN")
                 .with_property("iscsi.internal-session-state", "NO CHANGE")
@@ -5012,7 +5038,11 @@ mod tests {
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains("portal=10.0.0.10:3260,1"));
+        assert!(output.contains("portal-address=10.0.0.10 portal-port=3260 portal-tpgt=1"));
         assert!(output.contains("persistent-portal=10.0.0.11:3260,1"));
+        assert!(output.contains(
+            "persistent-portal-address=10.0.0.11 persistent-portal-port=3260 persistent-portal-tpgt=1"
+        ));
         assert!(output.contains("connection-state=LOGGED IN"));
         assert!(output.contains("session-state=LOGGED_IN"));
         assert!(output.contains("internal-session-state=NO CHANGE"));

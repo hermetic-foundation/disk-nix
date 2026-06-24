@@ -129,10 +129,10 @@ The current probe layer normalizes:
   replacement policy, priority stats, writeback delay/running/metadata
   settings, and cache relationships
 - iSCSI sessions through `iscsiadm -m session -P 3` for session ids, target
-  IQNs, current and persistent portals, target portal group tag, interface
-  identity, connection/session state, connection CID/local/peer addresses,
-  negotiated transfer parameters, host state, LUN SCSI coordinates, and
-  attached disk state
+  IQNs, current and persistent portals, parsed portal address/port/TPGT fields,
+  target portal group tag, interface identity, connection/session state,
+  connection CID/local/peer addresses, negotiated transfer parameters, host
+  state, LUN SCSI coordinates, and attached disk state
 - NFS mount metadata through `nfsstat -m` for server, export, alternate
   `target from source` records, protocol version, transport and mount
   transport, port/mount address, transfer sizes, timeout/retransmit settings,
