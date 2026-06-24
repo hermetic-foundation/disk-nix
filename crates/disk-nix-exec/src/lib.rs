@@ -121,6 +121,15 @@ pub struct ToolRequirement {
     pub mutating_count: usize,
     pub verification_count: usize,
     pub phases: Vec<ExecutionPhase>,
+    pub availability: ToolAvailability,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ToolAvailability {
+    Available,
+    Missing,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -193,14 +202,25 @@ impl CommandPlanSummary {
 
 #[must_use]
 pub fn prepare_execution(plan: &Plan, policy: ApplyPolicy, mode: ExecutionMode) -> ExecutionReport {
-    prepare_execution_with_runner(plan, policy, mode, run_command)
+    prepare_execution_with_runner_and_tool_checker(plan, policy, mode, run_command, command_exists)
 }
 
+#[cfg(test)]
 fn prepare_execution_with_runner(
     plan: &Plan,
     policy: ApplyPolicy,
     mode: ExecutionMode,
     mut runner: impl FnMut(&[String]) -> CommandRunResult,
+) -> ExecutionReport {
+    prepare_execution_with_runner_and_tool_checker(plan, policy, mode, &mut runner, |_| true)
+}
+
+fn prepare_execution_with_runner_and_tool_checker(
+    plan: &Plan,
+    policy: ApplyPolicy,
+    mode: ExecutionMode,
+    mut runner: impl FnMut(&[String]) -> CommandRunResult,
+    tool_exists: impl Fn(&str) -> bool,
 ) -> ExecutionReport {
     let apply = evaluate_apply_policy(plan, policy);
     let topology_comparison = plan.topology_comparison.clone();
@@ -208,7 +228,8 @@ fn prepare_execution_with_runner(
     let command_summary = summarize_command_plan(&command_plan);
     let verification_plan = verification_plan(plan, &apply);
     let verification_summary = summarize_verification_plan(&verification_plan);
-    let tool_requirements = summarize_tool_requirements(&command_plan, &verification_plan);
+    let tool_requirements =
+        summarize_tool_requirements(&command_plan, &verification_plan, tool_exists);
     if !apply.can_execute() {
         let blocked_count = apply.blocked_count;
         return attach_recovery_actions(ExecutionReport {
@@ -263,6 +284,23 @@ fn prepare_execution_with_runner(
                     ],
                 });
             }
+            if let Some(missing_tools_message) = missing_tools_message(&tool_requirements) {
+                return attach_recovery_actions(ExecutionReport {
+                    apply,
+                    status: ExecutionStatus::NotReady,
+                    topology_comparison,
+                    command_summary,
+                    tool_requirements,
+                    command_plan,
+                    verification_summary,
+                    verification_plan,
+                    execution_results: Vec::new(),
+                    recovery_actions: Vec::new(),
+                    messages: vec![format!(
+                        "execute refused: required tool(s) are not available: {missing_tools_message}"
+                    )],
+                });
+            }
 
             let (status, execution_results) = execute_command_and_verification_plan(
                 &command_plan,
@@ -296,6 +334,15 @@ fn prepare_execution_with_runner(
             })
         }
     }
+}
+
+fn missing_tools_message(tool_requirements: &[ToolRequirement]) -> Option<String> {
+    let missing = tool_requirements
+        .iter()
+        .filter(|requirement| requirement.availability == ToolAvailability::Missing)
+        .map(|requirement| requirement.tool.as_str())
+        .collect::<Vec<_>>();
+    (!missing.is_empty()).then(|| missing.join(", "))
 }
 
 fn attach_recovery_actions(mut report: ExecutionReport) -> ExecutionReport {
@@ -359,16 +406,22 @@ fn blocked_recovery_actions(report: &ExecutionReport) -> Vec<RecoveryAction> {
 }
 
 fn not_ready_recovery_actions(report: &ExecutionReport) -> Vec<RecoveryAction> {
+    let missing_tool_count = report
+        .tool_requirements
+        .iter()
+        .filter(|requirement| requirement.availability == ToolAvailability::Missing)
+        .count();
     vec![
         RecoveryAction {
             kind: RecoveryActionKind::ResolveInputs,
             summary: "Resolve unresolved command inputs before requesting execution".to_string(),
             commands: Vec::new(),
             notes: vec![format!(
-                "{} command(s) need desired size, {} need domain command implementation, {} are manual-only",
+                "{} command(s) need desired size, {} need domain command implementation, {} are manual-only, {} required tool(s) are missing",
                 report.command_summary.needs_desired_size_count,
                 report.command_summary.needs_domain_implementation_count,
-                report.command_summary.manual_only_count
+                report.command_summary.manual_only_count,
+                missing_tool_count
             )],
         },
         RecoveryAction {
@@ -507,6 +560,16 @@ fn run_command(argv: &[String]) -> CommandRunResult {
     }
 }
 
+fn command_exists(tool: &str) -> bool {
+    Command::new("sh")
+        .arg("-c")
+        .arg("command -v -- \"$1\" >/dev/null 2>&1")
+        .arg("disk-nix-command-exists")
+        .arg(tool)
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
 fn execute_command_and_verification_plan(
     command_plan: &[ExecutionStep],
     verification_plan: &[VerificationStep],
@@ -609,6 +672,7 @@ fn summarize_verification_plan(verification_plan: &[VerificationStep]) -> Verifi
 fn summarize_tool_requirements(
     command_plan: &[ExecutionStep],
     verification_plan: &[VerificationStep],
+    tool_exists: impl Fn(&str) -> bool,
 ) -> Vec<ToolRequirement> {
     let mut requirements = BTreeMap::<String, ToolRequirement>::new();
 
@@ -619,7 +683,23 @@ fn summarize_tool_requirements(
         register_tool_requirement(&mut requirements, ExecutionPhase::Verification, command);
     }
 
-    requirements.into_values().collect()
+    requirements
+        .into_values()
+        .map(|mut requirement| {
+            let available = tool_exists(&requirement.tool);
+            requirement.availability = if available {
+                ToolAvailability::Available
+            } else {
+                ToolAvailability::Missing
+            };
+            requirement.message = if available {
+                format!("{} is available on PATH", requirement.tool)
+            } else {
+                format!("{} is missing from PATH", requirement.tool)
+            };
+            requirement
+        })
+        .collect()
 }
 
 fn register_tool_requirement(
@@ -638,6 +718,8 @@ fn register_tool_requirement(
             mutating_count: 0,
             verification_count: 0,
             phases: Vec::new(),
+            availability: ToolAvailability::Missing,
+            message: String::new(),
         });
     requirement.command_count += 1;
     if command.mutates {
@@ -21082,6 +21164,11 @@ mod tests {
             exportfs_requirement.phases,
             [ExecutionPhase::Command, ExecutionPhase::Verification]
         );
+        assert_eq!(
+            exportfs_requirement.availability,
+            ToolAvailability::Available
+        );
+        assert!(exportfs_requirement.message.contains("available"));
         assert!(seen.iter().any(|argv| {
             argv == &[
                 "exportfs".to_string(),
@@ -21094,6 +21181,59 @@ mod tests {
         assert!(report.execution_results.iter().any(|result| {
             result.phase == ExecutionPhase::Verification && result.argv == ["exportfs", "-v"]
         }));
+    }
+
+    #[test]
+    fn execute_refuses_missing_required_tools_before_running_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "exports": {
+                "/srv/share": {
+                  "operation": "create",
+                  "client": "192.0.2.0/24",
+                  "options": "ro,sync"
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let mut ran_commands = false;
+        let report = prepare_execution_with_runner_and_tool_checker(
+            &plan,
+            policy,
+            ExecutionMode::Execute,
+            |_| {
+                ran_commands = true;
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+            |tool| tool != "exportfs",
+        );
+
+        assert_eq!(report.status, ExecutionStatus::NotReady);
+        assert!(!ran_commands);
+        assert!(report.execution_results.is_empty());
+        assert!(report.messages.iter().any(|message| {
+            message.contains("required tool(s) are not available") && message.contains("exportfs")
+        }));
+        let exportfs_requirement = report
+            .tool_requirements
+            .iter()
+            .find(|requirement| requirement.tool == "exportfs")
+            .expect("exportfs tool requirement is reported");
+        assert_eq!(exportfs_requirement.availability, ToolAvailability::Missing);
+        assert!(exportfs_requirement.message.contains("missing"));
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| { action.kind == RecoveryActionKind::ResolveInputs })
+        );
     }
 
     #[test]

@@ -30,7 +30,8 @@ behavior across real storage stacks.
   collection layer rank.
 - Guarded apply flow with dry-run reports, script generation, readiness
   summaries, manual-review markers, unresolved-input reporting, policy blocks,
-  renderer tool requirement inventories, optional current-topology probing, and
+  renderer tool requirement inventories with PATH availability, optional
+  current-topology probing, missing-tool refusal before execution, and
   sequential execution of ready commands.
 - Current-topology reconciliation suppresses safe no-op grow, shrink, and
   property actions when the graph proves they are already satisfied and no
@@ -93,7 +94,7 @@ manual-review guidance, or non-ready command plans instead of guessing.
 - Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output
   formats. Probe reports now expose structured degradation categories, but
-  per-tool remediation and renderer availability checks still need expansion.
+  per-tool remediation and privilege diagnostics still need expansion.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
 - Implemented migration tooling and tests for future spec versions. The parser

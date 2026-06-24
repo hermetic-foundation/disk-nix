@@ -2562,13 +2562,15 @@ fn print_execution_report(
                 for requirement in &report.tool_requirements {
                     writeln!(
                         output,
-                        "- {}: {} commands, {} mutating, {} verification, phases {:?}",
+                        "- {}: {} commands, {} mutating, {} verification, phases {:?}, availability {:?}",
                         requirement.tool,
                         requirement.command_count,
                         requirement.mutating_count,
                         requirement.verification_count,
-                        requirement.phases
+                        requirement.phases,
+                        requirement.availability
                     )?;
+                    writeln!(output, "  {}", requirement.message)?;
                 }
             }
             for step in &report.command_plan {
