@@ -145,12 +145,13 @@ The current probe layer normalizes:
   target portal group tag, interface identity, connection/session state,
   connection CID/local/peer addresses, negotiated transfer parameters, host
   state, LUN SCSI coordinates, and attached disk state
-- NFS mount metadata through `nfsstat -m` for server, export, alternate
-  `target from source` records, protocol version, transport and mount
-  transport, port/mount address, transfer sizes, timeout/retransmit settings,
-  local locking, lookup cache, FS-Cache, capability flags, transfer
-  multipliers, directory transfer/block sizing, RPC security flavor
-  identifiers, age, and mount options
+- NFS server exports through `exportfs -v` and mount metadata through
+  `nfsstat -m` for exported paths, clients, exportfs option state, server,
+  export, alternate `target from source` records, protocol version, transport
+  and mount transport, port/mount address, transfer sizes,
+  timeout/retransmit settings, local locking, lookup cache, FS-Cache,
+  capability flags, transfer multipliers, directory transfer/block sizing,
+  RPC security flavor identifiers, age, and mount options
 - MD RAID arrays through `mdadm --detail --scan`, `mdadm --examine --scan`,
   and `mdadm --detail <array>` for scan-level array UUID, metadata version,
   array name, spare count, member device hints, array level, state, size,

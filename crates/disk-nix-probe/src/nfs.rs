@@ -11,12 +11,30 @@ struct NfsMount {
     options: Vec<(String, String)>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NfsExport {
+    path: String,
+    client: String,
+    options: Vec<(String, String)>,
+}
+
 pub fn normalize_nfsstat_mounts(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
     let mounts = parse_mounts(bytes)?;
     let mut graph = StorageGraph::empty();
 
     for mount in mounts {
         add_mount(&mut graph, mount);
+    }
+
+    Ok(graph)
+}
+
+pub fn normalize_exportfs_verbose(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
+    let exports = parse_exports(bytes)?;
+    let mut graph = StorageGraph::empty();
+
+    for export in exports {
+        add_export(&mut graph, export);
     }
 
     Ok(graph)
@@ -53,6 +71,61 @@ fn parse_mounts(bytes: &[u8]) -> Result<Vec<NfsMount>, ProbeError> {
     Ok(mounts)
 }
 
+fn parse_exports(bytes: &[u8]) -> Result<Vec<NfsExport>, ProbeError> {
+    let text = std::str::from_utf8(bytes)
+        .map_err(|error| ProbeError::Adapter(format!("failed to read exportfs output: {error}")))?;
+    let mut exports = Vec::new();
+    let mut current_path: Option<String> = None;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let first_is_whitespace = line
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_whitespace());
+        if !first_is_whitespace {
+            current_path = trimmed.split_whitespace().next().map(ToOwned::to_owned);
+            if let Some(export) = parse_inline_export(trimmed) {
+                exports.push(export);
+            }
+            continue;
+        }
+
+        if let (Some(path), Some((client, options))) =
+            (&current_path, parse_client_options(trimmed))
+        {
+            exports.push(NfsExport {
+                path: path.clone(),
+                client,
+                options,
+            });
+        }
+    }
+
+    Ok(exports)
+}
+
+fn parse_inline_export(value: &str) -> Option<NfsExport> {
+    let (path, rest) = value.split_once(char::is_whitespace)?;
+    let (client, options) = parse_client_options(rest.trim())?;
+    Some(NfsExport {
+        path: path.to_string(),
+        client,
+        options,
+    })
+}
+
+fn parse_client_options(value: &str) -> Option<(String, Vec<(String, String)>)> {
+    let (client, options) = value.split_once('(')?;
+    let options = options.trim_end_matches(')').trim();
+    Some((client.trim().to_string(), parse_option_list(options)))
+        .filter(|(client, _)| !client.is_empty())
+}
+
 fn add_mount(graph: &mut StorageGraph, mount: NfsMount) {
     let mount_id = format!("mount:{}", mount.target);
     let mut mount_node = Node::new(mount_id.clone(), NodeKind::NfsMount, mount.target.clone());
@@ -78,6 +151,20 @@ fn add_mount(graph: &mut StorageGraph, mount: NfsMount) {
     }
     graph.add_node(export_node);
     graph.add_edge(Edge::new(export_id, mount_id, Relationship::MountedAt));
+}
+
+fn add_export(graph: &mut StorageGraph, export: NfsExport) {
+    let export_id = format!("nfs-export:{}:{}", export.path, export.client);
+    let mut export_node = Node::new(export_id, NodeKind::NfsExport, export.path.clone())
+        .with_property("nfs.export", export.path)
+        .with_property("nfs.export-client", export.client)
+        .with_property("nfs.exportfs", "true");
+
+    for (key, value) in export.options {
+        export_node = export_node.with_property(format!("nfs.export-option-{key}"), value);
+    }
+
+    graph.add_node(export_node);
 }
 
 fn parse_header(line: &str) -> Option<(String, String)> {
@@ -167,6 +254,12 @@ storage.example:/export/home mounted on /home:
    Options: ro,vers=3,proto=tcp,addr=10.0.0.11,local_lock=all
 "#;
 
+    const EXPORTFS: &[u8] = br#"
+/srv/share
+        192.0.2.0/24(sync,wdelay,hide,no_subtree_check,sec=sys,rw,secure,root_squash,no_all_squash)
+/srv/read-only 198.51.100.10(ro,sync,no_subtree_check,fsid=12)
+"#;
+
     #[test]
     fn normalizes_nfsstat_mount_metadata() {
         let graph = normalize_nfsstat_mounts(NFSSTAT).expect("fixture should parse");
@@ -246,6 +339,45 @@ storage.example:/export/home mounted on /home:
                     .properties
                     .iter()
                     .any(|property| property.key == "nfs.local-lock" && property.value == "all")
+        }));
+    }
+
+    #[test]
+    fn normalizes_exportfs_verbose_metadata() {
+        let graph = normalize_exportfs_verbose(EXPORTFS).expect("fixture should parse");
+
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::NfsExport
+                && node.name == "/srv/share"
+                && node.properties.iter().any(|property| {
+                    property.key == "nfs.export-client" && property.value == "192.0.2.0/24"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "nfs.exportfs" && property.value == "true")
+                && node.properties.iter().any(|property| {
+                    property.key == "nfs.export-option-rw" && property.value == "true"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "nfs.export-option-sec" && property.value == "sys"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "nfs.export-option-root-squash" && property.value == "true"
+                })
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::NfsExport
+                && node.name == "/srv/read-only"
+                && node.properties.iter().any(|property| {
+                    property.key == "nfs.export-client" && property.value == "198.51.100.10"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "nfs.export-option-fsid" && property.value == "12"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "nfs.export-option-ro" && property.value == "true"
+                })
         }));
     }
 }

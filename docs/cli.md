@@ -333,13 +333,15 @@ Use these commands for:
   parameters, target IQNs, LUN sizes, SCSI host/channel/id coordinates,
   attached disk state, session to target imports, target-contained LUN counts,
   and LUN-to-block-device backing relationships when `iscsiadm --mode node -P 1` or `iscsiadm --mode session -P 3` exposes them
-- `nfs`: NFS exports and client mounts, including source, server/export split,
-  NFS protocol version, transport and mount transport, security flavor,
-  client/server addresses, port/mount address, read/write transfer sizes,
-  timeout/retransmit settings, local locking, lookup cache, FS-Cache,
-  capability flags, transfer multipliers, directory transfer/block sizing,
-  RPC security flavor identifiers, age, and export-to-client mount
-  relationships when `findmnt` or NFS mount probes expose them
+- `nfs`: NFS server exports and client mounts, including exportfs path,
+  client, server/export split, export option state such as rw/ro, sync,
+  subtree checking, security flavor, squash flags, FSID, NFS protocol version,
+  transport and mount transport, client/server addresses, port/mount address,
+  read/write transfer sizes, timeout/retransmit settings, local locking,
+  lookup cache, FS-Cache, capability flags, transfer multipliers, directory
+  transfer/block sizing, RPC security flavor identifiers, age, and
+  export-to-client mount relationships when `exportfs -v`, `findmnt`, or NFS
+  mount probes expose them
 - `mounts`: local mountpoints and NFS mounts, including mount source,
   read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
   lower/upper/work directory options when `findmnt` reports them

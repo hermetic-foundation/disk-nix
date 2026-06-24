@@ -118,6 +118,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_iscsi_nodes(&mut result);
         collect_iscsi(&mut result);
         collect_nfs(&mut result);
+        collect_nfs_exports(&mut result);
         collect_mdraid(&mut result);
         collect_multipath(&mut result);
         collect_nvme(&mut result);
@@ -1288,6 +1289,43 @@ fn collect_nfs(result: &mut ProbeResult) {
         },
         Err(message) => result.reports.push(ProbeReport {
             adapter: "nfs".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
+    }
+}
+
+fn collect_nfs_exports(result: &mut ProbeResult) {
+    match run_report("exportfs", &["-v"]) {
+        Ok(output) if output.is_empty() => result.reports.push(ProbeReport {
+            adapter: "nfs-exports".to_string(),
+            status: ProbeStatus::Available,
+            message: Some("no NFS exports discovered".to_string()),
+        }),
+        Ok(output) => match nfs::normalize_exportfs_verbose(&output) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "nfs-exports".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from NFS exports"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "nfs-exports".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "nfs-exports".to_string(),
             status: if message.contains("not found") || message.contains("No such file") {
                 ProbeStatus::Unavailable
             } else {

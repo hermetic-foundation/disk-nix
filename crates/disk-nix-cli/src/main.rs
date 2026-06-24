@@ -3028,6 +3028,29 @@ fn usage_details(node: &Node) -> String {
         ("nfs.source", "source"),
         ("nfs.server", "server"),
         ("nfs.export", "export"),
+        ("nfs.export-client", "export-client"),
+        ("nfs.exportfs", "exportfs"),
+        ("nfs.export-option-rw", "export-rw"),
+        ("nfs.export-option-ro", "export-ro"),
+        ("nfs.export-option-sync", "export-sync"),
+        ("nfs.export-option-async", "export-async"),
+        ("nfs.export-option-wdelay", "export-wdelay"),
+        ("nfs.export-option-no-wdelay", "export-no-wdelay"),
+        ("nfs.export-option-hide", "export-hide"),
+        ("nfs.export-option-nohide", "export-nohide"),
+        (
+            "nfs.export-option-no-subtree-check",
+            "export-no-subtree-check",
+        ),
+        ("nfs.export-option-subtree-check", "export-subtree-check"),
+        ("nfs.export-option-sec", "export-sec"),
+        ("nfs.export-option-secure", "export-secure"),
+        ("nfs.export-option-insecure", "export-insecure"),
+        ("nfs.export-option-root-squash", "export-root-squash"),
+        ("nfs.export-option-no-root-squash", "export-no-root-squash"),
+        ("nfs.export-option-all-squash", "export-all-squash"),
+        ("nfs.export-option-no-all-squash", "export-no-all-squash"),
+        ("nfs.export-option-fsid", "export-fsid"),
         ("nfs.vers", "vers"),
         ("nfs.proto", "proto"),
         ("nfs.sec", "sec"),
@@ -5121,6 +5144,21 @@ mod tests {
             .with_property("nfs.export", "/export/home"),
         );
         graph.add_node(
+            Node::new(
+                "nfs-export:/srv/share:192.0.2.0/24",
+                NodeKind::NfsExport,
+                "/srv/share",
+            )
+            .with_property("nfs.export", "/srv/share")
+            .with_property("nfs.export-client", "192.0.2.0/24")
+            .with_property("nfs.exportfs", "true")
+            .with_property("nfs.export-option-rw", "true")
+            .with_property("nfs.export-option-sync", "true")
+            .with_property("nfs.export-option-no-subtree-check", "true")
+            .with_property("nfs.export-option-sec", "sys")
+            .with_property("nfs.export-option-root-squash", "true"),
+        );
+        graph.add_node(
             Node::new("mount:/home", NodeKind::NfsMount, "/home")
                 .with_size_bytes(1_099_511_627_776)
                 .with_usage(Usage {
@@ -5194,6 +5232,11 @@ mod tests {
         assert!(output.contains("local-lock=none lookupcache=positive fsc=true age=123"));
         assert!(output.contains("caps=0x3fffdf wtmult=512 dtsize=32768 bsize=0"));
         assert!(output.contains("flavor=1 pseudoflavor=1"));
+        assert!(output.contains("/srv/share"));
+        assert!(output.contains("export-client=192.0.2.0/24 exportfs=true"));
+        assert!(output.contains("export-rw=true export-sync=true"));
+        assert!(output.contains("export-no-subtree-check=true export-sec=sys"));
+        assert!(output.contains("export-root-squash=true"));
     }
 
     #[test]
