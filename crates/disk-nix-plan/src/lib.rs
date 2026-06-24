@@ -238,6 +238,8 @@ pub enum TopologyDiagnosticKind {
     SizeAlreadySatisfied,
     SizeConflict,
     FilesystemTypeConflict,
+    DiskCreateAlreadySatisfied,
+    DiskCreateRequired,
     BtrfsSubvolumeCreateAlreadySatisfied,
     BtrfsSubvolumeCreateRequired,
     BtrfsSubvolumeDestroyAlreadySatisfied,
@@ -832,6 +834,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                 matches!(
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::DiskCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
@@ -1478,6 +1481,7 @@ fn already_satisfied_action_ids(
             already_satisfied |= matches!(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
+                    | TopologyDiagnosticKind::DiskCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
@@ -1633,6 +1637,7 @@ fn topology_diagnostics_for_action(
 
     diagnostics.extend(size_diagnostic(action, node, &query));
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
+    diagnostics.extend(disk_create_diagnostic(action, node, &query));
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
     diagnostics.extend(iscsi_logout_diagnostic(action, &matches, &query));
     diagnostics.extend(nvme_namespace_present_diagnostic(action, node, &query));
@@ -1834,6 +1839,72 @@ fn filesystem_type_diagnostic(
         kind: TopologyDiagnosticKind::FilesystemTypeConflict,
         query: query.to_string(),
         message: format!("desired filesystem type {desired} differs from current {current}"),
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn disk_create_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Create
+        || action.context.collection.as_deref() != Some("disks")
+    {
+        return None;
+    }
+
+    let desired_table = action.context.partition_type.as_deref().unwrap_or("gpt");
+
+    if node.kind != NodeKind::PhysicalDisk {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::DiskCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a physical disk; partition table initialization remains actionable only after target review",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let Some(current_table) = property_value_from_node(node, "partition.table") else {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::DiskCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "disk {query} current partition table is unknown; desired {desired_table} remains actionable after disk identity review"
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    };
+
+    let (level, kind, message) = if current_table.eq_ignore_ascii_case(desired_table) {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::DiskCreateAlreadySatisfied,
+            format!("disk {query} already has partition table {current_table}"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::DiskCreateRequired,
+            format!(
+                "disk {query} has partition table {current_table}, desired {desired_table}; mklabel remains destructive and requires review"
+            ),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
         current: Some(current_node_summary(node)),
     })
 }
@@ -16152,6 +16223,142 @@ mod tests {
                 && diagnostic.kind == TopologyDiagnosticKind::PartitionCreateRequired
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.message.contains("not a partition")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_disk_create_from_partition_table() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "disks": {
+                "/dev/disk/by-id/system": {
+                  "operation": "create",
+                  "partitionType": "gpt"
+                },
+                "/dev/disk/by-id/default-gpt": {
+                  "operation": "create"
+                },
+                "/dev/disk/by-id/legacy": {
+                  "operation": "create",
+                  "partitionType": "gpt"
+                },
+                "/dev/disk/by-id/unknown": {
+                  "operation": "create",
+                  "partitionType": "gpt"
+                },
+                "/dev/disk/by-id/wrong": {
+                  "operation": "create",
+                  "partitionType": "gpt"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/system",
+                NodeKind::PhysicalDisk,
+                "/dev/disk/by-id/system",
+            )
+            .with_path("/dev/disk/by-id/system")
+            .with_property("partition.table", "gpt"),
+        );
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/default-gpt",
+                NodeKind::PhysicalDisk,
+                "/dev/disk/by-id/default-gpt",
+            )
+            .with_path("/dev/disk/by-id/default-gpt")
+            .with_property("partition.table", "gpt"),
+        );
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/legacy",
+                NodeKind::PhysicalDisk,
+                "/dev/disk/by-id/legacy",
+            )
+            .with_path("/dev/disk/by-id/legacy")
+            .with_property("partition.table", "msdos"),
+        );
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/unknown",
+                NodeKind::PhysicalDisk,
+                "/dev/disk/by-id/unknown",
+            )
+            .with_path("/dev/disk/by-id/unknown"),
+        );
+        graph.add_node(
+            Node::new(
+                "partition:/dev/disk/by-id/wrong",
+                NodeKind::Partition,
+                "/dev/disk/by-id/wrong",
+            )
+            .with_path("/dev/disk/by-id/wrong"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 5);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.summary.action_count, 3);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "disks:/dev/disk/by-id/system:create")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "disks:/dev/disk/by-id/default-gpt:create")
+        );
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "disks:/dev/disk/by-id/legacy:create"
+                && action.operation == Operation::Create
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "disks:/dev/disk/by-id/unknown:create"
+                && action.operation == Operation::Create
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "disks:/dev/disk/by-id/wrong:create"
+                && action.operation == Operation::Create
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "disks:/dev/disk/by-id/system:create"
+                && diagnostic.kind == TopologyDiagnosticKind::DiskCreateAlreadySatisfied
+                && diagnostic.message.contains("partition table gpt")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "disks:/dev/disk/by-id/default-gpt:create"
+                && diagnostic.kind == TopologyDiagnosticKind::DiskCreateAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "disks:/dev/disk/by-id/legacy:create"
+                && diagnostic.kind == TopologyDiagnosticKind::DiskCreateRequired
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.message.contains("partition table msdos")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "disks:/dev/disk/by-id/unknown:create"
+                && diagnostic.kind == TopologyDiagnosticKind::DiskCreateRequired
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic
+                    .message
+                    .contains("current partition table is unknown")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "disks:/dev/disk/by-id/wrong:create"
+                && diagnostic.kind == TopologyDiagnosticKind::DiskCreateRequired
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.message.contains("not a physical disk")
         }));
     }
 
