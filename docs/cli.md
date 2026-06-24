@@ -566,14 +566,16 @@ With `--probe-current`, the CLI also probes the current host and adds
 size diagnostics, filesystem type conflicts, and already-satisfied property,
 size, or remount option checks. Mount actions are also compared with
 `mount.source` when the current graph has mountpoint data, remount actions
-treat declared options as a required subset of current mount options, LUKS open
-actions are compared with `cryptsetup.active`, NFS export actions are compared
-with `nfs.export-client` and `nfs.export-option-*` properties, and iSCSI login
+treat declared options as a required subset of current mount options, LVM
+activation actions are compared with `lvm.active`, LUKS open actions are
+compared with `cryptsetup.active`, NFS export actions are compared with
+`nfs.export-client` and `nfs.export-option-*` properties, and iSCSI login
 actions are compared with current session state across all matching
 target/session nodes when metadata is available. Safe already-satisfied grow,
-shrink, iSCSI login, LUKS open, mount, remount, NFS export, and property
-actions that have no warning diagnostics are suppressed from the actionable
-plan and counted as `topologyComparison.summary.suppressedActionCount`;
+shrink, iSCSI login, LVM activation, LUKS open, mount, remount, NFS export, and
+property actions that have no warning diagnostics are suppressed from the
+actionable plan and counted as
+`topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 inactive LUKS mappers, mountpoints using a different source, export
 client/option differences, or known iSCSI targets without a logged-in session
 stay actionable with a warning diagnostic.
@@ -900,6 +902,8 @@ physical-volume removal. Volume group import/export declarations render
 reviewed `vgimport <vg>` and `vgexport <vg>` commands. LVM logical volume,
 thin-pool, snapshot, and volume-group activation declarations render reviewed
 `lvchange --activate y|n <vg/lv>` or `vgchange --activate y|n <vg>` commands.
+With current-topology probing, already-active logical-volume, thin-pool, and
+snapshot activation actions are suppressed from the actionable plan.
 LVM snapshot `operation = "rescan"` renders read-only `lvs` snapshot origin,
 COW usage, attribute, size, and graph inspection commands before rollback or
 removal decisions.

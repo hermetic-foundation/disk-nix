@@ -240,6 +240,8 @@ pub enum TopologyDiagnosticKind {
     FilesystemTypeConflict,
     IscsiLoginAlreadySatisfied,
     IscsiLoginRequired,
+    LvmActivateAlreadySatisfied,
+    LvmActivateRequired,
     LuksOpenAlreadySatisfied,
     LuksOpenRequired,
     MountAlreadySatisfied,
@@ -731,6 +733,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
+                        | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
                         | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
@@ -1292,6 +1295,7 @@ fn already_satisfied_action_ids(
             action.operation,
             Operation::Grow
                 | Operation::Shrink
+                | Operation::Activate
                 | Operation::Login
                 | Operation::Open
                 | Operation::Mount
@@ -1311,6 +1315,7 @@ fn already_satisfied_action_ids(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
+                    | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
                     | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
@@ -1359,6 +1364,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(size_diagnostic(action, node, &query));
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
+    diagnostics.extend(lvm_activate_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
@@ -1504,6 +1510,39 @@ fn mount_diagnostic(
             TopologyDiagnosticLevel::Warning,
             TopologyDiagnosticKind::MountSourceConflict,
             format!("mountpoint {query} uses source {current_source}, desired {desired_source}"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn lvm_activate_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Activate || !is_lvm_activation_collection(action) {
+        return None;
+    }
+    let active = lvm_node_is_active(node)?;
+    let (level, kind, message) = if active {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LvmActivateAlreadySatisfied,
+            format!("LVM object {query} is already active"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LvmActivateRequired,
+            format!("LVM object {query} is known but not active"),
         )
     };
 
@@ -1714,6 +1753,22 @@ fn is_logged_in_iscsi_state(value: &str) -> bool {
 
 fn luks_node_is_active(node: &Node) -> Option<bool> {
     property_value_from_node(node, "cryptsetup.active").map(|value| value == "true")
+}
+
+fn is_lvm_activation_collection(action: &PlannedAction) -> bool {
+    matches!(
+        action.context.collection.as_deref(),
+        Some("volumes" | "thinPools" | "lvmSnapshots")
+    )
+}
+
+fn lvm_node_is_active(node: &Node) -> Option<bool> {
+    property_value_from_node(node, "lvm.active").map(|value| {
+        value
+            .split_whitespace()
+            .next()
+            .is_some_and(|state| state.eq_ignore_ascii_case("active"))
+    })
 }
 
 fn property_value_from_node<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
@@ -12804,6 +12859,78 @@ mod tests {
             diagnostic.action_id == "luks.devices:cryptroot:open"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::LuksOpenRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_active_lvm_activate_action() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg0/home": {
+                  "operation": "activate"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lvm:lv:vg0/home", NodeKind::LvmLogicalVolume, "vg0/home")
+                .with_path("/dev/vg0/home")
+                .with_property("lvm.active", "active")
+                .with_property("lvm.active-locally", "active locally"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/home:activate"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmActivateAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_lvm_activate_action_when_inactive() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg0/home": {
+                  "operation": "activate"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lvm:lv:vg0/home", NodeKind::LvmLogicalVolume, "vg0/home")
+                .with_path("/dev/vg0/home")
+                .with_property("lvm.active", "inactive"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/home:activate"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmActivateRequired
         }));
     }
 
