@@ -955,7 +955,9 @@ renders offline-gated `multipath -f <map>` after map inspection; missing
 stable map targets keep map-specific commands non-ready. With
 current-topology probing, absent map flushes are suppressed as already
 satisfied and present maps remain actionable with a warning, including the
-current WWID or dm map name when available.
+current WWID or dm map name when available. Path add is suppressed when probed
+`Backs` edges show the path already feeds the map, and path removal is
+suppressed when the path is already absent from the matched map.
 NVMe namespace command plans render `nvme create-ns`, standalone
 `operation = "attach"` plans through `nvme attach-ns`, explicit
 `operation = "rescan"` plans through `nvme ns-rescan`, standalone

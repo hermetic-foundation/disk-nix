@@ -290,6 +290,10 @@ pub enum TopologyDiagnosticKind {
     LuksTokenRemoveRequired,
     MultipathDestroyAlreadySatisfied,
     MultipathDestroyRequired,
+    MultipathPathAddAlreadySatisfied,
+    MultipathPathAddRequired,
+    MultipathPathRemoveAlreadySatisfied,
+    MultipathPathRemoveRequired,
     SwapDeactivateAlreadySatisfied,
     SwapDeactivateRequired,
     SwapDestroyAlreadySatisfied,
@@ -851,6 +855,8 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
                         | TopologyDiagnosticKind::LuksTokenRemoveAlreadySatisfied
                         | TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied
+                        | TopologyDiagnosticKind::MultipathPathAddAlreadySatisfied
+                        | TopologyDiagnosticKind::MultipathPathRemoveAlreadySatisfied
                         | TopologyDiagnosticKind::SwapDeactivateAlreadySatisfied
                         | TopologyDiagnosticKind::SwapDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
@@ -1494,6 +1500,8 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
                     | TopologyDiagnosticKind::LuksTokenRemoveAlreadySatisfied
                     | TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied
+                    | TopologyDiagnosticKind::MultipathPathAddAlreadySatisfied
+                    | TopologyDiagnosticKind::MultipathPathRemoveAlreadySatisfied
                     | TopologyDiagnosticKind::SwapDeactivateAlreadySatisfied
                     | TopologyDiagnosticKind::SwapDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
@@ -1569,6 +1577,9 @@ fn topology_diagnostics_for_action(
             return vec![diagnostic];
         }
         if let Some(diagnostic) = multipath_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
+        if let Some(diagnostic) = multipath_path_remove_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
         if let Some(diagnostic) = loop_absent_diagnostic(action, &query) {
@@ -1650,6 +1661,10 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(btrfs_qgroup_create_present_diagnostic(action, node, &query));
     diagnostics.extend(dm_map_present_diagnostic(action, node, &query));
     diagnostics.extend(multipath_present_diagnostic(action, node, &query));
+    diagnostics.extend(multipath_path_add_diagnostic(action, node, graph, &query));
+    diagnostics.extend(multipath_path_remove_diagnostic(
+        action, node, graph, &query,
+    ));
     diagnostics.extend(loop_present_diagnostic(action, node, &query));
     diagnostics.extend(backing_file_create_diagnostic(action, node, &query));
     diagnostics.extend(md_create_diagnostic(action, node, &query));
@@ -3171,6 +3186,135 @@ fn multipath_identity_detail(node: &Node) -> Option<String> {
         return Some(format!("WWID {wwid}"));
     }
     property_value_from_node(node, "multipath.dm").map(|dm_name| format!("dm map {dm_name}"))
+}
+
+fn multipath_path_remove_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::RemoveDevice
+        || action.context.collection.as_deref() != Some("multipathMaps")
+    {
+        return None;
+    }
+
+    let device = action.context.device.as_deref().unwrap_or("<unknown-path>");
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::MultipathPathRemoveAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("multipath map {query} is absent, so path {device} is already removed"),
+        current: None,
+    })
+}
+
+fn multipath_path_add_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    graph: &StorageGraph,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::AddDevice
+        || action.context.collection.as_deref() != Some("multipathMaps")
+    {
+        return None;
+    }
+    let device = action.context.device.as_deref()?;
+
+    if node.kind != NodeKind::MultipathDevice {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MultipathPathAddRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a multipath map; path add remains actionable only after target review",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    if multipath_map_has_path(graph, node, device) {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Info,
+            kind: TopologyDiagnosticKind::MultipathPathAddAlreadySatisfied,
+            query: query.to_string(),
+            message: format!("multipath map {query} already includes path {device}"),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::MultipathPathAddRequired,
+        query: query.to_string(),
+        message: format!("multipath map {query} does not currently include path {device}"),
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn multipath_path_remove_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    graph: &StorageGraph,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::RemoveDevice
+        || action.context.collection.as_deref() != Some("multipathMaps")
+    {
+        return None;
+    }
+    let device = action.context.device.as_deref()?;
+
+    if node.kind != NodeKind::MultipathDevice {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MultipathPathRemoveRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a multipath map; path removal remains actionable only after target review",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    if multipath_map_has_path(graph, node, device) {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MultipathPathRemoveRequired,
+            query: query.to_string(),
+            message: format!("multipath map {query} still includes path {device}"),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::MultipathPathRemoveAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("multipath map {query} no longer includes path {device}"),
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn multipath_map_has_path(graph: &StorageGraph, map: &Node, device: &str) -> bool {
+    graph.edges.iter().any(|edge| {
+        edge.relationship == Relationship::Backs
+            && edge.to == map.id
+            && graph
+                .nodes
+                .iter()
+                .find(|node| node.id == edge.from)
+                .is_some_and(|path| path.matches(device))
+    })
 }
 
 fn loop_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
@@ -20136,6 +20280,126 @@ mod tests {
                 && diagnostic
                     .message
                     .contains("WWID 3600508b400105e210000900000490000")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_multipath_path_membership() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "multipathMaps": {
+                "mpatha": {
+                  "target": "/dev/mapper/mpatha",
+                  "addDevices": ["/dev/sdb", "/dev/sdd"],
+                  "removeDevices": ["/dev/sdc", "/dev/sde"]
+                },
+                "absent": {
+                  "target": "/dev/mapper/absent",
+                  "removeDevices": ["/dev/sdf"]
+                },
+                "wrong-kind": {
+                  "target": "/dev/mapper/wrong-kind",
+                  "addDevices": ["/dev/sdg"],
+                  "removeDevices": ["/dev/sdh"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("multipath:mpatha", NodeKind::MultipathDevice, "mpatha")
+                .with_path("/dev/mapper/mpatha")
+                .with_property("multipath.wwid", "3600508b400105e210000900000490000"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb").with_path("/dev/sdb"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/sdc", NodeKind::PhysicalDisk, "/dev/sdc").with_path("/dev/sdc"),
+        );
+        graph.add_node(
+            Node::new(
+                "dm:/dev/mapper/wrong-kind",
+                NodeKind::DeviceMapper,
+                "/dev/mapper/wrong-kind",
+            )
+            .with_path("/dev/mapper/wrong-kind"),
+        );
+        graph.add_edge(disk_nix_model::Edge::new(
+            "block:/dev/sdb",
+            "multipath:mpatha",
+            Relationship::Backs,
+        ));
+        graph.add_edge(disk_nix_model::Edge::new(
+            "block:/dev/sdc",
+            "multipath:mpatha",
+            Relationship::Backs,
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 7);
+        assert_eq!(comparison.summary.already_satisfied_count, 3);
+        assert_eq!(comparison.summary.suppressed_action_count, 3);
+        assert_eq!(plan.summary.action_count, 4);
+        for suppressed_id in [
+            "multipathMaps:mpatha:add-device:/dev/sdb",
+            "multipathMaps:mpatha:remove-device:/dev/sde",
+            "multipathMaps:absent:remove-device:/dev/sdf",
+        ] {
+            assert!(plan.actions.iter().all(|action| action.id != suppressed_id));
+        }
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "multipathMaps:mpatha:add-device:/dev/sdb"
+                && diagnostic.kind == TopologyDiagnosticKind::MultipathPathAddAlreadySatisfied
+                && diagnostic
+                    .message
+                    .contains("already includes path /dev/sdb")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "multipathMaps:mpatha:add-device:/dev/sdd"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MultipathPathAddRequired
+                && diagnostic
+                    .message
+                    .contains("does not currently include path /dev/sdd")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "multipathMaps:mpatha:remove-device:/dev/sdc"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MultipathPathRemoveRequired
+                && diagnostic.message.contains("still includes path /dev/sdc")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "multipathMaps:mpatha:remove-device:/dev/sde"
+                && diagnostic.kind == TopologyDiagnosticKind::MultipathPathRemoveAlreadySatisfied
+                && diagnostic
+                    .message
+                    .contains("no longer includes path /dev/sde")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "multipathMaps:absent:remove-device:/dev/sdf"
+                && diagnostic.kind == TopologyDiagnosticKind::MultipathPathRemoveAlreadySatisfied
+                && diagnostic
+                    .message
+                    .contains("map /dev/mapper/absent is absent")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "multipathMaps:wrong-kind:add-device:/dev/sdg"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MultipathPathAddRequired
+                && diagnostic.message.contains("not a multipath map")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "multipathMaps:wrong-kind:remove-device:/dev/sdh"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MultipathPathRemoveRequired
+                && diagnostic.message.contains("not a multipath map")
         }));
     }
 

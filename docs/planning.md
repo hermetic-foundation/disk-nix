@@ -462,7 +462,9 @@ offline-required host map flushing through `multipath -f`; target-side LUN data
 is not deleted, but filesystems, LVM, dm, and services must move away first.
 Current-topology comparison suppresses destroy actions when the map is already
 absent and keeps present maps actionable with a warning that includes the WWID
-or dm map name when probe metadata reports it.
+or dm map name when probe metadata reports it. It also suppresses path add when
+probed `Backs` edges show the path already feeds the map, and suppresses path
+removal when the path is already absent from the matched map.
 
 ZFS dataset and zvol `operation = "rescan"` actions are online read-only
 refreshes. Dataset rescan renders `zfs list -t filesystem`, `zfs get`, and
