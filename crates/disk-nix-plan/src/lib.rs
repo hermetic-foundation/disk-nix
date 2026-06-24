@@ -1574,7 +1574,8 @@ fn is_btrfs_balance_filter_property(property: &str) -> bool {
 }
 
 fn add_swap_actions(actions: &mut Vec<PlannedAction>, name: &str, swap: &Value) {
-    let device = string_field(swap, &["device"]).unwrap_or_else(|| name.to_string());
+    let device =
+        string_field(swap, &["target", "path", "device"]).unwrap_or_else(|| name.to_string());
     let operation = swap
         .get("operation")
         .or_else(|| swap.get("action"))
@@ -9331,6 +9332,60 @@ mod tests {
                 .iter()
                 .any(|alternative| alternative.contains("swap.label"))
         }));
+    }
+
+    #[test]
+    fn plan_accepts_swap_path_aliases_for_logical_keys() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "swaps": {
+                "scratch": {
+                  "path": "/swapfile",
+                  "operation": "grow",
+                  "desiredSize": "16GiB"
+                },
+                "inventory": {
+                  "target": "/dev/disk/by-label/swap-inventory",
+                  "operation": "rescan"
+                },
+                "primary": {
+                  "path": "/dev/disk/by-label/swap",
+                  "preserveData": false
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let grow = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "swaps:scratch:grow")
+            .expect("logical-key swap grow action exists");
+        assert_eq!(grow.context.target.as_deref(), Some("/swapfile"));
+        assert_eq!(grow.context.device.as_deref(), Some("/swapfile"));
+        assert_eq!(grow.context.desired_size.as_deref(), Some("16GiB"));
+
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "swaps:inventory:rescan")
+            .expect("logical-key swap rescan action exists");
+        assert_eq!(
+            rescan.context.target.as_deref(),
+            Some("/dev/disk/by-label/swap-inventory")
+        );
+
+        let format = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "swaps:primary:format")
+            .expect("logical-key swap format action exists");
+        assert_eq!(
+            format.context.target.as_deref(),
+            Some("/dev/disk/by-label/swap")
+        );
+        assert_eq!(format.risk, RiskClass::Destructive);
     }
 
     #[test]

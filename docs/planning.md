@@ -509,9 +509,10 @@ require a `/dev/nvme*` controller path from the declaration key, `target`,
 `path`, or `device`, plus `desiredSize`; attach and delete flows require
 `namespaceId` plus `controllers` when attachment state is changed.
 Swap grow, format, label, UUID, and rescan command plans require a path-shaped
-swap target. Label and UUID updates render `swaplabel --label` and
-`swaplabel --uuid`; `operation = "rescan"` renders read-only `swapon --show`,
-`blkid`, and graph inspection before any later grow or identity change. MD RAID
+swap target from the declaration key, `target`, `path`, or `device`. Label and
+UUID updates render `swaplabel --label` and `swaplabel --uuid`;
+`operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
+inspection before any later grow or identity change. MD RAID
 assemble, stop, create, grow, member add,
 replacement, and removal command plans require an explicit array path such as
 `/dev/md/root`; assemble also requires explicit reviewed member devices. MD

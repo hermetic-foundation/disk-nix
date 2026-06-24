@@ -573,10 +573,12 @@ Swapfile growth command plans render `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon`; block-device swap growth keeps the backing resize command
 non-ready until the partition, LV, LUN, or other backing layer is selected.
 Swap grow and format commands require a path-shaped target such as `/swapfile`
-or `/dev/disk/by-*`. Swap label and UUID property updates render
-`swaplabel --label <label> <target>` and `swaplabel --uuid <uuid> <target>` and
-remain offline-required. Swap `operation = "rescan"` renders read-only
-`swapon --show`, `blkid`, and graph inspection commands for activation,
+or `/dev/disk/by-*`; logical swap names can declare it with `target`, `path`,
+or `device`. Swap label and UUID property updates render
+`swaplabel --label <label> <target>` and
+`swaplabel --uuid <uuid> <target>` and remain offline-required. Swap
+`operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
+inspection commands for activation,
 capacity, label, UUID, and backing-storage refresh.
 Zram `operation = "rescan"` renders read-only `zramctl`, `swapon --show`, and
 `disk-nix swap` commands for compressed swap size, algorithm, memory use, and

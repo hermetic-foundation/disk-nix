@@ -232,6 +232,8 @@ render reviewed `zfs clone <snapshot> <dataset>` plans through the NixOS module.
 Typed swap declarations include:
 
 - `device`
+- `target`
+- `path`
 - `operation`
 - `action`
 - `destroy`
@@ -243,8 +245,9 @@ Typed swap declarations include:
 - `preserveData`
 - `properties`
 
-`targetSize` and `size` are serialized as aliases accepted by the planner for
-the desired swap size.
+`target` and `path` are aliases for logical declaration keys that should use a
+different concrete swap path. `targetSize` and `size` are serialized as aliases
+accepted by the planner for the desired swap size.
 
 Typed zram declarations include:
 
@@ -485,7 +488,7 @@ Example lifecycle planning through NixOS options:
       desiredSize = "100%";
     };
     swaps.primary = {
-      device = "/dev/disk/by-label/swap";
+      path = "/dev/disk/by-label/swap";
       operation = "format";
       desiredSize = "8GiB";
       properties.label = "swap";

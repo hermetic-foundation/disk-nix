@@ -854,6 +854,8 @@ let
   typedSwapSpec = lib.mapAttrs (_: swap: {
     inherit (swap)
       device
+      target
+      path
       operation
       action
       destroy
@@ -866,6 +868,14 @@ let
       properties
       ;
   }) cfg.swaps;
+  swapDevicePath =
+    swap:
+    if swap.target != null then
+      swap.target
+    else if swap.path != null then
+      swap.path
+    else
+      swap.device;
   hasDeclaredZram =
     cfg.zram.enable
     || cfg.zram.operation != null
@@ -1257,6 +1267,20 @@ in
                 example = "/dev/disk/by-label/swap";
               };
 
+              target = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Concrete swap path when the attribute name is only a friendly declaration key.";
+                example = "/dev/disk/by-label/swap";
+              };
+
+              path = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Alias for target accepted by disk-nix for logical swap declaration keys.";
+                example = "/swapfile";
+              };
+
               priority = lib.mkOption {
                 type = lib.types.nullOr lib.types.int;
                 default = null;
@@ -1330,7 +1354,7 @@ in
         )
       );
       default = { };
-      description = "Typed swap declarations used to generate both disk-nix spec and NixOS swapDevices.";
+      description = "Typed swap declarations used to generate both disk-nix spec and NixOS swapDevices. A logical attribute name can set target, path, or device to the concrete swap path.";
     };
 
     zram = {
@@ -2020,7 +2044,7 @@ in
     swapDevices = lib.mapAttrsToList (
       _: swap:
       {
-        inherit (swap) device;
+        device = swapDevicePath swap;
       }
       // lib.optionalAttrs (swap.priority != null) {
         inherit (swap) priority;

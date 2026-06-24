@@ -303,10 +303,12 @@ plans require a mounted filesystem path declared through `target`, `path`, or
 Swapfile grow plans render reviewed `swapoff`, `fallocate --length`, `mkswap`,
 and `swapon` steps while keeping block-device backing growth explicit. Swap
 grow and format commands require a path-shaped swap target such as `/swapfile`
-or `/dev/disk/by-*`. Swap label and UUID property updates render
-`swaplabel --label <label> <target>` and `swaplabel --uuid <uuid> <target>` as
-offline-required signature identity changes. Swap `operation = "rescan"`
-renders read-only `swapon --show`, `blkid`, and graph inspection for
+or `/dev/disk/by-*`; logical swap names can declare it with `target`, `path`,
+or `device`. Swap label and UUID property updates render
+`swaplabel --label <label> <target>` and
+`swaplabel --uuid <uuid> <target>` as offline-required signature identity
+changes. Swap `operation = "rescan"` renders read-only `swapon --show`,
+`blkid`, and graph inspection for
 activation, capacity, label, UUID, and backing-storage refresh.
 LUKS open plans render reviewed `cryptsetup open` commands for preserved
 existing containers; close plans render offline-policy-gated `cryptsetup close`

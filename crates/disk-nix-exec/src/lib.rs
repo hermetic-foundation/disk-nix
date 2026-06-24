@@ -15060,7 +15060,8 @@ mod tests {
                 "allowDestructive": true,
                 "allowFormat": true,
                 "allowOffline": true,
-                "allowGrow": true
+                "allowGrow": true,
+                "allowPropertyChanges": true
               }
             }"#,
         )
@@ -15360,7 +15361,8 @@ mod tests {
                 "allowDestructive": true,
                 "allowFormat": true,
                 "allowOffline": true,
-                "allowGrow": true
+                "allowGrow": true,
+                "allowPropertyChanges": true
               }
             }"#,
         )
@@ -15403,6 +15405,113 @@ mod tests {
                     command.argv == ["mkswap", "<swap>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["swap target path"]
+                })
+        }));
+    }
+
+    #[test]
+    fn swap_lifecycle_accepts_path_aliases_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "swaps": {
+                  "scratchSwap": {
+                    "path": "/swapfile",
+                    "operation": "grow",
+                    "desiredSize": "16GiB"
+                  },
+                  "inventorySwap": {
+                    "target": "/dev/disk/by-label/swap-inventory",
+                    "operation": "rescan"
+                  },
+                  "primarySwap": {
+                    "path": "/dev/disk/by-label/swap",
+                    "preserveData": false,
+                    "properties": {
+                      "label": "swap",
+                      "swap.uuid": "01234567-89ab-cdef-0123-456789abcdef"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowFormat": true,
+                "allowOffline": true,
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:scratchSwap:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["fallocate", "--length", "16GiB", "/swapfile"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["swapoff", "/swapfile"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["swapon", "/swapfile"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:inventorySwap:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["blkid", "/dev/disk/by-label/swap-inventory"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/disk/by-label/swap-inventory"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:primarySwap:format"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["mkswap", "/dev/disk/by-label/swap"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:primarySwap:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["swaplabel", "--label", "swap", "/dev/disk/by-label/swap"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:primarySwap:set-property:swap.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "swaplabel",
+                            "--uuid",
+                            "01234567-89ab-cdef-0123-456789abcdef",
+                            "/dev/disk/by-label/swap",
+                        ]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "swaps:scratchSwap:grow"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "/swapfile", "--json"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "swaps:primarySwap:set-property:swap.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/disk/by-label/swap", "--json"]
                 })
         }));
     }
