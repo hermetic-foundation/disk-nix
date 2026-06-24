@@ -883,7 +883,8 @@ the array is already absent or inactive; present active, unknown-state, or
 wrong-kind matches stay actionable with warnings. Member add is suppressed
 when probed `MemberOf` edges show the device is already in the array, and
 member removal is suppressed when the device is already absent from the matched
-array. MD RAID
+array. Member replacement is suppressed only when the old member is absent and
+the replacement member is attached. MD RAID
 `operation = "rescan"` renders read-only `mdadm --detail --scan`,
 `mdadm --examine --scan`, `/proc/mdstat`, and topology verification; a
 declared `/dev/md*` target adds targeted `mdadm --detail <array>` inspection.

@@ -43,11 +43,11 @@ behavior across real storage stacks.
   close, loop create/destroy, LUN attach/detach, NVMe namespace attach/detach,
   backing-file create/grow, LVM physical-volume create, swap
   deactivate/destroy, mount, unmount, remount, NFS export/unexport, VDO start,
-  VDO stop, MD create/assemble/stop/member add/member removal, ZFS pool
-  create/import, ZFS dataset/zvol create, Btrfs subvolume create, Btrfs qgroup
-  create, LVM volume/thin-pool create, LVM volume-group create/import/export,
-  and property actions when the graph proves they are already satisfied and no
-  warning diagnostics are present;
+  VDO stop, MD create/assemble/stop/member add/member removal/member
+  replacement, ZFS pool create/import, ZFS dataset/zvol create, Btrfs subvolume
+  create, Btrfs qgroup create, LVM volume/thin-pool create, LVM volume-group
+  create/import/export, and property actions when the graph proves they are
+  already satisfied and no warning diagnostics are present;
   inactive LVM activation targets, still-active LVM deactivation targets,
   physical-volume create targets without matching PV metadata or with duplicate
   or missing PV metadata, existing exported, partial, or missing-PV
@@ -64,7 +64,8 @@ behavior across real storage stacks.
   paths, visible NVMe namespace detach paths, non-normal VDO start modes,
   running VDO stop targets, active swap teardown targets, active or
   unknown-state MD stop targets, absent MD member-add devices, still-attached MD
-  member-removal devices, degraded or failed MD arrays, degraded ZFS pools,
+  member-removal devices, incomplete MD member replacements, degraded or failed
+  MD arrays, degraded ZFS pools,
   mount source mismatches, currently mounted unmount targets, published
   unexport targets, remount option differences, export client/option
   differences, and known iSCSI targets without logged-in sessions remain

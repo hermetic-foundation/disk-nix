@@ -309,6 +309,8 @@ pub enum TopologyDiagnosticKind {
     MdMemberAddRequired,
     MdMemberRemoveAlreadySatisfied,
     MdMemberRemoveRequired,
+    MdMemberReplaceAlreadySatisfied,
+    MdMemberReplaceRequired,
     MountAlreadySatisfied,
     MountSourceConflict,
     MountOptionsAlreadySatisfied,
@@ -858,6 +860,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::MdStopAlreadySatisfied
                         | TopologyDiagnosticKind::MdMemberAddAlreadySatisfied
                         | TopologyDiagnosticKind::MdMemberRemoveAlreadySatisfied
+                        | TopologyDiagnosticKind::MdMemberReplaceAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                         | TopologyDiagnosticKind::UnmountAlreadySatisfied
@@ -1430,6 +1433,7 @@ fn already_satisfied_action_ids(
                 | Operation::Grow
                 | Operation::Shrink
                 | Operation::AddDevice
+                | Operation::ReplaceDevice
                 | Operation::Attach
                 | Operation::Detach
                 | Operation::Assemble
@@ -1499,6 +1503,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::MdStopAlreadySatisfied
                     | TopologyDiagnosticKind::MdMemberAddAlreadySatisfied
                     | TopologyDiagnosticKind::MdMemberRemoveAlreadySatisfied
+                    | TopologyDiagnosticKind::MdMemberReplaceAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                     | TopologyDiagnosticKind::UnmountAlreadySatisfied
@@ -1652,6 +1657,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(md_stop_diagnostic(action, node, &query));
     diagnostics.extend(md_member_add_diagnostic(action, node, graph, &query));
     diagnostics.extend(md_member_remove_diagnostic(action, node, graph, &query));
+    diagnostics.extend(md_member_replace_diagnostic(action, node, graph, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
     diagnostics.extend(unmount_diagnostic(action, node, &query));
@@ -3641,6 +3647,80 @@ fn md_member_remove_diagnostic(
         message: format!("MD RAID array {query} no longer includes member {device}"),
         current: Some(current_node_summary(node)),
     })
+}
+
+fn md_member_replace_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    graph: &StorageGraph,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::ReplaceDevice
+        || action.context.collection.as_deref() != Some("mdRaids")
+    {
+        return None;
+    }
+    let old_device = action.context.device.as_deref()?;
+    let new_device = action.context.replacement.as_deref()?;
+
+    if node.kind != NodeKind::MdRaid {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MdMemberReplaceRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not an MD RAID array; mdadm replacement remains actionable only after target review",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let old_present = md_array_has_member(graph, node, old_device);
+    let new_present = md_array_has_member(graph, node, new_device);
+    match (old_present, new_present) {
+        (false, true) => Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Info,
+            kind: TopologyDiagnosticKind::MdMemberReplaceAlreadySatisfied,
+            query: query.to_string(),
+            message: format!(
+                "MD RAID array {query} already replaced member {old_device} with {new_device}"
+            ),
+            current: Some(current_node_summary(node)),
+        }),
+        (true, true) => Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MdMemberReplaceRequired,
+            query: query.to_string(),
+            message: format!(
+                "MD RAID array {query} still includes old member {old_device} and already includes replacement {new_device}; review before removing the old member"
+            ),
+            current: Some(current_node_summary(node)),
+        }),
+        (true, false) => Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MdMemberReplaceRequired,
+            query: query.to_string(),
+            message: format!(
+                "MD RAID array {query} still includes old member {old_device} and does not include replacement {new_device}"
+            ),
+            current: Some(current_node_summary(node)),
+        }),
+        (false, false) => Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MdMemberReplaceRequired,
+            query: query.to_string(),
+            message: format!(
+                "MD RAID array {query} no longer includes old member {old_device}, but replacement {new_device} is not attached"
+            ),
+            current: Some(current_node_summary(node)),
+        }),
+    }
 }
 
 fn md_array_has_member(graph: &StorageGraph, array: &Node, device: &str) -> bool {
@@ -17912,6 +17992,148 @@ mod tests {
             diagnostic.action_id == "mdRaids:wrong-kind:remove-device:/dev/sdh1"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::MdMemberRemoveRequired
+                && diagnostic.message.contains("not an MD RAID array")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_md_member_replacement() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "mdRaids": {
+                "done": {
+                  "target": "/dev/md/done",
+                  "replaceDevices": {
+                    "/dev/sdb1": "/dev/sdc1"
+                  }
+                },
+                "pending": {
+                  "target": "/dev/md/pending",
+                  "replaceDevices": {
+                    "/dev/sdd1": "/dev/sde1"
+                  }
+                },
+                "both": {
+                  "target": "/dev/md/both",
+                  "replaceDevices": {
+                    "/dev/sdf1": "/dev/sdg1"
+                  }
+                },
+                "missing-new": {
+                  "target": "/dev/md/missing-new",
+                  "replaceDevices": {
+                    "/dev/sdh1": "/dev/sdi1"
+                  }
+                },
+                "wrong-kind": {
+                  "target": "/dev/md/wrong-kind",
+                  "replaceDevices": {
+                    "/dev/sdj1": "/dev/sdk1"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        for target in [
+            "/dev/md/done",
+            "/dev/md/pending",
+            "/dev/md/both",
+            "/dev/md/missing-new",
+        ] {
+            graph.add_node(
+                Node::new(format!("md:{target}"), NodeKind::MdRaid, target)
+                    .with_path(target)
+                    .with_property("md.state", "clean")
+                    .with_property("md.degraded-devices", "0")
+                    .with_property("md.failed-devices", "0"),
+            );
+        }
+        graph.add_node(
+            Node::new(
+                "filesystem:/dev/md/wrong-kind",
+                NodeKind::Filesystem,
+                "/dev/md/wrong-kind",
+            )
+            .with_path("/dev/md/wrong-kind"),
+        );
+
+        for (device, target) in [
+            ("/dev/sdc1", "/dev/md/done"),
+            ("/dev/sdd1", "/dev/md/pending"),
+            ("/dev/sdf1", "/dev/md/both"),
+            ("/dev/sdg1", "/dev/md/both"),
+        ] {
+            graph.add_node(
+                Node::new(format!("block:{device}"), NodeKind::Partition, device).with_path(device),
+            );
+            graph.add_edge(disk_nix_model::Edge::new(
+                format!("block:{device}"),
+                format!("md:{target}"),
+                Relationship::MemberOf,
+            ));
+        }
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 5);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.summary.action_count, 4);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "mdRaids:done:replace-device:/dev/sdb1")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdRaids:done:replace-device:/dev/sdb1"
+                && diagnostic.kind == TopologyDiagnosticKind::MdMemberReplaceAlreadySatisfied
+                && diagnostic
+                    .message
+                    .contains("already replaced member /dev/sdb1 with /dev/sdc1")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdRaids:pending:replace-device:/dev/sdd1"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdMemberReplaceRequired
+                && diagnostic
+                    .message
+                    .contains("still includes old member /dev/sdd1")
+                && diagnostic
+                    .message
+                    .contains("does not include replacement /dev/sde1")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdRaids:both:replace-device:/dev/sdf1"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdMemberReplaceRequired
+                && diagnostic
+                    .message
+                    .contains("still includes old member /dev/sdf1")
+                && diagnostic
+                    .message
+                    .contains("already includes replacement /dev/sdg1")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdRaids:missing-new:replace-device:/dev/sdh1"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdMemberReplaceRequired
+                && diagnostic
+                    .message
+                    .contains("no longer includes old member /dev/sdh1")
+                && diagnostic
+                    .message
+                    .contains("replacement /dev/sdi1 is not attached")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdRaids:wrong-kind:replace-device:/dev/sdj1"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdMemberReplaceRequired
                 && diagnostic.message.contains("not an MD RAID array")
         }));
     }

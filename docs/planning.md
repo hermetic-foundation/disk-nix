@@ -275,9 +275,11 @@ Examples:
   unknown-state, or wrong-kind matches stay actionable with warnings.
   Current-topology comparison also suppresses member add when probed
   `MemberOf` edges show the device already attached, and suppresses member
-  removal when the device is already absent from the matched array. Member add is
-  online; replacement and grow/reshape are offline-required because redundancy,
-  resync, and dependent consumers must be coordinated.
+  removal when the device is already absent from the matched array. Member
+  replacement is suppressed only after topology shows the old member absent and
+  the replacement member attached. Member add is online; replacement and
+  grow/reshape are offline-required because redundancy, resync, and dependent
+  consumers must be coordinated.
 - Multipath map growth and path add are online; path replacement is
   offline-required and path removal is potential-data-loss because at least one
   healthy path must remain active while paths are added and deleted.
@@ -797,7 +799,9 @@ create reconciliation suppresses only already clean active arrays and keeps
 degraded, inactive, or wrong-kind matches actionable with warnings. MD stop
 reconciliation suppresses absent or inactive arrays and keeps active,
 unknown-state, or wrong-kind matches actionable with warnings. MD membership
-reconciliation suppresses already-attached adds and already-absent removals. MD
+reconciliation suppresses already-attached adds, already-absent removals, and
+completed replacements where the old member is gone and the new member is
+attached. MD
 RAID rescan plans render read-only `mdadm --detail --scan`,
 `mdadm --examine --scan`, and `/proc/mdstat` inventory checks without
 assembling arrays. Current-topology comparison suppresses assemble actions only
