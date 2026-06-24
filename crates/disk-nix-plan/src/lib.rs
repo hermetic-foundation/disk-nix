@@ -299,6 +299,8 @@ pub enum TopologyDiagnosticKind {
     PropertyDiffers,
     SnapshotDestroyAlreadySatisfied,
     SnapshotDestroyRequired,
+    SnapshotRollbackPointAvailable,
+    SnapshotRollbackPointMissing,
     VdoDestroyAlreadySatisfied,
     VdoDestroyRequired,
     VdoStartAlreadySatisfied,
@@ -1476,6 +1478,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = snapshot_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = snapshot_rollback_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = btrfs_subvolume_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1546,6 +1551,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(luks_token_remove_diagnostic(action, node, &query));
     diagnostics.extend(bcache_present_diagnostic(action, node, &query));
     diagnostics.extend(snapshot_destroy_present_diagnostic(action, node, &query));
+    diagnostics.extend(snapshot_rollback_present_diagnostic(action, node, &query));
     diagnostics.extend(btrfs_subvolume_destroy_present_diagnostic(
         action, node, &query,
     ));
@@ -1593,7 +1599,7 @@ fn topology_query(action: &PlannedAction) -> Option<String> {
     }
 
     if action.context.collection.as_deref() == Some("snapshots")
-        && action.operation == Operation::Destroy
+        && matches!(action.operation, Operation::Destroy | Operation::Rollback)
     {
         return action
             .context
@@ -2318,6 +2324,62 @@ fn snapshot_destroy_present_diagnostic(
         action_id: action.id.clone(),
         level: TopologyDiagnosticLevel::Warning,
         kind: TopologyDiagnosticKind::SnapshotDestroyRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn snapshot_rollback_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("snapshots")
+        || action.operation != Operation::Rollback
+        || !is_concrete_zfs_snapshot_target(query)
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::SnapshotRollbackPointMissing,
+        query: query.to_string(),
+        message: format!("ZFS rollback snapshot {query} is missing from current topology"),
+        current: None,
+    })
+}
+
+fn snapshot_rollback_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("snapshots")
+        || action.operation != Operation::Rollback
+        || node.kind != NodeKind::ZfsSnapshot
+    {
+        return None;
+    }
+
+    let mut details = zfs_snapshot_destroy_details(node);
+    if action.context.recursive_rollback == Some(true) {
+        details.push("recursive rollback requested".to_string());
+    }
+    let message = if details.is_empty() {
+        format!("ZFS rollback snapshot {query} is available; rollback remains potential data loss")
+    } else {
+        format!(
+            "ZFS rollback snapshot {query} is available with {}; rollback remains potential data loss",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::SnapshotRollbackPointAvailable,
         query: query.to_string(),
         message,
         current: Some(current_node_summary(node)),
@@ -16671,6 +16733,127 @@ mod tests {
             diagnostic.action_id == "snapshot:old-home:destroy"
                 && diagnostic.kind == TopologyDiagnosticKind::Missing
                 && diagnostic.query == "old-home"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_warns_when_zfs_rollback_snapshot_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home",
+                  "rollback": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "zfs-dataset:tank/home",
+            NodeKind::ZfsDataset,
+            "tank/home",
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@before:rollback"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotRollbackPointMissing
+                && diagnostic.query == "tank/home@before"
+                && diagnostic.current.is_none()
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_warns_when_zfs_rollback_snapshot_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home",
+                  "rollback": true,
+                  "recursiveRollback": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "zfs-snapshot:tank/home@before",
+                NodeKind::ZfsSnapshot,
+                "tank/home@before",
+            )
+            .with_property("zfs.used", "64M")
+            .with_property("zfs.referenced", "5G")
+            .with_property("zfs.userrefs", "1")
+            .with_property("zfs.compression", "lz4"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@before:rollback"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotRollbackPointAvailable
+                && diagnostic.query == "tank/home@before"
+                && diagnostic.message.contains("used 64M")
+                && diagnostic.message.contains("referenced 5G")
+                && diagnostic.message.contains("user references 1")
+                && diagnostic.message.contains("recursive rollback requested")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_logical_snapshot_rollback_missing() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "before": {
+                  "target": "tank/home",
+                  "rollback": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:before:rollback"
+                && diagnostic.kind == TopologyDiagnosticKind::Missing
+                && diagnostic.query == "before"
         }));
     }
 

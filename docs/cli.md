@@ -593,9 +593,11 @@ assemble actions are compared with `md.state`, `md.degraded-devices`, and
 `md.failed-devices`, ZFS dataset and zvol destroy actions are compared with
 concrete target presence and ZFS metadata, generic snapshot destroy actions are
 compared with concrete ZFS snapshot names or absolute Btrfs snapshot paths,
-ZFS pool import actions are compared with `zfs.state` and `zfs.health`, LVM
-volume-group import/export actions are compared with `lvm.vg-exported`, and
-iSCSI login/logout actions are compared with current session state across all matching target/session nodes when
+ZFS snapshot rollback actions are compared with the concrete rollback snapshot
+instead of only the target dataset, ZFS pool import actions are compared with
+`zfs.state` and `zfs.health`, LVM volume-group import/export actions are
+compared with `lvm.vg-exported`, and iSCSI login/logout actions are compared
+with current session state across all matching target/session nodes when
 metadata is available. Safe already-satisfied grow, shrink, device-mapper destroy,
 multipath destroy, bcache detach, iSCSI login/logout, LVM
 activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
@@ -612,7 +614,7 @@ present multipath flush targets, absent LUN attach paths, visible LUN detach
 paths, present bcache detach targets, still-attached LVM cache origins, absent
 NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
 destroy targets, non-normal VDO start modes, running VDO stop targets, present
-Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, present ZFS or Btrfs snapshot destroy targets, degraded or failed MD arrays,
+Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, present ZFS or Btrfs snapshot destroy targets, missing or present ZFS rollback snapshots, degraded or failed MD arrays,
 degraded ZFS pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
 targets without a logged-in session and logout targets that still have a
@@ -1085,6 +1087,10 @@ ZFS snapshot rollback declarations render reviewed `zfs rollback` command
 details internally, and `recursiveRollback`, `recursive`, or
 `zfs.rollbackRecursive` render reviewed `zfs rollback -r` details. Apply blocks
 rollback by default and requires `allowPotentialDataLoss=true` before execution.
+With current-topology probing, rollback compares the concrete ZFS snapshot
+identity and warns when the rollback point is missing or available; available
+rollback points still stay actionable because rollback remains potential data
+loss.
 The capability inventory advertises ZFS snapshot create, hold/release, clone,
 rescan, rollback including recursive rollback review, and destroy risks plus
 Btrfs snapshot create, clone, rename, rescan, and destroy risks.

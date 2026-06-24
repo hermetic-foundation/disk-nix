@@ -372,6 +372,10 @@ Examples:
   `zfs.rollbackRecursive` render explicit `zfs rollback -r` details for
   recursive rollback review. Apply blocks rollback by default and requires
   explicit `allowPotentialDataLoss=true` policy before execution.
+  Current-topology comparison checks the concrete ZFS rollback snapshot itself,
+  warns when the rollback point is missing, and keeps available rollback points
+  actionable with snapshot metadata because rollback remains potential data
+  loss.
   Snapshot rollback remains non-ready when a friendly declaration key does not
   resolve to a concrete ZFS snapshot name. Snapshot clone remains non-ready
   when a friendly declaration key does not resolve to a concrete ZFS snapshot
@@ -552,6 +556,11 @@ and absolute Btrfs snapshot paths only when they are already absent. Present
 snapshots stay actionable with warnings that include available ZFS
 user-reference, usage, compression, or encryption metadata, or Btrfs subvolume
 id, generation, parent, top-level, and UUID metadata.
+ZFS snapshot rollback reconciliation compares the concrete rollback snapshot,
+not just the target dataset. Missing rollback points and available rollback
+points both stay actionable with warning diagnostics; available points include
+snapshot metadata so reviewers can inspect usage, holds, and recursive rollback
+intent before policy-gated execution.
 NFS export reconciliation compares the declared client and options against
 `nfs.export-client` and `nfs.export-option-*` topology properties.
 iSCSI session reconciliation checks all matching target and session nodes so an

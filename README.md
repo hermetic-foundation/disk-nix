@@ -472,8 +472,10 @@ inspection for snapshot/source relationships.
 ZFS snapshot rollback plans render reviewed `zfs rollback` details while
 remaining blocked by the potential-data-loss policy gate. Set
 `recursiveRollback = true` for an explicit reviewed `zfs rollback -r` plan when
-newer snapshots in the dataset lineage may be discarded. The capability
-inventory includes recursive rollback review advice.
+newer snapshots in the dataset lineage may be discarded. Current-topology
+probing checks the rollback snapshot identity, warns if the rollback point is
+missing, and keeps present rollback points actionable with snapshot metadata.
+The capability inventory includes recursive rollback review advice.
 ZFS dataset apply plans render reviewed `zfs create` commands with declared
 properties as create-time `-o key=value` options, plus policy-gated
 `zfs destroy` commands. Dataset and zvol declarations can use a logical
