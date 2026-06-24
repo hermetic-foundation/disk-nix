@@ -129,6 +129,9 @@ fn add_map(graph: &mut StorageGraph, map: MultipathMap) {
         .with_path(format!("/dev/{}", path.device));
 
         if let Some(host_path) = path.host_path {
+            for (key, value) in scsi_coordinates(&host_path) {
+                path_node = path_node.with_property(key, value);
+            }
             path_node = path_node.with_property("multipath.host-path", host_path);
         }
         if let Some(major_minor) = path.major_minor {
@@ -144,6 +147,9 @@ fn add_map(graph: &mut StorageGraph, map: MultipathMap) {
             path_node = path_node.with_property("multipath.group-status", status);
         }
         if !path.state.is_empty() {
+            for (key, value) in path_state_columns(&path.state) {
+                path_node = path_node.with_property(key, value);
+            }
             path_node = path_node.with_property("multipath.path-state", path.state.join(" "));
         }
 
@@ -225,6 +231,33 @@ fn parse_path(line: &str) -> Option<MultipathPath> {
         group_status: None,
         state,
     })
+}
+
+fn scsi_coordinates(host_path: &str) -> Vec<(String, String)> {
+    let parts: Vec<&str> = host_path.split(':').collect();
+    if parts.len() != 4 || parts.iter().any(|part| part.is_empty()) {
+        return Vec::new();
+    }
+    [
+        ("multipath.scsi-host", parts[0]),
+        ("multipath.scsi-channel", parts[1]),
+        ("multipath.scsi-id", parts[2]),
+        ("multipath.scsi-lun", parts[3]),
+    ]
+    .into_iter()
+    .map(|(key, value)| (key.to_string(), value.to_string()))
+    .collect()
+}
+
+fn path_state_columns(state: &[String]) -> Vec<(String, String)> {
+    [
+        ("multipath.dm-state", state.first()),
+        ("multipath.checker-state", state.get(1)),
+        ("multipath.online-state", state.get(2)),
+    ]
+    .into_iter()
+    .filter_map(|(key, value)| value.map(|value| (key.to_string(), value.clone())))
+    .collect()
 }
 
 impl MultipathPath {
@@ -368,12 +401,47 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
             property.key == "multipath.group-policy" && property.value == "service-time 0"
         }));
         assert!(
+            active_path
+                .properties
+                .iter()
+                .any(|property| { property.key == "multipath.scsi-host" && property.value == "2" })
+        );
+        assert!(
+            active_path.properties.iter().any(|property| {
+                property.key == "multipath.scsi-channel" && property.value == "0"
+            })
+        );
+        assert!(
+            active_path
+                .properties
+                .iter()
+                .any(|property| { property.key == "multipath.scsi-id" && property.value == "0" })
+        );
+        assert!(
+            active_path
+                .properties
+                .iter()
+                .any(|property| { property.key == "multipath.scsi-lun" && property.value == "1" })
+        );
+        assert!(
             active_path.properties.iter().any(|property| {
                 property.key == "multipath.group-prio" && property.value == "50"
             })
         );
         assert!(active_path.properties.iter().any(|property| {
             property.key == "multipath.group-status" && property.value == "active"
+        }));
+        assert!(
+            active_path
+                .properties
+                .iter()
+                .any(|property| property.key == "multipath.dm-state" && property.value == "active")
+        );
+        assert!(active_path.properties.iter().any(|property| {
+            property.key == "multipath.checker-state" && property.value == "ready"
+        }));
+        assert!(active_path.properties.iter().any(|property| {
+            property.key == "multipath.online-state" && property.value == "running"
         }));
         let enabled_path = graph
             .nodes

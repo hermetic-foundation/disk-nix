@@ -201,8 +201,9 @@ Use these commands for:
   cache devices, multipath devices, NVMe namespaces, loop devices, and swap,
   including model/vendor, transport, rotational, NVMe model/firmware/namespace
   geometry, partition table/number, filesystem type, loop
-  backing/offset/autoclear metadata, multipath path host/major-minor/state
-  details, MD RAID member number/major/minor/raid-device/state, active swap
+  backing/offset/autoclear metadata, multipath path host/major-minor, parsed
+  SCSI coordinates, and split dm/checker/online state details, MD RAID member
+  number/major/minor/raid-device/state, active swap
   state/type/priority, and udev by-id/by-path links, encoded labels,
   filesystem UUID sub-identifiers,
   partition table metadata, major/minor numbers, and device-mapper flags when
@@ -260,9 +261,10 @@ Use these commands for:
   details, dm name/UUID, major/minor numbers, open/segment counters, LVM
   segment data/metadata device mappings,
   thin-pool discard/zeroing/transaction details, cache segment policy/settings,
-  VDO segment compression/dedup/write-policy details, multipath WWID/size/path
-  state, VDO backing device, logical/physical size, mode, configured and active
-  write policy, index/cache sizing, data-reduction settings, and block
+  VDO segment compression/dedup/write-policy details, multipath WWID/size,
+  parsed SCSI path coordinates, and split path state, VDO backing device,
+  logical/physical size, mode, configured and active write policy, index/cache
+  sizing, data-reduction settings, and block
   accounting, loop backing/offset/read-only/direct-I/O settings, and bcache
   role/cache-set/tuning details such as label, state, running flag, available
   cache percentage, cache mode, discard, I/O errors, written/metadata-written
@@ -290,8 +292,9 @@ Use these commands for:
   probes expose them
 - `multipath`: multipath maps and their backing paths, including WWID, dm
   device, vendor/product, size, features, hardware handler, write protection,
-  path count, host path, major/minor, path-group policy, priority, group
-  status, and path state when `multipath -ll` exposes them
+  path count, host path, SCSI host/channel/id/LUN coordinates, major/minor,
+  path-group policy, priority, group status, dm/checker/online state columns,
+  and raw path state when `multipath -ll` exposes them
 - `nvme`: NVMe namespaces, including path, serial, model, firmware, namespace
   index/id, generic namespace path, subsystem, controller, controller id,
   transport, address, namespace capacity, LBA format, maximum LBA, sector size,

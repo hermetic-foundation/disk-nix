@@ -145,7 +145,8 @@ The current probe layer normalizes:
   and state
 - Multipath maps through `multipath -ll` for map name, WWID, dm device,
   vendor/product, map features, hardware handler, write-protect state,
-  path-group policy/priority/status, and backing path device state
+  path-group policy/priority/status, parsed backing-path SCSI coordinates, and
+  split dm/checker/online path state
 - NVMe namespaces through `nvme list -o json` for namespace path, generic
   namespace path, serial, model/product, firmware, subsystem, controller,
   controller id, transport, address, namespace id/index, capacity, usage, LBA

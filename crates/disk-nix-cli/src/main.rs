@@ -2795,10 +2795,17 @@ fn usage_details(node: &Node) -> String {
         ("multipath.hwhandler", "handler"),
         ("multipath.write-protect", "wp"),
         ("multipath.host-path", "host-path"),
+        ("multipath.scsi-host", "scsi-host"),
+        ("multipath.scsi-channel", "scsi-channel"),
+        ("multipath.scsi-id", "scsi-id"),
+        ("multipath.scsi-lun", "scsi-lun"),
         ("major-minor", "major-minor"),
         ("multipath.group-policy", "group-policy"),
         ("multipath.group-prio", "group-prio"),
         ("multipath.group-status", "group-status"),
+        ("multipath.dm-state", "dm-state"),
+        ("multipath.checker-state", "checker-state"),
+        ("multipath.online-state", "online-state"),
         ("multipath.path-state", "path-state"),
         ("md.version", "md-version"),
         ("md.level", "level"),
@@ -5382,20 +5389,34 @@ mod tests {
             Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
                 .with_path("/dev/sdb")
                 .with_property("multipath.host-path", "2:0:0:1")
+                .with_property("multipath.scsi-host", "2")
+                .with_property("multipath.scsi-channel", "0")
+                .with_property("multipath.scsi-id", "0")
+                .with_property("multipath.scsi-lun", "1")
                 .with_property("major-minor", "8:16")
                 .with_property("multipath.group-policy", "service-time 0")
                 .with_property("multipath.group-prio", "50")
                 .with_property("multipath.group-status", "active")
+                .with_property("multipath.dm-state", "active")
+                .with_property("multipath.checker-state", "ready")
+                .with_property("multipath.online-state", "running")
                 .with_property("multipath.path-state", "active ready running"),
         );
         graph.add_node(
             Node::new("block:/dev/sdc", NodeKind::PhysicalDisk, "/dev/sdc")
                 .with_path("/dev/sdc")
                 .with_property("multipath.host-path", "3:0:0:1")
+                .with_property("multipath.scsi-host", "3")
+                .with_property("multipath.scsi-channel", "0")
+                .with_property("multipath.scsi-id", "0")
+                .with_property("multipath.scsi-lun", "1")
                 .with_property("major-minor", "8:32")
                 .with_property("multipath.group-policy", "service-time 0")
                 .with_property("multipath.group-prio", "10")
                 .with_property("multipath.group-status", "enabled")
+                .with_property("multipath.dm-state", "active")
+                .with_property("multipath.checker-state", "ready")
+                .with_property("multipath.online-state", "running")
                 .with_property("multipath.path-state", "active ready running"),
         );
         graph.add_edge(Edge::new(
@@ -5423,11 +5444,16 @@ mod tests {
         assert!(output.contains("vendor=IBM,2145 size=100G"));
         assert!(output.contains("features=1 queue_if_no_path handler=1 alua wp=rw"));
         assert!(output.contains("/dev/sdb"));
-        assert!(output.contains("host-path=2:0:0:1 major-minor=8:16"));
+        assert!(output.contains("host-path=2:0:0:1 scsi-host=2"));
+        assert!(output.contains("scsi-host=2 scsi-channel=0 scsi-id=0 scsi-lun=1"));
+        assert!(output.contains("scsi-lun=1 major-minor=8:16"));
         assert!(output.contains("group-policy=service-time 0 group-prio=50 group-status=active"));
+        assert!(output.contains("dm-state=active checker-state=ready online-state=running"));
         assert!(output.contains("path-state=active ready running"));
         assert!(output.contains("/dev/sdc"));
-        assert!(output.contains("host-path=3:0:0:1 major-minor=8:32"));
+        assert!(output.contains("host-path=3:0:0:1 scsi-host=3"));
+        assert!(output.contains("scsi-host=3 scsi-channel=0 scsi-id=0 scsi-lun=1"));
+        assert!(output.contains("scsi-lun=1 major-minor=8:32"));
         assert!(output.contains("group-policy=service-time 0 group-prio=10 group-status=enabled"));
     }
 
