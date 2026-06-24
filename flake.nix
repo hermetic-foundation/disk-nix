@@ -609,6 +609,10 @@
                 operation = "rescan";
                 path = "/var/lib/images/inventory.img";
               };
+              dmMaps.cryptroot = {
+                operation = "rescan";
+                target = "/dev/mapper/cryptroot";
+              };
               mdRaids.root = {
                 target = "/dev/md/root";
                 raidLevel = "1";
@@ -960,6 +964,7 @@
               and .properties.lvmCaches["$ref"] == "#/$defs/lifecycleMap"
               and .properties.loopDevices["$ref"] == "#/$defs/lifecycleMap"
               and .properties.backingFiles["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.dmMaps["$ref"] == "#/$defs/lifecycleMap"
               and .properties.mdRaids["$ref"] == "#/$defs/lifecycleMap"
               and .properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap"
               and .properties.pools["$ref"] == "#/$defs/lifecycleMap"
@@ -1004,6 +1009,7 @@
               and (."$defs".specBody.properties.lvmCaches["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.loopDevices["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.backingFiles["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.dmMaps["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.mdRaids["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.pools["$ref"] == "#/$defs/lifecycleMap")
@@ -1541,6 +1547,8 @@
                     and .spec.backingFiles."/var/lib/images/root.img".desiredSize == "16GiB"
                     and .spec.backingFiles.inventoryImage.operation == "rescan"
                     and .spec.backingFiles.inventoryImage.path == "/var/lib/images/inventory.img"
+                    and .spec.dmMaps.cryptroot.operation == "rescan"
+                    and .spec.dmMaps.cryptroot.target == "/dev/mapper/cryptroot"
                     and .spec.mdRaids.root.target == "/dev/md/root"
                     and .spec.mdRaids.root.raidLevel == "1"
                     and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-a") != null)

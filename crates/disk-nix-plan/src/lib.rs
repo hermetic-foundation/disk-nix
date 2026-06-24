@@ -502,6 +502,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "lvmCaches",
         "loopDevices",
         "backingFiles",
+        "dmMaps",
         "mdRaids",
         "multipathMaps",
         "pools",
@@ -3736,6 +3737,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Rescan if collection == "dmMaps" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "device-mapper rescan refreshes dmsetup map, dependency, table, and status metadata"
+                    .to_string(),
+                alternatives: vec![
+                    "use dmMaps.<name>.operation = \"rescan\" before editing dependent LUKS, LVM, VDO, or multipath layers"
+                        .to_string(),
+                    "review dmsetup table and status output before any destructive mapper replacement"
+                        .to_string(),
+                    "use domain-specific LUKS, LVM, VDO, or multipath declarations for mutating mapper lifecycle"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::Export if collection == "exports" => (
             RiskClass::Online,
             false,
@@ -4549,6 +4566,8 @@ fn classify_operation(
                     "use loopDevices.<path>.operation = \"rescan\" to refresh loop mapping inventory"
                         .to_string(),
                     "use backingFiles.<path>.operation = \"rescan\" to refresh file-backed storage origin inventory"
+                        .to_string(),
+                    "use dmMaps.<name>.operation = \"rescan\" to refresh device-mapper table and status metadata"
                         .to_string(),
                     "use physicalVolumes or volumeGroups operation = \"rescan\" to refresh LVM metadata"
                         .to_string(),
@@ -5741,6 +5760,21 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "use grow when the file-backed origin capacity must change".to_string(),
                     "inspect consumers before detaching loop devices or disabling swap".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::DeviceMapper,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "device-mapper rescan refreshes map identity, dependencies, table, and status metadata"
+                    .to_string(),
+                alternatives: vec![
+                    "use LUKS, LVM, VDO, multipath, or cache declarations for domain-specific mutations"
+                        .to_string(),
+                    "review dmsetup status before changing dependent filesystems or volumes"
+                        .to_string(),
                 ],
             }),
         },
@@ -7968,6 +8002,7 @@ mod tests {
             (NodeKind::LoopDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::BackingFile, Operation::Rescan, RiskClass::Online),
             (NodeKind::BackingFile, Operation::Grow, RiskClass::Online),
+            (NodeKind::DeviceMapper, Operation::Rescan, RiskClass::Online),
             (NodeKind::CacheDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::VdoVolume, Operation::Rescan, RiskClass::Online),
             (NodeKind::ZfsSnapshot, Operation::Rescan, RiskClass::Online),
@@ -10668,6 +10703,43 @@ mod tests {
             Some("/var/lib/images/inventory.img")
         );
         assert!(!rescan.destructive);
+    }
+
+    #[test]
+    fn plan_classifies_device_mapper_rescan_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "dmMaps": {
+                "cryptroot": {
+                  "operation": "rescan",
+                  "target": "/dev/mapper/cryptroot"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 1);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        assert_eq!(plan.summary.destructive_count, 0);
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "dmmaps:cryptroot:rescan")
+            .expect("device-mapper rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert_eq!(
+            rescan.context.target.as_deref(),
+            Some("/dev/mapper/cryptroot")
+        );
+        assert!(!rescan.destructive);
+        assert!(
+            rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("device-mapper rescan"))
+        );
     }
 
     #[test]

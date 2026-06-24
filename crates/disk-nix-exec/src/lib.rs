@@ -1197,6 +1197,27 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Rescan if collection == Some("dmMaps") => {
+            let target = dm_map_target_path(action);
+            (
+                vec![
+                    dmsetup_info_command(target, "verify device-mapper identity after rescan"),
+                    dmsetup_deps_command(target),
+                    dmsetup_table_command(target),
+                    dmsetup_status_command(target),
+                    dm_map_inspect_json_command(
+                        target,
+                        "verify modeled device-mapper relationships after rescan",
+                    ),
+                ],
+                vec![
+                    "device-mapper name, UUID, dependencies, table, and live status are reviewed"
+                        .to_string(),
+                    "dependent LUKS, LVM, VDO, multipath, filesystem, or mount consumers still resolve the mapper"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Create | Operation::Grow if collection == Some("partitions") => (
             vec![
                 command(
@@ -3388,6 +3409,25 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "backing file rescan is read-only and does not resize or detach consumers"
                         .to_string(),
                     "use grow only when file-backed storage capacity must change".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("dmMaps") => {
+            let target = dm_map_target_path(action);
+            (
+                vec![
+                    dmsetup_info_command(target, "refresh device-mapper identity metadata"),
+                    dmsetup_deps_command(target),
+                    dmsetup_table_command(target),
+                    dmsetup_status_command(target),
+                    dm_map_inspect_command(target),
+                ],
+                vec![
+                    "device-mapper rescan is read-only and does not reload or remove maps"
+                        .to_string(),
+                    "use domain-specific LUKS, LVM, VDO, multipath, or cache actions for mutating mapper lifecycle"
+                        .to_string(),
                 ],
                 true,
             )
@@ -11675,6 +11715,146 @@ fn backing_file_grow_command(target: Option<&str>, desired_size: Option<&str>) -
     }
 }
 
+fn dm_map_target_path(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .target
+        .as_deref()
+        .filter(|target| is_dm_map_target(target))
+        .or_else(|| {
+            action
+                .context
+                .name
+                .as_deref()
+                .filter(|name| is_dm_map_target(name))
+        })
+}
+
+fn is_dm_map_target(target: &str) -> bool {
+    target.starts_with("/dev/mapper/") || target.starts_with("/dev/dm-")
+}
+
+fn dmsetup_info_command(target: Option<&str>, description: &'static str) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            [
+                "dmsetup",
+                "info",
+                "-c",
+                "--noheadings",
+                "-o",
+                "name,uuid,major,minor,open,segments,events",
+                target,
+            ],
+            false,
+            description,
+        ),
+        None => command_with_readiness(
+            [
+                "dmsetup",
+                "info",
+                "-c",
+                "--noheadings",
+                "-o",
+                "name,uuid,major,minor,open,segments,events",
+                "<dm-map>",
+            ],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device-mapper path"],
+            description,
+        ),
+    }
+}
+
+fn dmsetup_deps_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["dmsetup", "deps", "-o", "devname", target],
+            false,
+            "refresh device-mapper dependency metadata",
+        ),
+        None => command_with_readiness(
+            ["dmsetup", "deps", "-o", "devname", "<dm-map>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device-mapper path"],
+            "refresh device-mapper dependency metadata after selecting the mapper path",
+        ),
+    }
+}
+
+fn dmsetup_table_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["dmsetup", "table", target],
+            false,
+            "refresh device-mapper table metadata",
+        ),
+        None => command_with_readiness(
+            ["dmsetup", "table", "<dm-map>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device-mapper path"],
+            "refresh device-mapper table metadata after selecting the mapper path",
+        ),
+    }
+}
+
+fn dmsetup_status_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["dmsetup", "status", target],
+            false,
+            "refresh device-mapper live status metadata",
+        ),
+        None => command_with_readiness(
+            ["dmsetup", "status", "<dm-map>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device-mapper path"],
+            "refresh device-mapper live status metadata after selecting the mapper path",
+        ),
+    }
+}
+
+fn dm_map_inspect_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["disk-nix", "inspect", target],
+            false,
+            "inspect modeled device-mapper relationships",
+        ),
+        None => command_with_readiness(
+            ["disk-nix", "inspect", "<dm-map>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device-mapper path"],
+            "inspect modeled device-mapper relationships after selecting the mapper path",
+        ),
+    }
+}
+
+fn dm_map_inspect_json_command(
+    target: Option<&str>,
+    description: &'static str,
+) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["disk-nix", "inspect", target, "--json"],
+            false,
+            description,
+        ),
+        None => command_with_readiness(
+            ["disk-nix", "inspect", "<dm-map>", "--json"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["device-mapper path"],
+            description,
+        ),
+    }
+}
+
 fn zvol_create_command(
     target: &str,
     desired_size: Option<&str>,
@@ -19695,6 +19875,104 @@ mod tests {
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs
                             == ["backing file path", "desired backing file size"]
+                })
+        }));
+    }
+
+    #[test]
+    fn dm_map_rescan_reports_dmsetup_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "dmMaps": {
+                  "cryptroot": {
+                    "operation": "rescan",
+                    "target": "/dev/mapper/cryptroot"
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "dmmaps:cryptroot:rescan"
+                && step.commands.iter().all(|command| !command.mutates)
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "dmsetup",
+                            "info",
+                            "-c",
+                            "--noheadings",
+                            "-o",
+                            "name,uuid,major,minor,open,segments,events",
+                            "/dev/mapper/cryptroot",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["dmsetup", "deps", "-o", "devname", "/dev/mapper/cryptroot"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["dmsetup", "table", "/dev/mapper/cryptroot"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["dmsetup", "status", "/dev/mapper/cryptroot"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/mapper/cryptroot"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "dmmaps:cryptroot:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/mapper/cryptroot", "--json"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
+    fn dm_map_rescan_requires_concrete_mapper_path_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "dmMaps": {
+                  "cryptroot": {
+                    "operation": "rescan"
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "dmmaps:cryptroot:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["dmsetup", "table", "<dm-map>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["device-mapper path"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "<dm-map>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["device-mapper path"]
                 })
         }));
     }

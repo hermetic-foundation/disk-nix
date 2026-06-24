@@ -1893,6 +1893,12 @@ in
       description = "Typed file-backed storage origin lifecycle declarations emitted into the disk-nix planner spec. Grow command plans require a path-shaped declaration key, target, or path plus desiredSize, targetSize, or size.";
     };
 
+    dmMaps = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed device-mapper lifecycle declarations emitted into the disk-nix planner spec. Rescan command plans require a concrete /dev/mapper/* or /dev/dm-* target through the declaration key, target, or path.";
+    };
+
     mdRaids = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -2114,6 +2120,7 @@ in
         lvmCaches = (cfg.spec.lvmCaches or { }) // normalizeLifecycleSpec cfg.lvmCaches;
         loopDevices = (cfg.spec.loopDevices or { }) // normalizeLifecycleSpec cfg.loopDevices;
         backingFiles = (cfg.spec.backingFiles or { }) // normalizeLifecycleSpec cfg.backingFiles;
+        dmMaps = (cfg.spec.dmMaps or { }) // normalizeLifecycleSpec cfg.dmMaps;
         mdRaids = (cfg.spec.mdRaids or { }) // normalizeLifecycleSpec cfg.mdRaids;
         multipathMaps = (cfg.spec.multipathMaps or { }) // normalizeLifecycleSpec cfg.multipathMaps;
         pools = (cfg.spec.pools or { }) // normalizeLifecycleSpec cfg.pools;

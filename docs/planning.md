@@ -70,6 +70,10 @@ Examples:
   grow plans require a concrete file path plus desired size before rendering
   `truncate --size`, leaving loop, swap, and filesystem refresh as explicit
   follow-up actions.
+- `dmMaps` declarations model read-only device-mapper refreshes. Rescan plans
+  inspect map identity, dependencies, table, live status, and graph consumers;
+  mutating mapper lifecycle is intentionally left to LUKS, LVM, VDO,
+  multipath, or cache-specific declarations.
 - LUKS keyslot and token add/change operations are offline-required header
   updates. Keyslot or token removal is potential-data-loss because deleting the
   last usable unlock path can make encrypted data inaccessible.
