@@ -141,11 +141,12 @@ fn add_scan_array(graph: &mut StorageGraph, array: MdScanArray) {
     let mut node =
         Node::new(id, NodeKind::MdRaid, array.name.clone()).with_path(array.name.clone());
 
-    if let Some(uuid) = array.uuid {
+    if let Some(uuid) = array.uuid.clone() {
         node = node.with_identity(Identity {
-            uuid: Some(uuid),
+            uuid: Some(uuid.clone()),
             ..Identity::default()
         });
+        node = node.with_property("md.uuid", uuid);
     }
 
     for (key, value) in [
@@ -276,11 +277,12 @@ fn add_array(graph: &mut StorageGraph, array: MdArray) {
     if let Some(size_bytes) = array.size_bytes {
         node = node.with_size_bytes(size_bytes);
     }
-    if let Some(uuid) = array.uuid {
+    if let Some(uuid) = array.uuid.clone() {
         node = node.with_identity(Identity {
-            uuid: Some(uuid),
+            uuid: Some(uuid.clone()),
             ..Identity::default()
         });
+        node = node.with_property("md.uuid", uuid);
     }
 
     let usage = Usage {
@@ -434,6 +436,9 @@ mod tests {
             node.kind == NodeKind::MdRaid
                 && node.name == "/dev/md/root"
                 && node.identity.uuid.as_deref() == Some("eeee:ffff:1111:2222")
+                && node.properties.iter().any(|property| {
+                    property.key == "md.uuid" && property.value == "eeee:ffff:1111:2222"
+                })
                 && node
                     .properties
                     .iter()
@@ -469,6 +474,10 @@ mod tests {
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::MdRaid
                 && node.name == "/dev/md0"
+                && node.identity.uuid.as_deref() == Some("aaaa:bbbb:cccc:dddd")
+                && node.properties.iter().any(|property| {
+                    property.key == "md.uuid" && property.value == "aaaa:bbbb:cccc:dddd"
+                })
                 && node
                     .properties
                     .iter()

@@ -2669,6 +2669,7 @@ fn usage_details(node: &Node) -> String {
         ("vendor", "vendor"),
         ("transport", "transport"),
         ("rotational", "rotational"),
+        ("md.uuid", "md-uuid"),
         ("scsi.address", "scsi-address"),
         ("scsi.host", "scsi-host"),
         ("scsi.channel", "scsi-channel"),
@@ -3504,6 +3505,7 @@ fn usage_details(node: &Node) -> String {
         ("md.member-minor", "member-minor"),
         ("md.member-raid-device", "member-raid-device"),
         ("md.member-state", "member-state"),
+        ("md.uuid", "md-uuid"),
         ("iscsi.target", "target"),
         ("iscsi.portal", "portal"),
         ("iscsi.portal-address", "portal-address"),
@@ -6445,6 +6447,7 @@ mod tests {
         graph.add_node(
             Node::new("md:/dev/md/root", NodeKind::MdRaid, "/dev/md/root")
                 .with_property("md.version", "1.2")
+                .with_property("md.uuid", "aaaa:bbbb:cccc:dddd")
                 .with_property("md.level", "raid1")
                 .with_property("md.state", "clean")
                 .with_property("md.raid-devices", "2")
@@ -6980,6 +6983,7 @@ mod tests {
                     ..Identity::default()
                 })
                 .with_property("md.version", "1.2")
+                .with_property("md.uuid", "aaaa:bbbb:cccc:dddd")
                 .with_property("md.level", "raid1")
                 .with_property("md.state", "clean")
                 .with_property("md.raid-devices", "2")
@@ -7012,6 +7016,7 @@ mod tests {
                     ..Identity::default()
                 })
                 .with_property("md.scan-metadata", "1.2")
+                .with_property("md.uuid", "eeee:ffff:1111:2222")
                 .with_property("md.scan-name", "host:root")
                 .with_property("md.scan-spares", "1")
                 .with_property("md.scan-devices", "/dev/sdc1,/dev/sdd1"),
@@ -7058,6 +7063,7 @@ mod tests {
         assert!(output.contains("/dev/md0"));
         assert!(output.contains("raid1"));
         assert!(output.contains("clean"));
+        assert!(output.contains("md-uuid=aaaa:bbbb:cccc:dddd"));
         assert!(output.contains("md-version=1.2 level=raid1 state=clean"));
         assert!(output.contains("raid-devices=2 total-devices=2 array-devices=2"));
         assert!(output.contains("active-devices=1 working-devices=2 failed-devices=1"));
@@ -7073,6 +7079,7 @@ mod tests {
             "persistence=Superblock is persistent bitmap-detail=0/8 pages [0KB], 65536KB chunk"
         ));
         assert!(output.contains("/dev/md/root"));
+        assert!(output.contains("md-uuid=eeee:ffff:1111:2222"));
         assert!(output.contains("scan-metadata=1.2 scan-name=host:root"));
         assert!(output.contains("scan-spares=1 scan-devices=/dev/sdc1,/dev/sdd1"));
         assert!(output.contains("/dev/sda1"));
