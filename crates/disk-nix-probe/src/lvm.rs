@@ -64,6 +64,14 @@ struct LogicalVolume {
     lv_time: Option<String>,
     origin: Option<String>,
     pool_lv: Option<String>,
+    raid_mismatch_count: Option<String>,
+    raid_sync_action: Option<String>,
+    raid_write_behind: Option<String>,
+    raid_min_recovery_rate: Option<String>,
+    raid_max_recovery_rate: Option<String>,
+    raidintegritymode: Option<String>,
+    raidintegrityblocksize: Option<String>,
+    integritymismatches: Option<String>,
     data_percent: Option<String>,
     snap_percent: Option<String>,
     metadata_percent: Option<String>,
@@ -300,6 +308,26 @@ fn add_logical_volume(graph: &mut StorageGraph, lv: LogicalVolume) {
         ("lvm.time", lv.lv_time.clone()),
         ("lvm.origin", lv.origin.clone()),
         ("lvm.pool", lv.pool_lv.clone()),
+        ("lvm.raid-mismatch-count", lv.raid_mismatch_count.clone()),
+        ("lvm.raid-sync-action", lv.raid_sync_action.clone()),
+        ("lvm.raid-write-behind", lv.raid_write_behind.clone()),
+        (
+            "lvm.raid-min-recovery-rate",
+            lv.raid_min_recovery_rate.clone(),
+        ),
+        (
+            "lvm.raid-max-recovery-rate",
+            lv.raid_max_recovery_rate.clone(),
+        ),
+        ("lvm.raid-integrity-mode", lv.raidintegritymode.clone()),
+        (
+            "lvm.raid-integrity-block-size",
+            lv.raidintegrityblocksize.clone(),
+        ),
+        (
+            "lvm.raid-integrity-mismatches",
+            lv.integritymismatches.clone(),
+        ),
         ("lvm.data-percent", lv.data_percent.clone()),
         ("lvm.snap-percent", lv.snap_percent.clone()),
         ("lvm.metadata-percent", lv.metadata_percent.clone()),
@@ -588,6 +616,14 @@ mod tests {
             "lv_time": "2026-06-23 10:00:00 -0500",
             "origin": "",
             "pool_lv": "",
+            "raid_mismatch_count": "",
+            "raid_sync_action": "",
+            "raid_write_behind": "",
+            "raid_min_recovery_rate": "",
+            "raid_max_recovery_rate": "",
+            "raidintegritymode": "",
+            "raidintegrityblocksize": "",
+            "integritymismatches": "",
             "data_percent": "",
             "snap_percent": "",
             "metadata_percent": "",
@@ -641,6 +677,14 @@ mod tests {
             "lv_time": "2026-06-23 10:05:00 -0500",
             "origin": "root",
             "pool_lv": "",
+            "raid_mismatch_count": "2",
+            "raid_sync_action": "repair",
+            "raid_write_behind": "256",
+            "raid_min_recovery_rate": "1024",
+            "raid_max_recovery_rate": "8192",
+            "raidintegritymode": "journal",
+            "raidintegrityblocksize": "4096",
+            "integritymismatches": "1",
             "data_percent": "12.00",
             "snap_percent": "12.00",
             "metadata_percent": "",
@@ -804,6 +848,30 @@ mod tests {
                     .any(|property| property.key == "lvm.health" && property.value == "partial")
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.tags" && property.value == "backup,snapshot"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.raid-mismatch-count" && property.value == "2"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.raid-sync-action" && property.value == "repair"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.raid-write-behind" && property.value == "256"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.raid-min-recovery-rate" && property.value == "1024"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.raid-max-recovery-rate" && property.value == "8192"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.raid-integrity-mode" && property.value == "journal"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.raid-integrity-block-size" && property.value == "4096"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.raid-integrity-mismatches" && property.value == "1"
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.cache-mode" && property.value == "writeback"

@@ -2693,6 +2693,14 @@ fn usage_details(node: &Node) -> String {
         ("lvm.check-needed", "check-needed"),
         ("lvm.role", "role"),
         ("lvm.time", "time"),
+        ("lvm.raid-mismatch-count", "raid-mismatches"),
+        ("lvm.raid-sync-action", "raid-sync"),
+        ("lvm.raid-write-behind", "raid-write-behind"),
+        ("lvm.raid-min-recovery-rate", "raid-min-recovery"),
+        ("lvm.raid-max-recovery-rate", "raid-max-recovery"),
+        ("lvm.raid-integrity-mode", "raid-integrity"),
+        ("lvm.raid-integrity-block-size", "raid-integrity-block"),
+        ("lvm.raid-integrity-mismatches", "raid-integrity-mismatches"),
         ("lvm.cache-total-blocks", "cache-total"),
         ("lvm.cache-used-blocks", "cache-used"),
         ("lvm.cache-dirty-blocks", "cache-dirty"),
@@ -4748,6 +4756,14 @@ mod tests {
             Node::new("lvm-cache:vg0/root", NodeKind::LvmCache, "vg0/root")
                 .with_property("lvm.cache-mode", "writeback")
                 .with_property("lvm.cache-policy", "smq")
+                .with_property("lvm.raid-mismatch-count", "2")
+                .with_property("lvm.raid-sync-action", "repair")
+                .with_property("lvm.raid-write-behind", "256")
+                .with_property("lvm.raid-min-recovery-rate", "1024")
+                .with_property("lvm.raid-max-recovery-rate", "8192")
+                .with_property("lvm.raid-integrity-mode", "journal")
+                .with_property("lvm.raid-integrity-block-size", "4096")
+                .with_property("lvm.raid-integrity-mismatches", "1")
                 .with_property("lvm.writecache-writeback-blocks", "16"),
         );
         graph.add_node(
@@ -4783,7 +4799,12 @@ mod tests {
         assert!(output.contains("when-full=queue metadata-size=8.00g"));
         assert!(output.contains("layout=thin pool=pool active=active health=ok"));
         assert!(output.contains("snap=12.50 origin=root active=active"));
-        assert!(output.contains("cache-mode=writeback cache-policy=smq writecache-writeback=16"));
+        assert!(output.contains("raid-mismatches=2 raid-sync=repair"));
+        assert!(output.contains("raid-write-behind=256 raid-min-recovery=1024"));
+        assert!(output.contains("raid-max-recovery=8192 raid-integrity=journal"));
+        assert!(output.contains("raid-integrity-block=4096 raid-integrity-mismatches=1"));
+        assert!(output.contains("cache-mode=writeback cache-policy=smq"));
+        assert!(output.contains("writecache-writeback=16"));
         assert!(
             output
                 .contains("segment-type=thin segment-start=0 segment-size=200.00g devices=pool(0)")

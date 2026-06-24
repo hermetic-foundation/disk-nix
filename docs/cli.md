@@ -284,9 +284,9 @@ Use these commands for:
 - `lvm`: LVM physical volumes, volume groups, logical volumes, segments, thin
   pools, snapshots, and cache/writecache layers, including data and metadata
   percentages, active state, extent/PV/LV counts, origin/pool relationships,
-  thin-pool fullness behavior, segment device mappings, cache policy, health,
-  tags, and backing/member counts when `pvs`, `vgs`, `lvs`, or `dmsetup`
-  expose them
+  thin-pool fullness behavior, segment device mappings, cache policy, LVM RAID
+  sync/recovery/integrity status, health, tags, and backing/member counts when
+  `pvs`, `vgs`, `lvs`, or `dmsetup` expose them
 - `vdo`: native VDO volumes and LVM VDO segment metadata, including backing
   device, logical and physical size, status/stat counters, operating mode,
   recovery progress, configured and active write policy, LVM VDO compression
