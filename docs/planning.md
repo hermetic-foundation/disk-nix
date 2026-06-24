@@ -243,7 +243,8 @@ Examples:
   treated as data destruction. Legacy NFS export `create` and `destroy` still
   map to the same lifecycle paths.
 - LUN `operation = "attach"` means host-side attach for an existing target-side
-  LUN and is online when it only rescans sessions and verifies stable paths.
+  LUN and is online when it rescans sessions, rescans declared stable paths, and
+  verifies path capacity.
   Legacy LUN `create` maps to the same host attach lifecycle.
   LUN `operation = "rescan"` is online and refreshes existing host-visible
   paths without implying target-side capacity growth.

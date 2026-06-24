@@ -721,8 +721,8 @@ refresh. Legacy session `create` and `destroy` map to the same login/logout
 command plans. LUN command plans model host-side `operation = "attach"`,
 `operation = "rescan"`, growth rescan, and `operation = "detach"`: attach,
 rescan, and grow keep the broad `iscsiadm --mode session --rescan` step,
-rescan/grow add per-path SCSI rescans when stable paths are declared, and
-detach deletes only declared stable SCSI path devices before reloading
+add per-path SCSI rescans when stable paths are declared, and reload multipath.
+Detach deletes only declared stable SCSI path devices before reloading
 multipath. Legacy LUN `create` and `destroy` map to the same command plans.
 Attach, rescan, grow, and detach remain non-ready until stable paths are
 declared through `device`, `path`, `devices`, `paths`, or `devicePaths`.

@@ -3422,17 +3422,29 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "rescan iSCSI sessions after target-side LUN creation",
                 ),
                 command(
-                    ["multipath", "-r"],
-                    true,
-                    "reload multipath maps after newly attached LUN paths appear",
-                ),
-                command(
                     ["disk-nix", "inspect", target, "--json"],
                     false,
                     "inspect the newly attached LUN and consumers",
                 ),
             ];
             let devices = lun_rescan_devices(action);
+            if devices.is_empty() {
+                commands.push(command_vec_with_readiness(
+                    vec!["<scsi-rescan-device>", "<lun-path>"],
+                    true,
+                    CommandReadiness::NeedsDomainImplementation,
+                    ["stable LUN device path"],
+                    "rescan the concrete SCSI path after declaring a stable by-path device",
+                ));
+            }
+            for device in &devices {
+                commands.push(scsi_device_rescan_command(device));
+            }
+            commands.push(command(
+                ["multipath", "-r"],
+                true,
+                "reload multipath maps after newly attached LUN paths appear",
+            ));
             if devices.is_empty() {
                 commands.push(command_vec_with_readiness(
                     vec!["blockdev", "--getsize64", "<lun-path>"],
@@ -3442,7 +3454,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "verify the reviewed LUN path after declaring a stable by-path device",
                 ));
             }
-            for device in devices {
+            for device in &devices {
                 commands.push(command_vec(
                     vec!["blockdev", "--getsize64", device.as_str()],
                     false,
@@ -19583,6 +19595,21 @@ mod tests {
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
+                            "sh",
+                            "-c",
+                            "block=$(basename \"$(readlink -f \"$1\")\"); printf '1\\n' > \"/sys/class/block/${block}/device/rescan\"",
+                            "disk-nix-scsi-rescan",
+                            "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luns:iqn.2026-06.example:storage/root:0:attach"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
                             "blockdev",
                             "--getsize64",
                             "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
@@ -19956,6 +19983,11 @@ mod tests {
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "luns:iqn.2026-06.example:storage/new:0:create"
                 && step.commands.iter().any(|command| {
+                    command.argv == ["<scsi-rescan-device>", "<lun-path>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["stable LUN device path"]
+                })
+                && step.commands.iter().any(|command| {
                     command.argv == ["blockdev", "--getsize64", "<lun-path>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["stable LUN device path"]
@@ -19969,7 +20001,7 @@ mod tests {
                         && command.unresolved_inputs == ["stable LUN device path"]
                 })
         }));
-        assert_eq!(report.command_summary.needs_domain_implementation_count, 2);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 3);
         assert!(!report.command_summary.all_commands_ready());
     }
 
