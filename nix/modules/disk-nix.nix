@@ -1027,6 +1027,8 @@ let
   activeThinPools = activeLifecycleAttrs cfg.thinPools;
   activeLvmSnapshots = activeLifecycleAttrs cfg.lvmSnapshots;
   activeLvmCaches = activeLifecycleAttrs cfg.lvmCaches;
+  activeBackingFiles = activeLifecycleAttrs cfg.backingFiles;
+  activeDmMaps = activeLifecycleAttrs cfg.dmMaps;
   activeMdRaids = activeLifecycleAttrs cfg.mdRaids;
   activeMultipathMaps = activeLifecycleAttrs cfg.multipathMaps;
   activeVdoVolumes = activeLifecycleAttrs cfg.vdoVolumes;
@@ -1043,6 +1045,25 @@ let
     (map (filesystem: filesystem.mountpoint) (lib.attrValues activeFilesystems))
     ++ (map (mount: mount.mountpoint) (lib.attrValues activeNfsMounts));
   activeSwapDevicePaths = map swapDevicePath (lib.attrValues activeSwaps);
+  lifecyclePathTarget =
+    name: object:
+    if object.target != null then
+      object.target
+    else if object.path != null then
+      object.path
+    else if object.device != null then
+      object.device
+    else if lib.hasPrefix "/" name then
+      name
+    else
+      null;
+  activeBackingFilePaths = lib.filter (path: path != null) (
+    lib.mapAttrsToList lifecyclePathTarget activeBackingFiles
+  );
+  isDmMapTarget = target: lib.hasPrefix "/dev/mapper/" target || lib.hasPrefix "/dev/dm-" target;
+  activeDmMapTargets = lib.filter (target: target != null && isDmMapTarget target) (
+    lib.mapAttrsToList lifecyclePathTarget activeDmMaps
+  );
   iscsiDiscoverPortal =
     if cfg.iscsi.discoverPortal != null then
       cfg.iscsi.discoverPortal
@@ -2306,6 +2327,14 @@ in
       {
         assertion = lib.length activeSwapDevicePaths == lib.length (lib.unique activeSwapDevicePaths);
         message = "services.disk-nix.swaps entries must resolve to unique active swap device paths.";
+      }
+      {
+        assertion = lib.length activeBackingFilePaths == lib.length (lib.unique activeBackingFilePaths);
+        message = "services.disk-nix.backingFiles entries must resolve to unique active backing file paths.";
+      }
+      {
+        assertion = lib.length activeDmMapTargets == lib.length (lib.unique activeDmMapTargets);
+        message = "services.disk-nix.dmMaps entries must resolve to unique active /dev/mapper/* or /dev/dm-* targets.";
       }
       {
         assertion = lib.length activeNfsExportSelectors == lib.length (lib.unique activeNfsExportSelectors);

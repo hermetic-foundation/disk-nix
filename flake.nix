@@ -868,6 +868,43 @@
             };
           }
         ];
+        nixosModuleBackingFileCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              backingFiles.rootImage = {
+                operation = "rescan";
+                path = "/var/lib/images/root.img";
+              };
+              backingFiles.duplicateRootImage = {
+                operation = "grow";
+                target = "/var/lib/images/root.img";
+                desiredSize = "16GiB";
+              };
+            };
+          }
+        ];
+        nixosModuleDmMapCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              dmMaps.cryptroot = {
+                operation = "rescan";
+                target = "/dev/mapper/cryptroot";
+              };
+              dmMaps.duplicateCryptroot = {
+                operation = "rescan";
+                path = "/dev/mapper/cryptroot";
+              };
+            };
+          }
+        ];
       in
       {
         formatter = formatProgram;
@@ -1861,7 +1898,11 @@
               '';
           nixosModuleAssertions = pkgs.runCommand "disk-nix-nixos-module-assertions-check" { } ''
             collisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleCollisionTest.config.system.build.toplevel).success))}
+            backingFileCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBackingFileCollisionTest.config.system.build.toplevel).success))}
+            dmMapCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDmMapCollisionTest.config.system.build.toplevel).success))}
             test "$collisionSuccess" = false
+            test "$backingFileCollisionSuccess" = false
+            test "$dmMapCollisionSuccess" = false
             touch "$out"
           '';
         };

@@ -362,6 +362,11 @@ Typed lifecycle declarations are available for:
 - `exports`
 - `caches`
 
+Active path-addressed declarations must resolve to unique concrete targets.
+The module rejects duplicate filesystem mountpoints, swap paths, LUKS mapper
+names, backing-file paths, device-mapper `/dev/mapper/*` or `/dev/dm-*`
+targets, and NFS export path/client pairs before generating an apply plan.
+
 `volumeGroups.<name>.operation = "import"` and `"export"` render reviewed
 `vgimport <name>` and `vgexport <name>` plans for moving existing VGs without
 recreating or removing them.
