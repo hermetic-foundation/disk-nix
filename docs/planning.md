@@ -90,7 +90,10 @@ Examples:
   sparse file. Rescan plans are read-only and inspect size, sparse allocation,
   and modeled consumers; grow plans require the same concrete inputs before
   rendering `truncate --size`, leaving loop, swap, and filesystem refresh as
-  explicit follow-up actions.
+  explicit follow-up actions. Current-topology comparison suppresses create
+  only when the existing file already has the declared size, suppresses grow
+  when current size already satisfies the desired size, and warns when create
+  would hit an existing file with a different or unknown size.
 - `dmMaps` declarations model device-mapper refreshes, reviewed mapper renames,
   and explicit mapper removal. Rescan plans inspect map identity, dependencies,
   table, live status, and graph consumers; rename plans are offline-required

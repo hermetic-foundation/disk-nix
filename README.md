@@ -282,6 +282,10 @@ Create plans require a path-shaped key, `target`, or `path` plus `desiredSize`,
 with `test ! -e` before rendering `truncate --size`. Growth uses the same path
 and size inputs to extend an existing file. Focused graph inspection keeps loop
 devices, swapfiles, and filesystem consumers as explicit follow-up work.
+Current-topology comparison suppresses backing-file create only when the file
+already exists at the declared size, suppresses grow when current size already
+satisfies the desired size, and warns when create would hit an existing file
+with a different or unknown size.
 Device-mapper map rescan plans use `dmMaps` declarations and render read-only
 `dmsetup info`, `dmsetup deps -o devname`, `dmsetup table`, `dmsetup status`,
 and graph inspection commands. `operation = "rename"` renders reviewed

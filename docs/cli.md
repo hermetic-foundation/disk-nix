@@ -620,13 +620,15 @@ multipath destroy, bcache detach, iSCSI login/logout, LVM
 activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
 LUKS keyslot/token removal, loop create/destroy, LUN attach/detach, NVMe
 namespace attach/detach, mount, unmount, remount, NFS export/unexport, VDO
-destroy, VDO start, VDO stop, MD assemble, Btrfs subvolume destroy, ZFS
-dataset/zvol destroy, generic snapshot destroy, ZFS pool import, LVM cache detach, and property actions that have no warning diagnostics are suppressed from the actionable plan and counted as
+destroy, VDO start, VDO stop, backing-file create/grow, MD assemble, Btrfs
+subvolume destroy, ZFS dataset/zvol destroy, generic snapshot destroy, ZFS
+pool import, LVM cache detach, and property actions that have no warning diagnostics are suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
 inactive LUKS open targets, active LUKS close targets, still-present LUKS
 keyslots/tokens selected for removal, loop devices mapped to different backing
-files, still-mapped loop detach targets, present device-mapper removal targets,
+files, backing-file create targets with different or unknown current size,
+still-mapped loop detach targets, present device-mapper removal targets,
 present multipath flush targets, absent LUN attach paths, visible LUN detach
 paths, present bcache detach targets, still-attached LVM cache origins, absent
 NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
@@ -749,6 +751,10 @@ so existing images are not overwritten by the generated command sequence.
 commands. `operation = "grow"` renders `truncate --size` only when a concrete
 file path and desired size are declared; logical names can supply the file path
 with `target` or `path`.
+Current-topology probing suppresses backing-file create only when the existing
+file already has the declared size, suppresses grow when current size already
+satisfies the desired size, and keeps mismatched existing files actionable with
+a warning because the generated create command refuses to overwrite them.
 Device-mapper command plans use `dmMaps` declarations for map refreshes and
 reviewed mapper renames or removals. `operation = "rescan"` renders `dmsetup info`, `dmsetup deps -o devname`, `dmsetup table`, `dmsetup status`, and graph
 inspection commands when a concrete `/dev/mapper/*` or `/dev/dm-*` target is

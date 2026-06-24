@@ -244,6 +244,8 @@ pub enum TopologyDiagnosticKind {
     BtrfsQgroupDestroyRequired,
     BcacheDetachAlreadySatisfied,
     BcacheDetachRequired,
+    BackingFileCreateAlreadySatisfied,
+    BackingFileCreateRequired,
     IscsiLoginAlreadySatisfied,
     IscsiLoginRequired,
     IscsiLogoutAlreadySatisfied,
@@ -799,6 +801,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                 matches!(
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
@@ -1427,6 +1430,7 @@ fn already_satisfied_action_ids(
             already_satisfied |= matches!(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
+                    | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
@@ -1584,6 +1588,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(dm_map_present_diagnostic(action, node, &query));
     diagnostics.extend(multipath_present_diagnostic(action, node, &query));
     diagnostics.extend(loop_present_diagnostic(action, node, &query));
+    diagnostics.extend(backing_file_create_diagnostic(action, node, &query));
     diagnostics.extend(md_assemble_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
@@ -2891,6 +2896,79 @@ fn loop_create_diagnostic(
             TopologyDiagnosticLevel::Warning,
             TopologyDiagnosticKind::LoopCreateConflict,
             format!("loop device {query} is already present with unknown backing file"),
+        ),
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn backing_file_create_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Create
+        || action.context.collection.as_deref() != Some("backingFiles")
+        || node.kind != NodeKind::BackingFile
+    {
+        return None;
+    }
+
+    let desired = action.context.desired_size.as_deref();
+    let desired_bytes = desired.and_then(parse_size_bytes);
+    let (level, kind, message) = match (desired, desired_bytes, node.size_bytes) {
+        (Some(desired), Some(desired_bytes), Some(current_bytes))
+            if current_bytes == desired_bytes =>
+        {
+            (
+                TopologyDiagnosticLevel::Info,
+                TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied,
+                format!(
+                    "backing file {query} already exists with desired size {desired} ({current_bytes} bytes)"
+                ),
+            )
+        }
+        (Some(desired), Some(_), Some(current_bytes)) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::BackingFileCreateRequired,
+            format!(
+                "backing file {query} already exists with size {current_bytes} bytes, not desired size {desired}; create would refuse to overwrite it"
+            ),
+        ),
+        (Some(desired), None, _) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::BackingFileCreateRequired,
+            format!(
+                "backing file {query} already exists, but desired size {desired} could not be compared"
+            ),
+        ),
+        (None, _, Some(current_bytes)) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::BackingFileCreateRequired,
+            format!(
+                "backing file {query} already exists with size {current_bytes} bytes, but create has no desired size to compare"
+            ),
+        ),
+        (None, _, None) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::BackingFileCreateRequired,
+            format!(
+                "backing file {query} already exists, but create has no desired size to compare"
+            ),
+        ),
+        (Some(desired), Some(_), None) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::BackingFileCreateRequired,
+            format!(
+                "backing file {query} already exists, but current size is unknown; desired size is {desired}"
+            ),
         ),
     };
 
@@ -11356,6 +11434,7 @@ mod tests {
             (NodeKind::LvmThinPool, Operation::Rescan, RiskClass::Online),
             (NodeKind::LvmSnapshot, Operation::Rescan, RiskClass::Online),
             (NodeKind::LoopDevice, Operation::Rescan, RiskClass::Online),
+            (NodeKind::BackingFile, Operation::Create, RiskClass::Online),
             (NodeKind::BackingFile, Operation::Rescan, RiskClass::Online),
             (NodeKind::BackingFile, Operation::Grow, RiskClass::Online),
             (NodeKind::DeviceMapper, Operation::Rescan, RiskClass::Online),
@@ -14498,6 +14577,88 @@ mod tests {
             Some("/var/lib/images/inventory.img")
         );
         assert!(!rescan.destructive);
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_backing_file_create_and_grow() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "backingFiles": {
+                "/var/lib/images/new.img": {
+                  "operation": "create",
+                  "desiredSize": "8GiB"
+                },
+                "/var/lib/images/mismatch.img": {
+                  "operation": "create",
+                  "desiredSize": "8GiB"
+                },
+                "/var/lib/images/root.img": {
+                  "operation": "grow",
+                  "desiredSize": "8GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "backing-file:/var/lib/images/new.img",
+                NodeKind::BackingFile,
+                "/var/lib/images/new.img",
+            )
+            .with_path("/var/lib/images/new.img")
+            .with_size_bytes(8 * 1024 * 1024 * 1024),
+        );
+        graph.add_node(
+            Node::new(
+                "backing-file:/var/lib/images/mismatch.img",
+                NodeKind::BackingFile,
+                "/var/lib/images/mismatch.img",
+            )
+            .with_path("/var/lib/images/mismatch.img")
+            .with_size_bytes(4 * 1024 * 1024 * 1024),
+        );
+        graph.add_node(
+            Node::new(
+                "backing-file:/var/lib/images/root.img",
+                NodeKind::BackingFile,
+                "/var/lib/images/root.img",
+            )
+            .with_path("/var/lib/images/root.img")
+            .with_size_bytes(16 * 1024 * 1024 * 1024),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.matched_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.summary.action_count, 1);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id == "backingfiles:/var/lib/images/mismatch.img:create")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "backingfiles:/var/lib/images/new.img:create"
+                && diagnostic.kind == TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "backingfiles:/var/lib/images/mismatch.img:create"
+                && diagnostic.kind == TopologyDiagnosticKind::BackingFileCreateRequired
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.message.contains("refuse to overwrite")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "backingfiles:/var/lib/images/root.img:grow"
+                && diagnostic.kind == TopologyDiagnosticKind::SizeAlreadySatisfied
+        }));
     }
 
     #[test]
