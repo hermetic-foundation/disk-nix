@@ -248,12 +248,12 @@ Use these commands for:
   quota/reservation/encryption, and POSIX metadata policy properties when
   probes expose them
 - `zfs`: ZFS pools, vdevs, datasets, snapshots, and zvols, including pool
-  health/state, status/action advisories, scan/error summaries, vdev roles and
-  error counters, dataset compression, dedup, checksum, copies, sync, cache
-  policy, record size, quota, reservation, encryption, key status, POSIX
-  metadata policy, snapshot user references, zvol volume size, origin, and
-  pool/dataset/snapshot child relationships when `zpool` and `zfs` probes
-  expose them
+  health/state, capacity, dedup ratio, fragmentation, altroot, status/action
+  advisories, scan/error summaries, vdev roles and error counters, dataset
+  compression, dedup, checksum, copies, sync, cache policy, record size, quota,
+  reservation, encryption, key status, POSIX metadata policy, snapshot user
+  references, zvol volume size, origin, and pool/dataset/snapshot child
+  relationships when `zpool` and `zfs` probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, bcachefs, ZFS, zvols,
   LUNs, and exports, including LVM origin/pool/data metadata, activation state,
   activation locality/exclusivity, role, layout, health, tags, device-mapper

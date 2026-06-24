@@ -1914,7 +1914,13 @@ fn run_findmnt_targets(filesystem_type: &str) -> Result<Vec<String>, String> {
 fn collect_zfs(result: &mut ProbeResult) {
     let zpool_list = run_report(
         "zpool",
-        &["list", "-H", "-p", "-o", "name,size,alloc,free,health"],
+        &[
+            "list",
+            "-H",
+            "-p",
+            "-o",
+            "name,size,alloc,free,health,capacity,dedupratio,fragmentation,altroot",
+        ],
     );
     let zfs_list = run_report(
         "zfs",

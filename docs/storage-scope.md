@@ -154,7 +154,8 @@ The current probe layer normalizes:
   serial, volume length, FAT/cluster offsets, cluster counts, sector sizing,
   allocated capacity, and free-space estimates
 - ZFS `zpool list -H -p`, `zpool status -P`, and `zfs list -H -p` output for
-  pool capacity, health, status/action advisories, scan/error summaries, vdev
+  pool size, allocated/free usage, capacity, dedup ratio, fragmentation,
+  altroot, health, status/action advisories, scan/error summaries, vdev
   topology, data/log/cache/special/dedup roles, backing devices, datasets,
   snapshots, zvols, mountpoints, clone origins, and snapshot user-reference
   counts that indicate active holds; ZFS dataset and zvol policy properties

@@ -29,6 +29,10 @@ struct ZpoolRow {
     allocated: Option<u64>,
     free: Option<u64>,
     health: Option<String>,
+    capacity: Option<String>,
+    dedupratio: Option<String>,
+    fragmentation: Option<String>,
+    altroot: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,6 +108,10 @@ fn parse_zpools(bytes: &[u8]) -> Result<Vec<ZpoolRow>, ProbeError> {
             allocated: parse_u64_field(fields[2]),
             free: parse_u64_field(fields[3]),
             health: nonempty(fields[4]),
+            capacity: fields.get(5).and_then(|value| nonempty_dash(value)),
+            dedupratio: fields.get(6).and_then(|value| nonempty_dash(value)),
+            fragmentation: fields.get(7).and_then(|value| nonempty_dash(value)),
+            altroot: fields.get(8).and_then(|value| nonempty_dash(value)),
         });
     }
 
@@ -301,6 +309,16 @@ fn add_pool(graph: &mut StorageGraph, pool: ZpoolRow) {
     if let Some(health) = pool.health {
         node = node.with_property("zfs.health", health);
     }
+    for (key, value) in [
+        ("zfs.pool-capacity", pool.capacity),
+        ("zfs.pool-dedupratio", pool.dedupratio),
+        ("zfs.pool-fragmentation", pool.fragmentation),
+        ("zfs.pool-altroot", pool.altroot),
+    ] {
+        if let Some(value) = value {
+            node = node.with_property(key, value);
+        }
+    }
 
     graph.add_node(node);
 }
@@ -494,7 +512,7 @@ mod tests {
 
     use super::*;
 
-    const ZPOOL: &[u8] = b"tank\t1000\t400\t600\tONLINE\n";
+    const ZPOOL: &[u8] = b"tank\t1000\t400\t600\tONLINE\t40%\t1.00x\t12%\t/mnt/rescue\n";
     const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\t-\tlz4\tnone\tnone\toff\t-\t-\t131072\toff\ton\t1\tstandard\tall\tall\ton\toff\thidden\toff\tsa\n\
 tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\tzstd\t1073741824\t268435456\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
 tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\tzstd\t-\t-\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
@@ -542,6 +560,25 @@ errors: No known data errors
                 .iter()
                 .any(|node| node.kind == NodeKind::ZfsPool && node.name == "tank")
         );
+        let pool = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::ZfsPool && node.name == "tank")
+            .expect("pool node exists");
+        assert!(
+            pool.properties
+                .iter()
+                .any(|property| { property.key == "zfs.pool-capacity" && property.value == "40%" })
+        );
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.pool-dedupratio" && property.value == "1.00x"
+        }));
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.pool-fragmentation" && property.value == "12%"
+        }));
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.pool-altroot" && property.value == "/mnt/rescue"
+        }));
         assert!(
             graph
                 .nodes
