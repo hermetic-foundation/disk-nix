@@ -375,6 +375,7 @@ Each lifecycle declaration includes:
 - `devices`
 - `removeDevices`
 - `replaceDevices`
+- `cacheSetUuid`
 - `renameTo`
 - `renameTarget`
 - `newName`
@@ -698,6 +699,7 @@ Example lifecycle planning through NixOS options:
     };
     caches."tank/l2arc0" = {
       replaceDevices."/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
+      cacheSetUuid = "11111111-2222-3333-4444-555555555555";
     };
     caches.writeback = {
       path = "/dev/bcache0";

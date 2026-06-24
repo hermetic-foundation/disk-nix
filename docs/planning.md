@@ -410,11 +410,13 @@ include `executionResults` with command phase, argv, success, exit status,
 stdout, and stderr for each command that ran.
 Cache command plans include bcache-aware sysfs updates for existing cache-set
 attachment, cache-mode property changes, read-only rescans, dirty-data checks,
-and replacement scaffolding that remains marked as needing domain
-implementation until the replacement cache device and new cache-set UUID are
-verified. bcache sysfs operations require a concrete `/dev/bcache*` target;
-logical cache declaration names become ready when `target`, `path`, or `device`
-declares the backing bcache device path.
+and replacement steps that remain non-ready until the replacement cache device,
+concrete `/dev/bcache*` target, and new cache-set UUID are declared. Once
+`cacheSetUuid` is declared, replacement renders `make-bcache --cset-uuid`,
+detach, and attach steps without guessing generated identity. bcache sysfs
+operations require a concrete `/dev/bcache*` target; logical cache declaration
+names become ready when `target`, `path`, or `device` declares the backing
+bcache device path.
 Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
 detach operations. Logical loop declaration names can supply that target with
 `target` or `path`; `device` remains the backing file or block device for

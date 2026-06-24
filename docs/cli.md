@@ -563,9 +563,9 @@ When an action context includes `desiredSize`, supported resize commands use
 that concrete target and no longer report `needs-desired-size`.
 Cache-layer command plans include bcache sysfs operations for attaching or
 detaching an existing cache-set UUID, rescanning status, changing cache mode,
-checking dirty data, and staging replacement cache media without silently
-formatting unknown devices. bcache `operation = "rescan"` reads state,
-cache-mode, dirty-data, and modeled graph relationships without changing
+checking dirty data, and replacing cache media only when the replacement device
+and explicit `cacheSetUuid` are declared. bcache `operation = "rescan"` reads
+state, cache-mode, dirty-data, and modeled graph relationships without changing
 attachment. bcache sysfs operations require a concrete `/dev/bcache*` target;
 logical cache names can declare `target = "/dev/bcacheN"`,
 `path = "/dev/bcacheN"`, or `device = "/dev/bcacheN"` to make attach, detach,

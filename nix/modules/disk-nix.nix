@@ -178,6 +178,13 @@ let
           };
         };
 
+        cacheSetUuid = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Explicit cache-set UUID for bcache replacement cache media created with make-bcache --cset-uuid.";
+          example = "11111111-2222-3333-4444-555555555555";
+        };
+
         renameTo = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -721,6 +728,7 @@ let
         devicePaths
         removeDevices
         replaceDevices
+        cacheSetUuid
         renameTo
         renameTarget
         newName

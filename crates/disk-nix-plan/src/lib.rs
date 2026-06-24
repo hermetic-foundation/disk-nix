@@ -196,6 +196,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replacement: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_set_uuid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub rename_to: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub property: Option<String>,
@@ -255,6 +257,7 @@ impl ActionContext {
             && self.device.is_none()
             && self.devices.is_empty()
             && self.replacement.is_none()
+            && self.cache_set_uuid.is_none()
             && self.rename_to.is_none()
             && self.property.is_none()
             && self.property_value.is_none()
@@ -882,6 +885,18 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         target: lifecycle_target(collection, name, object),
         device: lifecycle_device(collection, object),
         devices: lifecycle_devices(collection, object),
+        cache_set_uuid: metadata_string_field(
+            object,
+            &[
+                "cacheSetUuid",
+                "cacheSetUUID",
+                "cache-set-uuid",
+                "cache_set_uuid",
+                "newCacheSetUuid",
+                "newCacheSetUUID",
+                "new-cache-set-uuid",
+            ],
+        ),
         rename_to: string_field(object, &["renameTo", "renameTarget", "newName"]),
         fs_type: string_field(object, &["fsType", "type"]),
         mountpoint: string_field(object, &["mountpoint", "path"])

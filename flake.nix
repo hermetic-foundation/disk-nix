@@ -697,6 +697,7 @@
                 replaceDevices = {
                   "/dev/disk/by-id/old-cache" = "/dev/disk/by-id/new-cache";
                 };
+                cacheSetUuid = "11111111-2222-3333-4444-555555555555";
               };
               caches."/dev/bcache0" = {
                 operation = "rescan";
@@ -1539,6 +1540,7 @@
                     and .spec.multipathMaps.mpatha.replaceDevices."/dev/sdc" == "/dev/sdd"
                     and .spec.multipathMaps.mpathb.operation == "rescan"
                     and .spec.multipathMaps.mpathb.target == "mpathb"
+                    and .spec.caches."tank/l2arc0".cacheSetUuid == "11111111-2222-3333-4444-555555555555"
                     and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
                     and .spec.caches."/dev/bcache0".operation == "rescan"
                     and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"

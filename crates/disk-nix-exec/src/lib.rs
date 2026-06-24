@@ -4140,7 +4140,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::ReplaceDevice => {
-            let target = target.unwrap_or("<target>");
+            let target = if collection == Some("caches") {
+                cache_target.unwrap_or("<cache-device>")
+            } else {
+                target.unwrap_or("<target>")
+            };
             let fs_type = action.context.fs_type.as_deref();
             let from = action
                 .context
@@ -4148,6 +4152,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .as_deref()
                 .or_else(|| action_id_suffix(&action.id, "replace-device"));
             let to = action.context.replacement.as_deref();
+            let replacement_cache_set = action.context.cache_set_uuid.as_deref();
             (
                 vec![
                     command(
@@ -4155,7 +4160,16 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         false,
                         "inspect redundancy and source device health before replacement",
                     ),
-                    replace_device_command(collection, fs_type, target, from, to),
+                    if collection == Some("caches") {
+                        match (from, to) {
+                            (Some(from), Some(to)) => {
+                                bcache_replace_command(target, from, to, replacement_cache_set)
+                            }
+                            _ => replace_device_command(collection, fs_type, target, from, to),
+                        }
+                    } else {
+                        replace_device_command(collection, fs_type, target, from, to)
+                    },
                 ],
                 vec![
                     "keep the old device available until post-apply verification passes"
@@ -7190,23 +7204,7 @@ fn replace_device_command(
         Some("lvmCaches") => {
             lvm_cache_replace_command(lvm_volume_target_path(Some(target)), Some(from), Some(to))
         }
-        Some("caches") => command_vec_with_readiness(
-            vec![
-                "make-bcache".to_string(),
-                "-C".to_string(),
-                to.to_string(),
-                "--writeback".to_string(),
-            ],
-            true,
-            CommandReadiness::NeedsDomainImplementation,
-            [
-                "confirmed empty replacement cache device",
-                "new cache-set UUID",
-            ],
-            &format!(
-                "initialize replacement cache device after flushing and detaching {from} from {target}"
-            ),
-        ),
+        Some("caches") => bcache_replace_command(target, from, to, None),
         _ => command_with_readiness(
             ["<replace-device-tool>", target, from, to],
             true,
@@ -8849,6 +8847,57 @@ fn bcache_detach_command(target: &str) -> ExecutionCommand {
         true,
         "detach the bcache cache set from the backing device after dirty data is flushed",
     )
+}
+
+fn bcache_replace_command(
+    target: &str,
+    from: &str,
+    replacement_device: &str,
+    cache_set_uuid: Option<&str>,
+) -> ExecutionCommand {
+    let cache_set_arg = cache_set_uuid.unwrap_or("<new-cache-set-uuid>");
+    let mut missing = Vec::new();
+    if !is_bcache_target(target) {
+        missing.push("bcache device path");
+    }
+    if cache_set_uuid.is_none() {
+        missing.push("new cache-set UUID");
+    }
+
+    let argv = vec![
+        "sh".to_string(),
+        "-c".to_string(),
+        "make-bcache -C \"$2\" --cset-uuid \"$3\" --writeback && printf '1\\n' > \"/sys/block/${1#/dev/}/bcache/detach\" && printf '%s\\n' \"$3\" > \"/sys/block/${1#/dev/}/bcache/attach\""
+            .to_string(),
+        "disk-nix-bcache-replace".to_string(),
+        if is_bcache_target(target) {
+            target.to_string()
+        } else {
+            "<cache-device>".to_string()
+        },
+        replacement_device.to_string(),
+        cache_set_arg.to_string(),
+    ];
+
+    if missing.is_empty() {
+        command_vec(
+            argv,
+            true,
+            &format!(
+                "initialize replacement cache device {replacement_device}, detach {from}, and attach cache-set {cache_set_arg} to {target}"
+            ),
+        )
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            &format!(
+                "initialize replacement cache device after flushing and detaching {from} from {target}"
+            ),
+        )
+    }
 }
 
 fn bcache_property_command(target: &str, property: &str, assignment: &str) -> ExecutionCommand {
@@ -20023,6 +20072,7 @@ mod tests {
                     "replaceDevices": {
                       "/dev/disk/by-id/old-cache": "/dev/disk/by-id/new-cache"
                     },
+                    "cacheSetUuid": "11111111-2222-3333-4444-555555555555",
                     "properties": {
                       "bcache.cache-mode": "writethrough"
                     }
@@ -20105,12 +20155,15 @@ mod tests {
             step.commands.iter().any(|command| {
                 command.argv
                     == [
-                        "make-bcache",
-                        "-C",
+                        "sh",
+                        "-c",
+                        "make-bcache -C \"$2\" --cset-uuid \"$3\" --writeback && printf '1\\n' > \"/sys/block/${1#/dev/}/bcache/detach\" && printf '%s\\n' \"$3\" > \"/sys/block/${1#/dev/}/bcache/attach\"",
+                        "disk-nix-bcache-replace",
+                        "/dev/bcache0",
                         "/dev/disk/by-id/new-cache",
-                        "--writeback",
+                        "11111111-2222-3333-4444-555555555555",
                     ]
-                    && command.readiness == CommandReadiness::NeedsDomainImplementation
+                    && command.readiness == CommandReadiness::Ready
             })
         }));
         assert!(report.command_plan.iter().any(|step| {
@@ -20156,6 +20209,51 @@ mod tests {
                             "/dev/bcache0",
                             "dirty_data",
                         ]
+                })
+        }));
+    }
+
+    #[test]
+    fn cache_replacement_requires_declared_cache_set_uuid() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "caches": {
+                  "/dev/bcache0": {
+                    "operation": "replace-device",
+                    "replaceDevices": {
+                      "/dev/disk/by-id/old-cache": "/dev/disk/by-id/new-cache"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowDeviceReplacement": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:/dev/bcache0:replace-device:/dev/disk/by-id/old-cache"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "make-bcache -C \"$2\" --cset-uuid \"$3\" --writeback && printf '1\\n' > \"/sys/block/${1#/dev/}/bcache/detach\" && printf '%s\\n' \"$3\" > \"/sys/block/${1#/dev/}/bcache/attach\"",
+                            "disk-nix-bcache-replace",
+                            "/dev/bcache0",
+                            "/dev/disk/by-id/new-cache",
+                            "<new-cache-set-uuid>",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["new cache-set UUID"]
                 })
         }));
     }
