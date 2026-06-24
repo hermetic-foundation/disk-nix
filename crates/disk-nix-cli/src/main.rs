@@ -3100,6 +3100,7 @@ fn usage_details(node: &Node) -> String {
         ("ext.reserved-block-count", "reserved-blocks"),
         ("ext.overhead-clusters", "overhead-clusters"),
         ("ext.free-blocks", "free-blocks"),
+        ("ext.first-block", "first-block"),
         ("ext.block-size", "block-size"),
         ("ext.fragment-size", "fragment-size"),
         ("ext.blocks-per-group", "blocks-per-group"),
@@ -3107,6 +3108,8 @@ fn usage_details(node: &Node) -> String {
         ("ext.inode-count", "inodes"),
         ("ext.free-inodes", "free-inodes"),
         ("ext.inodes-per-group", "inodes-per-group"),
+        ("ext.raid-stride", "raid-stride"),
+        ("ext.raid-stripe-width", "raid-stripe-width"),
         ("ext.features", "features"),
         ("ext.flags", "flags"),
         ("ext.default-directory-hash", "dir-hash"),
@@ -4167,6 +4170,7 @@ mod tests {
             .with_property("ext.reserved-block-count", "6104832")
             .with_property("ext.overhead-clusters", "123456")
             .with_property("ext.free-blocks", "73328197")
+            .with_property("ext.first-block", "0")
             .with_property("ext.block-size", "4096")
             .with_property("ext.fragment-size", "4096")
             .with_property("ext.blocks-per-group", "32768")
@@ -4174,6 +4178,8 @@ mod tests {
             .with_property("ext.inode-count", "30531584")
             .with_property("ext.free-inodes", "27187554")
             .with_property("ext.inodes-per-group", "8192")
+            .with_property("ext.raid-stride", "128")
+            .with_property("ext.raid-stripe-width", "256")
             .with_property("ext.features", "has_journal extent metadata_csum")
             .with_property("ext.flags", "signed_directory_hash")
             .with_property("ext.default-directory-hash", "half_md4")
@@ -4203,7 +4209,7 @@ mod tests {
             .with_property("ext.checksum", "0x12345678");
         assert_eq!(
             usage_details(&ext),
-            "fstype=ext4 version=1.0 blkid-block-size=4096 usage=filesystem uuid-sub=subvol-uuid ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197 block-size=4096 fragment-size=4096 blocks-per-group=32768 fragments-per-group=32768 inodes=30531584 free-inodes=27187554 inodes-per-group=8192 features=has_journal extent metadata_csum flags=signed_directory_hash dir-hash=half_md4 dir-hash-seed=11111111-2222-3333-4444-555555555555 default-mount=user_xattr acl created=Mon Jan 01 00:00:00 2024 last-mounted=Mon Jun 22 12:00:00 2026 last-written=Mon Jun 22 12:00:00 2026 mount-count=12 max-mount-count=-1 last-checked=Mon Jan 01 00:00:00 2024 check-interval=0 (<none>) lifetime-writes=189 GB reserved-uid=0 (user root) reserved-gid=0 (group root) first-inode=11 inode-size=256 journal-inode=8 journal-uuid=99999999-aaaa-bbbb-cccc-dddddddddddd journal-backup=inode blocks journal-features=journal_incompat_revoke journal-size=1024M checksum-type=crc32c checksum=0x12345678"
+            "fstype=ext4 version=1.0 blkid-block-size=4096 usage=filesystem uuid-sub=subvol-uuid ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197 first-block=0 block-size=4096 fragment-size=4096 blocks-per-group=32768 fragments-per-group=32768 inodes=30531584 free-inodes=27187554 inodes-per-group=8192 raid-stride=128 raid-stripe-width=256 features=has_journal extent metadata_csum flags=signed_directory_hash dir-hash=half_md4 dir-hash-seed=11111111-2222-3333-4444-555555555555 default-mount=user_xattr acl created=Mon Jan 01 00:00:00 2024 last-mounted=Mon Jun 22 12:00:00 2026 last-written=Mon Jun 22 12:00:00 2026 mount-count=12 max-mount-count=-1 last-checked=Mon Jan 01 00:00:00 2024 check-interval=0 (<none>) lifetime-writes=189 GB reserved-uid=0 (user root) reserved-gid=0 (group root) first-inode=11 inode-size=256 journal-inode=8 journal-uuid=99999999-aaaa-bbbb-cccc-dddddddddddd journal-backup=inode blocks journal-features=journal_incompat_revoke journal-size=1024M checksum-type=crc32c checksum=0x12345678"
         );
 
         let exfat = Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
@@ -4500,11 +4506,14 @@ mod tests {
                 .with_property("ext.reserved-block-count", "6104832")
                 .with_property("ext.overhead-clusters", "123456")
                 .with_property("ext.free-blocks", "73328197")
+                .with_property("ext.first-block", "0")
                 .with_property("ext.block-size", "4096")
                 .with_property("ext.blocks-per-group", "32768")
                 .with_property("ext.inode-count", "30531584")
                 .with_property("ext.free-inodes", "27187554")
                 .with_property("ext.inodes-per-group", "8192")
+                .with_property("ext.raid-stride", "128")
+                .with_property("ext.raid-stripe-width", "256")
                 .with_property("ext.features", "has_journal extent metadata_csum")
                 .with_property("ext.flags", "signed_directory_hash")
                 .with_property("ext.default-directory-hash", "half_md4")
@@ -4619,10 +4628,10 @@ mod tests {
         ));
         assert!(output.contains("xfs-realtime-type=none xfs-realtime-blocks=0"));
         assert!(output.contains(
-            "fstype=ext4 ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197"
+            "fstype=ext4 ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197 first-block=0"
         ));
         assert!(output.contains(
-            "block-size=4096 blocks-per-group=32768 inodes=30531584 free-inodes=27187554 inodes-per-group=8192"
+            "block-size=4096 blocks-per-group=32768 inodes=30531584 free-inodes=27187554 inodes-per-group=8192 raid-stride=128 raid-stripe-width=256"
         ));
         assert!(output.contains(
             "features=has_journal extent metadata_csum flags=signed_directory_hash dir-hash=half_md4 dir-hash-seed=11111111-2222-3333-4444-555555555555"

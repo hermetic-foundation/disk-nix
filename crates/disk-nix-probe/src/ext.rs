@@ -71,11 +71,14 @@ const PROPERTIES: &[(&str, &str)] = &[
     ("Reserved block count", "ext.reserved-block-count"),
     ("Overhead clusters", "ext.overhead-clusters"),
     ("Free blocks", "ext.free-blocks"),
+    ("First block", "ext.first-block"),
     ("Block size", "ext.block-size"),
     ("Fragment size", "ext.fragment-size"),
     ("Blocks per group", "ext.blocks-per-group"),
     ("Fragments per group", "ext.fragments-per-group"),
     ("Inodes per group", "ext.inodes-per-group"),
+    ("RAID stride", "ext.raid-stride"),
+    ("RAID stripe width", "ext.raid-stripe-width"),
     ("Filesystem features", "ext.features"),
     ("Filesystem flags", "ext.flags"),
     ("Default directory hash", "ext.default-directory-hash"),
@@ -205,6 +208,8 @@ Fragment size:            4096
 Blocks per group:         32768
 Fragments per group:      32768
 Inodes per group:         8192
+RAID stride:              128
+RAID stripe width:        256
 Filesystem created:       Mon Jan 01 00:00:00 2024
 Last mount time:          Mon Jun 22 12:00:00 2026
 Last write time:          Mon Jun 22 12:00:00 2026
@@ -250,6 +255,21 @@ Checksum:                 0x12345678
         }));
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ext.overhead-clusters" && property.value == "123456"
+        }));
+        assert!(
+            filesystem
+                .properties
+                .iter()
+                .any(|property| { property.key == "ext.first-block" && property.value == "0" })
+        );
+        assert!(
+            filesystem
+                .properties
+                .iter()
+                .any(|property| { property.key == "ext.raid-stride" && property.value == "128" })
+        );
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ext.raid-stripe-width" && property.value == "256"
         }));
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ext.default-directory-hash" && property.value == "half_md4"

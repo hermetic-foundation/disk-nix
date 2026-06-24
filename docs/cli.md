@@ -228,9 +228,10 @@ Use these commands for:
   member-device, mounted usage, and filesystem/member data-type byte
   accounting, Btrfs Data/Metadata/System allocation profiles and byte counts,
   and ext state/features, reserved and overhead block accounting, block/inode
-  group geometry, mount/check counters, timestamps, directory hash settings,
-  default mount options, lifetime writes, journal identity, and checksum
-  metadata when probes expose them
+  group geometry, first-block and RAID stride/stripe layout hints, mount/check
+  counters, timestamps, directory hash settings, default mount options,
+  lifetime writes, journal identity, and checksum metadata when probes expose
+  them
 - `complex-filesystems`: Btrfs, bcachefs, and ZFS pools, vdevs, datasets,
   zvols, subvolumes, snapshots, qgroups, and member devices, including size,
   used/free capacity, utilization, backing/member counts, allocation profiles,
@@ -363,8 +364,9 @@ Use these commands for:
   metadata detail data, including bcache role/backing-device/set/state, cache mode,
   replacement policy, available cache percentage, dirty data, I/O errors,
   writeback percentage, `blkid` signature
-  details, ext superblock state, block/inode geometry, reservation, mount/check,
-  and journal details, LVM layout, health, thin/cache/writecache
+  details, ext superblock state, block/inode geometry, RAID layout hints,
+  reservation, mount/check, and journal details, LVM layout, health,
+  thin/cache/writecache
   capacity/status counters, NTFS volume geometry and MFT record sizing, F2FS
   block usage,
   valid inode/node counts, segment layout, section/zone geometry, log sizing,
