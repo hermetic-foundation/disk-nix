@@ -248,6 +248,8 @@ pub enum TopologyDiagnosticKind {
     BackingFileCreateRequired,
     LvmPvCreateAlreadySatisfied,
     LvmPvCreateRequired,
+    LvmVgCreateAlreadySatisfied,
+    LvmVgCreateRequired,
     IscsiLoginAlreadySatisfied,
     IscsiLoginRequired,
     IscsiLogoutAlreadySatisfied,
@@ -805,6 +807,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
+                        | TopologyDiagnosticKind::LvmVgCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
@@ -1435,6 +1438,7 @@ fn already_satisfied_action_ids(
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
+                    | TopologyDiagnosticKind::LvmVgCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
@@ -1572,6 +1576,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(lvm_activate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_deactivate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_pv_create_diagnostic(action, &matches, &query));
+    diagnostics.extend(lvm_vg_create_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_export_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
     diagnostics.extend(lvm_cache_detach_diagnostic(action, node, &query));
@@ -1955,6 +1960,59 @@ fn lvm_vg_import_diagnostic(
             TopologyDiagnosticLevel::Info,
             TopologyDiagnosticKind::LvmVgImportAlreadySatisfied,
             format!("LVM volume group {query} is already imported"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn lvm_vg_create_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Create
+        || action.context.collection.as_deref() != Some("volumeGroups")
+    {
+        return None;
+    }
+
+    if node.kind != NodeKind::LvmVolumeGroup {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::LvmVgCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not an LVM volume group; vgcreate would write VG metadata",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let review_reasons = lvm_vg_review_reasons(node);
+    let (level, kind, message) = if review_reasons.is_empty() {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LvmVgCreateAlreadySatisfied,
+            format!("volume group {query} already exists"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LvmVgCreateRequired,
+            format!(
+                "volume group {query} already exists, but metadata needs review before treating create as satisfied: {}",
+                review_reasons.join(", ")
+            ),
         )
     };
 
@@ -3903,15 +3961,38 @@ fn lvm_pv_review_reasons(node: &Node) -> Vec<String> {
     .collect()
 }
 
+fn lvm_vg_review_reasons(node: &Node) -> Vec<String> {
+    let mut reasons = Vec::new();
+
+    if let Some(value) = property_value_from_node(node, "lvm.vg-exported")
+        .filter(|value| lvm_truthy_or_named_state(value, "VG is marked exported"))
+    {
+        reasons.push(format!("VG is marked exported (lvm.vg-exported={value})"));
+    }
+
+    if let Some(value) = property_value_from_node(node, "lvm.vg-partial")
+        .filter(|value| lvm_truthy_or_named_state(value, "VG is marked partial"))
+    {
+        reasons.push(format!("VG is marked partial (lvm.vg-partial={value})"));
+    }
+
+    if let Some(count) = property_value_from_node(node, "lvm.missing-pv-count")
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|count| *count > 0)
+    {
+        reasons.push(format!("VG reports {count} missing physical volume(s)"));
+    }
+
+    reasons
+}
+
 fn lvm_truthy_or_named_state(value: &str, reason: &str) -> bool {
     let normalized = value.trim().to_ascii_lowercase();
-    normalized == "1"
-        || normalized == "true"
-        || normalized == "yes"
-        || normalized
-            == reason
-                .trim_start_matches("PV is marked ")
-                .to_ascii_lowercase()
+    let named_state = reason
+        .trim_start_matches("PV is marked ")
+        .trim_start_matches("VG is marked ")
+        .to_ascii_lowercase();
+    normalized == "1" || normalized == "true" || normalized == "yes" || normalized == named_state
 }
 
 fn md_state_indicates_active(value: &str) -> bool {
@@ -16154,6 +16235,81 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "volumegroups:vg0:import"
                 && diagnostic.kind == TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_lvm_volume_group_create() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumeGroups": {
+                "vg-present": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/pv-present"
+                },
+                "vg-exported": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/pv-exported"
+                },
+                "vg-partial": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/pv-partial"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "lvm-vg:vg-present",
+            NodeKind::LvmVolumeGroup,
+            "vg-present",
+        ));
+        graph.add_node(
+            Node::new(
+                "lvm-vg:vg-exported",
+                NodeKind::LvmVolumeGroup,
+                "vg-exported",
+            )
+            .with_property("lvm.vg-exported", "exported"),
+        );
+        graph.add_node(
+            Node::new("lvm-vg:vg-partial", NodeKind::LvmVolumeGroup, "vg-partial")
+                .with_property("lvm.vg-partial", "partial")
+                .with_property("lvm.missing-pv-count", "1"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.summary.action_count, 2);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| { action.id != "volumegroups:vg-present:create" })
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumegroups:vg-present:create"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmVgCreateAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumegroups:vg-exported:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmVgCreateRequired
+                && diagnostic.message.contains("lvm.vg-exported=exported")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumegroups:vg-partial:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmVgCreateRequired
+                && diagnostic.message.contains("lvm.vg-partial=partial")
+                && diagnostic.message.contains("1 missing physical volume")
         }));
     }
 

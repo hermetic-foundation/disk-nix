@@ -1013,10 +1013,12 @@ reviewed `vgextend`, `pvmove <old-pv> <new-pv>`, and `vgreduce` replacement
 workflows, and reviewed `pvmove` then `vgreduce` commands for explicit
 physical-volume removal. Volume group import/export declarations render
 reviewed `vgimport <vg>` and `vgexport <vg>` commands. Current-topology probing
-suppresses a volume-group import when the VG is already visible and not marked
-`lvm.vg-exported`, and suppresses a volume-group export when the VG is already
-marked exported; still-exported imports and still-imported exports stay
-actionable with a warning. LVM
+suppresses a volume-group create when the VG already exists without exported,
+partial, or missing-PV metadata. It also suppresses a volume-group import when
+the VG is already visible and not marked `lvm.vg-exported`, and suppresses a
+volume-group export when the VG is already marked exported; existing exported,
+partial, or missing-PV create targets, still-exported imports, and
+still-imported exports stay actionable with a warning. LVM
 logical volume, thin-pool, snapshot, and volume-group activation declarations render reviewed
 `lvchange --activate y|n <vg/lv>` or `vgchange --activate y|n <vg>` commands.
 With current-topology probing, already-active logical-volume, thin-pool, and

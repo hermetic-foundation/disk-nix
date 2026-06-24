@@ -44,12 +44,13 @@ behavior across real storage stacks.
   backing-file create/grow, LVM physical-volume create, swap
   deactivate/destroy, mount, unmount, remount, NFS export/unexport, VDO start,
   VDO stop, MD
-  assemble, ZFS pool import, LVM volume-group import/export, and property
-  actions when the graph proves they are already satisfied and no warning
-  diagnostics are present;
+  assemble, ZFS pool import, LVM volume-group create/import/export, and
+  property actions when the graph proves they are already satisfied and no
+  warning diagnostics are present;
   inactive LVM activation targets, still-active LVM deactivation targets,
   physical-volume create targets without matching PV metadata or with duplicate
-  or missing PV metadata,
+  or missing PV metadata, existing exported, partial, or missing-PV
+  volume-group create targets,
   still-exported LVM volume-group imports, still-imported LVM volume-group
   exports, inactive LUKS open targets, active LUKS close targets, loop devices
   mapped to different backing files, backing-file create targets with different
