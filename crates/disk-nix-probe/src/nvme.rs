@@ -13,14 +13,17 @@ struct NvmeList {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct NvmeDevice {
+    #[serde(alias = "Name")]
     device_path: Option<String>,
+    #[serde(alias = "GenericDevice")]
     generic: Option<String>,
     model_number: Option<String>,
     product_name: Option<String>,
     serial_number: Option<String>,
+    #[serde(alias = "FirmwareRevision", alias = "FWRev")]
     firmware: Option<String>,
     index: Option<u64>,
-    #[serde(alias = "NameSpace")]
+    #[serde(alias = "NameSpace", alias = "Namespace")]
     namespace: Option<u64>,
     #[serde(rename = "SubSystem", alias = "Subsystem", alias = "SubsystemNQN")]
     subsystem: Option<String>,
@@ -28,10 +31,20 @@ struct NvmeDevice {
     controller: Option<String>,
     #[serde(alias = "Address", alias = "TransportAddress")]
     address: Option<String>,
+    #[serde(alias = "NamespaceSize")]
     physical_size: Option<u64>,
+    #[serde(alias = "NamespaceUsage")]
     used_bytes: Option<u64>,
+    #[serde(alias = "NamespaceCapacity")]
+    namespace_capacity: Option<u64>,
     maximum_lba: Option<u64>,
     sector_size: Option<u64>,
+    #[serde(alias = "Transport", alias = "TrType")]
+    transport: Option<String>,
+    #[serde(alias = "ControllerID", alias = "CNTLID")]
+    controller_id: Option<u64>,
+    #[serde(alias = "Format", alias = "LBAFormat")]
+    lba_format: Option<String>,
 }
 
 pub fn normalize_nvme_list_json(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
@@ -53,13 +66,14 @@ fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
     let id = format!("block:{path}");
     let mut node = Node::new(id, NodeKind::NvmeNamespace, path.clone()).with_path(path);
 
-    if let Some(size_bytes) = device.physical_size {
+    let size_bytes = device.physical_size.or(device.namespace_capacity);
+    if let Some(size_bytes) = size_bytes {
         node = node.with_size_bytes(size_bytes);
     }
 
     let usage = Usage {
         used_bytes: device.used_bytes,
-        free_bytes: match (device.physical_size, device.used_bytes) {
+        free_bytes: match (size_bytes, device.used_bytes) {
             (Some(size), Some(used)) => size.checked_sub(used),
             _ => None,
         },
@@ -89,6 +103,16 @@ fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
         ("nvme.subsystem", device.subsystem),
         ("nvme.controller", device.controller),
         ("nvme.address", device.address),
+        ("nvme.transport", device.transport),
+        (
+            "nvme.controller-id",
+            device.controller_id.map(|value| value.to_string()),
+        ),
+        (
+            "nvme.namespace-capacity",
+            device.namespace_capacity.map(|value| value.to_string()),
+        ),
+        ("nvme.lba-format", device.lba_format),
         (
             "nvme.maximum-lba",
             device.maximum_lba.map(|value| value.to_string()),
@@ -127,8 +151,12 @@ mod tests {
       "SubSystem": "nvme-subsys0",
       "Controller": "nvme0",
       "Address": "0000:01:00.0",
+      "Transport": "pcie",
+      "ControllerID": 1,
       "PhysicalSize": 1000,
       "UsedBytes": 400,
+      "NamespaceCapacity": 900,
+      "Format": "512 B + 0 B",
       "MaximumLBA": 1953125,
       "SectorSize": 512
     }
@@ -177,5 +205,21 @@ mod tests {
                 .iter()
                 .any(|property| property.key == "nvme.address" && property.value == "0000:01:00.0")
         );
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "nvme.transport" && property.value == "pcie")
+        );
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| { property.key == "nvme.controller-id" && property.value == "1" })
+        );
+        assert!(node.properties.iter().any(|property| {
+            property.key == "nvme.namespace-capacity" && property.value == "900"
+        }));
+        assert!(node.properties.iter().any(|property| {
+            property.key == "nvme.lba-format" && property.value == "512 B + 0 B"
+        }));
     }
 }

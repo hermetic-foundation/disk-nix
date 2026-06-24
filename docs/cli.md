@@ -291,9 +291,9 @@ Use these commands for:
   path count, host path, major/minor, path-group policy, priority, group
   status, and path state when `multipath -ll` exposes them
 - `nvme`: NVMe namespaces, including path, serial, model, firmware, namespace
-  index/id, generic namespace path, subsystem, controller, address, maximum LBA,
-  sector size, physical size, used bytes, free bytes, and utilization when
-  `nvme list -o json` exposes them
+  index/id, generic namespace path, subsystem, controller, controller id,
+  transport, address, namespace capacity, LBA format, maximum LBA, sector size,
+  physical size, used bytes, free bytes, and utilization when `nvme list -o json` exposes them
 - `raid`: MD RAID arrays and member devices, including array UUID, metadata
   version, level, state, size, raid, total, active, working, failed, and spare
   device counts, event counters, chunk/layout details, consistency policy,
