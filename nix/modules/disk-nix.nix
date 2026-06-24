@@ -880,8 +880,13 @@ let
     cfg.zram.enable
     || cfg.zram.operation != null
     || cfg.zram.action != null
+    || cfg.zram.swapDevices != 1
+    || cfg.zram.memoryPercent != 50
     || cfg.zram.memoryMax != null
+    || cfg.zram.priority != 5
+    || cfg.zram.algorithm != "zstd"
     || cfg.zram.writebackDevice != null
+    || cfg.zram.preserveData != true
     || cfg.zram.properties != { };
   typedZramSpec = lib.optionalAttrs hasDeclaredZram (cleanSpecAttrs {
     inherit (cfg.zram)
@@ -1474,7 +1479,7 @@ in
       properties = lib.mkOption {
         type = lib.types.attrsOf json.type;
         default = { };
-        description = "Zram properties copied into the disk-nix planner spec for future reconciliation.";
+        description = "Zram properties copied into the disk-nix planner spec for planning, review, and reconciliation with generated zramSwap settings.";
         example = {
           "zram.algorithm" = "zstd";
         };

@@ -757,6 +757,23 @@
             };
           }
         ];
+        zramTuningOnlyModuleTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              zram = {
+                swapDevices = 3;
+                memoryPercent = 35;
+                priority = 15;
+                algorithm = "lz4";
+                preserveData = false;
+              };
+            };
+          }
+        ];
         nixosModuleExecuteTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -1745,6 +1762,24 @@
                   printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
                   grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
                   ! grep -- '/srv/old-share' nfs-exports
+                  tuningOnlySpec=${zramTuningOnlyModuleTest.config.environment.etc."disk-nix/spec.json".source}
+                  jq -e '
+                    .spec.zram.swapDevices == 3
+                    and .spec.zram.memoryPercent == 35
+                    and .spec.zram.priority == 15
+                    and .spec.zram.algorithm == "lz4"
+                    and .spec.zram.preserveData == false
+                    and ((.spec.zram.enable // false) == false)
+                  ' "$tuningOnlySpec"
+                  tuningOnlyNative=${
+                    pkgs.lib.escapeShellArg (
+                      builtins.toJSON {
+                        zram = zramTuningOnlyModuleTest.config.zramSwap.enable;
+                      }
+                    )
+                  }
+                  printf '%s\n' "$tuningOnlyNative" > tuning-only-native-storage
+                  jq -e '.zram == false' tuning-only-native-storage
                   touch "$out"
               '';
           nixosModuleExecute =
