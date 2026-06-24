@@ -264,6 +264,8 @@ pub enum TopologyDiagnosticKind {
     UnmountRequired,
     NfsExportAlreadySatisfied,
     NfsExportDiffers,
+    NfsUnexportAlreadySatisfied,
+    NfsUnexportRequired,
     PropertyAlreadySatisfied,
     PropertyDiffers,
     VdoStartAlreadySatisfied,
@@ -765,6 +767,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                         | TopologyDiagnosticKind::UnmountAlreadySatisfied
                         | TopologyDiagnosticKind::NfsExportAlreadySatisfied
+                        | TopologyDiagnosticKind::NfsUnexportAlreadySatisfied
                         | TopologyDiagnosticKind::PropertyAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStartAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStopAlreadySatisfied
@@ -1337,6 +1340,7 @@ fn already_satisfied_action_ids(
                 | Operation::Unmount
                 | Operation::Remount
                 | Operation::Export
+                | Operation::Unexport
                 | Operation::Start
                 | Operation::Stop
                 | Operation::SetProperty
@@ -1365,6 +1369,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                     | TopologyDiagnosticKind::UnmountAlreadySatisfied
                     | TopologyDiagnosticKind::NfsExportAlreadySatisfied
+                    | TopologyDiagnosticKind::NfsUnexportAlreadySatisfied
                     | TopologyDiagnosticKind::PropertyAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStartAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStopAlreadySatisfied
@@ -1389,6 +1394,9 @@ fn topology_diagnostics_for_action(
 
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
+        if let Some(diagnostic) = nfs_unexport_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = unmount_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1427,6 +1435,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
     diagnostics.extend(unmount_diagnostic(action, node, &query));
     diagnostics.extend(nfs_export_diagnostic(action, node, &query));
+    diagnostics.extend(nfs_unexport_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics.extend(vdo_start_diagnostic(action, node, &query));
     diagnostics.extend(vdo_stop_diagnostic(action, node, &query));
@@ -1963,6 +1972,47 @@ fn nfs_export_diagnostic(
         kind,
         query: query.to_string(),
         message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn nfs_unexport_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Unexport
+        || action.context.collection.as_deref() != Some("exports")
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::NfsUnexportAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("NFS export {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn nfs_unexport_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Unexport
+        || action.context.collection.as_deref() != Some("exports")
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::NfsUnexportRequired,
+        query: query.to_string(),
+        message: format!("NFS export {query} is currently published"),
         current: Some(current_node_summary(node)),
     })
 }
@@ -13340,6 +13390,81 @@ mod tests {
             diagnostic.action_id == "exports:/srv/share:export"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::NfsExportDiffers
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_absent_nfs_unexport() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "exports": {
+                "/srv/old": {
+                  "operation": "unexport",
+                  "client": "192.0.2.0/24"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "exports:/srv/old:unexport"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::NfsUnexportAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_nfs_unexport_when_export_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "exports": {
+                "/srv/old": {
+                  "operation": "unexport",
+                  "client": "192.0.2.0/24"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "nfs-export:/srv/old:192.0.2.0/24",
+                NodeKind::NfsExport,
+                "/srv/old",
+            )
+            .with_property("nfs.export", "/srv/old")
+            .with_property("nfs.export-client", "192.0.2.0/24")
+            .with_property("nfs.exportfs", "true"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "exports:/srv/old:unexport"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::NfsUnexportRequired
         }));
     }
 

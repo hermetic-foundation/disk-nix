@@ -571,8 +571,9 @@ options as a required subset of current mount options, LVM
 activation and deactivation actions are compared with `lvm.active` where that
 metadata is available, LUKS open and close actions are compared with
 `cryptsetup.active`, NFS export actions are compared with
-`nfs.export-client` and `nfs.export-option-*` properties, VDO start actions are
-compared with `vdo.operating-mode`, VDO stop actions are compared with
+`nfs.export-client` and `nfs.export-option-*` properties, NFS unexport actions
+are suppressed when the export is absent, VDO start actions are compared with
+`vdo.operating-mode`, VDO stop actions are compared with
 explicitly stopped, not-running, or inactive `vdo.operating-mode` values, MD
 assemble actions are compared with `md.state`, `md.degraded-devices`, and
 `md.failed-devices`, ZFS pool import actions are compared with `zfs.state` and
@@ -581,17 +582,17 @@ assemble actions are compared with `md.state`, `md.degraded-devices`, and
 session state across all matching target/session nodes when metadata is
 available. Safe already-satisfied grow, shrink, iSCSI login/logout, LVM
 activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
-mount, unmount, remount, NFS export, VDO start, VDO stop, MD assemble, ZFS pool
-import, and property actions that have no warning diagnostics are
+mount, unmount, remount, NFS export/unexport, VDO start, VDO stop, MD assemble,
+ZFS pool import, and property actions that have no warning diagnostics are
 suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
 inactive LUKS open targets, active LUKS close targets, non-normal VDO start
 modes, running VDO stop targets, degraded or failed MD arrays, degraded ZFS
 pools, mountpoints using a different source, currently mounted unmount targets,
-export client/option differences, or known iSCSI targets without a logged-in
-session and logout targets that still have a logged-in session stay actionable
-with a warning diagnostic.
+published unexport targets, export client/option differences, or known iSCSI
+targets without a logged-in session and logout targets that still have a
+logged-in session stay actionable with a warning diagnostic.
 
 ## Apply Evaluation
 

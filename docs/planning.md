@@ -523,9 +523,10 @@ read-only `exportfs -v` plus graph inspection for `operation = "rescan"`, and
 with unresolved-input markers when clients, options, or the local export path
 are missing. Logical export names can declare the local export path through
 `target` or `path`. Current-topology comparison suppresses export actions only
-when the probed export client and requested option subset already match. Legacy
-export `create` and `destroy` map to the same
-commands.
+when the probed export client and requested option subset already match, and it
+suppresses unexport actions only when the export is already absent. Published
+unexport targets remain actionable with a warning. Legacy export `create` and
+`destroy` map to the same commands.
 NFS client mount command plans use
 `mount -t <nfs|nfs4> -o <options> <source> <mountpoint>` for reviewed
 `operation = "mount"` actions, `mount -o remount,<options> <mountpoint>` for
