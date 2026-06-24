@@ -15817,6 +15817,54 @@ mod tests {
     }
 
     #[test]
+    fn btrfs_qgroup_lifecycle_accepts_path_aliases_for_mount_targets() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "btrfsQgroups": {
+                  "0/257": {
+                    "path": "/mnt/persist",
+                    "properties": {
+                      "limit": "25GiB"
+                    }
+                  },
+                  "0/258": {
+                    "mountpoint": "/mnt/archive",
+                    "operation": "rescan"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsQgroups:0/257:set-property:limit"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "qgroup", "limit", "25GiB", "0/257", "/mnt/persist"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfsqgroups:0/258:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "qgroup", "show", "--raw", "-reF", "/mnt/archive"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "btrfsqgroups:0/258:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/mnt/archive", "--json"]
+                })
+        }));
+    }
+
+    #[test]
     fn btrfs_qgroup_lifecycle_without_target_reports_unresolved_path() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
