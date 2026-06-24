@@ -2570,6 +2570,26 @@ fn usage_details(node: &Node) -> String {
         ("nvme.sector-size", "sector-size"),
         ("nvme.ana-state", "ana-state"),
         ("lsblk.type", "lsblk-type"),
+        ("lsblk.logical-sector-size", "logical-sector"),
+        ("lsblk.physical-sector-size", "physical-sector"),
+        ("lsblk.minimum-io-size", "minimum-io"),
+        ("lsblk.optimal-io-size", "optimal-io"),
+        ("lsblk.discard-alignment", "discard-alignment"),
+        ("lsblk.discard-granularity", "discard-granularity"),
+        ("lsblk.discard-max", "discard-max"),
+        ("lsblk.discard-zeroes-data", "discard-zeroes"),
+        ("lsblk.scheduler", "scheduler"),
+        ("lsblk.request-queue-size", "rq-size"),
+        ("lsblk.write-same-max", "write-same-max"),
+        ("lsblk.zoned", "zoned"),
+        ("lsblk.zone-size", "zone-size"),
+        ("lsblk.zone-write-granularity", "zone-write-granularity"),
+        ("lsblk.zone-append-max", "zone-append-max"),
+        ("lsblk.zone-count", "zone-count"),
+        ("lsblk.zone-open-max", "zone-open-max"),
+        ("lsblk.zone-active-max", "zone-active-max"),
+        ("lsblk.dax", "dax"),
+        ("lsblk.hotplug", "hotplug"),
         ("filesystem.type", "fstype"),
         ("blkid.type", "blkid-type"),
         ("blkid.version", "version"),
@@ -3838,6 +3858,26 @@ mod tests {
                 .with_property("nvme.maximum-lba", "1953125")
                 .with_property("nvme.sector-size", "512")
                 .with_property("nvme.ana-state", "optimized")
+                .with_property("lsblk.logical-sector-size", "512")
+                .with_property("lsblk.physical-sector-size", "4096")
+                .with_property("lsblk.minimum-io-size", "4096")
+                .with_property("lsblk.optimal-io-size", "1048576")
+                .with_property("lsblk.discard-alignment", "0")
+                .with_property("lsblk.discard-granularity", "4096")
+                .with_property("lsblk.discard-max", "2147483648")
+                .with_property("lsblk.discard-zeroes-data", "false")
+                .with_property("lsblk.scheduler", "none")
+                .with_property("lsblk.request-queue-size", "1023")
+                .with_property("lsblk.write-same-max", "0")
+                .with_property("lsblk.zoned", "host-managed")
+                .with_property("lsblk.zone-size", "268435456")
+                .with_property("lsblk.zone-write-granularity", "4096")
+                .with_property("lsblk.zone-append-max", "65536")
+                .with_property("lsblk.zone-count", "64")
+                .with_property("lsblk.zone-open-max", "32")
+                .with_property("lsblk.zone-active-max", "48")
+                .with_property("lsblk.dax", "false")
+                .with_property("lsblk.hotplug", "false")
                 .with_property("partition.table", "gpt")
                 .with_property("udev.symlink", "disk/by-id/nvme-Acme_FastDisk")
                 .with_property("udev.devname", "/dev/nvme0n1")
@@ -3961,7 +4001,19 @@ mod tests {
         assert!(output.contains(
             "transport=pcie controller-id=1 namespace-capacity=900000000000 lba-format=512 B + 0 B"
         ));
-        assert!(output.contains("max-lba=1953125 sector-size=512 ana-state=optimized ptable=gpt"));
+        assert!(output.contains("max-lba=1953125 sector-size=512 ana-state=optimized"));
+        assert!(output.contains(
+            "logical-sector=512 physical-sector=4096 minimum-io=4096 optimal-io=1048576"
+        ));
+        assert!(output.contains(
+            "discard-alignment=0 discard-granularity=4096 discard-max=2147483648 discard-zeroes=false"
+        ));
+        assert!(output.contains("scheduler=none rq-size=1023 write-same-max=0 zoned=host-managed"));
+        assert!(output.contains(
+            "zone-size=268435456 zone-write-granularity=4096 zone-append-max=65536 zone-count=64"
+        ));
+        assert!(output.contains("zone-open-max=32 zone-active-max=48 dax=false hotplug=false"));
+        assert!(output.contains("ptable=gpt"));
         assert!(output.contains("udev-link=disk/by-id/nvme-Acme_FastDisk"));
         assert!(output.contains("udev-devname=/dev/nvme0n1 udev-devtype=disk"));
         assert!(output.contains("udev-bus=nvme udev-model=FastDisk udev-model-id=a808"));

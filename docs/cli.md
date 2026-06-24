@@ -203,7 +203,8 @@ Use these commands for:
 - `devices`: disks, partitions, dm devices, LVM objects, VDO, RAID, zvols,
   cache devices, multipath devices, NVMe namespaces, loop devices, and swap,
   including model/vendor, transport, rotational, NVMe model/firmware/namespace
-  geometry, partition table/number, filesystem type, loop
+  geometry, `lsblk` sector/I/O alignment, discard, scheduler, zoned-device,
+  DAX, and hotplug metadata, partition table/number, filesystem type, loop
   backing inode, backing major/minor, offset/autoclear/partition-scan metadata,
   multipath path host/major-minor, parsed
   SCSI coordinates, split dm/checker/online state details, and extra path

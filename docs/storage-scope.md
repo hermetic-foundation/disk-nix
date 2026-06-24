@@ -48,7 +48,8 @@ Creation is only one lifecycle operation. The planner should also support:
 The current probe layer normalizes:
 
 - `lsblk --json --bytes --output-all` for block devices, partitions,
-  filesystems, identity, usage, and mount hints
+  filesystems, identity, sector and I/O alignment, discard geometry, scheduler
+  queue sizing, zoned-device limits, DAX/hotplug flags, usage, and mount hints
 - `blkid -o export` for filesystem and block signatures, UUIDs, labels,
   PARTUUID/PARTLABEL, signature usage, versions, and block sizes
 - `parted -lm` for partition table type, disk sector sizes, partition numbers,

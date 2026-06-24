@@ -1,5 +1,6 @@
 use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::{ProbeError, ProbeReport, ProbeStatus};
 
@@ -34,6 +35,46 @@ struct LsblkDevice {
     rm: Option<bool>,
     model: Option<String>,
     vendor: Option<String>,
+    #[serde(default)]
+    log_sec: Option<Value>,
+    #[serde(default)]
+    phy_sec: Option<Value>,
+    #[serde(default)]
+    min_io: Option<Value>,
+    #[serde(default)]
+    opt_io: Option<Value>,
+    #[serde(default)]
+    disc_aln: Option<Value>,
+    #[serde(default)]
+    disc_gran: Option<Value>,
+    #[serde(default)]
+    disc_max: Option<Value>,
+    #[serde(default)]
+    disc_zero: Option<Value>,
+    #[serde(default)]
+    sched: Option<Value>,
+    #[serde(default)]
+    rq_size: Option<Value>,
+    #[serde(default)]
+    wsame: Option<Value>,
+    #[serde(default)]
+    zoned: Option<Value>,
+    #[serde(default)]
+    zone_sz: Option<Value>,
+    #[serde(default)]
+    zone_wgran: Option<Value>,
+    #[serde(default)]
+    zone_app: Option<Value>,
+    #[serde(default)]
+    zone_nr: Option<Value>,
+    #[serde(default)]
+    zone_omax: Option<Value>,
+    #[serde(default)]
+    zone_amax: Option<Value>,
+    #[serde(default)]
+    dax: Option<Value>,
+    #[serde(default)]
+    hotplug: Option<Value>,
     children: Option<Vec<LsblkDevice>>,
 }
 
@@ -230,7 +271,46 @@ fn properties(device: &LsblkDevice) -> Vec<(&'static str, String)> {
         properties.push(("vendor", vendor.clone()));
     }
 
+    for (key, value) in [
+        ("lsblk.logical-sector-size", &device.log_sec),
+        ("lsblk.physical-sector-size", &device.phy_sec),
+        ("lsblk.minimum-io-size", &device.min_io),
+        ("lsblk.optimal-io-size", &device.opt_io),
+        ("lsblk.discard-alignment", &device.disc_aln),
+        ("lsblk.discard-granularity", &device.disc_gran),
+        ("lsblk.discard-max", &device.disc_max),
+        ("lsblk.discard-zeroes-data", &device.disc_zero),
+        ("lsblk.scheduler", &device.sched),
+        ("lsblk.request-queue-size", &device.rq_size),
+        ("lsblk.write-same-max", &device.wsame),
+        ("lsblk.zoned", &device.zoned),
+        ("lsblk.zone-size", &device.zone_sz),
+        ("lsblk.zone-write-granularity", &device.zone_wgran),
+        ("lsblk.zone-append-max", &device.zone_app),
+        ("lsblk.zone-count", &device.zone_nr),
+        ("lsblk.zone-open-max", &device.zone_omax),
+        ("lsblk.zone-active-max", &device.zone_amax),
+        ("lsblk.dax", &device.dax),
+        ("lsblk.hotplug", &device.hotplug),
+    ] {
+        if let Some(value) = property_value(value) {
+            properties.push((key, value));
+        }
+    }
+
     properties
+}
+
+fn property_value(value: &Option<Value>) -> Option<String> {
+    let value = value.as_ref()?;
+    match value {
+        Value::Null => None,
+        Value::Bool(value) => Some(value.to_string()),
+        Value::Number(value) => Some(value.to_string()),
+        Value::String(value) if value.is_empty() => None,
+        Value::String(value) => Some(value.clone()),
+        Value::Array(_) | Value::Object(_) => serde_json::to_string(value).ok(),
+    }
 }
 
 fn mountpoints(device: &LsblkDevice) -> Vec<String> {
@@ -286,6 +366,26 @@ mod tests {
       "tran": "nvme",
       "serial": "SERIAL",
       "wwn": "eui.1234",
+      "log-sec": 512,
+      "phy-sec": 4096,
+      "min-io": 4096,
+      "opt-io": 1048576,
+      "disc-aln": 0,
+      "disc-gran": 4096,
+      "disc-max": 2147483648,
+      "disc-zero": false,
+      "sched": "none",
+      "rq-size": 1023,
+      "wsame": 0,
+      "zoned": "host-managed",
+      "zone-sz": 268435456,
+      "zone-wgran": 4096,
+      "zone-app": 65536,
+      "zone-nr": 64,
+      "zone-omax": 32,
+      "zone-amax": 48,
+      "dax": false,
+      "hotplug": false,
       "children": [
         {
           "name": "nvme0n1p1",
@@ -328,13 +428,20 @@ mod tests {
     fn normalizes_lsblk_fixture_into_storage_graph() {
         let graph = normalize_lsblk_json(FIXTURE).expect("fixture should parse");
 
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::NvmeNamespace
-                    && node.path.as_deref() == Some("/dev/nvme0n1"))
-        );
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::NvmeNamespace
+                && node.path.as_deref() == Some("/dev/nvme0n1")
+                && node.properties.iter().any(|property| {
+                    property.key == "lsblk.discard-granularity" && property.value == "4096"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lsblk.zoned" && property.value == "host-managed"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lsblk.zone-count" && property.value == "64")
+        }));
         assert!(
             graph
                 .nodes
