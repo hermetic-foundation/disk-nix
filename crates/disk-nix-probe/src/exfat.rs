@@ -50,6 +50,14 @@ pub fn normalize_exfat_metadata(
         filesystem = filesystem.with_property("exfat.guid", guid);
     }
 
+    if let Some(cluster_size) = cluster_size(&dump_fields) {
+        filesystem = filesystem.with_property("exfat.bytes-per-cluster", cluster_size.to_string());
+    }
+
+    if let Some(used_clusters) = used_clusters(&dump_fields) {
+        filesystem = filesystem.with_property("exfat.used-clusters", used_clusters.to_string());
+    }
+
     for (key, value) in dump_fields {
         filesystem = filesystem.with_property(format!("exfat.{}", normalize_key(&key)), value);
     }
@@ -84,7 +92,7 @@ fn parse_dump_exfat(bytes: &[u8]) -> Result<BTreeMap<String, String>, ProbeError
         };
         let key = key.trim();
         let value = value.trim();
-        if key.is_empty() || value.is_empty() || key == "exfatprogs version" {
+        if key.is_empty() || value.is_empty() {
             continue;
         }
         fields.insert(key.to_string(), value.to_string());
@@ -119,16 +127,10 @@ fn size_bytes(fields: &BTreeMap<String, String>) -> Option<u64> {
 }
 
 fn usage(fields: &BTreeMap<String, String>) -> Usage {
-    let Some(cluster_count) = fields
-        .get("Cluster Count")
-        .and_then(|value| parse_u64(value))
-    else {
+    let Some(cluster_count) = cluster_count(fields) else {
         return Usage::empty();
     };
-    let Some(free_clusters) = fields
-        .get("Free Clusters")
-        .and_then(|value| parse_u64(value))
-    else {
+    let Some(free_clusters) = free_clusters(fields) else {
         return Usage::empty();
     };
     let Some(cluster_size) = cluster_size(fields) else {
@@ -144,6 +146,22 @@ fn usage(fields: &BTreeMap<String, String>) -> Usage {
         free_bytes: Some(free_clusters.saturating_mul(cluster_size)),
         allocated_bytes: Some(cluster_count.saturating_mul(cluster_size)),
     }
+}
+
+fn used_clusters(fields: &BTreeMap<String, String>) -> Option<u64> {
+    Some(cluster_count(fields)?.saturating_sub(free_clusters(fields)?))
+}
+
+fn cluster_count(fields: &BTreeMap<String, String>) -> Option<u64> {
+    fields
+        .get("Cluster Count")
+        .and_then(|value| parse_u64(value))
+}
+
+fn free_clusters(fields: &BTreeMap<String, String>) -> Option<u64> {
+    fields
+        .get("Free Clusters")
+        .and_then(|value| parse_u64(value))
 }
 
 fn cluster_size(fields: &BTreeMap<String, String>) -> Option<u64> {
@@ -251,6 +269,15 @@ Sectors per Cluster:                    64
         }));
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "exfat.cluster-count" && property.value == "49984"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "exfat.used-clusters" && property.value == "48960"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "exfat.bytes-per-cluster" && property.value == "32768"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "exfat.exfatprogs-version" && property.value == "1.2.4"
         }));
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "exfat.volume-serial" && property.value == "0x6eef953b"

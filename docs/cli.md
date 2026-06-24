@@ -45,13 +45,14 @@ swap, LUKS, device-mapper, LVM, VDO, MD RAID, Btrfs, ZFS, exFAT, NTFS, iSCSI,
 LUNs, NFS, bcache, multipath, NVMe namespaces, and loop devices. Nodes are
 merged by id when multiple probe adapters report complementary information.
 exFAT probing uses `tune.exfat` and `dump.exfat` when available to add label,
-GUID, serial, sector, cluster, size, and free-space metadata beyond generic
-`blkid` fields. NTFS probing uses `ntfsinfo -m` when available to add volume
-name/state/version, serial, sector/cluster sizing, index block size, MFT record
-size, and allocated size. F2FS probing uses `dump.f2fs` when available to add
-volume name, UUID, user/valid block counts, checkpoint/SIT/NAT/SSA segment
-layout, section/zone geometry, log sizing, version metadata, overprovisioning,
-and computed usage. bcachefs probing uses `bcachefs show-super` and
+GUID, serial, tool version, sector, cluster, size, used-cluster, and free-space
+metadata beyond generic `blkid` fields. NTFS probing uses `ntfsinfo -m` when
+available to add volume name/state/version, serial, sector/cluster sizing,
+index block size, MFT record size, and allocated size. F2FS probing uses
+`dump.f2fs` when available to add volume name, UUID, user/valid block counts,
+checkpoint/SIT/NAT/SSA segment layout, section/zone geometry, log sizing,
+version metadata, overprovisioning, and computed usage. bcachefs probing uses
+`bcachefs show-super` and
 `bcachefs fs usage` when available to add external/internal UUIDs, labels,
 superblock magic, version and upgrade state, member-device indexes, mounted
 capacity, filesystem data-type byte accounting, and per-device free/capacity,
@@ -213,8 +214,8 @@ Use these commands for:
   bcachefs filesystems, ZFS datasets/snapshots, and NFS exports, with selected
   filesystem metadata details such as `blkid` version/block-size/usage, exFAT
   GUID/serial, volume length, FAT and cluster-heap layout, root cluster, and
-  cluster geometry, NTFS volume identity, version, cluster sizing, and MFT
-  record sizing, F2FS block usage, valid inode/node counts, segment layout,
+  raw plus derived cluster geometry, NTFS volume identity, version, cluster
+  sizing, and MFT record sizing, F2FS block usage, valid inode/node counts, segment layout,
   section/zone geometry, log sizing, version, and overprovisioning metadata,
   XFS source, allocation-group, inode, data, naming format, log type/sizing,
   realtime type/geometry, and metadata feature details,

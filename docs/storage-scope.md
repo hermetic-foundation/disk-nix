@@ -72,8 +72,8 @@ The current probe layer normalizes:
 - `ntfsinfo -m` for NTFS volume identity, serial, state, version, sector and
   cluster sizing, index block size, MFT record size, and allocated size
 - `dump.exfat`, `exfatlabel`, and `tune.exfat` for exFAT GUID/serial,
-  volume length, FAT offset/length, cluster heap offset, cluster/free-cluster
-  counts, root cluster, sector sizing, and cluster sizing
+  tool version, volume length, FAT offset/length, cluster heap offset, total,
+  used, and free cluster counts, root cluster, sector sizing, and cluster sizing
 - `dump.f2fs` for F2FS volume identity, UUID, user/valid block counts,
   valid node/inode counts, checkpoint/SIT/NAT/SSA segment layout,
   section/zone geometry, log sizing, version metadata, and overprovisioning
