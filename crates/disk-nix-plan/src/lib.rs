@@ -303,6 +303,8 @@ pub enum TopologyDiagnosticKind {
     MdCreateRequired,
     MdAssembleAlreadySatisfied,
     MdAssembleRequired,
+    MdStopAlreadySatisfied,
+    MdStopRequired,
     MountAlreadySatisfied,
     MountSourceConflict,
     MountOptionsAlreadySatisfied,
@@ -849,6 +851,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
                         | TopologyDiagnosticKind::MdCreateAlreadySatisfied
                         | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
+                        | TopologyDiagnosticKind::MdStopAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                         | TopologyDiagnosticKind::UnmountAlreadySatisfied
@@ -1486,6 +1489,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
                     | TopologyDiagnosticKind::MdCreateAlreadySatisfied
                     | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
+                    | TopologyDiagnosticKind::MdStopAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                     | TopologyDiagnosticKind::UnmountAlreadySatisfied
@@ -1554,6 +1558,9 @@ fn topology_diagnostics_for_action(
             return vec![diagnostic];
         }
         if let Some(diagnostic) = loop_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
+        if let Some(diagnostic) = md_stop_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
         if let Some(diagnostic) = nvme_namespace_absent_diagnostic(action, &query) {
@@ -1630,6 +1637,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(backing_file_create_diagnostic(action, node, &query));
     diagnostics.extend(md_create_diagnostic(action, node, &query));
     diagnostics.extend(md_assemble_diagnostic(action, node, &query));
+    diagnostics.extend(md_stop_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
     diagnostics.extend(unmount_diagnostic(action, node, &query));
@@ -3418,10 +3426,93 @@ fn md_assemble_diagnostic(
     })
 }
 
+fn md_stop_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Stop
+        || action.context.collection.as_deref() != Some("mdRaids")
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::MdStopAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("MD RAID array {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn md_stop_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Stop
+        || action.context.collection.as_deref() != Some("mdRaids")
+    {
+        return None;
+    }
+
+    if node.kind != NodeKind::MdRaid {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MdStopRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not an MD RAID array; mdadm --stop remains actionable only after target review",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let Some(status) = md_array_status(node) else {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MdStopRequired,
+            query: query.to_string(),
+            message: format!(
+                "MD RAID array {query} is present, but current state is unknown; rescan before treating stop as satisfied"
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    };
+
+    if status.active {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MdStopRequired,
+            query: query.to_string(),
+            message: format!(
+                "MD RAID array {query} is still active: state={}, degradedDevices={}, failedDevices={}",
+                status.state, status.degraded_devices, status.failed_devices
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::MdStopAlreadySatisfied,
+        query: query.to_string(),
+        message: format!(
+            "MD RAID array {query} is already inactive: state={}",
+            status.state
+        ),
+        current: Some(current_node_summary(node)),
+    })
+}
+
 struct MdArrayStatus<'a> {
     state: &'a str,
     degraded_devices: u64,
     failed_devices: u64,
+    active: bool,
     cleanly_active: bool,
 }
 
@@ -3434,6 +3525,7 @@ fn md_array_status(node: &Node) -> Option<MdArrayStatus<'_>> {
         state,
         degraded_devices,
         failed_devices,
+        active: state_indicates_active,
         cleanly_active: state_indicates_active && degraded_devices == 0 && failed_devices == 0,
     })
 }
@@ -17442,6 +17534,113 @@ mod tests {
             diagnostic.action_id == "mdraids:wrong-kind:create"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::MdCreateRequired
+                && diagnostic.message.contains("not an MD RAID array")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_md_stop() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "mdRaids": {
+                "absent": {
+                  "operation": "stop",
+                  "target": "/dev/md/absent"
+                },
+                "inactive": {
+                  "operation": "stop",
+                  "target": "/dev/md/inactive"
+                },
+                "active": {
+                  "operation": "stop",
+                  "target": "/dev/md/active"
+                },
+                "unknown": {
+                  "operation": "stop",
+                  "target": "/dev/md/unknown"
+                },
+                "wrong-kind": {
+                  "operation": "stop",
+                  "target": "/dev/md/wrong-kind"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("md:/dev/md/inactive", NodeKind::MdRaid, "/dev/md/inactive")
+                .with_path("/dev/md/inactive")
+                .with_property("md.state", "inactive")
+                .with_property("md.degraded-devices", "0")
+                .with_property("md.failed-devices", "0"),
+        );
+        graph.add_node(
+            Node::new("md:/dev/md/active", NodeKind::MdRaid, "/dev/md/active")
+                .with_path("/dev/md/active")
+                .with_property("md.state", "clean")
+                .with_property("md.degraded-devices", "0")
+                .with_property("md.failed-devices", "0"),
+        );
+        graph.add_node(
+            Node::new("md:/dev/md/unknown", NodeKind::MdRaid, "/dev/md/unknown")
+                .with_path("/dev/md/unknown"),
+        );
+        graph.add_node(
+            Node::new(
+                "filesystem:/dev/md/wrong-kind",
+                NodeKind::Filesystem,
+                "/dev/md/wrong-kind",
+            )
+            .with_path("/dev/md/wrong-kind"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 5);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.summary.action_count, 3);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "mdraids:absent:stop")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "mdraids:inactive:stop")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:absent:stop"
+                && diagnostic.kind == TopologyDiagnosticKind::MdStopAlreadySatisfied
+                && diagnostic.message.contains("already absent")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:inactive:stop"
+                && diagnostic.kind == TopologyDiagnosticKind::MdStopAlreadySatisfied
+                && diagnostic.message.contains("already inactive")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:active:stop"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdStopRequired
+                && diagnostic.message.contains("still active")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:unknown:stop"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdStopRequired
+                && diagnostic.message.contains("current state is unknown")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:wrong-kind:stop"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdStopRequired
                 && diagnostic.message.contains("not an MD RAID array")
         }));
     }

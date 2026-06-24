@@ -43,7 +43,7 @@ behavior across real storage stacks.
   close, loop create/destroy, LUN attach/detach, NVMe namespace attach/detach,
   backing-file create/grow, LVM physical-volume create, swap
   deactivate/destroy, mount, unmount, remount, NFS export/unexport, VDO start,
-  VDO stop, MD create/assemble, ZFS pool create/import, ZFS dataset/zvol create,
+  VDO stop, MD create/assemble/stop, ZFS pool create/import, ZFS dataset/zvol create,
   Btrfs subvolume create, Btrfs qgroup create, LVM volume/thin-pool create,
   LVM volume-group create/import/export, and property actions when the graph
   proves they are already satisfied and no warning diagnostics are present;
@@ -61,8 +61,8 @@ behavior across real storage stacks.
   or unknown current size, still-mapped loop detach targets, absent LUN attach
   paths, visible LUN detach paths, absent NVMe namespace attach
   paths, visible NVMe namespace detach paths, non-normal VDO start modes,
-  running VDO stop targets, active swap teardown targets, degraded or failed MD
-  arrays, degraded ZFS pools,
+  running VDO stop targets, active swap teardown targets, active or
+  unknown-state MD stop targets, degraded or failed MD arrays, degraded ZFS pools,
   mount source mismatches, currently mounted unmount targets, published
   unexport targets, remount option differences, export client/option
   differences, and known iSCSI targets without logged-in sessions remain
