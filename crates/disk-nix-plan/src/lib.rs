@@ -619,6 +619,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
             add_snapshot_actions(&mut actions, name, snapshot);
         }
     }
+    order_plan_actions(&mut actions);
 
     Plan {
         summary: plan_summary(&actions),
@@ -687,6 +688,111 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
         diagnostics,
     });
     plan
+}
+
+fn order_plan_actions(actions: &mut [PlannedAction]) {
+    actions.sort_by_key(action_order_key);
+}
+
+fn action_order_key(action: &PlannedAction) -> (u16, u16) {
+    let rank = collection_dependency_rank(action.context.collection.as_deref());
+    let layer = if operation_runs_upper_layers_first(action.operation) {
+        u16::MAX - rank
+    } else {
+        rank
+    };
+
+    (operation_dependency_phase(action.operation), layer)
+}
+
+fn operation_dependency_phase(operation: Operation) -> u16 {
+    match operation {
+        Operation::Create
+        | Operation::Import
+        | Operation::Login
+        | Operation::Attach
+        | Operation::Open
+        | Operation::Activate
+        | Operation::Assemble
+        | Operation::Start => 10,
+        Operation::Format
+        | Operation::Grow
+        | Operation::AddDevice
+        | Operation::ReplaceDevice
+        | Operation::AddKey
+        | Operation::ImportToken
+        | Operation::SetProperty
+        | Operation::Snapshot
+        | Operation::Clone
+        | Operation::Promote
+        | Operation::Mount
+        | Operation::Remount
+        | Operation::Check
+        | Operation::Repair
+        | Operation::Scrub
+        | Operation::Trim
+        | Operation::Rescan
+        | Operation::Rename
+        | Operation::Rebalance => 20,
+        Operation::Shrink
+        | Operation::RemoveDevice
+        | Operation::RemoveKey
+        | Operation::RemoveToken
+        | Operation::Rollback
+        | Operation::Unmount
+        | Operation::Close
+        | Operation::Logout
+        | Operation::Deactivate
+        | Operation::Stop
+        | Operation::Detach
+        | Operation::Export
+        | Operation::Unexport
+        | Operation::Destroy => 30,
+    }
+}
+
+fn operation_runs_upper_layers_first(operation: Operation) -> bool {
+    matches!(
+        operation,
+        Operation::Shrink
+            | Operation::RemoveDevice
+            | Operation::RemoveKey
+            | Operation::RemoveToken
+            | Operation::Rollback
+            | Operation::Unmount
+            | Operation::Close
+            | Operation::Logout
+            | Operation::Deactivate
+            | Operation::Stop
+            | Operation::Detach
+            | Operation::Export
+            | Operation::Unexport
+            | Operation::Destroy
+    )
+}
+
+fn collection_dependency_rank(collection: Option<&str>) -> u16 {
+    match collection {
+        Some("backingFiles") => 10,
+        Some("loopDevices") => 15,
+        Some("disks") => 20,
+        Some("iscsiSessions") => 25,
+        Some("nvmeNamespaces") => 30,
+        Some("luns") => 35,
+        Some("partitions") => 40,
+        Some("mdRaids") | Some("multipathMaps") => 45,
+        Some("luks.devices") | Some("dmMaps") => 50,
+        Some("physicalVolumes") => 55,
+        Some("volumeGroups") => 60,
+        Some("thinPools") | Some("volumes") | Some("lvmCaches") | Some("lvmSnapshots") => 65,
+        Some("vdoVolumes") | Some("caches") => 70,
+        Some("pools") => 75,
+        Some("datasets") | Some("zvols") => 80,
+        Some("btrfsSubvolumes") | Some("btrfsQgroups") => 85,
+        Some("filesystems") | Some("swaps") | Some("zram") | Some("nfs.mounts") => 90,
+        Some("snapshots") | Some("exports") => 95,
+        Some(_) | None => 100,
+    }
 }
 
 fn plan_summary(actions: &[PlannedAction]) -> PlanSummary {
@@ -8398,6 +8504,85 @@ mod tests {
         assert_eq!(
             conflicting.to_string(),
             "conflicting disk-nix spec versions: top-level version 1, spec.version 2"
+        );
+    }
+
+    #[test]
+    fn plan_orders_stacked_storage_actions_by_dependency_layer() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "ext4",
+                  "resizePolicy": "grow-only"
+                }
+              },
+              "volumes": {
+                "root": {
+                  "operation": "create",
+                  "device": "/dev/vg/root"
+                }
+              },
+              "volumeGroups": {
+                "vg": {
+                  "operation": "create"
+                }
+              },
+              "physicalVolumes": {
+                "pv0": {
+                  "operation": "create",
+                  "device": "/dev/mapper/cryptroot"
+                }
+              },
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "operation": "open",
+                    "device": "/dev/disk/by-partlabel/root"
+                  }
+                }
+              },
+              "partitions": {
+                "root": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-partlabel/root"
+                }
+              },
+              "disks": {
+                "system": {
+                  "operation": "create",
+                  "device": "/dev/disk/by-id/nvme-system"
+                }
+              },
+              "snapshots": {
+                "old-root": {
+                  "target": "tank/root@old",
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let ids: Vec<&str> = plan
+            .actions
+            .iter()
+            .map(|action| action.id.as_str())
+            .collect();
+
+        assert_eq!(
+            ids,
+            vec![
+                "disks:system:create",
+                "partitions:root:create",
+                "luks.devices:cryptroot:open",
+                "physicalvolumes:pv0:create",
+                "volumegroups:vg:create",
+                "volumes:root:create",
+                "filesystem:root:grow",
+                "snapshot:old-root:destroy",
+            ]
         );
     }
 

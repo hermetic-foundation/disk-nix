@@ -27,6 +27,7 @@ or the NixOS module wrapper written to `/etc/disk-nix/spec.json`:
 
 ```json
 {
+  "version": 1,
   "spec": {
     "filesystems": {}
   },
@@ -42,6 +43,12 @@ maps, pools, datasets, zvols, LUNs, iSCSI sessions, exports, cache layers, and
 snapshots. It reports
 destructive or potentially destructive behavior with alternatives instead of
 silently accepting unsafe mutation.
+
+Planned actions are ordered by coarse storage dependency layers after parsing.
+Create, attach, open, grow, and other build/update operations run from lower
+layers toward upper layers; shrink, remove, unmount, detach, close, and destroy
+operations run from upper layers back down. Actions in the same layer keep
+their declaration order.
 
 Examples:
 

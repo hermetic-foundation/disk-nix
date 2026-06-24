@@ -69,9 +69,10 @@ manual-review guidance, or non-ready command plans instead of guessing.
   disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional
   operation types and multi-action groups before command rendering.
-- Stronger dependency ordering for multi-layer changes, such as growing an
-  iSCSI LUN, refreshing multipath, growing a partition, resizing LUKS/LVM, and
-  then growing a filesystem as one reviewed plan.
+- Graph-derived dependency ordering for multi-layer changes. The planner now
+  applies coarse layer ordering, but grouped changes such as iSCSI LUN refresh,
+  multipath, partition growth, LUKS/LVM resize, and filesystem growth still need
+  explicit dependency edges.
 - More NixOS steady-state synthesis for lifecycle-managed resources after
   mutation, especially when imperative changes should update declarative mounts,
   crypttab, swap, NFS exports, iSCSI boot, or generated files.
