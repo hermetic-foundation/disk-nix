@@ -212,7 +212,8 @@ fn add_target_lines(graph: &mut StorageGraph, lines: Vec<DmTargetLine>, namespac
                         node = node.with_property(format!("{prefix}.crypt.{key}"), value);
                     }
                 } else {
-                    for (key, value) in target_payload_properties(&line.target, payload) {
+                    for (key, value) in target_payload_properties(namespace, &line.target, payload)
+                    {
                         node = node.with_property(format!("{prefix}.{key}"), value);
                     }
                     node = node.with_property(format!("{prefix}.payload"), payload.clone());
@@ -245,13 +246,26 @@ fn crypt_table_properties(payload: &str) -> Vec<(String, String)> {
     properties
 }
 
-fn target_payload_properties(target: &str, payload: &str) -> Vec<(String, String)> {
+fn target_payload_properties(
+    namespace: &str,
+    target: &str,
+    payload: &str,
+) -> Vec<(String, String)> {
     let fields = payload.split_whitespace().collect::<Vec<_>>();
+    match (namespace, target) {
+        ("table", target) => target_table_properties(target, &fields),
+        ("status", "thin-pool") => thin_pool_status_properties(&fields),
+        ("status", "snapshot") => snapshot_status_properties(&fields),
+        _ => Vec::new(),
+    }
+}
+
+fn target_table_properties(target: &str, fields: &[&str]) -> Vec<(String, String)> {
     match target {
-        "linear" => properties_from_fields(&fields, &[("device", 0), ("offset", 1)]),
-        "striped" => striped_properties(&fields),
+        "linear" => properties_from_fields(fields, &[("device", 0), ("offset", 1)]),
+        "striped" => striped_properties(fields),
         "thin-pool" => properties_from_fields(
-            &fields,
+            fields,
             &[
                 ("metadata-device", 0),
                 ("data-device", 1),
@@ -260,7 +274,7 @@ fn target_payload_properties(target: &str, payload: &str) -> Vec<(String, String
             ],
         ),
         "thin" => properties_from_fields(
-            &fields,
+            fields,
             &[
                 ("pool-device", 0),
                 ("thin-device-id", 1),
@@ -268,7 +282,7 @@ fn target_payload_properties(target: &str, payload: &str) -> Vec<(String, String
             ],
         ),
         "cache" => properties_from_fields(
-            &fields,
+            fields,
             &[
                 ("metadata-device", 0),
                 ("cache-device", 1),
@@ -277,7 +291,7 @@ fn target_payload_properties(target: &str, payload: &str) -> Vec<(String, String
             ],
         ),
         "snapshot" => properties_from_fields(
-            &fields,
+            fields,
             &[
                 ("origin-device", 0),
                 ("cow-device", 1),
@@ -286,10 +300,39 @@ fn target_payload_properties(target: &str, payload: &str) -> Vec<(String, String
             ],
         ),
         "snapshot-origin" | "snapshot-merge" => {
-            properties_from_fields(&fields, &[("origin-device", 0)])
+            properties_from_fields(fields, &[("origin-device", 0)])
         }
         _ => Vec::new(),
     }
+}
+
+fn thin_pool_status_properties(fields: &[&str]) -> Vec<(String, String)> {
+    let mut properties = properties_from_fields(
+        fields,
+        &[
+            ("transaction-id", 0),
+            ("held-metadata-root", 3),
+            ("mode", 4),
+        ],
+    );
+    if let Some((used, total)) = fields.get(1).and_then(|value| value.split_once('/')) {
+        properties.push(("metadata-used-blocks".to_string(), used.to_string()));
+        properties.push(("metadata-total-blocks".to_string(), total.to_string()));
+    }
+    if let Some((used, total)) = fields.get(2).and_then(|value| value.split_once('/')) {
+        properties.push(("data-used-blocks".to_string(), used.to_string()));
+        properties.push(("data-total-blocks".to_string(), total.to_string()));
+    }
+    properties
+}
+
+fn snapshot_status_properties(fields: &[&str]) -> Vec<(String, String)> {
+    let mut properties = Vec::new();
+    if let Some((used, total)) = fields.first().and_then(|value| value.split_once('/')) {
+        properties.push(("used-sectors".to_string(), used.to_string()));
+        properties.push(("total-sectors".to_string(), total.to_string()));
+    }
+    properties
 }
 
 fn properties_from_fields(
@@ -444,6 +487,18 @@ vg-root: 1 dependencies  : (253, 0) (dm-0)
         assert!(thinpool.properties.iter().any(|property| {
             property.key == "dm.table.segment.0.metadata-device" && property.value == "253:5"
         }));
+        assert!(thinpool.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.metadata-used-blocks" && property.value == "12"
+        }));
+        assert!(thinpool.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.data-total-blocks" && property.value == "4096"
+        }));
+        assert!(thinpool.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.mode" && property.value == "rw"
+        }));
+        assert!(!thinpool.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.metadata-device" && property.value == "7"
+        }));
 
         let snapshot = graph
             .nodes
@@ -452,6 +507,12 @@ vg-root: 1 dependencies  : (253, 0) (dm-0)
             .expect("snap should exist");
         assert!(snapshot.properties.iter().any(|property| {
             property.key == "dm.table.segment.0.cow-device" && property.value == "253:8"
+        }));
+        assert!(snapshot.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.used-sectors" && property.value == "32"
+        }));
+        assert!(snapshot.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.total-sectors" && property.value == "1024"
         }));
 
         let striped = graph
@@ -486,5 +547,7 @@ striped: 0 2097152 striped 2 128 8:1 0 8:2 0
     const STATUS: &[u8] = br#"
 cryptroot: 0 2097152 crypt 0 2097152
 vg-root: 0 2097152 linear A
+thinpool: 0 2097152 thin-pool 7 12/128 1024/4096 - rw no_discard_passdown
+snap: 0 1048576 snapshot 32/1024
 "#;
 }

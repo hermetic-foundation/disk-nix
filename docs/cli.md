@@ -282,8 +282,8 @@ Use these commands for:
   bindings, header area/epoch/flag details, data-segment cipher/offset/length
   details, dm name/UUID, major/minor numbers, open/segment counters, mapper
   table targets, live target status, sanitized dm-crypt table details, parsed
-  linear/striped/thin/cache/snapshot target fields, LVM segment data/metadata
-  device mappings,
+  linear/striped/thin/cache/snapshot table fields, thin-pool and snapshot
+  status usage counters, LVM segment data/metadata device mappings,
   thin-pool discard/zeroing/transaction details, cache segment policy/settings,
   VDO segment compression/dedup/write-policy details, multipath WWID/size,
   parsed SCSI path coordinates, and split path state, VDO backing device,
