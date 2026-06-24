@@ -237,6 +237,7 @@ pub enum TopologyDiagnosticKind {
     SizeBelowDesired,
     SizeAlreadySatisfied,
     SizeConflict,
+    FilesystemFormatAlreadySatisfied,
     FilesystemTypeConflict,
     DiskCreateAlreadySatisfied,
     DiskCreateRequired,
@@ -834,6 +835,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                 matches!(
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::FilesystemFormatAlreadySatisfied
                         | TopologyDiagnosticKind::DiskCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
@@ -1481,6 +1483,7 @@ fn already_satisfied_action_ids(
             already_satisfied |= matches!(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
+                    | TopologyDiagnosticKind::FilesystemFormatAlreadySatisfied
                     | TopologyDiagnosticKind::DiskCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
@@ -1830,6 +1833,18 @@ fn filesystem_type_diagnostic(
     let desired = action.context.fs_type.as_deref()?;
     let current = property_value_from_node(node, "filesystem.type")?;
     if current == desired {
+        if action.operation == Operation::Format
+            && action.context.collection.as_deref() == Some("filesystems")
+        {
+            return Some(TopologyDiagnostic {
+                action_id: action.id.clone(),
+                level: TopologyDiagnosticLevel::Info,
+                kind: TopologyDiagnosticKind::FilesystemFormatAlreadySatisfied,
+                query: query.to_string(),
+                message: format!("filesystem {query} already reports type {current}"),
+                current: Some(current_node_summary(node)),
+            });
+        }
         return None;
     }
 
@@ -16594,6 +16609,93 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
                 && diagnostic.action_id == "datasets:tank/home:set-property:compression"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reports_matching_filesystem_format_type() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "data": {
+                  "mountpoint": "/data",
+                  "device": "/dev/disk/by-label/data",
+                  "fsType": "ext4",
+                  "preserveData": false
+                },
+                "legacy": {
+                  "mountpoint": "/legacy",
+                  "device": "/dev/disk/by-label/legacy",
+                  "fsType": "xfs",
+                  "preserveData": false
+                },
+                "small": {
+                  "mountpoint": "/small",
+                  "device": "/dev/disk/by-label/small",
+                  "fsType": "ext4",
+                  "desiredSize": "2GiB",
+                  "preserveData": false
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("filesystem:/data", NodeKind::Filesystem, "/data")
+                .with_path("/data")
+                .with_property("filesystem.type", "ext4"),
+        );
+        graph.add_node(
+            Node::new("filesystem:/legacy", NodeKind::Filesystem, "/legacy")
+                .with_path("/legacy")
+                .with_property("filesystem.type", "ext4"),
+        );
+        graph.add_node(
+            Node::new("filesystem:/small", NodeKind::Filesystem, "/small")
+                .with_path("/small")
+                .with_size_bytes(1024 * 1024 * 1024)
+                .with_property("filesystem.type", "ext4"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 6);
+        assert_eq!(comparison.summary.matched_count, 6);
+        assert_eq!(comparison.summary.type_conflict_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.summary.action_count, 6);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "filesystem:data:preserve-data-disabled"
+                && action.operation == Operation::Format
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "filesystem:legacy:preserve-data-disabled"
+                && action.operation == Operation::Format
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "filesystem:small:preserve-data-disabled"
+                && action.operation == Operation::Format
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystem:data:preserve-data-disabled"
+                && diagnostic.kind == TopologyDiagnosticKind::FilesystemFormatAlreadySatisfied
+                && diagnostic.message.contains("type ext4")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystem:legacy:preserve-data-disabled"
+                && diagnostic.kind == TopologyDiagnosticKind::FilesystemTypeConflict
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystem:small:preserve-data-disabled"
+                && diagnostic.kind == TopologyDiagnosticKind::FilesystemFormatAlreadySatisfied
+                && diagnostic.message.contains("type ext4")
         }));
     }
 
