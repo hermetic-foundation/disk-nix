@@ -678,8 +678,9 @@ read-only `mdadm --detail --scan`, `mdadm --examine --scan`, `/proc/mdstat`,
 and topology verification; a declared `/dev/md*` target adds targeted
 `mdadm --detail <array>` inspection.
 VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
-online `vdo growLogical` and `vdo growPhysical` growth steps, and
-offline-required `vdo start`/`vdo stop` lifecycle steps for existing volumes.
+online `vdo growLogical` for `desiredSize`, explicit `vdo growPhysical` for
+`physicalSize`, and offline-required `vdo start`/`vdo stop` lifecycle steps for
+existing volumes.
 VDO `operation = "rescan"` renders read-only `vdo status`, `vdostats`, and
 graph inspection commands to refresh status and utilization without changing
 activation state or capacity.

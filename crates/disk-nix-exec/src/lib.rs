@@ -3645,20 +3645,15 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         Operation::Grow if collection == Some("vdoVolumes") => {
             let target = target.unwrap_or("<vdo-volume>");
             let desired_size = action.context.desired_size.as_deref();
+            let physical_size = action.context.physical_size.as_deref();
+            let mut commands = vec![command(
+                ["vdo", "status", "--name", target],
+                false,
+                "inspect VDO logical and physical size before growth",
+            )];
+            commands.extend(vdo_growth_commands(target, desired_size, physical_size));
             (
-                vec![
-                    command(
-                        ["vdo", "status", "--name", target],
-                        false,
-                        "inspect VDO logical and physical size before growth",
-                    ),
-                    vdo_grow_logical_command(target, desired_size),
-                    command(
-                        ["vdo", "growPhysical", "--name", target],
-                        true,
-                        "grow VDO physical capacity after backing storage has grown",
-                    ),
-                ],
+                commands,
                 vec![
                     "choose logical and physical growth intentionally; they are separate VDO operations"
                         .to_string(),
@@ -10489,6 +10484,43 @@ fn vdo_grow_logical_command(target: &str, desired_size: Option<&str>) -> Executi
     }
 }
 
+fn vdo_growth_commands(
+    target: &str,
+    desired_size: Option<&str>,
+    physical_size: Option<&str>,
+) -> Vec<ExecutionCommand> {
+    let mut commands = Vec::new();
+    if let Some(size) = physical_size {
+        commands.push(command(
+            ["vdo", "growPhysical", "--name", target],
+            true,
+            &format!(
+                "grow VDO physical capacity after backing storage has grown to reviewed size {size}"
+            ),
+        ));
+    }
+    if desired_size.is_some() {
+        commands.push(vdo_grow_logical_command(target, desired_size));
+    }
+    if commands.is_empty() {
+        commands.push(command_with_readiness(
+            [
+                "vdo",
+                "growLogical",
+                "--name",
+                target,
+                "--vdoLogicalSize",
+                "<size>",
+            ],
+            true,
+            CommandReadiness::NeedsDesiredSize,
+            ["desired VDO logical size or physicalSize intent"],
+            "grow VDO after declaring desiredSize for logical growth or physicalSize for backing growth",
+        ));
+    }
+    commands
+}
+
 fn vdo_create_command(
     target: &str,
     device: Option<&str>,
@@ -15813,6 +15845,10 @@ mod tests {
                       "deduplication": "disabled"
                     }
                   },
+                  "archive-physical": {
+                    "operation": "grow",
+                    "physicalSize": "6TiB"
+                  },
                   "warmArchive": {
                     "operation": "start"
                   },
@@ -15895,6 +15931,28 @@ mod tests {
                     ]
                     && command.readiness == CommandReadiness::Ready
             })
+        }));
+        assert!(
+            !report.command_plan.iter().any(|step| {
+                step.action_id == "vdovolumes:archive:grow"
+                    && step
+                        .commands
+                        .iter()
+                        .any(|command| command.argv == ["vdo", "growPhysical", "--name", "archive"])
+            }),
+            "logical-only VDO growth must not grow physical capacity implicitly"
+        );
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:archive-physical:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdo", "growPhysical", "--name", "archive-physical"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && !step.commands.iter().any(|command| {
+                    command
+                        .argv
+                        .starts_with(&["vdo".to_string(), "growLogical".to_string()])
+                })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "vdoVolumes:archive:set-property:writePolicy"
@@ -16021,6 +16079,7 @@ mod tests {
                     "target": "archive-vdo",
                     "operation": "grow",
                     "desiredSize": "4TiB",
+                    "physicalSize": "6TiB",
                     "properties": {
                       "writePolicy": "sync",
                       "compression": "disabled",
@@ -16073,6 +16132,14 @@ mod tests {
                             "2TiB",
                         ]
                         && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:archivegrow:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdo", "growPhysical", "--name", "archive-vdo"]
+                        && command.readiness == CommandReadiness::Ready
+                        && command.note.contains("6TiB")
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {

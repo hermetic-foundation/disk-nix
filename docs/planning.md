@@ -125,7 +125,9 @@ Examples:
   metadata, read-only state, and modeled graph relationships for the declared
   `path`.
 - VDO creation and removal are destructive because they write or remove VDO
-  metadata on the backing device; VDO growth is online, with advice to
+  metadata on the backing device; VDO growth is online, with `desiredSize`
+  rendering logical growth and explicit `physicalSize` rendering physical
+  growth after backing storage has already expanded. Plans advise operators to
   distinguish logical growth from physical backing growth and verify
   `vdostats`. VDO `operation = "start"` and `operation = "stop"` are
   offline-required lifecycle actions that activate or deactivate existing VDO
@@ -358,6 +360,8 @@ Lifecycle objects may use:
 - `properties`: object of properties to set
 - `desiredSize`, `targetSize`, or `size`: desired capacity for grow, shrink,
   or create plans
+- `physicalSize`: explicit VDO physical backing-size intent for
+  `vdo growPhysical` planning
 - `target`, `path`, or `mountpoint`: explicit target path or object identity
   when it differs from the attribute name
 - `name`, `snapshotName`, or `snapshot-name`: explicit snapshot identity when a
@@ -380,8 +384,8 @@ Lifecycle objects may use:
 Plan actions include typed `context` when a desired object provides useful
 executor inputs. Context fields can include collection, name, target, device,
 replacement, property, property value, filesystem type, mountpoint, and
-desired size, plus partition start, end, and type. Apply reports use this
-context to build command plans without relying on action-id parsing.
+desired or physical size, plus partition start, end, and type. Apply reports
+use this context to build command plans without relying on action-id parsing.
 
 `disk-nix plan --probe-current --spec <path>` probes the current host and adds
 a `topologyComparison` section to the plan. The comparison matches action

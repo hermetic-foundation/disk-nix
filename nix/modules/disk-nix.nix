@@ -185,6 +185,13 @@ let
           example = "11111111-2222-3333-4444-555555555555";
         };
 
+        physicalSize = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Explicit physical backing-size intent for VDO growPhysical planning.";
+          example = "6TiB";
+        };
+
         renameTo = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -729,6 +736,7 @@ let
         removeDevices
         replaceDevices
         cacheSetUuid
+        physicalSize
         renameTo
         renameTarget
         newName

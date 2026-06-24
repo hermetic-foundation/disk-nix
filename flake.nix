@@ -445,6 +445,7 @@
                 target = "archive";
                 operation = "grow";
                 desiredSize = "4TiB";
+                physicalSize = "6TiB";
                 properties = {
                   writePolicy = "sync";
                   compression = "enabled";
@@ -960,6 +961,8 @@
               and .properties.exports["$ref"] == "#/$defs/lifecycleMap"
               and .properties.caches["$ref"] == "#/$defs/lifecycleMap"
               and .properties.snapshots["$ref"] == "#/$defs/snapshotMap"
+              and ."$defs".lifecycleObject.properties.physicalSize.type == ["string", "number"]
+              and ."$defs".lifecycleObject.properties.vdoPhysicalSize.type == ["string", "number"]
               and ."$defs".snapshot.properties.operation["$ref"] == "#/$defs/operation"
               and ."$defs".snapshot.properties.action["$ref"] == "#/$defs/operation"
               and (."$defs".operation.enum | index("grow") != null)
@@ -1469,6 +1472,7 @@
                     and .spec.vdoVolumes.archiveLifecycle.target == "archive"
                     and .spec.vdoVolumes.archiveLifecycle.operation == "grow"
                     and .spec.vdoVolumes.archiveLifecycle.desiredSize == "4TiB"
+                    and .spec.vdoVolumes.archiveLifecycle.physicalSize == "6TiB"
                     and .spec.vdoVolumes.archiveLifecycle.properties.writePolicy == "sync"
                     and .spec.vdoVolumes.archiveLifecycle.properties.compression == "enabled"
                     and .spec.vdoVolumes.archiveLifecycle.properties.deduplication == "disabled"

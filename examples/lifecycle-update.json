@@ -189,6 +189,7 @@
     "archive": {
       "operation": "grow",
       "desiredSize": "4TiB",
+      "physicalSize": "6TiB",
       "properties": {
         "writePolicy": "sync",
         "compression": "enabled",

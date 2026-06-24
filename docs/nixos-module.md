@@ -387,6 +387,7 @@ Each lifecycle declaration includes:
 - `desiredSize`
 - `targetSize`
 - `size`
+- `physicalSize`
 - `target`
 - `path`
 - `mountpoint`
@@ -533,6 +534,7 @@ Example lifecycle planning through NixOS options:
     vdoVolumes.archive = {
       operation = "grow";
       desiredSize = "4TiB";
+      physicalSize = "6TiB";
     };
     vdoVolumes.warmArchive.operation = "start";
     vdoVolumes.coldArchive.operation = "stop";

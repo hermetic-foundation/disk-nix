@@ -352,13 +352,15 @@ as `/dev/md/root`; logical array names can declare `target` or `device` with
 that array path. MD RAID rescan plans render read-only `mdadm --detail --scan`,
 `mdadm --examine --scan`, and
 `/proc/mdstat` inventory checks without assembling arrays.
-VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
-online `vdo growLogical` and physical growth review steps. Create preflight is
-marked unresolved until a backing device is declared. VDO property updates
-cover `auto`, `sync`, and `async` write policy changes, compression, and
-deduplication with concrete `vdo` commands; unsupported properties and invalid
-property values are classified as unsupported before execution. Logical VDO
-volume names can declare the concrete VDO name with `target`.
+VDO apply plans render gated `vdo create` and `vdo remove` commands. VDO
+`desiredSize` drives online `vdo growLogical`, while explicit `physicalSize`
+drives reviewed `vdo growPhysical` after backing storage has already grown.
+Create preflight is marked unresolved until a backing device is declared. VDO
+property updates cover `auto`, `sync`, and `async` write policy changes,
+compression, and deduplication with concrete `vdo` commands; unsupported
+properties and invalid property values are classified as unsupported before
+execution. Logical VDO volume names can declare the concrete VDO name with
+`target`.
 VDO rescan plans render read-only `vdo status`, `vdostats`, and graph
 inspection commands to refresh status and utilization without changing
 activation state or capacity.

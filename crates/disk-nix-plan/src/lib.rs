@@ -212,6 +212,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub desired_size: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub physical_size: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub start: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end: Option<String>,
@@ -265,6 +267,7 @@ impl ActionContext {
             && self.fs_type.is_none()
             && self.mountpoint.is_none()
             && self.desired_size.is_none()
+            && self.physical_size.is_none()
             && self.start.is_none()
             && self.end.is_none()
             && self.partition_number.is_none()
@@ -902,6 +905,17 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         mountpoint: string_field(object, &["mountpoint", "path"])
             .or_else(|| name.starts_with('/').then(|| name.to_string())),
         desired_size: desired_size(object),
+        physical_size: metadata_string_field(
+            object,
+            &[
+                "physicalSize",
+                "physical-size",
+                "physical_size",
+                "vdoPhysicalSize",
+                "vdo-physical-size",
+                "vdo_physical_size",
+            ],
+        ),
         start: string_field(object, &["start", "startOffset"]),
         end: string_field(object, &["end", "endOffset"]),
         partition_number: string_field(object, &["partitionNumber", "number"]),
@@ -9754,6 +9768,7 @@ mod tests {
                 "archive": {
                   "operation": "grow",
                   "desiredSize": "4TiB",
+                  "physicalSize": "6TiB",
                   "properties": {
                     "writePolicy": "sync",
                     "compression": "enabled",
@@ -9798,6 +9813,8 @@ mod tests {
             .find(|action| action.id == "vdovolumes:archive:grow")
             .expect("VDO grow action exists");
         assert_eq!(grow.risk, RiskClass::Online);
+        assert_eq!(grow.context.desired_size.as_deref(), Some("4TiB"));
+        assert_eq!(grow.context.physical_size.as_deref(), Some("6TiB"));
         assert!(grow.advice.as_ref().is_some_and(|advice| {
             advice.summary.contains("logical size")
                 && advice
