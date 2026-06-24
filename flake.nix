@@ -1397,10 +1397,12 @@
             cmp "$schema" ${diskNix}/share/disk-nix/schema/disk-nix-spec.schema.json
             jq -e '
               ."$schema" == "https://json-schema.org/draft/2020-12/schema"
+              and .properties.version.const == 1
               and .properties.spec["$ref"] == "#/$defs/specBody"
               and .properties.apply["$ref"] == "#/$defs/applyPolicy"
               and .properties.swaps["$ref"] == "#/$defs/lifecycleMap"
               and .properties.zram["$ref"] == "#/$defs/zramSpec"
+              and ."$defs".specBody.properties.version.const == 1
               and ."$defs".specBody.properties.zram["$ref"] == "#/$defs/zramSpec"
               and ."$defs".zramSpec.properties.operation["$ref"] == "#/$defs/operation"
               and ."$defs".zramSpec.properties.swapDevices.minimum == 1
@@ -1767,7 +1769,8 @@
               ''
                   spec=${nixosModuleTest.config.environment.etc."disk-nix/spec.json".source}
                   jq -e '
-                    .spec.filesystems.root.device == "/dev/disk/by-label/nixos-root"
+                    .version == 1
+                    and .spec.filesystems.root.device == "/dev/disk/by-label/nixos-root"
                     and .spec.filesystems.root.resizePolicy == "grow-only"
                     and .spec.filesystems.root.desiredSize == "100%"
                     and .spec.filesystems.data.device == "/dev/disk/by-label/data"

@@ -14,8 +14,9 @@ use clap_mangen::Man;
 use disk_nix_exec::{ExecutionMode, ExecutionReport, ExecutionStatus, prepare_execution};
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use disk_nix_plan::{
-    ApplyPolicy, Plan, TopologyComparison, TopologyDiagnosticLevel, compare_plan_with_topology,
-    default_capabilities, plan_and_policy_from_json_bytes, plan_from_json_bytes,
+    ApplyPolicy, Plan, SUPPORTED_SPEC_VERSION, TopologyComparison, TopologyDiagnosticLevel,
+    compare_plan_with_topology, default_capabilities, plan_and_policy_from_json_bytes,
+    plan_from_json_bytes,
 };
 use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeStatus};
 
@@ -808,7 +809,8 @@ fn spec_schema() -> serde_json::Value {
         "properties": {
             "version": {
                 "type": "integer",
-                "description": "Optional spec version marker for callers."
+                "const": SUPPORTED_SPEC_VERSION,
+                "description": "Optional disk-nix spec contract version. Version 1 is the current supported contract."
             },
             "spec": {
                 "$ref": "#/$defs/specBody",
@@ -922,6 +924,11 @@ fn spec_schema() -> serde_json::Value {
                 "type": "object",
                 "additionalProperties": true,
                 "properties": {
+                    "version": {
+                        "type": "integer",
+                        "const": SUPPORTED_SPEC_VERSION,
+                        "description": "Optional disk-nix spec contract version. Version 1 is the current supported contract."
+                    },
                     "filesystems": { "$ref": "#/$defs/filesystemMap" },
                     "swaps": { "$ref": "#/$defs/lifecycleMap" },
                     "zram": { "$ref": "#/$defs/zramSpec" },

@@ -2331,6 +2331,7 @@ in
     environment.systemPackages = [ cfg.package ] ++ cfg.toolPackages;
 
     environment.etc."disk-nix/spec.json".source = json.generate "disk-nix-spec.json" {
+      version = 1;
       spec = cfg.spec // {
         filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec // typedNfsFilesystemSpec;
         swaps = (cfg.spec.swaps or { }) // typedSwapSpec;

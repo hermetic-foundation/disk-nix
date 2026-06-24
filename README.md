@@ -140,7 +140,9 @@ The Nix package installs generated bash, zsh, and fish completions plus a
 `disk-nix(1)` manpage. The `completions` and `manpage` commands can also emit
 those artifacts directly.
 `schema` emits the supported desired-spec JSON contract for editor integration
-and automation; the Nix package also installs it at
+and automation. The current contract is version `1`; omitted versions are
+treated as version `1`, and unsupported future versions are rejected before
+planning. The Nix package also installs it at
 `share/disk-nix/schema/disk-nix-spec.schema.json`.
 
 See [docs/cli.md](docs/cli.md) for the command reference and JSON contracts.

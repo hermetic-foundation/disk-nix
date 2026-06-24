@@ -327,7 +327,9 @@ flake validates stable plan summaries, selected action ids, allowed simple
 apply output, blocked lifecycle apply output, and review-script generation.
 `disk-nix schema` emits a JSON Schema-style contract for direct specs, NixOS
 module wrapper specs, lifecycle collections, snapshot declarations, and apply
-policy fields.
+policy fields. The current supported contract is version `1`. Specs may omit
+`version`, but if `version` or `spec.version` is present it must be integer
+`1`; unsupported future versions are rejected before planning.
 
 Lifecycle collections currently accepted by the planner:
 

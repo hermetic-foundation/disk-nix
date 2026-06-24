@@ -81,5 +81,6 @@ manual-review guidance, or non-ready command plans instead of guessing.
   formats.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
-- Clear stability policy for JSON contracts, NixOS option compatibility, and
-  migration between schema versions.
+- Deeper stability policy for JSON contracts, NixOS option compatibility, and
+  migration between schema versions. The parser now validates version `1`, but
+  future migration and deprecation policy still needs to be documented.

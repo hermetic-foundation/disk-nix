@@ -122,8 +122,11 @@ disk-nix schema
 ```
 
 The schema describes both direct planner specs and the NixOS module wrapper
-shape with top-level `spec` and `apply` objects. It includes the planner's
-filesystem fields, including filesystem `operation`, `device`, mount
+shape with top-level `version`, `spec`, and `apply` objects. The current
+supported contract is version `1`; omitted versions are accepted as version
+`1`, and unsupported future versions are rejected before planning. It includes
+the planner's filesystem fields, including filesystem `operation`, `device`,
+mount
 `options`, `properties`, `metadata`, `neededForBoot`, `destroy`, and Btrfs
 device-membership update fields. It also includes disk and partition lifecycle
 collections, swap, LUKS, LUKS keyslots/tokens, NFS mount wrappers with

@@ -57,8 +57,9 @@ The NixOS module is the primary declarative interface.
 }
 ```
 
-The module writes `/etc/disk-nix/spec.json`, installs the CLI and default
-storage tooling, and derives the matching NixOS `fileSystems`, `swapDevices`,
+The module writes `/etc/disk-nix/spec.json` with top-level contract
+`version = 1`, installs the CLI and default storage tooling, and derives the
+matching NixOS `fileSystems`, `swapDevices`,
 `zramSwap`, `boot.initrd.luks.devices`, `boot.supportedFilesystems`,
 `services.lvm`, `boot.initrd.services.lvm`, `boot.swraid`, `services.multipath`,
 `boot.zfs.extraPools`, `boot.bcache`, `boot.initrd.services.bcache`,

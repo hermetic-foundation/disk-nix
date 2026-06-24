@@ -1,6 +1,56 @@
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::{error::Error, fmt};
+
+pub const SUPPORTED_SPEC_VERSION: u64 = 1;
+
+#[derive(Debug)]
+pub enum PlanDocumentError {
+    Json(serde_json::Error),
+    UnsupportedVersion { found: u64, supported: u64 },
+    InvalidVersion { location: &'static str },
+    ConflictingVersions { top_level: u64, spec: u64 },
+}
+
+impl fmt::Display for PlanDocumentError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Json(error) => error.fmt(formatter),
+            Self::UnsupportedVersion { found, supported } => write!(
+                formatter,
+                "unsupported disk-nix spec version {found}; supported version is {supported}"
+            ),
+            Self::InvalidVersion { location } => {
+                write!(
+                    formatter,
+                    "disk-nix spec version at {location} must be an integer"
+                )
+            }
+            Self::ConflictingVersions { top_level, spec } => write!(
+                formatter,
+                "conflicting disk-nix spec versions: top-level version {top_level}, spec.version {spec}"
+            ),
+        }
+    }
+}
+
+impl Error for PlanDocumentError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Json(error) => Some(error),
+            Self::UnsupportedVersion { .. }
+            | Self::InvalidVersion { .. }
+            | Self::ConflictingVersions { .. } => None,
+        }
+    }
+}
+
+impl From<serde_json::Error> for PlanDocumentError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::Json(error)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -388,18 +438,61 @@ pub struct BlockedSummary {
     pub unsupported_count: usize,
 }
 
-pub fn plan_from_json_bytes(bytes: &[u8]) -> Result<Plan, serde_json::Error> {
+pub fn plan_from_json_bytes(bytes: &[u8]) -> Result<Plan, PlanDocumentError> {
     let value: Value = serde_json::from_slice(bytes)?;
+    validate_spec_version(&value)?;
     Ok(plan_from_value(&value))
 }
 
 pub fn plan_and_policy_from_json_bytes(
     bytes: &[u8],
-) -> Result<(Plan, ApplyPolicy), serde_json::Error> {
+) -> Result<(Plan, ApplyPolicy), PlanDocumentError> {
     let value: Value = serde_json::from_slice(bytes)?;
+    validate_spec_version(&value)?;
     let plan = plan_from_value(&value);
     let policy = apply_policy_from_value(&value)?;
     Ok((plan, policy))
+}
+
+fn validate_spec_version(value: &Value) -> Result<(), PlanDocumentError> {
+    let top_level = read_spec_version(value.get("version"), "version")?;
+    let spec = value
+        .get("spec")
+        .and_then(Value::as_object)
+        .and_then(|spec| spec.get("version"))
+        .map_or(Ok(None), |version| {
+            read_spec_version(Some(version), "spec.version")
+        })?;
+
+    if let (Some(top_level), Some(spec)) = (top_level, spec) {
+        if top_level != spec {
+            return Err(PlanDocumentError::ConflictingVersions { top_level, spec });
+        }
+    }
+
+    let version = top_level.or(spec).unwrap_or(SUPPORTED_SPEC_VERSION);
+    if version != SUPPORTED_SPEC_VERSION {
+        return Err(PlanDocumentError::UnsupportedVersion {
+            found: version,
+            supported: SUPPORTED_SPEC_VERSION,
+        });
+    }
+
+    Ok(())
+}
+
+fn read_spec_version(
+    version: Option<&Value>,
+    location: &'static str,
+) -> Result<Option<u64>, PlanDocumentError> {
+    match version {
+        Some(Value::Number(number)) => number
+            .as_u64()
+            .map(Some)
+            .ok_or(PlanDocumentError::InvalidVersion { location }),
+        Some(_) => Err(PlanDocumentError::InvalidVersion { location }),
+        None => Ok(None),
+    }
 }
 
 pub fn apply_policy_from_value(value: &Value) -> Result<ApplyPolicy, serde_json::Error> {
@@ -8222,6 +8315,90 @@ mod tests {
             assert_eq!(capability.risk, risk);
             assert!(capability.advice.is_some());
         }
+    }
+
+    #[test]
+    fn plan_accepts_supported_spec_versions() {
+        let direct = plan_from_json_bytes(
+            br#"{
+              "version": 1,
+              "filesystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "ext4",
+                  "resizePolicy": "grow-only"
+                }
+              }
+            }"#,
+        )
+        .expect("direct spec should parse");
+
+        let wrapped = plan_from_json_bytes(
+            br#"{
+              "version": 1,
+              "spec": {
+                "version": 1,
+                "filesystems": {
+                  "root": {
+                    "mountpoint": "/",
+                    "fsType": "ext4",
+                    "resizePolicy": "grow-only"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("wrapped spec should parse");
+
+        assert_eq!(direct.summary.action_count, 1);
+        assert_eq!(wrapped.summary.action_count, 1);
+    }
+
+    #[test]
+    fn plan_rejects_unsupported_spec_versions() {
+        let error = plan_from_json_bytes(
+            br#"{
+              "version": 2,
+              "filesystems": {}
+            }"#,
+        )
+        .expect_err("future version should be rejected");
+
+        assert_eq!(
+            error.to_string(),
+            "unsupported disk-nix spec version 2; supported version is 1"
+        );
+    }
+
+    #[test]
+    fn plan_rejects_invalid_and_conflicting_spec_versions() {
+        let invalid = plan_from_json_bytes(
+            br#"{
+              "spec": {
+                "version": "1"
+              }
+            }"#,
+        )
+        .expect_err("string version should be rejected");
+
+        let conflicting = plan_from_json_bytes(
+            br#"{
+              "version": 1,
+              "spec": {
+                "version": 2
+              }
+            }"#,
+        )
+        .expect_err("conflicting versions should be rejected");
+
+        assert_eq!(
+            invalid.to_string(),
+            "disk-nix spec version at spec.version must be an integer"
+        );
+        assert_eq!(
+            conflicting.to_string(),
+            "conflicting disk-nix spec versions: top-level version 1, spec.version 2"
+        );
     }
 
     #[test]
