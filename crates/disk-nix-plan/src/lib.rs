@@ -2028,8 +2028,10 @@ fn property_diagnostic(
     }
     let property = action.context.property.as_deref()?;
     let desired = action.context.property_value.as_deref()?;
-    let current = property_value_from_node(node, property)?;
-    let (level, kind, message) = if current == desired {
+    let current = current_property_value(action, node, property)?;
+    let desired_compare = comparable_property_value(action, property, desired);
+    let current_compare = comparable_property_value(action, property, &current);
+    let (level, kind, message) = if current_compare == desired_compare {
         (
             TopologyDiagnosticLevel::Info,
             TopologyDiagnosticKind::PropertyAlreadySatisfied,
@@ -2051,6 +2053,58 @@ fn property_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -> Option<String> {
+    if action.context.collection.as_deref() == Some("vdoVolumes") {
+        let normalized = normalize_storage_property_name(property);
+        let aliases: &[&str] = match normalized.as_str() {
+            "writepolicy" | "write-policy" | "vdo-write-policy" => {
+                &["vdo.write-policy", "lvm.vdo-write-policy", property]
+            }
+            "compression" | "vdo-compression" => {
+                &["vdo.compression", "lvm.vdo-compression", property]
+            }
+            "deduplication" | "dedupe" | "vdo-deduplication" | "vdo-dedupe" => &[
+                "vdo.deduplication",
+                "vdo.dedupe",
+                "lvm.vdo-deduplication",
+                "lvm.vdo-dedupe",
+                property,
+            ],
+            _ => &[property],
+        };
+        return aliases
+            .iter()
+            .find_map(|alias| property_value_from_node(node, alias).map(str::to_string));
+    }
+
+    property_value_from_node(node, property).map(str::to_string)
+}
+
+fn comparable_property_value(action: &PlannedAction, property: &str, value: &str) -> String {
+    if action.context.collection.as_deref() != Some("vdoVolumes") {
+        return value.to_string();
+    }
+
+    let normalized_property = normalize_storage_property_name(property);
+    let normalized_value = normalize_storage_property_name(value);
+    match normalized_property.as_str() {
+        "compression" | "vdo-compression" | "deduplication" | "dedupe" | "vdo-deduplication"
+        | "vdo-dedupe" => normalize_vdo_boolean_property_value(&normalized_value)
+            .map(str::to_string)
+            .unwrap_or(normalized_value),
+        "writepolicy" | "write-policy" | "vdo-write-policy" => normalized_value,
+        _ => value.to_string(),
+    }
+}
+
+fn normalize_vdo_boolean_property_value(value: &str) -> Option<&'static str> {
+    match value {
+        "enabled" | "enable" | "true" | "yes" | "on" | "1" => Some("enabled"),
+        "disabled" | "disable" | "false" | "no" | "off" | "0" => Some("disabled"),
+        _ => None,
+    }
 }
 
 fn mount_diagnostic(
@@ -18786,6 +18840,75 @@ mod tests {
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::VdoCreateTargetPresent
                 && diagnostic.message.contains("filesystem")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_vdo_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "properties": {
+                    "writePolicy": "sync",
+                    "compression": "enabled",
+                    "deduplication": "disabled"
+                  }
+                },
+                "vg0/lv": {
+                  "properties": {
+                    "writePolicy": "async"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_property("vdo.write-policy", "sync")
+                .with_property("vdo.compression", "true")
+                .with_property("vdo.deduplication", "off"),
+        );
+        graph.add_node(
+            Node::new("lvm:vg0/lv", NodeKind::VdoVolume, "vg0/lv")
+                .with_property("lvm.vdo-write-policy", "sync"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 4);
+        assert_eq!(comparison.summary.matched_count, 4);
+        assert_eq!(comparison.summary.already_satisfied_count, 3);
+        assert_eq!(comparison.summary.suppressed_action_count, 3);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "vdoVolumes:vg0/lv:set-property:writePolicy"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdoVolumes:archive:set-property:writePolicy"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdoVolumes:archive:set-property:compression"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdoVolumes:archive:set-property:deduplication"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdoVolumes:vg0/lv:set-property:writePolicy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic.message.contains("sync")
+                && diagnostic.message.contains("async")
         }));
     }
 
