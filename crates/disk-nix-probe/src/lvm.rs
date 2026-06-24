@@ -74,6 +74,11 @@ struct LogicalVolume {
     kernel_cache_mode: Option<String>,
     kernel_cache_policy: Option<String>,
     kernel_discards: Option<String>,
+    vdo_operating_mode: Option<String>,
+    vdo_compression_state: Option<String>,
+    vdo_index_state: Option<String>,
+    vdo_used_size: Option<String>,
+    vdo_saving_percent: Option<String>,
     writecache_total_blocks: Option<String>,
     writecache_free_blocks: Option<String>,
     writecache_writeback_blocks: Option<String>,
@@ -294,6 +299,14 @@ fn add_logical_volume(graph: &mut StorageGraph, lv: LogicalVolume) {
         ("lvm.kernel-cache-mode", lv.kernel_cache_mode.clone()),
         ("lvm.kernel-cache-policy", lv.kernel_cache_policy.clone()),
         ("lvm.kernel-discards", lv.kernel_discards.clone()),
+        ("lvm.vdo-operating-mode", lv.vdo_operating_mode.clone()),
+        (
+            "lvm.vdo-compression-state",
+            lv.vdo_compression_state.clone(),
+        ),
+        ("lvm.vdo-index-state", lv.vdo_index_state.clone()),
+        ("lvm.vdo-used-size", lv.vdo_used_size.clone()),
+        ("lvm.vdo-saving-percent", lv.vdo_saving_percent.clone()),
         (
             "lvm.writecache-total-blocks",
             lv.writecache_total_blocks.clone(),
@@ -557,6 +570,11 @@ mod tests {
             "kernel_cache_mode": "",
             "kernel_cache_policy": "",
             "kernel_discards": "",
+            "vdo_operating_mode": "",
+            "vdo_compression_state": "",
+            "vdo_index_state": "",
+            "vdo_used_size": "",
+            "vdo_saving_percent": "",
             "writecache_total_blocks": "",
             "writecache_free_blocks": "",
             "writecache_writeback_blocks": "",
@@ -594,6 +612,11 @@ mod tests {
             "kernel_cache_mode": "writeback",
             "kernel_cache_policy": "smq",
             "kernel_discards": "passdown",
+            "vdo_operating_mode": "normal",
+            "vdo_compression_state": "online",
+            "vdo_index_state": "online",
+            "vdo_used_size": "8.00g",
+            "vdo_saving_percent": "42.00",
             "writecache_total_blocks": "1024",
             "writecache_free_blocks": "512",
             "writecache_writeback_blocks": "16",
@@ -741,6 +764,21 @@ mod tests {
                     .any(|property| property.key == "lvm.cache-policy" && property.value == "smq")
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.kernel-discards" && property.value == "passdown"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.vdo-operating-mode" && property.value == "normal"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.vdo-compression-state" && property.value == "online"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.vdo-index-state" && property.value == "online"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.vdo-used-size" && property.value == "8.00g"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.vdo-saving-percent" && property.value == "42.00"
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.writecache-writeback-blocks" && property.value == "16"

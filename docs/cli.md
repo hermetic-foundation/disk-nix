@@ -288,9 +288,10 @@ Use these commands for:
   expose them
 - `vdo`: native VDO volumes and LVM VDO segment metadata, including backing
   device, logical and physical size, status/stat counters, operating mode,
-  recovery progress, configured and active write policy, index/cache sizing,
-  compression, deduplication, version/release data, and block accounting when
-  probes expose them
+  recovery progress, configured and active write policy, LVM VDO compression
+  and index state, used/saving counters, index/cache sizing, compression,
+  deduplication, version/release data, and block accounting when probes expose
+  them
 - `multipath`: multipath maps and their backing paths, including WWID, dm
   device, vendor/product, size, features, hardware handler, write protection,
   path count, host path, SCSI host/channel/id/LUN coordinates, major/minor,

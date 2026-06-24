@@ -98,8 +98,9 @@ The current probe layer normalizes:
   names, UUIDs, major/minor numbers, open counts, segment/event counts, and
   backing dependency edges
 - LVM `pvs`, `vgs`, and `lvs` JSON reports for PV/VG/LV topology, snapshots,
-  thin pools, cache-like logical volumes, and VDO-like logical volumes where
-  attributes expose them
+  thin pools, cache-like logical volumes, VDO-like logical volumes, and LVM VDO
+  operating mode, compression/index state, used size, and saving percentage
+  where attributes expose them
 - LVM `lvs --segments` JSON reports for LV segment type, segment size/start,
   physical extent ranges, and dependencies on backing PV devices or internal LVs
 - VDO `vdo status` output for VDO device path, backing storage device,

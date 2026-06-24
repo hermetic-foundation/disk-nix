@@ -1672,7 +1672,9 @@ fn print_vdo(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
             property_value(node, "vdo.physical-size")
                 .or_else(|| property_value(node, "lvm.vdo-physical-size"))
                 .unwrap_or("-"),
-            property_value(node, "vdo.operating-mode").unwrap_or("-"),
+            property_value(node, "vdo.operating-mode")
+                .or_else(|| property_value(node, "lvm.vdo-operating-mode"))
+                .unwrap_or("-"),
             property_value(node, "vdo.write-policy")
                 .or_else(|| property_value(node, "lvm.vdo-write-policy"))
                 .unwrap_or("-"),
@@ -2669,6 +2671,11 @@ fn usage_details(node: &Node) -> String {
         ("lvm.vdo-compression", "vdo-compression"),
         ("lvm.vdo-deduplication", "vdo-deduplication"),
         ("lvm.vdo-write-policy", "vdo-write-policy"),
+        ("lvm.vdo-operating-mode", "vdo-mode"),
+        ("lvm.vdo-compression-state", "vdo-compression-state"),
+        ("lvm.vdo-index-state", "vdo-index-state"),
+        ("lvm.vdo-used-size", "vdo-used"),
+        ("lvm.vdo-saving-percent", "vdo-saving"),
         ("lvm.origin", "origin"),
         ("lvm.pool", "pool"),
         ("lvm.extent-size", "extent"),
@@ -5352,8 +5359,13 @@ mod tests {
                 "vg0/archive:0",
             )
             .with_property("lvm.segment-type", "vdo")
+            .with_property("lvm.vdo-operating-mode", "normal")
             .with_property("lvm.vdo-compression", "enabled")
+            .with_property("lvm.vdo-compression-state", "online")
             .with_property("lvm.vdo-deduplication", "disabled")
+            .with_property("lvm.vdo-index-state", "online")
+            .with_property("lvm.vdo-used-size", "8.00g")
+            .with_property("lvm.vdo-saving-percent", "42.00")
             .with_property("lvm.vdo-write-policy", "auto"),
         );
 
@@ -5378,6 +5390,11 @@ mod tests {
         assert!(output.contains("vdo-version=47 vdo-release=133524"));
         assert!(output.contains("data-blocks=65536 overhead-blocks=4096 logical-blocks=262144"));
         assert!(output.contains("vg0/archive:0"));
+        assert!(output.contains("vdo-mode=normal"));
+        assert!(output.contains("vdo-compression-state=online"));
+        assert!(output.contains("vdo-index-state=online"));
+        assert!(output.contains("vdo-used=8.00g"));
+        assert!(output.contains("vdo-saving=42.00"));
         assert!(output.contains("vdo-write-policy=auto"));
     }
 
