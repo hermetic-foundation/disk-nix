@@ -169,11 +169,14 @@ Examples:
   and is offline-required. Legacy `operation = "create"` with preserved data
   remains accepted for the same preserved open flow. LUKS `operation = "close"`
   tears down the mapper without removing the header. LUKS format operations or
-  `preserveData = false` are destructive. Current-topology
-  comparison suppresses `operation = "open"` only when `cryptsetup.active`
-  proves the mapper is already active and suppresses `operation = "close"` only
-  when it proves the mapper is inactive. LUKS growth and mapper close are
-  offline-required because backing capacity, mapper state, and dependent
+  `preserveData = false` are destructive. Current-topology comparison matches
+  LUKS format actions by their backing `device` first and reports existing
+  LUKS header metadata or non-LUKS matched nodes without suppressing the
+  destructive format action. It suppresses `operation = "open"` only when
+  `cryptsetup.active` proves the mapper is already active and suppresses
+  `operation = "close"` only when it proves the mapper is inactive. LUKS growth
+  and mapper close are offline-required because backing capacity, mapper state,
+  and dependent
   consumers must be coordinated. LUKS header label, subsystem, and UUID
   property updates are offline-required identity metadata changes rendered
   through `cryptsetup config` or `cryptsetup luksUUID`. Mapper close keeps the

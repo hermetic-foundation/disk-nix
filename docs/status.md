@@ -54,6 +54,9 @@ behavior across real storage stacks.
   diagnostics are present;
   matching filesystem format types are reported without suppressing destructive
   format actions so policy and confirmation gates still apply;
+  LUKS format targets are matched by backing device and report existing header
+  metadata or non-LUKS node kinds without suppressing destructive format
+  actions;
   inactive LVM activation targets, still-active LVM deactivation targets,
   physical-volume create targets without matching PV metadata or with duplicate
   or missing PV metadata, existing exported, partial, or missing-PV

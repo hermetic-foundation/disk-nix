@@ -801,8 +801,12 @@ LUKS `operation = "open"` command plans render `cryptsetup open` for preserved
 existing containers. With current-topology probing, active mappers are
 suppressed from the actionable plan and inactive matched mappers remain
 warnings. Legacy preserved `operation = "create"` still maps to the same open
-flow. `operation = "close"` plans render offline-policy-gated `cryptsetup close` steps and keep the backing LUKS container intact for later reopen. LUKS
-header label and subsystem property updates render
+flow. LUKS `operation = "format"` and `preserveData = false` compare the
+declared backing `device` against current topology and report existing LUKS
+header metadata or other matched node kinds, but destructive format commands
+remain reviewable. `operation = "close"` plans render offline-policy-gated
+`cryptsetup close` steps and keep the backing LUKS container intact for later
+reopen. LUKS header label and subsystem property updates render
 `cryptsetup config <device> --label` or `--subsystem`, while UUID updates render
 `cryptsetup luksUUID <device> --uuid <uuid>`. Logical LUKS declaration keys can
 declare the concrete mapper name with `target`, `mapperName`, `mapper`, or
