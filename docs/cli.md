@@ -572,17 +572,18 @@ compared with `cryptsetup.active`, NFS export actions are compared with
 `nfs.export-client` and `nfs.export-option-*` properties, VDO start actions are
 compared with `vdo.operating-mode`, MD assemble actions are compared with
 `md.state`, `md.degraded-devices`, and `md.failed-devices`, ZFS pool import
-actions are compared with `zfs.state` and `zfs.health`, and iSCSI login actions
-are compared with current session state across all matching target/session
-nodes when metadata is available. Safe already-satisfied grow, shrink, iSCSI
-login, LVM activation, LUKS open, mount, remount, NFS export, VDO start, MD
-assemble, ZFS pool import, and property actions that have no warning diagnostics
-are suppressed from the actionable plan and counted as
+actions are compared with `zfs.state` and `zfs.health`, LVM volume-group import
+actions are compared with `lvm.vg-exported`, and iSCSI login actions are
+compared with current session state across all matching target/session nodes
+when metadata is available. Safe already-satisfied grow, shrink, iSCSI login,
+LVM activation, LVM volume-group import, LUKS open, mount, remount, NFS export,
+VDO start, MD assemble, ZFS pool import, and property actions that have no
+warning diagnostics are suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
-inactive LUKS mappers, non-normal VDO modes, degraded or failed MD arrays,
-degraded ZFS pools, mountpoints using a different source, export client/option
-differences, or known iSCSI targets without a logged-in session stay actionable
-with a warning diagnostic.
+still-exported LVM volume groups, inactive LUKS mappers, non-normal VDO modes,
+degraded or failed MD arrays, degraded ZFS pools, mountpoints using a different
+source, export client/option differences, or known iSCSI targets without a
+logged-in session stay actionable with a warning diagnostic.
 
 ## Apply Evaluation
 
@@ -906,8 +907,10 @@ commands for grow or add-device operations with an explicit physical volume,
 reviewed `vgextend`, `pvmove <old-pv> <new-pv>`, and `vgreduce` replacement
 workflows, and reviewed `pvmove` then `vgreduce` commands for explicit
 physical-volume removal. Volume group import/export declarations render
-reviewed `vgimport <vg>` and `vgexport <vg>` commands. LVM logical volume,
-thin-pool, snapshot, and volume-group activation declarations render reviewed
+reviewed `vgimport <vg>` and `vgexport <vg>` commands. Current-topology probing
+suppresses a volume-group import when the VG is already visible and not marked
+`lvm.vg-exported`; still-exported VGs stay actionable with a warning. LVM
+logical volume, thin-pool, snapshot, and volume-group activation declarations render reviewed
 `lvchange --activate y|n <vg/lv>` or `vgchange --activate y|n <vg>` commands.
 With current-topology probing, already-active logical-volume, thin-pool, and
 snapshot activation actions are suppressed from the actionable plan.
