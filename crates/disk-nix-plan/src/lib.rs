@@ -260,6 +260,8 @@ pub enum TopologyDiagnosticKind {
     MountSourceConflict,
     MountOptionsAlreadySatisfied,
     MountOptionsDiffer,
+    UnmountAlreadySatisfied,
+    UnmountRequired,
     NfsExportAlreadySatisfied,
     NfsExportDiffers,
     PropertyAlreadySatisfied,
@@ -761,6 +763,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
+                        | TopologyDiagnosticKind::UnmountAlreadySatisfied
                         | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                         | TopologyDiagnosticKind::PropertyAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStartAlreadySatisfied
@@ -1331,6 +1334,7 @@ fn already_satisfied_action_ids(
                 | Operation::Logout
                 | Operation::Open
                 | Operation::Mount
+                | Operation::Unmount
                 | Operation::Remount
                 | Operation::Export
                 | Operation::Start
@@ -1359,6 +1363,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
+                    | TopologyDiagnosticKind::UnmountAlreadySatisfied
                     | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                     | TopologyDiagnosticKind::PropertyAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStartAlreadySatisfied
@@ -1384,6 +1389,9 @@ fn topology_diagnostics_for_action(
 
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
+        if let Some(diagnostic) = unmount_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         return vec![TopologyDiagnostic {
             action_id: action.id.clone(),
             level: TopologyDiagnosticLevel::Warning,
@@ -1417,6 +1425,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(md_assemble_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
+    diagnostics.extend(unmount_diagnostic(action, node, &query));
     diagnostics.extend(nfs_export_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics.extend(vdo_start_diagnostic(action, node, &query));
@@ -1870,6 +1879,40 @@ fn mount_options_diagnostic(
     })
 }
 
+fn unmount_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Unmount || !is_mount_collection(action) {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::UnmountAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("mountpoint {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn unmount_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Unmount || !is_mount_collection(action) {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::UnmountRequired,
+        query: query.to_string(),
+        message: format!("mountpoint {query} is currently mounted"),
+        current: Some(current_node_summary(node)),
+    })
+}
+
 fn nfs_export_diagnostic(
     action: &PlannedAction,
     node: &Node,
@@ -2143,6 +2186,13 @@ fn is_lvm_activation_collection(action: &PlannedAction) -> bool {
     matches!(
         action.context.collection.as_deref(),
         Some("volumes" | "thinPools" | "lvmSnapshots")
+    )
+}
+
+fn is_mount_collection(action: &PlannedAction) -> bool {
+    matches!(
+        action.context.collection.as_deref(),
+        Some("filesystems" | "nfs.mounts")
     )
 }
 
@@ -12985,6 +13035,101 @@ mod tests {
             diagnostic.action_id == "filesystems:backup:mount"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::MountSourceConflict
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_unmount_when_mountpoint_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "archive": {
+                  "operation": "unmount",
+                  "mountpoint": "/archive"
+                }
+              },
+              "nfs": {
+                "mounts": {
+                  "/srv/old": {
+                    "operation": "unmount",
+                    "source": "nas.example.com:/srv/old"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "filesystems:archive:unmount")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "nfs.mounts:/srv/old:unmount")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:archive:unmount"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::UnmountAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "nfs.mounts:/srv/old:unmount"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::UnmountAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_unmount_when_mountpoint_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "archive": {
+                  "operation": "unmount",
+                  "mountpoint": "/archive"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("mount:/archive", NodeKind::Mountpoint, "/archive")
+                .with_property("mount.source", "/dev/disk/by-label/archive"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "filesystems:archive:unmount")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:archive:unmount"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::UnmountRequired
         }));
     }
 

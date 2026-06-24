@@ -455,7 +455,8 @@ state versus `desiredSize`, filesystem type conflicts, and already-satisfied
 mount, remount, NFS export, iSCSI login, or property updates where the current
 graph has enough data. Remount reconciliation treats declared options as a
 required subset of the current mount options, allowing kernel-added defaults to
-remain.
+remain. Filesystem and NFS unmount reconciliation treats an absent mountpoint as
+already satisfied and keeps currently mounted targets actionable with a warning.
 LVM activation/deactivation reconciliation uses `lvm.active` topology metadata
 to suppress already-active `volumes`, `thinPools`, and `lvmSnapshots`
 activation actions and already-inactive deactivation actions, and to warn when
@@ -475,8 +476,9 @@ actions are suppressed only when a logged-in session is present; logout actions
 are suppressed only when the target is known and no logged-in session is
 present.
 Already-satisfied grow, shrink, iSCSI login/logout, LVM
-activation/deactivation, LUKS open, mount, remount, NFS export, VDO start, and
-set-property actions with no warning diagnostics are suppressed from the actionable plan and counted in
+activation/deactivation, LUKS open, mount, unmount, remount, NFS export, VDO
+start, and set-property actions with no warning diagnostics are suppressed from
+the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy
