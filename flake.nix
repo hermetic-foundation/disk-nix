@@ -1681,8 +1681,20 @@
               ''
                 bootWarnings=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleBootModeTest.config.warnings)}
                 installWarnings=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleInstallModeTest.config.warnings)}
-                printf '%s\n' "$bootWarnings" | grep -- 'apply.mode = \\"boot\\" is reserved'
+                ! printf '%s\n' "$bootWarnings" | grep -- 'apply.mode = \\"boot\\" is reserved'
                 ! printf '%s\n' "$installWarnings" | grep -- 'apply.mode = \\"install\\" is reserved'
+                bootSpec=${nixosModuleBootModeTest.config.environment.etc."disk-nix/spec.json".source}
+                jq -e '.apply.mode == "boot"' "$bootSpec"
+                bootScript='${nixosModuleBootModeTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'
+                grep -- 'apply' "$bootScript"
+                bootWantedBy=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleBootModeTest.config.systemd.services.disk-nix-plan.wantedBy)}
+                printf '%s\n' "$bootWantedBy" | jq -e 'index("multi-user.target") != null'
+                bootWants=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleBootModeTest.config.systemd.services.disk-nix-plan.wants)}
+                printf '%s\n' "$bootWants" | jq -e 'index("systemd-udev-settle.service") != null'
+                bootAfter=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleBootModeTest.config.systemd.services.disk-nix-plan.after)}
+                printf '%s\n' "$bootAfter" | jq -e 'index("local-fs.target") != null and index("systemd-udev-settle.service") != null'
+                bootBefore=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleBootModeTest.config.systemd.services.disk-nix-plan.before)}
+                printf '%s\n' "$bootBefore" | jq -e 'index("multi-user.target") != null'
                 installSpec=${nixosModuleInstallModeTest.config.environment.etc."disk-nix/spec.json".source}
                 jq -e '.apply.mode == "install"' "$installSpec"
                 installScript='${nixosModuleInstallModeTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'

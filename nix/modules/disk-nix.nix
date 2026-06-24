@@ -17,7 +17,9 @@ let
   );
   applyCommand = if cfg.apply.failOnBlocked then "apply" else "validate";
   applyPolicy = builtins.removeAttrs cfg.apply [ "execute" ];
-  applyRunsAsService = cfg.apply.mode == "activation" || cfg.apply.mode == "install";
+  applyRunsAsService =
+    cfg.apply.mode == "activation" || cfg.apply.mode == "install" || cfg.apply.mode == "boot";
+  applyRunsAtBoot = cfg.apply.mode == "boot";
   defaultToolPackages = with pkgs; [
     bcachefs-tools
     bcache-tools
@@ -1915,10 +1917,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    warnings =
-      lib.optional (cfg.apply.mode == "boot")
-        "services.disk-nix.apply.mode = \"boot\" is reserved; disk-nix currently wires imperative apply for mode = \"activation\" or \"install\".";
-
     environment.systemPackages = [ cfg.package ] ++ cfg.toolPackages;
 
     environment.etc."disk-nix/spec.json".source = json.generate "disk-nix-spec.json" {
@@ -2081,6 +2079,12 @@ in
     systemd.services.disk-nix-plan = {
       description = "Validate disk-nix storage apply policy";
       wantedBy = lib.mkIf applyRunsAsService [ "multi-user.target" ];
+      wants = lib.mkIf applyRunsAtBoot [ "systemd-udev-settle.service" ];
+      after = lib.mkIf applyRunsAtBoot [
+        "local-fs.target"
+        "systemd-udev-settle.service"
+      ];
+      before = lib.mkIf applyRunsAtBoot [ "multi-user.target" ];
       path = cfg.toolPackages;
       serviceConfig = {
         Type = "oneshot";
