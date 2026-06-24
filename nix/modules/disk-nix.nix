@@ -1887,6 +1887,12 @@ in
       description = "Typed loop-device lifecycle declarations emitted into the disk-nix planner spec. Refresh, grow, and detach command plans require a /dev/loop* target through the declaration key, target, or path.";
     };
 
+    backingFiles = lib.mkOption {
+      type = lifecycleAttrs;
+      default = { };
+      description = "Typed file-backed storage origin lifecycle declarations emitted into the disk-nix planner spec. Grow command plans require a path-shaped declaration key, target, or path plus desiredSize, targetSize, or size.";
+    };
+
     mdRaids = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
@@ -2107,6 +2113,7 @@ in
         lvmSnapshots = (cfg.spec.lvmSnapshots or { }) // normalizeLifecycleSpec cfg.lvmSnapshots;
         lvmCaches = (cfg.spec.lvmCaches or { }) // normalizeLifecycleSpec cfg.lvmCaches;
         loopDevices = (cfg.spec.loopDevices or { }) // normalizeLifecycleSpec cfg.loopDevices;
+        backingFiles = (cfg.spec.backingFiles or { }) // normalizeLifecycleSpec cfg.backingFiles;
         mdRaids = (cfg.spec.mdRaids or { }) // normalizeLifecycleSpec cfg.mdRaids;
         multipathMaps = (cfg.spec.multipathMaps or { }) // normalizeLifecycleSpec cfg.multipathMaps;
         pools = (cfg.spec.pools or { }) // normalizeLifecycleSpec cfg.pools;

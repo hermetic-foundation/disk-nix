@@ -482,7 +482,8 @@ disk-nix capabilities --json
 The matrix includes local block layers, complex filesystems, cache layers, NFS
 exports and client mounts, iSCSI sessions, LUNs, safe property updates,
 ZFS/Btrfs/LVM snapshots, and topology updates for ZFS pools, LVM volume
-groups, MD RAID, multipath, Btrfs, NVMe namespaces, and cache devices.
+groups, MD RAID, multipath, Btrfs, NVMe namespaces, backing files, and cache
+devices.
 
 The JSON records include:
 
@@ -610,6 +611,11 @@ Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
 detach operations. Logical loop declarations can supply that target with
 `target` or `path`; `device` is reserved for the backing file or block device
 used by create plans.
+Backing-file command plans use `backingFiles` declarations for file-backed
+storage origins. `operation = "rescan"` renders read-only `stat`, `du`, and
+graph inspection commands. `operation = "grow"` renders `truncate --size`
+only when a concrete file path and desired size are declared; logical names
+can supply the file path with `target` or `path`.
 Btrfs filesystem device-removal plans use Btrfs allocation inspection and
 domain-specific `btrfs device remove` rendering, but the mutating command is
 blocked by default until `allowPotentialDataLoss=true` is set.

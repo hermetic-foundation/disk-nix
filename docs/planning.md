@@ -65,6 +65,11 @@ Examples:
   formatting or replacement. Apply plans render reviewed `mkfs` commands for
   common filesystem types only when a concrete backing `device` or `disk` is
   declared; mountpoint-only declarations remain non-ready.
+- `backingFiles` declarations model file-backed storage origins. Rescan plans
+  are read-only and inspect size, sparse allocation, and modeled consumers;
+  grow plans require a concrete file path plus desired size before rendering
+  `truncate --size`, leaving loop, swap, and filesystem refresh as explicit
+  follow-up actions.
 - LUKS keyslot and token add/change operations are offline-required header
   updates. Keyslot or token removal is potential-data-loss because deleting the
   last usable unlock path can make encrypted data inaccessible.

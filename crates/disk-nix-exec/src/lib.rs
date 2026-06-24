@@ -1162,6 +1162,41 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "dependent mappings or filesystems still resolve the loop device".to_string(),
             ],
         ),
+        Operation::Grow if collection == Some("backingFiles") => {
+            let target = backing_file_target_path(action);
+            (
+                vec![
+                    backing_file_stat_command(target, "verify backing file size after growth"),
+                    backing_file_inspect_json_command(
+                        target,
+                        "verify modeled backing-file consumers after growth",
+                    ),
+                ],
+                vec![
+                    "backing file reports the requested capacity".to_string(),
+                    "dependent loop, swap, mapping, or filesystem consumers are refreshed separately"
+                        .to_string(),
+                ],
+            )
+        }
+        Operation::Rescan if collection == Some("backingFiles") => {
+            let target = backing_file_target_path(action);
+            (
+                vec![
+                    backing_file_stat_command(target, "verify backing file metadata after rescan"),
+                    backing_file_usage_command(target),
+                    backing_file_inspect_json_command(
+                        target,
+                        "verify modeled backing-file consumers after rescan",
+                    ),
+                ],
+                vec![
+                    "backing file size, allocation, and sparse usage are reviewed".to_string(),
+                    "dependent loop, swap, mapping, or filesystem consumers still resolve the file"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Create | Operation::Grow if collection == Some("partitions") => (
             vec![
                 command(
@@ -3320,6 +3355,39 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "loop rescan does not refresh size; use grow after backing size changes"
                         .to_string(),
                     "review dependent filesystems and mappings before detach".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Grow if collection == Some("backingFiles") => {
+            let target = backing_file_target_path(action);
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    backing_file_stat_command(target, "inspect backing file before growth"),
+                    backing_file_grow_command(target, desired_size),
+                ],
+                vec![
+                    "verify host filesystem free space and sparse allocation policy before growth"
+                        .to_string(),
+                    "refresh loop devices, swap signatures, and dependent filesystems after the file grows"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rescan if collection == Some("backingFiles") => {
+            let target = backing_file_target_path(action);
+            (
+                vec![
+                    backing_file_stat_command(target, "refresh backing file size and metadata"),
+                    backing_file_usage_command(target),
+                    backing_file_inspect_command(target),
+                ],
+                vec![
+                    "backing file rescan is read-only and does not resize or detach consumers"
+                        .to_string(),
+                    "use grow only when file-backed storage capacity must change".to_string(),
                 ],
                 true,
             )
@@ -11490,6 +11558,123 @@ fn loop_device_detach_command(target: Option<&str>) -> ExecutionCommand {
     }
 }
 
+fn backing_file_target_path(action: &PlannedAction) -> Option<&str> {
+    action
+        .context
+        .target
+        .as_deref()
+        .filter(|target| target.starts_with('/'))
+        .or_else(|| {
+            action
+                .context
+                .name
+                .as_deref()
+                .filter(|name| name.starts_with('/'))
+        })
+}
+
+fn backing_file_stat_command(target: Option<&str>, description: &'static str) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["stat", "--printf=%n %s %b %B\\n", target],
+            false,
+            description,
+        ),
+        None => command_with_readiness(
+            ["stat", "--printf=%n %s %b %B\\n", "<backing-file>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing file path"],
+            description,
+        ),
+    }
+}
+
+fn backing_file_usage_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["du", "--bytes", "--apparent-size", target],
+            false,
+            "inspect backing file apparent size",
+        ),
+        None => command_with_readiness(
+            ["du", "--bytes", "--apparent-size", "<backing-file>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing file path"],
+            "inspect backing file apparent size",
+        ),
+    }
+}
+
+fn backing_file_inspect_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["disk-nix", "inspect", target],
+            false,
+            "inspect modeled backing-file relationships",
+        ),
+        None => command_with_readiness(
+            ["disk-nix", "inspect", "<backing-file>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing file path"],
+            "inspect modeled backing-file relationships",
+        ),
+    }
+}
+
+fn backing_file_inspect_json_command(
+    target: Option<&str>,
+    description: &'static str,
+) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["disk-nix", "inspect", target, "--json"],
+            false,
+            description,
+        ),
+        None => command_with_readiness(
+            ["disk-nix", "inspect", "<backing-file>", "--json"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing file path"],
+            description,
+        ),
+    }
+}
+
+fn backing_file_grow_command(target: Option<&str>, desired_size: Option<&str>) -> ExecutionCommand {
+    match (target, desired_size) {
+        (Some(target), Some(size)) => command_vec(
+            vec!["truncate", "--size", size, target],
+            true,
+            "extend the backing file to the requested size",
+        ),
+        (Some(target), None) => command_with_readiness(
+            ["truncate", "--size", "<size>", target],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["desired backing file size"],
+            "extend the backing file after selecting a desired size",
+        ),
+        (None, Some(size)) => command_with_readiness(
+            ["truncate", "--size", size, "<backing-file>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing file path"],
+            "extend the selected backing file to the requested size",
+        ),
+        (None, None) => command_with_readiness(
+            ["truncate", "--size", "<size>", "<backing-file>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing file path", "desired backing file size"],
+            "extend the backing file after selecting a path and desired size",
+        ),
+    }
+}
+
 fn zvol_create_command(
     target: &str,
     desired_size: Option<&str>,
@@ -19409,6 +19594,107 @@ mod tests {
                     command.argv == ["losetup", "--detach", "<loop-device>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["loop device path"]
+                })
+        }));
+    }
+
+    #[test]
+    fn backing_file_lifecycle_reports_file_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "backingFiles": {
+                  "/var/lib/images/root.img": {
+                    "operation": "grow",
+                    "desiredSize": "16GiB"
+                  },
+                  "inventory-image": {
+                    "operation": "rescan",
+                    "path": "/var/lib/images/inventory.img"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "backingfiles:/var/lib/images/root.img:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "stat",
+                            "--printf=%n %s %b %B\\n",
+                            "/var/lib/images/root.img",
+                        ]
+                        && !command.mutates
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["truncate", "--size", "16GiB", "/var/lib/images/root.img"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "backingfiles:inventory-image:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "du",
+                            "--bytes",
+                            "--apparent-size",
+                            "/var/lib/images/inventory.img",
+                        ]
+                        && !command.mutates
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/var/lib/images/inventory.img"]
+                        && !command.mutates
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "backingfiles:/var/lib/images/root.img:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/var/lib/images/root.img", "--json"]
+                })
+        }));
+    }
+
+    #[test]
+    fn backing_file_growth_requires_path_and_size_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "backingFiles": {
+                  "root-image": {
+                    "operation": "grow"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "backingfiles:root-image:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["truncate", "--size", "<size>", "<backing-file>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == ["backing file path", "desired backing file size"]
                 })
         }));
     }

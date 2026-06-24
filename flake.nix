@@ -601,6 +601,14 @@
                 device = "/var/lib/images/root.img";
               };
               loopDevices."/dev/loop10".operation = "rescan";
+              backingFiles."/var/lib/images/root.img" = {
+                operation = "grow";
+                desiredSize = "16GiB";
+              };
+              backingFiles.inventoryImage = {
+                operation = "rescan";
+                path = "/var/lib/images/inventory.img";
+              };
               mdRaids.root = {
                 target = "/dev/md/root";
                 raidLevel = "1";
@@ -951,6 +959,7 @@
               and .properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap"
               and .properties.lvmCaches["$ref"] == "#/$defs/lifecycleMap"
               and .properties.loopDevices["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.backingFiles["$ref"] == "#/$defs/lifecycleMap"
               and .properties.mdRaids["$ref"] == "#/$defs/lifecycleMap"
               and .properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap"
               and .properties.pools["$ref"] == "#/$defs/lifecycleMap"
@@ -994,6 +1003,7 @@
               and (."$defs".specBody.properties.lvmSnapshots["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.lvmCaches["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.loopDevices["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.backingFiles["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.mdRaids["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.multipathMaps["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.pools["$ref"] == "#/$defs/lifecycleMap")
@@ -1527,6 +1537,10 @@
                     and .spec.loopDevices.rootImage.path == "/dev/loop7"
                     and .spec.loopDevices.rootImage.device == "/var/lib/images/root.img"
                     and .spec.loopDevices."/dev/loop10".operation == "rescan"
+                    and .spec.backingFiles."/var/lib/images/root.img".operation == "grow"
+                    and .spec.backingFiles."/var/lib/images/root.img".desiredSize == "16GiB"
+                    and .spec.backingFiles.inventoryImage.operation == "rescan"
+                    and .spec.backingFiles.inventoryImage.path == "/var/lib/images/inventory.img"
                     and .spec.mdRaids.root.target == "/dev/md/root"
                     and .spec.mdRaids.root.raidLevel == "1"
                     and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-a") != null)

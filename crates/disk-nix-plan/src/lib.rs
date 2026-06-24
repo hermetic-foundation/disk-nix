@@ -501,6 +501,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "lvmSnapshots",
         "lvmCaches",
         "loopDevices",
+        "backingFiles",
         "mdRaids",
         "multipathMaps",
         "pools",
@@ -3704,6 +3705,37 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Grow if collection == "backingFiles" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "backing file growth extends a file-backed storage origin before consumer refresh"
+                    .to_string(),
+                alternatives: vec![
+                    "grow file-backed storage before refreshing loop devices or swap signatures"
+                        .to_string(),
+                    "prefer adding a replacement image and migrating consumers when shrinking is needed"
+                        .to_string(),
+                    "verify sparse-file allocation and host filesystem free space before growth"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Rescan if collection == "backingFiles" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "backing file rescan refreshes file size, allocation, and graph relationships"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow only when the file-backed storage origin must be extended"
+                        .to_string(),
+                    "refresh loop devices after backing file size changes".to_string(),
+                    "inspect dependent swap, loop, filesystem, or mapping consumers before detach"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create | Operation::Export if collection == "exports" => (
             RiskClass::Online,
             false,
@@ -4493,7 +4525,7 @@ fn classify_operation(
             RiskClass::Unsupported,
             false,
             Some(Advice {
-                summary: "rescan operations are currently supported for filesystems, disks, partitions, snapshots, LUNs, iSCSI sessions, NFS exports/mounts, NVMe namespaces, multipath maps, loop devices, ZFS datasets/zvols, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
+                summary: "rescan operations are currently supported for filesystems, disks, partitions, snapshots, LUNs, iSCSI sessions, NFS exports/mounts, NVMe namespaces, multipath maps, loop devices, backing files, ZFS datasets/zvols, Btrfs subvolumes/qgroups, LVM PV/VG/LV/snapshot/cache/thin-pool metadata, MD RAID metadata, VDO status, and bcache status"
                     .to_string(),
                 alternatives: vec![
                     "use filesystems.<name>.operation = \"rescan\" to refresh local mount and graph inventory"
@@ -4515,6 +4547,8 @@ fn classify_operation(
                     "use multipathMaps.<name>.operation = \"rescan\" to reload reviewed path maps"
                         .to_string(),
                     "use loopDevices.<path>.operation = \"rescan\" to refresh loop mapping inventory"
+                        .to_string(),
+                    "use backingFiles.<path>.operation = \"rescan\" to refresh file-backed storage origin inventory"
                         .to_string(),
                     "use physicalVolumes or volumeGroups operation = \"rescan\" to refresh LVM metadata"
                         .to_string(),
@@ -5680,6 +5714,33 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "unmount filesystems before detach".to_string(),
                     "preserve the backing file for remapping".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BackingFile,
+            operation: Operation::Grow,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "backing file growth extends file-backed storage before consumer refresh"
+                    .to_string(),
+                alternatives: vec![
+                    "verify host filesystem free space before extending sparse or preallocated images"
+                        .to_string(),
+                    "refresh loop, swap, filesystem, or mapping consumers after growth".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BackingFile,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "backing file rescan refreshes size, allocation, and consumer relationships"
+                    .to_string(),
+                alternatives: vec![
+                    "use grow when the file-backed origin capacity must change".to_string(),
+                    "inspect consumers before detaching loop devices or disabling swap".to_string(),
                 ],
             }),
         },
@@ -7905,6 +7966,8 @@ mod tests {
             (NodeKind::LvmThinPool, Operation::Rescan, RiskClass::Online),
             (NodeKind::LvmSnapshot, Operation::Rescan, RiskClass::Online),
             (NodeKind::LoopDevice, Operation::Rescan, RiskClass::Online),
+            (NodeKind::BackingFile, Operation::Rescan, RiskClass::Online),
+            (NodeKind::BackingFile, Operation::Grow, RiskClass::Online),
             (NodeKind::CacheDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::VdoVolume, Operation::Rescan, RiskClass::Online),
             (NodeKind::ZfsSnapshot, Operation::Rescan, RiskClass::Online),
@@ -10553,6 +10616,58 @@ mod tests {
             .expect("loop destroy action exists");
         assert_eq!(destroy.risk, RiskClass::OfflineRequired);
         assert!(!destroy.destructive);
+    }
+
+    #[test]
+    fn plan_classifies_backing_file_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "backingFiles": {
+                "/var/lib/images/root.img": {
+                  "operation": "grow",
+                  "desiredSize": "16GiB"
+                },
+                "inventory-image": {
+                  "operation": "rescan",
+                  "path": "/var/lib/images/inventory.img"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 0);
+        assert_eq!(plan.summary.destructive_count, 0);
+        let grow = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "backingfiles:/var/lib/images/root.img:grow")
+            .expect("backing file grow action exists");
+        assert_eq!(grow.operation, Operation::Grow);
+        assert_eq!(grow.risk, RiskClass::Online);
+        assert_eq!(
+            grow.context.target.as_deref(),
+            Some("/var/lib/images/root.img")
+        );
+        assert_eq!(grow.context.desired_size.as_deref(), Some("16GiB"));
+        assert!(
+            grow.advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("backing file growth"))
+        );
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "backingfiles:inventory-image:rescan")
+            .expect("backing file rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert_eq!(
+            rescan.context.target.as_deref(),
+            Some("/var/lib/images/inventory.img")
+        );
+        assert!(!rescan.destructive);
     }
 
     #[test]
