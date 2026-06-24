@@ -287,6 +287,7 @@ pub enum TopologyDiagnosticKind {
     LvmCacheDetachRequired,
     LuksCloseAlreadySatisfied,
     LuksCloseRequired,
+    LuksFormatTargetPresent,
     LuksOpenAlreadySatisfied,
     LuksOpenRequired,
     LuksKeyslotRemoveAlreadySatisfied,
@@ -1693,6 +1694,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(nfs_export_diagnostic(action, node, &query));
     diagnostics.extend(nfs_unexport_diagnostic(action, node, &query));
     diagnostics.extend(swap_active_diagnostic(action, node, &query));
+    diagnostics.extend(luks_format_present_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics.extend(vdo_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(vdo_grow_diagnostic(action, node, &query));
@@ -1746,6 +1748,17 @@ fn topology_query(action: &PlannedAction) -> Option<String> {
         action.context.collection.as_deref(),
         Some("luksKeyslots" | "luksTokens")
     ) {
+        return action
+            .context
+            .device
+            .clone()
+            .or_else(|| action.context.target.clone())
+            .or_else(|| action.context.name.clone());
+    }
+
+    if action.context.collection.as_deref() == Some("luks.devices")
+        && action.operation == Operation::Format
+    {
         return action
             .context
             .device
@@ -2529,6 +2542,64 @@ fn luks_open_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn luks_format_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Format
+        || action.context.collection.as_deref() != Some("luks.devices")
+    {
+        return None;
+    }
+
+    let message = if node.kind == NodeKind::LuksContainer {
+        let details = luks_format_present_details(node);
+        if details.is_empty() {
+            format!(
+                "LUKS format target {query} already contains a LUKS container; format remains destructive and requires review"
+            )
+        } else {
+            format!(
+                "LUKS format target {query} already contains a LUKS container with {}; format remains destructive and requires review",
+                details.join(", ")
+            )
+        }
+    } else {
+        format!(
+            "LUKS format target {query} matched current {} node {}; format remains destructive and requires review",
+            node.kind, node.name
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::LuksFormatTargetPresent,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn luks_format_present_details(node: &Node) -> Vec<String> {
+    [
+        ("cryptsetup.luks-version", "version"),
+        ("cryptsetup.uuid", "UUID"),
+        ("cryptsetup.luks-uuid", "UUID"),
+        ("cryptsetup.label", "label"),
+        ("cryptsetup.luks-label", "label"),
+        ("cryptsetup.luks-keyslot-count", "keyslots"),
+        ("cryptsetup.luks-token-count", "tokens"),
+        ("cryptsetup.active", "active"),
+    ]
+    .into_iter()
+    .filter_map(|(property, label)| {
+        property_value_from_node(node, property).map(|value| format!("{label} {value}"))
+    })
+    .collect()
 }
 
 fn luks_close_diagnostic(
@@ -17289,6 +17360,85 @@ mod tests {
             diagnostic.action_id == "exports:/srv/old:unexport"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::NfsUnexportRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reports_luks_format_target_metadata() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "operation": "format",
+                    "device": "/dev/disk/by-partuuid/root",
+                    "target": "cryptroot"
+                  },
+                  "cryptdata": {
+                    "operation": "format",
+                    "device": "/dev/disk/by-id/data",
+                    "target": "cryptdata"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-partuuid/root",
+                NodeKind::LuksContainer,
+                "/dev/disk/by-partuuid/root",
+            )
+            .with_path("/dev/disk/by-partuuid/root")
+            .with_property("cryptsetup.luks-version", "2")
+            .with_property("cryptsetup.uuid", "11111111-2222-3333-4444-555555555555")
+            .with_property("cryptsetup.luks-keyslot-count", "2")
+            .with_property("cryptsetup.luks-token-count", "1")
+            .with_property("cryptsetup.active", "false"),
+        );
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/data",
+                NodeKind::Partition,
+                "/dev/disk/by-id/data",
+            )
+            .with_path("/dev/disk/by-id/data"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.matched_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.summary.action_count, 2);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "luks.devices:cryptroot:format" && action.operation == Operation::Format
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "luks.devices:cryptdata:format" && action.operation == Operation::Format
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptroot:format"
+                && diagnostic.query == "/dev/disk/by-partuuid/root"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LuksFormatTargetPresent
+                && diagnostic.message.contains("version 2")
+                && diagnostic.message.contains("keyslots 2")
+                && diagnostic.message.contains("tokens 1")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptdata:format"
+                && diagnostic.query == "/dev/disk/by-id/data"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LuksFormatTargetPresent
+                && diagnostic.message.contains("partition")
         }));
     }
 
