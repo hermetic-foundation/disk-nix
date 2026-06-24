@@ -570,7 +570,9 @@ suppressed when the mountpoint is absent, remount actions treat declared
 options as a required subset of current mount options, LVM
 activation and deactivation actions are compared with `lvm.active` where that
 metadata is available, LUKS open and close actions are compared with
-`cryptsetup.active`, loop-device create/destroy actions are compared with
+`cryptsetup.active`, and LUKS keyslot/token removal actions are compared with
+`cryptsetup.luks-keyslots` and `cryptsetup.luks-tokens` header metadata from
+the matched container. Loop-device create/destroy actions are compared with
 `loop.back-file` mapping metadata, device-mapper destroy actions are compared
 with current mapper presence and `dm.open-count` metadata, multipath destroy
 actions are compared with current map presence plus WWID or dm map metadata,
@@ -595,19 +597,20 @@ with current session state across all matching target/session nodes when
 metadata is available. Safe already-satisfied grow, shrink, device-mapper destroy,
 multipath destroy, bcache detach, iSCSI login/logout, LVM
 activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
-loop create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
-unmount, remount, NFS export/unexport, VDO destroy, VDO start, VDO stop, MD
-assemble, Btrfs subvolume destroy, ZFS dataset/zvol destroy, ZFS pool import,
-and property actions that have no warning diagnostics are suppressed from the actionable plan and counted as
+LUKS keyslot/token removal, loop create/destroy, LUN attach/detach, NVMe
+namespace attach/detach, mount, unmount, remount, NFS export/unexport, VDO
+destroy, VDO start, VDO stop, MD assemble, Btrfs subvolume destroy, ZFS
+dataset/zvol destroy, ZFS pool import, and property actions that have no warning diagnostics are suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
-inactive LUKS open targets, active LUKS close targets, loop devices mapped to
-different backing files, still-mapped loop detach targets, present
-device-mapper removal targets, present multipath flush targets, absent LUN
-attach paths, visible LUN detach paths, present bcache detach targets, absent
-NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
-destroy targets, non-normal VDO start modes, running VDO stop targets,
-present Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, degraded or failed MD arrays,
+inactive LUKS open targets, active LUKS close targets, still-present LUKS
+keyslots/tokens selected for removal, loop devices mapped to different backing
+files, still-mapped loop detach targets, present device-mapper removal targets,
+present multipath flush targets, absent LUN attach paths, visible LUN detach
+paths, present bcache detach targets, absent NVMe namespace attach paths,
+visible NVMe namespace detach paths, present VDO destroy targets, non-normal
+VDO start modes, running VDO stop targets, present Btrfs subvolume destroy
+targets, present ZFS dataset/zvol destroy targets, degraded or failed MD arrays,
 degraded ZFS pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
 targets without a logged-in session and logout targets that still have a
@@ -939,7 +942,11 @@ declarations still map to the same access-material command plans.
 add/change plans require a LUKS backing device and new key file; token imports
 require a token JSON file; removal also requires a keyslot number or token id.
 Logical keyslot and token names can declare concrete slot/token ids with
-`keySlot`, `key-slot`, `slot`, `tokenId`, `token-id`, or `token`.
+`keySlot`, `key-slot`, `slot`, `tokenId`, `token-id`, or `token`. With
+current-topology probing, removal is suppressed only when the matched LUKS
+container no longer lists the keyslot or token id; present entries stay
+actionable with warnings that include keyslot priority, cipher, PBKDF, token
+type, or token keyslot binding metadata when available.
 LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
 read-only `lvs` rescans, and policy-gated `lvremove` commands for `thinPools`
 lifecycle declarations, with separate unresolved-input markers for target form

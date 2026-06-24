@@ -270,6 +270,10 @@ pub enum TopologyDiagnosticKind {
     LuksCloseRequired,
     LuksOpenAlreadySatisfied,
     LuksOpenRequired,
+    LuksKeyslotRemoveAlreadySatisfied,
+    LuksKeyslotRemoveRequired,
+    LuksTokenRemoveAlreadySatisfied,
+    LuksTokenRemoveRequired,
     MultipathDestroyAlreadySatisfied,
     MultipathDestroyRequired,
     LoopCreateAlreadySatisfied,
@@ -797,6 +801,8 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
                         | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
                         | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
+                        | TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
+                        | TopologyDiagnosticKind::LuksTokenRemoveAlreadySatisfied
                         | TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
@@ -1388,6 +1394,8 @@ fn already_satisfied_action_ids(
                 | Operation::Stop
                 | Operation::Destroy
                 | Operation::RemoveDevice
+                | Operation::RemoveKey
+                | Operation::RemoveToken
                 | Operation::SetProperty
         ) {
             continue;
@@ -1417,6 +1425,8 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
                     | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
                     | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
+                    | TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
+                    | TopologyDiagnosticKind::LuksTokenRemoveAlreadySatisfied
                     | TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
@@ -1520,6 +1530,8 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
     diagnostics.extend(luks_close_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
+    diagnostics.extend(luks_keyslot_remove_diagnostic(action, node, &query));
+    diagnostics.extend(luks_token_remove_diagnostic(action, node, &query));
     diagnostics.extend(bcache_present_diagnostic(action, node, &query));
     diagnostics.extend(btrfs_subvolume_destroy_present_diagnostic(
         action, node, &query,
@@ -1565,6 +1577,18 @@ fn topology_query(action: &PlannedAction) -> Option<String> {
             .clone()
             .or_else(|| action.context.target.clone())
             .or_else(|| action.context.device.clone());
+    }
+
+    if matches!(
+        action.context.collection.as_deref(),
+        Some("luksKeyslots" | "luksTokens")
+    ) {
+        return action
+            .context
+            .device
+            .clone()
+            .or_else(|| action.context.target.clone())
+            .or_else(|| action.context.name.clone());
     }
 
     action
@@ -1922,6 +1946,148 @@ fn luks_close_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn luks_keyslot_remove_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("luksKeyslots")
+        || !matches!(action.operation, Operation::Destroy | Operation::RemoveKey)
+        || node.kind != NodeKind::LuksContainer
+    {
+        return None;
+    }
+    let key_slot = action.context.key_slot.as_deref()?;
+    let present = property_list_contains(
+        property_value_from_node(node, "cryptsetup.luks-keyslots"),
+        key_slot,
+    );
+
+    let (level, kind, message) = if present {
+        let details = luks_keyslot_remove_details(node, key_slot);
+        let message = if details.is_empty() {
+            format!("LUKS keyslot {key_slot} is still present on {query}")
+        } else {
+            format!(
+                "LUKS keyslot {key_slot} is still present on {query} with {}",
+                details.join(", ")
+            )
+        };
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LuksKeyslotRemoveRequired,
+            message,
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied,
+            format!("LUKS keyslot {key_slot} is already absent from {query}"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn luks_token_remove_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("luksTokens")
+        || !matches!(
+            action.operation,
+            Operation::Destroy | Operation::RemoveToken
+        )
+        || node.kind != NodeKind::LuksContainer
+    {
+        return None;
+    }
+    let token_id = action.context.token_id.as_deref()?;
+    let present = property_list_contains(
+        property_value_from_node(node, "cryptsetup.luks-tokens"),
+        token_id,
+    );
+
+    let (level, kind, message) = if present {
+        let details = luks_token_remove_details(node, token_id);
+        let message = if details.is_empty() {
+            format!("LUKS token {token_id} is still present on {query}")
+        } else {
+            format!(
+                "LUKS token {token_id} is still present on {query} with {}",
+                details.join(", ")
+            )
+        };
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LuksTokenRemoveRequired,
+            message,
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LuksTokenRemoveAlreadySatisfied,
+            format!("LUKS token {token_id} is already absent from {query}"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn luks_keyslot_remove_details(node: &Node, key_slot: &str) -> Vec<String> {
+    let prefix = format!("cryptsetup.luks-keyslot-{key_slot}-");
+    [
+        ("type", "type"),
+        ("priority", "priority"),
+        ("cipher", "cipher"),
+        ("cipher-key", "cipher key"),
+        ("pbkdf", "PBKDF"),
+        ("time-cost", "time cost"),
+        ("memory", "memory"),
+        ("threads", "threads"),
+    ]
+    .into_iter()
+    .filter_map(|(suffix, label)| {
+        property_value_from_node(node, &format!("{prefix}{suffix}"))
+            .map(|value| format!("{label} {value}"))
+    })
+    .collect()
+}
+
+fn luks_token_remove_details(node: &Node, token_id: &str) -> Vec<String> {
+    let prefix = format!("cryptsetup.luks-token-{token_id}-");
+    [("type", "type"), ("keyslot", "keyslot")]
+        .into_iter()
+        .filter_map(|(suffix, label)| {
+            property_value_from_node(node, &format!("{prefix}{suffix}"))
+                .map(|value| format!("{label} {value}"))
+        })
+        .collect()
+}
+
+fn property_list_contains(values: Option<&str>, needle: &str) -> bool {
+    values
+        .into_iter()
+        .flat_map(|values| values.split(','))
+        .map(str::trim)
+        .any(|value| value == needle)
 }
 
 fn bcache_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
@@ -14506,6 +14672,230 @@ mod tests {
             diagnostic.action_id == "luks.devices:cryptroot:close"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::LuksCloseRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_luks_keyslot_remove_when_slot_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luksKeyslots": {
+                "cryptroot:2": {
+                  "operation": "remove-key",
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "keySlot": "2"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/root-luks",
+                NodeKind::LuksContainer,
+                "root-luks",
+            )
+            .with_path("/dev/disk/by-id/root-luks")
+            .with_property("cryptsetup.luks-keyslots", "0,1")
+            .with_property("cryptsetup.luks-keyslot-count", "2"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lukskeyslots:cryptroot:2:remove-key"
+                && diagnostic.kind == TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
+                && diagnostic.query == "/dev/disk/by-id/root-luks"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_luks_keyslot_remove_when_slot_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luksKeyslots": {
+                "cryptroot:2": {
+                  "operation": "remove-key",
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "keySlot": "2"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/root-luks",
+                NodeKind::LuksContainer,
+                "root-luks",
+            )
+            .with_path("/dev/disk/by-id/root-luks")
+            .with_property("cryptsetup.luks-keyslots", "0,2")
+            .with_property("cryptsetup.luks-keyslot-2-type", "luks2")
+            .with_property("cryptsetup.luks-keyslot-2-priority", "normal")
+            .with_property("cryptsetup.luks-keyslot-2-pbkdf", "argon2id")
+            .with_property("cryptsetup.luks-keyslot-2-time-cost", "4"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lukskeyslots:cryptroot:2:remove-key"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LuksKeyslotRemoveRequired
+                && diagnostic.message.contains("type luks2")
+                && diagnostic.message.contains("priority normal")
+                && diagnostic.message.contains("PBKDF argon2id")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_luks_token_remove_when_token_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luksTokens": {
+                "cryptroot:3": {
+                  "operation": "remove-token",
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "tokenId": "3"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/root-luks",
+                NodeKind::LuksContainer,
+                "root-luks",
+            )
+            .with_path("/dev/disk/by-id/root-luks")
+            .with_property("cryptsetup.luks-tokens", "0,1")
+            .with_property("cryptsetup.luks-token-count", "2"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lukstokens:cryptroot:3:remove-token"
+                && diagnostic.kind == TopologyDiagnosticKind::LuksTokenRemoveAlreadySatisfied
+                && diagnostic.query == "/dev/disk/by-id/root-luks"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_luks_token_remove_when_token_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luksTokens": {
+                "cryptroot:3": {
+                  "operation": "remove-token",
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "tokenId": "3"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/root-luks",
+                NodeKind::LuksContainer,
+                "root-luks",
+            )
+            .with_path("/dev/disk/by-id/root-luks")
+            .with_property("cryptsetup.luks-tokens", "1,3")
+            .with_property("cryptsetup.luks-token-3-type", "systemd-tpm2")
+            .with_property("cryptsetup.luks-token-3-keyslot", "2"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lukstokens:cryptroot:3:remove-token"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LuksTokenRemoveRequired
+                && diagnostic.message.contains("type systemd-tpm2")
+                && diagnostic.message.contains("keyslot 2")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_luks_keyslot_remove_missing_without_container() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luksKeyslots": {
+                "cryptroot:2": {
+                  "operation": "remove-key",
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "keySlot": "2"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lukskeyslots:cryptroot:2:remove-key"
+                && diagnostic.kind == TopologyDiagnosticKind::Missing
+                && diagnostic.query == "/dev/disk/by-id/root-luks"
         }));
     }
 

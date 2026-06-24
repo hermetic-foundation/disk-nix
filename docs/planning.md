@@ -509,6 +509,12 @@ a matched LVM object is in the opposite state.
 LUKS open/close reconciliation uses `cryptsetup.active` topology metadata to
 suppress mapper opens that are already active and mapper closes that are
 already inactive; opposite-state mappers remain actionable with a warning.
+LUKS keyslot and token removal reconciliation matches the declared backing
+device to the LUKS container and uses `cryptsetup.luks-keyslots` or
+`cryptsetup.luks-tokens` from `luksDump` metadata to suppress only removals
+whose slot or token id is already absent. Present slots and tokens remain
+actionable with warnings that include keyslot priority, cipher, PBKDF, token
+type, or token keyslot binding metadata when available.
 Loop-device create/destroy reconciliation uses `loop.back-file` topology
 metadata to suppress create actions only when the loop device already maps the
 declared backing file and suppress destroy/detach actions only when the loop
@@ -666,7 +672,10 @@ device and replacement key file; token imports require a token JSON file.
 Removal requires both the device and keyslot number or token id, and remains
 blocked by the potential-data-loss policy. Logical keyslot and token names can
 declare concrete slot/token ids with `keySlot`, `key-slot`, `slot`, `tokenId`,
-`token-id`, or `token`.
+`token-id`, or `token`. With current-topology probing, already-absent
+keyslots/tokens are suppressed only after the backing container is matched and
+the specific id is missing from probed LUKS header metadata; still-present
+entries stay actionable.
 LVM cache command plans use `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` for `lvmCaches` lifecycle
 declarations. Executable attach plans require an origin `vg/lv` target and a
