@@ -946,6 +946,45 @@
             };
           }
         ];
+        nixosModuleIscsiSessionCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              iscsi.sessions."iqn.2026-06.example:storage.root" = {
+                portal = "192.0.2.10:3260";
+                operation = "rescan";
+              };
+              iscsi.sessions.rootAlias = {
+                target = "iqn.2026-06.example:storage.root";
+                portal = "192.0.2.11:3260";
+                operation = "login";
+              };
+            };
+          }
+        ];
+        nixosModuleLunPathCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              luns.rootPrimary = {
+                operation = "rescan";
+                device = "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0";
+              };
+              luns.rootMultipath = {
+                operation = "attach";
+                paths = [
+                  "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+                ];
+              };
+            };
+          }
+        ];
       in
       {
         formatter = formatProgram;
@@ -1959,10 +1998,14 @@
             backingFileCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBackingFileCollisionTest.config.system.build.toplevel).success))}
             dmMapCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDmMapCollisionTest.config.system.build.toplevel).success))}
             snapshotCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleSnapshotCollisionTest.config.system.build.toplevel).success))}
+            iscsiSessionCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleIscsiSessionCollisionTest.config.system.build.toplevel).success))}
+            lunPathCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLunPathCollisionTest.config.system.build.toplevel).success))}
             test "$collisionSuccess" = false
             test "$backingFileCollisionSuccess" = false
             test "$dmMapCollisionSuccess" = false
             test "$snapshotCollisionSuccess" = false
+            test "$iscsiSessionCollisionSuccess" = false
+            test "$lunPathCollisionSuccess" = false
             touch "$out"
           '';
         };

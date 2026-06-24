@@ -1037,6 +1037,7 @@ let
   activeZvols = activeLifecycleAttrs cfg.zvols;
   activeSnapshots = lib.filterAttrs (_: snapshot: !snapshot.destroy) cfg.snapshots;
   activeCaches = activeLifecycleAttrs cfg.caches;
+  activeLuns = activeLifecycleAttrs cfg.luns;
   activeIscsiSessions = activeLifecycleAttrs cfg.iscsi.sessions;
   activeIscsiSessionPortals = lib.filter (portal: portal != null) (
     map (session: session.portal) (lib.attrValues activeIscsiSessions)
@@ -1085,6 +1086,30 @@ let
   activeSnapshotIdentities = lib.filter (identity: identity != null) (
     lib.mapAttrsToList snapshotIdentity activeSnapshots
   );
+  iscsiSessionIdentity =
+    name: session:
+    if session.target != null then
+      session.target
+    else if lib.hasPrefix "iqn." name || lib.hasPrefix "eui." name || lib.hasPrefix "naa." name then
+      name
+    else
+      null;
+  activeIscsiSessionIdentities = lib.filter (identity: identity != null) (
+    lib.mapAttrsToList iscsiSessionIdentity activeIscsiSessions
+  );
+  pathLike = path: lib.hasPrefix "/dev/" path;
+  lunHostPaths =
+    name: lun:
+    lib.filter pathLike (
+      lib.optional (pathLike name) name
+      ++ lib.optional (lun.target != null && pathLike lun.target) lun.target
+      ++ lib.optional (lun.path != null && pathLike lun.path) lun.path
+      ++ lib.optional (lun.device != null && pathLike lun.device) lun.device
+      ++ lun.devices
+      ++ lun.paths
+      ++ lun.devicePaths
+    );
+  activeLunHostPaths = lib.concatLists (lib.mapAttrsToList lunHostPaths activeLuns);
   iscsiDiscoverPortal =
     if cfg.iscsi.discoverPortal != null then
       cfg.iscsi.discoverPortal
@@ -2360,6 +2385,15 @@ in
       {
         assertion = lib.length activeSnapshotIdentities == lib.length (lib.unique activeSnapshotIdentities);
         message = "services.disk-nix.snapshots entries must resolve to unique active concrete snapshot identities.";
+      }
+      {
+        assertion =
+          lib.length activeIscsiSessionIdentities == lib.length (lib.unique activeIscsiSessionIdentities);
+        message = "services.disk-nix.iscsi.sessions entries must resolve to unique active concrete target identities.";
+      }
+      {
+        assertion = lib.length activeLunHostPaths == lib.length (lib.unique activeLunHostPaths);
+        message = "services.disk-nix.luns entries must resolve to unique active concrete host paths.";
       }
       {
         assertion = lib.length activeNfsExportSelectors == lib.length (lib.unique activeNfsExportSelectors);
