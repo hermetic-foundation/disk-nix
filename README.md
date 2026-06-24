@@ -80,6 +80,7 @@ disk-nix multipath
 disk-nix nvme
 disk-nix raid
 disk-nix loop
+disk-nix backing-files
 disk-nix swap
 disk-nix zram
 disk-nix iscsi
@@ -117,7 +118,7 @@ as `devices --json`, `partitions --json`, `complex-filesystems --json`,
 `btrfs --json`, `bcachefs --json`, `zfs --json`, `pools --json`, `snapshots --json`, `mappings --json`,
 `dm --json`, `encryption --json`, `cache --json`, `lvm --json`, `vdo --json`,
 `multipath --json`, `nvme --json`, `raid --json`, `loop --json`,
-`swap --json`, `zram --json`, `iscsi --json`, `luns --json`, `nfs --json`,
+`backing-files --json`, `swap --json`, `zram --json`, `iscsi --json`, `luns --json`, `nfs --json`,
 `network-storage --json`, `ids --json`, and `usage --json` return focused
 one-hop subgraphs containing
 matching nodes, directly related neighbors, and the relationship edges between

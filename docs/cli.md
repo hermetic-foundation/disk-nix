@@ -164,6 +164,7 @@ disk-nix multipath
 disk-nix nvme
 disk-nix raid
 disk-nix loop
+disk-nix backing-files
 disk-nix swap
 disk-nix zram
 disk-nix iscsi
@@ -198,6 +199,7 @@ disk-nix multipath --json
 disk-nix nvme --json
 disk-nix raid --json
 disk-nix loop --json
+disk-nix backing-files --json
 disk-nix swap --json
 disk-nix zram --json
 disk-nix iscsi --json
@@ -377,6 +379,9 @@ Use these commands for:
   backing inode, backing major/minor, offset, size limit, logical sector size,
   major/minor, autoclear, partition-scan, read-only, and direct-I/O settings
   when `losetup --json` exposes them
+- `backing-files`: file-backed storage origins, including path, size,
+  utilization, loop backing metadata, consumer counts, and one-hop loop or
+  swapfile relationships
 - `swap`: active swap devices and files plus zram swap devices, including type,
   priority, active state, size, used bytes, free bytes, utilization, zram
   compression algorithm, compressed/data/total memory accounting, memory limit

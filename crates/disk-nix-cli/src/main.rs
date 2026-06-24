@@ -184,6 +184,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered file-backed storage origins.
+    BackingFiles {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered active swap devices and files.
     Swap {
         /// Emit JSON for matching graph nodes.
@@ -567,6 +573,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_loop_node)?;
             } else {
                 print_loop(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::BackingFiles { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_backing_file_node)?;
+            } else {
+                print_backing_files(output, &graph)?;
             }
             Ok(())
         }
@@ -2017,6 +2032,27 @@ fn print_loop(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     Ok(())
 }
 
+fn print_backing_files(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<44} {:>12} {:>9} {:>7} DETAILS",
+        "KIND", "PATH", "SIZE", "CONSUMERS", "USE%"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_backing_file_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<44} {:>12} {:>9} {:>7} {}",
+            node.kind,
+            node.path.as_deref().unwrap_or(&node.name),
+            human_bytes(node.size_bytes),
+            consumer_count(graph, node),
+            usage_percent(node),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_swap(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2853,6 +2889,10 @@ fn is_loop_node(node: &Node) -> bool {
             .properties
             .iter()
             .any(|property| property.key.starts_with("loop."))
+}
+
+fn is_backing_file_node(node: &Node) -> bool {
+    node.kind == NodeKind::BackingFile
 }
 
 fn is_swap_node(node: &Node) -> bool {
@@ -4205,6 +4245,22 @@ fn backing_count(graph: &StorageGraph, node: &Node) -> usize {
         .count()
 }
 
+fn consumer_count(graph: &StorageGraph, node: &Node) -> usize {
+    graph
+        .edges
+        .iter()
+        .filter(|edge| {
+            edge.from == node.id
+                && matches!(
+                    edge.relationship,
+                    disk_nix_model::Relationship::Backs
+                        | disk_nix_model::Relationship::DependsOn
+                        | disk_nix_model::Relationship::MemberOf
+                )
+        })
+        .count()
+}
+
 fn member_count(graph: &StorageGraph, node: &Node) -> usize {
     graph
         .edges
@@ -4371,14 +4427,15 @@ mod tests {
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 
     use super::{
-        confirmation_file_accepts, is_bcachefs_node, is_btrfs_node, is_cache_node,
-        is_complex_filesystem_node, is_device_node, is_dm_node, is_encryption_node,
-        is_filesystem_node, is_iscsi_node, is_loop_node, is_lun_node, is_lvm_node, is_mapping_node,
-        is_multipath_node, is_network_storage_node, is_nfs_node, is_nvme_node, is_partition_node,
-        is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node, is_volume_node,
-        is_zfs_node, is_zram_node, iscsi_lun_count, member_count, mount_details, nfs_mount_count,
-        print_bcachefs, print_btrfs, print_cache, print_complex_filesystems, print_devices,
-        print_dm, print_encryption, print_filesystems, print_filtered_json, print_inspect,
+        confirmation_file_accepts, consumer_count, is_backing_file_node, is_bcachefs_node,
+        is_btrfs_node, is_cache_node, is_complex_filesystem_node, is_device_node, is_dm_node,
+        is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node, is_lun_node,
+        is_lvm_node, is_mapping_node, is_multipath_node, is_network_storage_node, is_nfs_node,
+        is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node,
+        is_swap_node, is_vdo_node, is_volume_node, is_zfs_node, is_zram_node, iscsi_lun_count,
+        member_count, mount_details, nfs_mount_count, print_backing_files, print_bcachefs,
+        print_btrfs, print_cache, print_complex_filesystems, print_devices, print_dm,
+        print_encryption, print_filesystems, print_filtered_json, print_inspect,
         print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm, print_mappings,
         print_mounts, print_multipath, print_network_storage, print_nfs, print_nvme,
         print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
@@ -4610,6 +4667,11 @@ mod tests {
             "/dev/loop0"
         )));
         assert!(is_loop_node(&Node::new(
+            "file:/var/lib/images/root.img",
+            NodeKind::BackingFile,
+            "/var/lib/images/root.img"
+        )));
+        assert!(is_backing_file_node(&Node::new(
             "file:/var/lib/images/root.img",
             NodeKind::BackingFile,
             "/var/lib/images/root.img"
@@ -7686,6 +7748,64 @@ mod tests {
         assert!(output.contains("1.0 GiB"));
         assert!(output.contains("/dev/disk/by-id/nvme-loop-backing"));
         assert!(output.contains("sizelimit=1073741824"));
+    }
+
+    #[test]
+    fn backing_files_table_includes_consumers_and_json_neighbors() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "file:/var/lib/images/root.img",
+                NodeKind::BackingFile,
+                "/var/lib/images/root.img",
+            )
+            .with_path("/var/lib/images/root.img")
+            .with_size_bytes(4_294_967_296)
+            .with_usage(Usage {
+                used_bytes: Some(1_073_741_824),
+                free_bytes: Some(3_221_225_472),
+                allocated_bytes: Some(4_294_967_296),
+            })
+            .with_property("loop.backing", "true"),
+        );
+        graph.add_node(
+            Node::new("block:/dev/loop0", NodeKind::LoopDevice, "/dev/loop0")
+                .with_path("/dev/loop0")
+                .with_property("loop.back-file", "/var/lib/images/root.img")
+                .with_property("loop.offset", "0")
+                .with_property("loop.read-only", "false"),
+        );
+        graph.add_edge(Edge::new(
+            "file:/var/lib/images/root.img",
+            "block:/dev/loop0",
+            Relationship::Backs,
+        ));
+
+        let file = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "file:/var/lib/images/root.img")
+            .expect("backing file exists");
+        assert_eq!(consumer_count(&graph, file), 1);
+
+        let mut output = Vec::new();
+        print_backing_files(&mut output, &graph).expect("backing files table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("CONSUMERS"));
+        assert!(output.contains("/var/lib/images/root.img"));
+        assert!(output.contains("4.0 GiB"));
+        assert!(output.contains("25.0%"));
+        assert!(output.contains("loop-backing=true"));
+        assert!(!output.contains("/dev/loop0"));
+
+        let mut json = Vec::new();
+        print_filtered_json(&mut json, &graph, is_backing_file_node)
+            .expect("backing files json renders");
+        let json = String::from_utf8(json).expect("json is utf8");
+        assert!(json.contains("file:/var/lib/images/root.img"));
+        assert!(json.contains("block:/dev/loop0"));
+        assert!(json.contains("\"relationship\":\"backs\""));
     }
 
     #[test]
