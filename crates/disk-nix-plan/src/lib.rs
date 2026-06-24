@@ -238,6 +238,8 @@ pub enum TopologyDiagnosticKind {
     SizeAlreadySatisfied,
     SizeConflict,
     FilesystemTypeConflict,
+    BtrfsSubvolumeCreateAlreadySatisfied,
+    BtrfsSubvolumeCreateRequired,
     BtrfsSubvolumeDestroyAlreadySatisfied,
     BtrfsSubvolumeDestroyRequired,
     BtrfsQgroupDestroyAlreadySatisfied,
@@ -807,6 +809,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                 matches!(
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
@@ -1439,6 +1442,7 @@ fn already_satisfied_action_ids(
             already_satisfied |= matches!(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
+                    | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
@@ -1594,6 +1598,9 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(snapshot_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(snapshot_rename_present_diagnostic(action, node, &query));
     diagnostics.extend(snapshot_rollback_present_diagnostic(action, node, &query));
+    diagnostics.extend(btrfs_subvolume_create_present_diagnostic(
+        action, node, &query,
+    ));
     diagnostics.extend(btrfs_subvolume_destroy_present_diagnostic(
         action, node, &query,
     ));
@@ -2784,6 +2791,51 @@ fn btrfs_subvolume_destroy_absent_diagnostic(
         query: query.to_string(),
         message: format!("Btrfs subvolume {query} is already absent from current topology"),
         current: None,
+    })
+}
+
+fn btrfs_subvolume_create_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("btrfsSubvolumes")
+        || action.operation != Operation::Create
+    {
+        return None;
+    }
+
+    if node.kind != NodeKind::BtrfsSubvolume {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::BtrfsSubvolumeCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a Btrfs subvolume; btrfs subvolume create remains actionable",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let details = btrfs_subvolume_destroy_details(node);
+    let message = if details.is_empty() {
+        format!("Btrfs subvolume {query} already exists")
+    } else {
+        format!(
+            "Btrfs subvolume {query} already exists with {}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
     })
 }
 
@@ -17617,6 +17669,72 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "btrfssubvolumes:/mnt/persist/@old:destroy"
                 && diagnostic.kind == TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_btrfs_subvolume_create() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsSubvolumes": {
+                "/mnt/persist/@home": {
+                  "operation": "create"
+                },
+                "/mnt/persist/plain-dir": {
+                  "operation": "create"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "btrfs-subvolume:fs-uuid:@home",
+                NodeKind::BtrfsSubvolume,
+                "@home",
+            )
+            .with_path("/mnt/persist/@home")
+            .with_property("btrfs.id", "257")
+            .with_property("btrfs.generation", "100")
+            .with_property("btrfs.parent-id", "5")
+            .with_property("btrfs.top-level", "5"),
+        );
+        graph.add_node(
+            Node::new(
+                "mount:/mnt/persist/plain-dir",
+                NodeKind::Mountpoint,
+                "/mnt/persist/plain-dir",
+            )
+            .with_path("/mnt/persist/plain-dir"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.summary.action_count, 1);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id == "btrfssubvolumes:/mnt/persist/plain-dir:create")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfssubvolumes:/mnt/persist/@home:create"
+                && diagnostic.kind == TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
+                && diagnostic.message.contains("subvolume id 257")
+                && diagnostic.message.contains("generation 100")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfssubvolumes:/mnt/persist/plain-dir:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::BtrfsSubvolumeCreateRequired
+                && diagnostic.message.contains("not a Btrfs subvolume")
         }));
     }
 

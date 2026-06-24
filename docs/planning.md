@@ -178,10 +178,12 @@ Examples:
   `operation = "rescan"` is online and read-only; it refreshes subvolume
   metadata, read-only state, and modeled graph relationships for the declared
   `path`. Current-topology comparison suppresses concrete absolute-path
-  subvolume destroy actions only when the subvolume is already absent; present
-  subvolumes remain actionable with warnings that include available subvolume
-  id, generation, parent, top-level, and UUID metadata. Logical subvolume names
-  remain actionable unless the graph matches them.
+  subvolume create actions when the matched node is already a Btrfs subvolume,
+  and suppresses destroy actions only when the subvolume is already absent.
+  Existing non-subvolume path matches stay actionable for create with warnings;
+  present subvolumes remain actionable for destroy with warnings that include
+  available subvolume id, generation, parent, top-level, and UUID metadata.
+  Logical subvolume names remain actionable unless the graph matches them.
 - VDO creation and removal are destructive because they write or remove VDO
   metadata on the backing device; VDO growth is online, with `desiredSize`
   rendering logical growth and explicit `physicalSize` rendering physical

@@ -1085,9 +1085,12 @@ Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
 declarations. Subvolume `operation = "rescan"` renders read-only
 `btrfs subvolume show`, `btrfs property get -ts <path> ro`, and graph
 inspection commands for the declared path. With current-topology probing,
-concrete absolute-path subvolume destroy actions are suppressed only when the
-subvolume is already absent; present subvolumes stay actionable with warnings
-that include subvolume id, generation, parent, top-level, or UUID metadata when
+concrete absolute-path subvolume create actions are suppressed when the matched
+node is already a Btrfs subvolume, and destroy actions are suppressed only when
+the subvolume is already absent. Existing non-subvolume path matches stay
+actionable for create with warnings; present subvolumes stay actionable for
+destroy with warnings that include subvolume id, generation, parent, top-level,
+or UUID metadata when
 available. Logical subvolume names remain actionable unless a graph node
 actually matches them.
 Btrfs qgroup command plans render `btrfs qgroup create`, policy-gated
