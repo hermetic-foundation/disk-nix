@@ -1691,7 +1691,7 @@ in
     vdoVolumes = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed VDO volume lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed VDO volume lifecycle declarations emitted into the disk-nix planner spec. The target option supplies the concrete VDO volume name when the attribute name is logical.";
     };
 
     physicalVolumes = lib.mkOption {

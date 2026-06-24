@@ -343,7 +343,8 @@ online `vdo growLogical` and physical growth review steps. Create preflight is
 marked unresolved until a backing device is declared. VDO property updates
 cover `auto`, `sync`, and `async` write policy changes, compression, and
 deduplication with concrete `vdo` commands; unsupported properties and invalid
-property values are classified as unsupported before execution.
+property values are classified as unsupported before execution. Logical VDO
+volume names can declare the concrete VDO name with `target`.
 VDO rescan plans render read-only `vdo status`, `vdostats`, and graph
 inspection commands to refresh status and utilization without changing
 activation state or capacity.

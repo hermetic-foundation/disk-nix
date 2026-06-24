@@ -440,7 +440,8 @@
                 operation = "rescan";
                 device = "/dev/disk/by-id/nvme-data";
               };
-              vdoVolumes.archive = {
+              vdoVolumes.archiveLifecycle = {
+                target = "archive";
                 operation = "grow";
                 desiredSize = "4TiB";
                 properties = {
@@ -449,9 +450,18 @@
                   deduplication = "disabled";
                 };
               };
-              vdoVolumes.warmArchive.operation = "start";
-              vdoVolumes.coldArchive.operation = "stop";
-              vdoVolumes.refreshArchive.operation = "rescan";
+              vdoVolumes.warmArchive = {
+                target = "warm-archive";
+                operation = "start";
+              };
+              vdoVolumes.coldArchive = {
+                target = "cold-archive";
+                operation = "stop";
+              };
+              vdoVolumes.refreshArchive = {
+                target = "refresh-archive";
+                operation = "rescan";
+              };
               physicalVolumes.nvmePvGrow = {
                 operation = "grow";
                 path = "/dev/disk/by-id/nvme-pv-grow";
@@ -1378,13 +1388,17 @@
                     and .spec.volumes."vg0/reporting".operation == "rescan"
                     and .spec.datasets."tank/home".operation == "create"
                     and .spec.datasets."tank/inventory".operation == "rescan"
-                    and .spec.vdoVolumes.archive.operation == "grow"
-                    and .spec.vdoVolumes.archive.desiredSize == "4TiB"
-                    and .spec.vdoVolumes.archive.properties.writePolicy == "sync"
-                    and .spec.vdoVolumes.archive.properties.compression == "enabled"
-                    and .spec.vdoVolumes.archive.properties.deduplication == "disabled"
+                    and .spec.vdoVolumes.archiveLifecycle.target == "archive"
+                    and .spec.vdoVolumes.archiveLifecycle.operation == "grow"
+                    and .spec.vdoVolumes.archiveLifecycle.desiredSize == "4TiB"
+                    and .spec.vdoVolumes.archiveLifecycle.properties.writePolicy == "sync"
+                    and .spec.vdoVolumes.archiveLifecycle.properties.compression == "enabled"
+                    and .spec.vdoVolumes.archiveLifecycle.properties.deduplication == "disabled"
+                    and .spec.vdoVolumes.warmArchive.target == "warm-archive"
                     and .spec.vdoVolumes.warmArchive.operation == "start"
+                    and .spec.vdoVolumes.coldArchive.target == "cold-archive"
                     and .spec.vdoVolumes.coldArchive.operation == "stop"
+                    and .spec.vdoVolumes.refreshArchive.target == "refresh-archive"
                     and .spec.vdoVolumes.refreshArchive.operation == "rescan"
                     and .spec.physicalVolumes.nvmePvGrow.operation == "grow"
                     and .spec.physicalVolumes.nvmePvGrow.path == "/dev/disk/by-id/nvme-pv-grow"

@@ -15414,6 +15414,154 @@ mod tests {
     }
 
     #[test]
+    fn vdo_lifecycle_accepts_targets_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "vdoVolumes": {
+                  "newArchive": {
+                    "target": "archive-vdo",
+                    "operation": "create",
+                    "device": "/dev/disk/by-id/vdo-backing",
+                    "desiredSize": "2TiB"
+                  },
+                  "archiveGrow": {
+                    "target": "archive-vdo",
+                    "operation": "grow",
+                    "desiredSize": "4TiB",
+                    "properties": {
+                      "writePolicy": "sync",
+                      "compression": "disabled",
+                      "deduplication": "enabled"
+                    }
+                  },
+                  "archiveStart": {
+                    "target": "archive-vdo",
+                    "operation": "start"
+                  },
+                  "archiveStop": {
+                    "target": "archive-vdo",
+                    "operation": "stop"
+                  },
+                  "archiveRefresh": {
+                    "target": "archive-vdo",
+                    "operation": "rescan"
+                  },
+                  "archiveRemove": {
+                    "target": "archive-vdo",
+                    "operation": "destroy"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true,
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:newarchive:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "vdo",
+                            "create",
+                            "--name",
+                            "archive-vdo",
+                            "--device",
+                            "/dev/disk/by-id/vdo-backing",
+                            "--vdoLogicalSize",
+                            "2TiB",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:archivegrow:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "vdo",
+                            "growLogical",
+                            "--name",
+                            "archive-vdo",
+                            "--vdoLogicalSize",
+                            "4TiB",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdoVolumes:archiveGrow:set-property:writePolicy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "vdo",
+                            "changeWritePolicy",
+                            "--name",
+                            "archive-vdo",
+                            "--writePolicy",
+                            "sync",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdoVolumes:archiveGrow:set-property:compression"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdo", "disableCompression", "--name", "archive-vdo"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdoVolumes:archiveGrow:set-property:deduplication"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdo", "enableDeduplication", "--name", "archive-vdo"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:archivestart:start"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdo", "start", "--name", "archive-vdo"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:archivestop:stop"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdo", "stop", "--name", "archive-vdo"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:archiverefresh:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdo", "status", "--name", "archive-vdo"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdostats", "--human-readable", "archive-vdo"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "vdovolumes:archiveremove:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["vdo", "remove", "--name", "archive-vdo"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
     fn vdo_property_lifecycle_blocks_unsupported_properties_and_values() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

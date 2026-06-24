@@ -135,7 +135,8 @@ Examples:
   `vdo enableCompression`/`disableCompression`, and
   `vdo enableDeduplication`/`disableDeduplication` commands. Write policy
   updates require `auto`, `sync`, or `async`; unsupported properties and
-  invalid values are classified as unsupported before execution.
+  invalid values are classified as unsupported before execution. Logical VDO
+  volume names can declare the concrete VDO name with `target`.
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV growth is also online when the volume group has free
   extents; LV removal is destructive because it deletes the volume contents.
