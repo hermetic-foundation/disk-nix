@@ -1622,6 +1622,7 @@
                   grep -- 'ntfs3g-' service-paths
                   grep -- 'open-iscsi-' service-paths
                   grep -- 'smartmontools-' service-paths
+                  grep -- 'util-linux-' service-paths
                   grep -- 'zfs-user-' service-paths
                   swapDevices=${
                     pkgs.lib.escapeShellArg (
