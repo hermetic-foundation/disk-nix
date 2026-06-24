@@ -349,6 +349,8 @@ Typed lifecycle declarations are available for:
 - `lvmSnapshots`
 - `lvmCaches`
 - `loopDevices`
+- `backingFiles`
+- `dmMaps`
 - `mdRaids`
 - `multipathMaps`
 - `pools`
@@ -674,6 +676,18 @@ Example lifecycle planning through NixOS options:
       device = "/var/lib/images/root.img";
     };
     loopDevices."/dev/loop10".operation = "rescan";
+    backingFiles."/var/lib/images/root.img" = {
+      operation = "grow";
+      desiredSize = "16GiB";
+    };
+    backingFiles.inventoryImage = {
+      operation = "rescan";
+      path = "/var/lib/images/inventory.img";
+    };
+    dmMaps.cryptroot = {
+      operation = "rescan";
+      target = "/dev/mapper/cryptroot";
+    };
     mdRaids.root = {
       target = "/dev/md/root";
       addDevices = [ "/dev/disk/by-id/nvme-md-spare" ];
