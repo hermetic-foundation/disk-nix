@@ -240,6 +240,8 @@ pub enum TopologyDiagnosticKind {
     FilesystemTypeConflict,
     IscsiLoginAlreadySatisfied,
     IscsiLoginRequired,
+    IscsiLogoutAlreadySatisfied,
+    IscsiLogoutRequired,
     LvmActivateAlreadySatisfied,
     LvmActivateRequired,
     LvmVgExportAlreadySatisfied,
@@ -747,6 +749,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
+                        | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
                         | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
@@ -1321,6 +1324,7 @@ fn already_satisfied_action_ids(
                 | Operation::Activate
                 | Operation::Close
                 | Operation::Login
+                | Operation::Logout
                 | Operation::Open
                 | Operation::Mount
                 | Operation::Remount
@@ -1341,6 +1345,7 @@ fn already_satisfied_action_ids(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
+                    | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
                     | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
@@ -1397,6 +1402,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(size_diagnostic(action, node, &query));
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
+    diagnostics.extend(iscsi_logout_diagnostic(action, &matches, &query));
     diagnostics.extend(lvm_activate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_export_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
@@ -2017,6 +2023,48 @@ fn iscsi_login_diagnostic(
             TopologyDiagnosticLevel::Warning,
             TopologyDiagnosticKind::IscsiLoginRequired,
             format!("iSCSI target {query} is known but no logged-in session was matched"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current,
+    })
+}
+
+fn iscsi_logout_diagnostic(
+    action: &PlannedAction,
+    matches: &[&Node],
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Logout
+        || action.context.collection.as_deref() != Some("iscsiSessions")
+    {
+        return None;
+    }
+
+    let logged_in = matches
+        .iter()
+        .copied()
+        .find(|node| iscsi_node_is_logged_in(node));
+    let current = logged_in
+        .or_else(|| matches.first().copied())
+        .map(current_node_summary);
+    let (level, kind, message) = if logged_in.is_some() {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::IscsiLogoutRequired,
+            format!("iSCSI target {query} still has a logged-in session"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied,
+            format!("iSCSI target {query} has no logged-in session"),
         )
     };
 
@@ -13948,6 +13996,86 @@ mod tests {
             diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.root:login"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::IscsiLoginRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_iscsi_logout_when_session_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.old": {
+                  "operation": "logout",
+                  "portal": "192.0.2.10:3260"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "iscsi-target:iqn.2026-06.example:storage.old",
+                NodeKind::IscsiTarget,
+                "iqn.2026-06.example:storage.old",
+            )
+            .with_property("iscsi.node-configured", "true"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.old:logout"
+                && diagnostic.kind == TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_iscsi_logout_when_session_is_logged_in() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.old": {
+                  "operation": "logout",
+                  "portal": "192.0.2.10:3260"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "iscsi-session:19",
+                NodeKind::IscsiSession,
+                "iscsi-session:19",
+            )
+            .with_property("iscsi.target", "iqn.2026-06.example:storage.old")
+            .with_property("iscsi.connection-state", "LOGGED_IN"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.old:logout"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::IscsiLogoutRequired
         }));
     }
 

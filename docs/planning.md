@@ -468,10 +468,13 @@ stop actions only when the mode explicitly reports stopped, not-running, or
 inactive; opposite states stay actionable with a warning.
 NFS export reconciliation compares the declared client and options against
 `nfs.export-client` and `nfs.export-option-*` topology properties.
-iSCSI login reconciliation checks all matching target and session nodes so an
-active session is not hidden by a configured but disconnected target.
-Already-satisfied grow, shrink, iSCSI login, LVM activation, LUKS open, mount,
-remount, NFS export, VDO start, and set-property actions with no warning
+iSCSI session reconciliation checks all matching target and session nodes so an
+active session is not hidden by a configured but disconnected target. Login
+actions are suppressed only when a logged-in session is present; logout actions
+are suppressed only when the target is known and no logged-in session is
+present.
+Already-satisfied grow, shrink, iSCSI login/logout, LVM activation, LUKS open,
+mount, remount, NFS export, VDO start, and set-property actions with no warning
 diagnostics are suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 

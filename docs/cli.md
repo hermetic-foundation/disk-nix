@@ -575,19 +575,20 @@ explicitly stopped, not-running, or inactive `vdo.operating-mode` values, MD
 assemble actions are compared with `md.state`, `md.degraded-devices`, and
 `md.failed-devices`, ZFS pool import actions are compared with `zfs.state` and
 `zfs.health`, LVM volume-group import/export actions are compared with
-`lvm.vg-exported`, and iSCSI login actions are compared with current session
-state across all matching
-target/session nodes when metadata is available. Safe already-satisfied grow,
-shrink, iSCSI login, LVM activation, LVM volume-group import/export, LUKS open,
-LUKS close, mount, remount, NFS export, VDO start, VDO stop, MD assemble, ZFS
-pool import, and property actions that have no warning diagnostics are
+`lvm.vg-exported`, and iSCSI login/logout actions are compared with current
+session state across all matching target/session nodes when metadata is
+available. Safe already-satisfied grow, shrink, iSCSI login/logout, LVM
+activation, LVM volume-group import/export, LUKS open, LUKS close, mount,
+remount, NFS export, VDO start, VDO stop, MD assemble, ZFS pool import, and
+property actions that have no warning diagnostics are
 suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-exported LVM volume groups, inactive LUKS open targets, active LUKS close
 targets, non-normal VDO start modes, running VDO stop targets, degraded or
 failed MD arrays, degraded ZFS pools, mountpoints using a different source,
 export client/option differences, or known iSCSI targets without a logged-in
-session stay actionable with a warning diagnostic.
+session and logout targets that still have a logged-in session stay actionable
+with a warning diagnostic.
 
 ## Apply Evaluation
 
