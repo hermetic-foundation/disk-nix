@@ -45,6 +45,8 @@ struct MdArray {
     resync_status: Option<String>,
     check_status: Option<String>,
     intent_bitmap: Option<String>,
+    persistence: Option<String>,
+    bitmap: Option<String>,
     members: Vec<MdMember>,
 }
 
@@ -190,6 +192,8 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
         resync_status: None,
         check_status: None,
         intent_bitmap: None,
+        persistence: None,
+        bitmap: None,
         members: Vec::new(),
     };
     let mut in_member_table = false;
@@ -244,6 +248,10 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
             array.check_status = value_after_colon(trimmed);
         } else if trimmed.starts_with("Intent Bitmap :") {
             array.intent_bitmap = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Persistence :") {
+            array.persistence = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Bitmap :") {
+            array.bitmap = value_after_colon(trimmed);
         } else if trimmed.starts_with("Number")
             && trimmed.contains("Major")
             && trimmed.contains("RaidDevice")
@@ -307,6 +315,8 @@ fn add_array(graph: &mut StorageGraph, array: MdArray) {
         ("md.resync-status", array.resync_status),
         ("md.check-status", array.check_status),
         ("md.intent-bitmap", array.intent_bitmap),
+        ("md.persistence", array.persistence),
+        ("md.bitmap", array.bitmap),
     ] {
         if let Some(value) = value {
             node = node.with_property(key, value);
@@ -397,6 +407,8 @@ mod tests {
       Resync Status : delayed\n\
        Check Status : 10% complete\n\
       Intent Bitmap : Internal\n\
+       Persistence : Superblock is persistent\n\
+            Bitmap : 0/8 pages [0KB], 65536KB chunk\n\
         Update Time : Tue Jun 23 10:16:00 2026\n\
                UUID : aaaa:bbbb:cccc:dddd\n\
                Name : host:0\n\
@@ -499,6 +511,13 @@ mod tests {
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "md.intent-bitmap" && property.value == "Internal"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "md.persistence" && property.value == "Superblock is persistent"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "md.bitmap"
+                        && property.value == "0/8 pages [0KB], 65536KB chunk"
                 })
         }));
         assert_eq!(

@@ -2957,6 +2957,8 @@ fn usage_details(node: &Node) -> String {
         ("md.resync-status", "resync"),
         ("md.check-status", "check"),
         ("md.intent-bitmap", "bitmap"),
+        ("md.persistence", "persistence"),
+        ("md.bitmap", "bitmap-detail"),
         ("md.creation-time", "created"),
         ("md.update-time", "updated"),
         ("md.scan-metadata", "scan-metadata"),
@@ -5950,7 +5952,9 @@ mod tests {
                 .with_property("md.rebuild-status", "42% complete")
                 .with_property("md.resync-status", "delayed")
                 .with_property("md.check-status", "10% complete")
-                .with_property("md.intent-bitmap", "Internal"),
+                .with_property("md.intent-bitmap", "Internal")
+                .with_property("md.persistence", "Superblock is persistent")
+                .with_property("md.bitmap", "0/8 pages [0KB], 65536KB chunk"),
         );
         graph.add_node(
             Node::new("md:/dev/md/root", NodeKind::MdRaid, "/dev/md/root")
@@ -6017,6 +6021,9 @@ mod tests {
         assert!(output.contains("chunk=512K layout=near=2"));
         assert!(output.contains("consistency=bitmap rebuild=42% complete"));
         assert!(output.contains("resync=delayed check=10% complete bitmap=Internal"));
+        assert!(output.contains(
+            "persistence=Superblock is persistent bitmap-detail=0/8 pages [0KB], 65536KB chunk"
+        ));
         assert!(output.contains("/dev/md/root"));
         assert!(output.contains("scan-metadata=1.2 scan-name=host:root"));
         assert!(output.contains("scan-spares=1 scan-devices=/dev/sdc1,/dev/sdd1"));

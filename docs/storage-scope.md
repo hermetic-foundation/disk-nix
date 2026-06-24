@@ -160,7 +160,7 @@ The current probe layer normalizes:
   and `mdadm --detail <array>` for scan-level array UUID, metadata version,
   array name, spare count, member device hints, array level, state, size,
   raid/total/array/active/working/failed/spare/degraded device counts, and
-  member number, major/minor, raid-device, and state
+  persistence, bitmap detail, member number, major/minor, raid-device, and state
 - Multipath maps through `multipath -ll` for map name, WWID, dm device,
   vendor/product, map features, hardware handler, write-protect state,
   path-group policy/priority/status, parsed backing-path SCSI coordinates, and

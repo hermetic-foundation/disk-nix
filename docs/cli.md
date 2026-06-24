@@ -320,8 +320,9 @@ Use these commands for:
   metadata version, level, state, size, raid, total, array, active, working,
   failed, spare, and degraded device counts, event counters, chunk/layout
   details, consistency policy, rebuild, resync, and check progress, intent
-  bitmap, timestamps, and per-member number, major/minor, raid-device, and
-  state when `mdadm --detail --scan`, `mdadm --examine --scan`, or
+  bitmap, persistence, bitmap detail, timestamps, and per-member number,
+  major/minor, raid-device, and state when `mdadm --detail --scan`,
+  `mdadm --examine --scan`, or
   `mdadm --detail` exposes them
 - `loop`: loop devices and backing files/devices, including backing path,
   offset, size limit, logical sector size, major/minor, autoclear,
