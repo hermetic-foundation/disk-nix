@@ -6,6 +6,7 @@ use crate::ProbeError;
 
 pub fn normalize_zfs(
     zpool_list: &[u8],
+    zpool_get: &[u8],
     zfs_list: &[u8],
     zpool_status: &[u8],
 ) -> Result<StorageGraph, ProbeError> {
@@ -13,6 +14,9 @@ pub fn normalize_zfs(
 
     for pool in parse_zpools(zpool_list)? {
         add_pool(&mut graph, pool);
+    }
+    for property in parse_zpool_properties(zpool_get)? {
+        add_pool_property(&mut graph, property);
     }
     let datasets = parse_datasets(zfs_list)?;
     let dataset_kinds = dataset_kinds(&datasets);
@@ -37,6 +41,13 @@ struct ZpoolRow {
     dedupratio: Option<String>,
     fragmentation: Option<String>,
     altroot: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ZpoolProperty {
+    pool: String,
+    property: String,
+    value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -209,6 +220,34 @@ fn parse_zpool_status(bytes: &[u8]) -> Result<Vec<ZpoolStatus>, ProbeError> {
     Ok(pools)
 }
 
+fn parse_zpool_properties(bytes: &[u8]) -> Result<Vec<ZpoolProperty>, ProbeError> {
+    let text = std::str::from_utf8(bytes).map_err(|error| {
+        ProbeError::Adapter(format!("failed to read zpool get output: {error}"))
+    })?;
+    let mut properties = Vec::new();
+
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let fields: Vec<&str> = line.split('\t').collect();
+        if fields.len() < 3 {
+            return Err(ProbeError::Adapter(format!(
+                "zpool get row has {} fields, expected at least 3: {line}",
+                fields.len()
+            )));
+        }
+
+        let Some(value) = nonempty_dash(fields[2]) else {
+            continue;
+        };
+        properties.push(ZpoolProperty {
+            pool: fields[0].to_string(),
+            property: fields[1].to_string(),
+            value,
+        });
+    }
+
+    Ok(properties)
+}
+
 fn parse_vdev_line(
     pool_name: &str,
     role: &str,
@@ -325,6 +364,29 @@ fn add_pool(graph: &mut StorageGraph, pool: ZpoolRow) {
     }
 
     graph.add_node(node);
+}
+
+fn add_pool_property(graph: &mut StorageGraph, property: ZpoolProperty) {
+    let key = format!(
+        "zfs.pool-{}",
+        property
+            .property
+            .chars()
+            .map(|character| match character {
+                'A'..='Z' => character.to_ascii_lowercase(),
+                'a'..='z' | '0'..='9' => character,
+                _ => '-',
+            })
+            .collect::<String>()
+            .split('-')
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("-")
+    );
+    graph.add_node(
+        Node::new(pool_id(&property.pool), NodeKind::ZfsPool, property.pool)
+            .with_property(key, property.value),
+    );
 }
 
 fn add_status_pool(graph: &mut StorageGraph, pool: ZpoolStatus) {
@@ -543,6 +605,18 @@ mod tests {
     use super::*;
 
     const ZPOOL: &[u8] = b"tank\t1000\t400\t600\tONLINE\t40%\t1.00x\t12%\t/mnt/rescue\n";
+    const ZPOOL_GET: &[u8] = b"tank\taltroot\t/mnt/rescue\n\
+tank\tashift\t12\n\
+tank\tautotrim\ton\n\
+tank\tautoexpand\toff\n\
+tank\tautoreplace\toff\n\
+tank\tbootfs\ttank/root\n\
+tank\tcachefile\t/etc/zfs/zpool.cache\n\
+tank\tcomment\tprimary pool\n\
+tank\tdelegation\ton\n\
+tank\tfailmode\twait\n\
+tank\tlistsnapshots\toff\n\
+tank\tmultihost\toff\n";
     const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\t-\tlz4\tnone\tnone\toff\t-\t-\t131072\toff\ton\t1\tstandard\tall\tall\ton\toff\thidden\toff\tsa\n\
 tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\tzstd\t1073741824\t268435456\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
 tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\tzstd\t-\t-\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
@@ -583,7 +657,8 @@ errors: No known data errors
 
     #[test]
     fn normalizes_zfs_pool_datasets_snapshots_and_zvols() {
-        let graph = normalize_zfs(ZPOOL, ZFS, ZPOOL_STATUS).expect("fixture should parse");
+        let graph =
+            normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, ZPOOL_STATUS).expect("fixture should parse");
 
         assert!(
             graph
@@ -610,6 +685,29 @@ errors: No known data errors
         assert!(pool.properties.iter().any(|property| {
             property.key == "zfs.pool-altroot" && property.value == "/mnt/rescue"
         }));
+        assert!(
+            pool.properties
+                .iter()
+                .any(|property| property.key == "zfs.pool-ashift" && property.value == "12")
+        );
+        assert!(
+            pool.properties
+                .iter()
+                .any(|property| property.key == "zfs.pool-autotrim" && property.value == "on")
+        );
+        assert!(
+            pool.properties.iter().any(|property| {
+                property.key == "zfs.pool-autoexpand" && property.value == "off"
+            })
+        );
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.pool-cachefile" && property.value == "/etc/zfs/zpool.cache"
+        }));
+        assert!(
+            pool.properties.iter().any(|property| {
+                property.key == "zfs.pool-failmode" && property.value == "wait"
+            })
+        );
         assert!(
             graph
                 .nodes
@@ -727,7 +825,8 @@ errors: No known data errors
 
     #[test]
     fn normalizes_zpool_status_advisory_fields() {
-        let graph = normalize_zfs(ZPOOL, ZFS, DEGRADED_ZPOOL_STATUS).expect("fixture should parse");
+        let graph = normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, DEGRADED_ZPOOL_STATUS)
+            .expect("fixture should parse");
         let pool = graph
             .nodes
             .iter()

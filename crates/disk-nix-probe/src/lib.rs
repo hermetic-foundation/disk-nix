@@ -2012,11 +2012,21 @@ fn collect_zfs(result: &mut ProbeResult) {
             "name,type,used,available,referenced,mountpoint,origin,userrefs,compression,quota,reservation,encryption,keystatus,volsize,recordsize,dedup,checksum,copies,sync,primarycache,secondarycache,atime,relatime,snapdir,acltype,xattr",
         ],
     );
+    let zpool_get = run_report(
+        "zpool",
+        &[
+            "get",
+            "-H",
+            "-o",
+            "name,property,value",
+            "altroot,ashift,autotrim,autoexpand,autoreplace,bootfs,cachefile,comment,delegation,failmode,listsnapshots,multihost",
+        ],
+    );
     let zpool_status = run_report("zpool", &["status", "-P"]);
 
-    match (zpool_list, zfs_list, zpool_status) {
-        (Ok(zpool_list), Ok(zfs_list), Ok(zpool_status)) => {
-            match zfs::normalize_zfs(&zpool_list, &zfs_list, &zpool_status) {
+    match (zpool_list, zpool_get, zfs_list, zpool_status) {
+        (Ok(zpool_list), Ok(zpool_get), Ok(zfs_list), Ok(zpool_status)) => {
+            match zfs::normalize_zfs(&zpool_list, &zpool_get, &zfs_list, &zpool_status) {
                 Ok(graph) => {
                     let node_count = graph.nodes.len();
                     merge_graph(&mut result.graph, graph);
@@ -2035,7 +2045,10 @@ fn collect_zfs(result: &mut ProbeResult) {
                 }),
             }
         }
-        (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
+        (Err(message), _, _, _)
+        | (_, Err(message), _, _)
+        | (_, _, Err(message), _)
+        | (_, _, _, Err(message)) => {
             result.reports.push(ProbeReport {
                 adapter: "zfs".to_string(),
                 status: if message.contains("not found") {
