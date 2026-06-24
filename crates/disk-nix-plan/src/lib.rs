@@ -262,6 +262,8 @@ pub enum TopologyDiagnosticKind {
     PropertyDiffers,
     VdoStartAlreadySatisfied,
     VdoStartRequired,
+    VdoStopAlreadySatisfied,
+    VdoStopRequired,
     ZfsPoolImportAlreadySatisfied,
     ZfsPoolImportRequired,
 }
@@ -756,6 +758,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                         | TopologyDiagnosticKind::PropertyAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStartAlreadySatisfied
+                        | TopologyDiagnosticKind::VdoStopAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
                 )
             })
@@ -1323,6 +1326,7 @@ fn already_satisfied_action_ids(
                 | Operation::Remount
                 | Operation::Export
                 | Operation::Start
+                | Operation::Stop
                 | Operation::SetProperty
         ) {
             continue;
@@ -1348,6 +1352,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                     | TopologyDiagnosticKind::PropertyAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStartAlreadySatisfied
+                    | TopologyDiagnosticKind::VdoStopAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
             );
             has_warning |= diagnostic.level == TopologyDiagnosticLevel::Warning;
@@ -1403,6 +1408,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(nfs_export_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics.extend(vdo_start_diagnostic(action, node, &query));
+    diagnostics.extend(vdo_stop_diagnostic(action, node, &query));
     diagnostics.extend(zfs_pool_import_diagnostic(action, node, &query));
     diagnostics
 }
@@ -1909,6 +1915,42 @@ fn vdo_start_diagnostic(
     })
 }
 
+fn vdo_stop_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Stop
+        || action.context.collection.as_deref() != Some("vdoVolumes")
+    {
+        return None;
+    }
+    let operating_mode = property_value_from_node(node, "vdo.operating-mode")?;
+    let stopped = vdo_operating_mode_is_stopped(operating_mode);
+    let (level, kind, message) = if stopped {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::VdoStopAlreadySatisfied,
+            format!("VDO volume {query} is already stopped"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::VdoStopRequired,
+            format!("VDO volume {query} operating mode is {operating_mode}, desired stopped"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
 fn zfs_pool_import_diagnostic(
     action: &PlannedAction,
     node: &Node,
@@ -2048,6 +2090,22 @@ fn md_device_count_property(node: &Node, key: &str) -> Option<u64> {
 
 fn zfs_status_is_online(value: &str) -> bool {
     value.trim().eq_ignore_ascii_case("online")
+}
+
+fn vdo_operating_mode_is_stopped(value: &str) -> bool {
+    let normalized = value
+        .trim()
+        .chars()
+        .map(|character| {
+            if character.is_ascii_whitespace() || character == '_' {
+                '-'
+            } else {
+                character
+            }
+        })
+        .collect::<String>()
+        .to_ascii_lowercase();
+    matches!(normalized.as_str(), "stopped" | "not-running" | "inactive")
 }
 
 fn property_value_from_node<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
@@ -13498,6 +13556,77 @@ mod tests {
             diagnostic.action_id == "vdovolumes:archive:start"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::VdoStartRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_vdo_stop_when_stopped() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "operation": "stop"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_path("/dev/mapper/archive")
+                .with_property("vdo.operating-mode", "stopped"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:archive:stop"
+                && diagnostic.kind == TopologyDiagnosticKind::VdoStopAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_vdo_stop_when_normal() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "operation": "stop"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_path("/dev/mapper/archive")
+                .with_property("vdo.operating-mode", "normal"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:archive:stop"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::VdoStopRequired
         }));
     }
 

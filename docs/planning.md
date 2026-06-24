@@ -462,9 +462,10 @@ and to warn when a matched LVM object is known but inactive.
 LUKS open/close reconciliation uses `cryptsetup.active` topology metadata to
 suppress mapper opens that are already active and mapper closes that are
 already inactive; opposite-state mappers remain actionable with a warning.
-VDO start reconciliation uses `vdo.operating-mode` topology metadata to
-suppress start actions only when the volume is already in `normal` mode; other
-known modes stay actionable with a warning.
+VDO start/stop reconciliation uses `vdo.operating-mode` topology metadata to
+suppress start actions only when the volume is already in `normal` mode and
+stop actions only when the mode explicitly reports stopped, not-running, or
+inactive; opposite states stay actionable with a warning.
 NFS export reconciliation compares the declared client and options against
 `nfs.export-client` and `nfs.export-option-*` topology properties.
 iSCSI login reconciliation checks all matching target and session nodes so an

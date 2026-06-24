@@ -570,22 +570,24 @@ treat declared options as a required subset of current mount options, LVM
 activation actions are compared with `lvm.active`, LUKS open and close actions
 are compared with `cryptsetup.active`, NFS export actions are compared with
 `nfs.export-client` and `nfs.export-option-*` properties, VDO start actions are
-compared with `vdo.operating-mode`, MD assemble actions are compared with
-`md.state`, `md.degraded-devices`, and `md.failed-devices`, ZFS pool import
-actions are compared with `zfs.state` and `zfs.health`, LVM volume-group
-import/export actions are compared with `lvm.vg-exported`, and iSCSI login
-actions are compared with current session state across all matching
+compared with `vdo.operating-mode`, VDO stop actions are compared with
+explicitly stopped, not-running, or inactive `vdo.operating-mode` values, MD
+assemble actions are compared with `md.state`, `md.degraded-devices`, and
+`md.failed-devices`, ZFS pool import actions are compared with `zfs.state` and
+`zfs.health`, LVM volume-group import/export actions are compared with
+`lvm.vg-exported`, and iSCSI login actions are compared with current session
+state across all matching
 target/session nodes when metadata is available. Safe already-satisfied grow,
 shrink, iSCSI login, LVM activation, LVM volume-group import/export, LUKS open,
-LUKS close, mount, remount, NFS export, VDO start, MD assemble, ZFS pool import,
-and property actions that have no warning diagnostics are suppressed from the
-actionable plan and counted as
+LUKS close, mount, remount, NFS export, VDO start, VDO stop, MD assemble, ZFS
+pool import, and property actions that have no warning diagnostics are
+suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-exported LVM volume groups, inactive LUKS open targets, active LUKS close
-targets, non-normal VDO modes, degraded or failed MD arrays, degraded ZFS
-pools, mountpoints using a different source, export client/option differences,
-or known iSCSI targets without a logged-in session stay actionable with a
-warning diagnostic.
+targets, non-normal VDO start modes, running VDO stop targets, degraded or
+failed MD arrays, degraded ZFS pools, mountpoints using a different source,
+export client/option differences, or known iSCSI targets without a logged-in
+session stay actionable with a warning diagnostic.
 
 ## Apply Evaluation
 
@@ -807,7 +809,9 @@ VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
 online `vdo growLogical` for `desiredSize`, explicit `vdo growPhysical` for
 `physicalSize`, and offline-required `vdo start`/`vdo stop` lifecycle steps for
 existing volumes. With current-topology probing, `vdo start` actions are
-suppressed only when the current operating mode is already `normal`.
+suppressed only when the current operating mode is already `normal`; `vdo stop`
+actions are suppressed only when the current operating mode explicitly reports
+stopped, not-running, or inactive.
 VDO `operation = "rescan"` renders read-only `vdo status`, `vdostats`, and
 graph inspection commands to refresh status and utilization without changing
 activation state or capacity.
