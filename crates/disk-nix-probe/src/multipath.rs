@@ -106,6 +106,10 @@ fn add_map(graph: &mut StorageGraph, map: MultipathMap) {
     let id = format!("multipath:{}", map.name);
     let mut node = Node::new(id.clone(), NodeKind::MultipathDevice, map.name.clone());
 
+    if let Some(size_bytes) = map.size.as_deref().and_then(parse_size) {
+        node = node.with_size_bytes(size_bytes);
+    }
+
     if let Some(dm_name) = map.dm_name {
         node = node
             .with_path(format!("/dev/mapper/{}", map.name))
@@ -372,6 +376,36 @@ fn looks_like_kernel_disk(value: &str) -> bool {
         || value.starts_with("nvme")
 }
 
+fn parse_size(value: &str) -> Option<u64> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed == "-" {
+        return None;
+    }
+
+    let number_end = trimmed
+        .find(|character: char| !(character.is_ascii_digit() || character == '.'))
+        .unwrap_or(trimmed.len());
+    let number = trimmed[..number_end].parse::<f64>().ok()?;
+    let unit = trimmed[number_end..].trim().to_ascii_lowercase();
+    let multiplier = match unit.as_str() {
+        "" | "b" => 1_f64,
+        "k" | "kb" => 1_000_f64,
+        "m" | "mb" => 1_000_000_f64,
+        "g" | "gb" => 1_000_000_000_f64,
+        "t" | "tb" => 1_000_000_000_000_f64,
+        "p" | "pb" => 1_000_000_000_000_000_f64,
+        "ki" | "kib" => 1024_f64,
+        "mi" | "mib" => 1024_f64.powi(2),
+        "gi" | "gib" => 1024_f64.powi(3),
+        "ti" | "tib" => 1024_f64.powi(4),
+        "pi" | "pib" => 1024_f64.powi(5),
+        _ => return None,
+    };
+
+    let bytes = number * multiplier;
+    bytes.is_finite().then_some(bytes.round() as u64)
+}
+
 #[cfg(test)]
 mod tests {
     use disk_nix_model::{NodeKind, Relationship};
@@ -402,9 +436,15 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
             .iter()
             .find(|node| node.kind == NodeKind::MultipathDevice && node.name == "mpatha")
             .expect("multipath map should exist");
+        assert_eq!(map.size_bytes, Some(100_000_000_000));
         assert!(map.properties.iter().any(|property| {
             property.key == "multipath.features" && property.value == "1 queue_if_no_path"
         }));
+        assert!(
+            map.properties
+                .iter()
+                .any(|property| { property.key == "multipath.size" && property.value == "100G" })
+        );
         assert!(map.properties.iter().any(|property| {
             property.key == "multipath.vendor-product" && property.value == "IBM,2145"
         }));
@@ -492,5 +532,13 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
                 .count(),
             2
         );
+    }
+
+    #[test]
+    fn parses_multipath_size_strings() {
+        assert_eq!(parse_size("100G"), Some(100_000_000_000));
+        assert_eq!(parse_size("1.5TiB"), Some(1_649_267_441_664));
+        assert_eq!(parse_size("4096"), Some(4096));
+        assert_eq!(parse_size("-"), None);
     }
 }

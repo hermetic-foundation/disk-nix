@@ -386,10 +386,11 @@ Use these commands for:
   counters, index/cache sizing, compression, deduplication, version/release
   data, and block accounting when probes expose them
 - `multipath`: multipath maps and their backing paths, including WWID, dm
-  device, vendor/product, size, features, hardware handler, write protection,
-  path count, host path, SCSI host/channel/id/LUN coordinates, major/minor,
-  path-group policy, priority, group status, dm/checker/online state columns,
-  extra path flags, and raw path state when `multipath -ll` exposes them
+  device, vendor/product, raw size, normalized byte capacity, features,
+  hardware handler, write protection, path count, host path, SCSI
+  host/channel/id/LUN coordinates, major/minor, path-group policy, priority,
+  group status, dm/checker/online state columns, extra path flags, and raw path
+  state when `multipath -ll` exposes them
 - `nvme`: NVMe subsystems, controllers, and namespaces, including path, serial,
   model, firmware, namespace index/id, generic namespace path, subsystem NQN,
   host NQN, controller, controller id, transport, address, fabrics endpoint,

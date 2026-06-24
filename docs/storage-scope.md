@@ -209,10 +209,10 @@ The current probe layer normalizes:
   raid/total/array/active/working/failed/spare/degraded device counts, and
   persistence, bitmap detail, member number, major/minor, raid-device, and state
 - Multipath maps through `multipath -ll` for map name, WWID, dm device,
-  vendor/product, map features, hardware handler, write-protect state,
-  path-group policy/priority/status, parsed backing-path SCSI coordinates, and
-  split dm/checker/online path state plus additional path flags such as ghost
-  or faulty state tokens
+  vendor/product, raw size plus normalized byte capacity, map features,
+  hardware handler, write-protect state, path-group policy/priority/status,
+  parsed backing-path SCSI coordinates, and split dm/checker/online path state
+  plus additional path flags such as ghost or faulty state tokens
 - NVMe subsystems, controllers, and namespaces through `nvme list-subsys -o json` for subsystem, host NQN, controller path, fabrics endpoint, path state,
   and ANA topology; `nvme list -o json` adds namespace path, generic namespace
   path, serial, model/product, firmware, subsystem, controller, controller id,
