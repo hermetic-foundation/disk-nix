@@ -1011,6 +1011,69 @@
             };
           }
         ];
+        nixosModuleVolumeGroupCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              volumeGroups.vg0.operation = "rescan";
+              volumeGroups.primaryVg = {
+                target = "vg0";
+                operation = "activate";
+              };
+            };
+          }
+        ];
+        nixosModuleVolumeCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              volumes."vg0/root".operation = "rescan";
+              volumes.rootAlias = {
+                path = "vg0/root";
+                operation = "grow";
+                desiredSize = "80GiB";
+              };
+            };
+          }
+        ];
+        nixosModuleThinPoolCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              thinPools."vg0/thinpool".operation = "rescan";
+              thinPools.primaryThin = {
+                target = "vg0/thinpool";
+                operation = "grow";
+                desiredSize = "500GiB";
+              };
+            };
+          }
+        ];
+        nixosModuleLvmCacheCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              lvmCaches."vg0/root".operation = "rescan";
+              lvmCaches.rootCacheAlias = {
+                target = "vg0/root";
+                operation = "create";
+                device = "vg0/root-cache";
+              };
+            };
+          }
+        ];
         nixosModuleSnapshotCollisionTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -2086,6 +2149,10 @@
             poolCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModulePoolCollisionTest.config.system.build.toplevel).success))}
             datasetCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDatasetCollisionTest.config.system.build.toplevel).success))}
             zvolCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleZvolCollisionTest.config.system.build.toplevel).success))}
+            volumeGroupCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleVolumeGroupCollisionTest.config.system.build.toplevel).success))}
+            volumeCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleVolumeCollisionTest.config.system.build.toplevel).success))}
+            thinPoolCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleThinPoolCollisionTest.config.system.build.toplevel).success))}
+            lvmCacheCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLvmCacheCollisionTest.config.system.build.toplevel).success))}
             snapshotCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleSnapshotCollisionTest.config.system.build.toplevel).success))}
             iscsiSessionCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleIscsiSessionCollisionTest.config.system.build.toplevel).success))}
             lunPathCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLunPathCollisionTest.config.system.build.toplevel).success))}
@@ -2097,6 +2164,10 @@
             test "$poolCollisionSuccess" = false
             test "$datasetCollisionSuccess" = false
             test "$zvolCollisionSuccess" = false
+            test "$volumeGroupCollisionSuccess" = false
+            test "$volumeCollisionSuccess" = false
+            test "$thinPoolCollisionSuccess" = false
+            test "$lvmCacheCollisionSuccess" = false
             test "$snapshotCollisionSuccess" = false
             test "$iscsiSessionCollisionSuccess" = false
             test "$lunPathCollisionSuccess" = false

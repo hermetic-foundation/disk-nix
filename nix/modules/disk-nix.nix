@@ -1095,6 +1095,10 @@ let
   activePoolIdentities = lib.mapAttrsToList lifecycleIdentity activePools;
   activeDatasetIdentities = lib.mapAttrsToList lifecycleIdentity activeDatasets;
   activeZvolIdentities = lib.mapAttrsToList lifecycleIdentity activeZvols;
+  activeVolumeGroupIdentities = lib.mapAttrsToList lifecycleIdentity activeVolumeGroups;
+  activeVolumeIdentities = lib.mapAttrsToList lifecycleIdentity activeVolumes;
+  activeThinPoolIdentities = lib.mapAttrsToList lifecycleIdentity activeThinPools;
+  activeLvmCacheIdentities = lib.mapAttrsToList lifecycleIdentity activeLvmCaches;
   snapshotIdentity =
     name: snapshot:
     if snapshot.name != null then
@@ -2429,6 +2433,23 @@ in
       {
         assertion = lib.length activeZvolIdentities == lib.length (lib.unique activeZvolIdentities);
         message = "services.disk-nix.zvols entries must resolve to unique active concrete zvol identities.";
+      }
+      {
+        assertion =
+          lib.length activeVolumeGroupIdentities == lib.length (lib.unique activeVolumeGroupIdentities);
+        message = "services.disk-nix.volumeGroups entries must resolve to unique active concrete volume-group identities.";
+      }
+      {
+        assertion = lib.length activeVolumeIdentities == lib.length (lib.unique activeVolumeIdentities);
+        message = "services.disk-nix.volumes entries must resolve to unique active concrete logical-volume identities.";
+      }
+      {
+        assertion = lib.length activeThinPoolIdentities == lib.length (lib.unique activeThinPoolIdentities);
+        message = "services.disk-nix.thinPools entries must resolve to unique active concrete thin-pool identities.";
+      }
+      {
+        assertion = lib.length activeLvmCacheIdentities == lib.length (lib.unique activeLvmCacheIdentities);
+        message = "services.disk-nix.lvmCaches entries must resolve to unique active concrete cache identities.";
       }
       {
         assertion = lib.length activeSnapshotIdentities == lib.length (lib.unique activeSnapshotIdentities);
