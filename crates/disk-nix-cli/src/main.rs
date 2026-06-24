@@ -4432,6 +4432,17 @@ fn usage_details(node: &Node) -> String {
         ("zfs.pool-dedupratio", "pool-dedupratio"),
         ("zfs.pool-fragmentation", "pool-fragmentation"),
         ("zfs.pool-altroot", "pool-altroot"),
+        ("zfs.pool-ashift", "pool-ashift"),
+        ("zfs.pool-autotrim", "pool-autotrim"),
+        ("zfs.pool-autoexpand", "pool-autoexpand"),
+        ("zfs.pool-autoreplace", "pool-autoreplace"),
+        ("zfs.pool-bootfs", "pool-bootfs"),
+        ("zfs.pool-cachefile", "pool-cachefile"),
+        ("zfs.pool-comment", "pool-comment"),
+        ("zfs.pool-delegation", "pool-delegation"),
+        ("zfs.pool-failmode", "pool-failmode"),
+        ("zfs.pool-listsnapshots", "pool-listsnapshots"),
+        ("zfs.pool-multihost", "pool-multihost"),
         ("zfs.state", "state"),
         ("zfs.status", "status"),
         ("zfs.action", "action"),
@@ -6710,6 +6721,11 @@ mod tests {
                 })
                 .with_property("zfs.health", "ONLINE")
                 .with_property("zfs.state", "ONLINE")
+                .with_property("zfs.pool-ashift", "12")
+                .with_property("zfs.pool-autotrim", "on")
+                .with_property("zfs.pool-autoexpand", "off")
+                .with_property("zfs.pool-cachefile", "/etc/zfs/zpool.cache")
+                .with_property("zfs.pool-failmode", "wait")
                 .with_property("zfs.status", "some devices need attention")
                 .with_property("zfs.action", "replace the faulted device")
                 .with_property("zfs.scan", "scrub repaired 0B")
@@ -6811,6 +6827,9 @@ mod tests {
         assert!(output.contains("CHILDREN"));
         assert!(output.contains("tank"));
         assert!(output.contains("ONLINE"));
+        assert!(output.contains(
+            "pool-ashift=12 pool-autotrim=on pool-autoexpand=off pool-cachefile=/etc/zfs/zpool.cache pool-failmode=wait"
+        ));
         assert!(output.contains(
             "status=some devices need attention action=replace the faulted device scan=scrub repaired 0B errors=No known data errors"
         ));
