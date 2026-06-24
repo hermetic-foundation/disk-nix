@@ -141,6 +141,7 @@ pub enum RecoveryActionKind {
     ResolveInputs,
     InspectCurrentState,
     ReviewExecutionFailure,
+    DomainRecovery,
     RunVerification,
     ResumeAfterFix,
     PreserveRecoveryPoints,
@@ -482,8 +483,195 @@ fn failed_recovery_actions(report: &ExecutionReport) -> Vec<RecoveryAction> {
             ],
         });
     }
+    actions.extend(domain_recovery_actions_for_failure(report, failed));
 
     actions
+}
+
+fn domain_recovery_actions_for_failure(
+    report: &ExecutionReport,
+    failed: Option<&ExecutionCommandResult>,
+) -> Vec<RecoveryAction> {
+    let Some(failed) = failed else {
+        return Vec::new();
+    };
+    let Some(step) = report
+        .command_plan
+        .iter()
+        .find(|step| step.action_id == failed.action_id)
+    else {
+        return Vec::new();
+    };
+    if !requires_domain_recovery(step) {
+        return Vec::new();
+    }
+
+    let completed_mutating_commands = report
+        .execution_results
+        .iter()
+        .take_while(|result| result.action_id != failed.action_id || result.argv != failed.argv)
+        .filter(|result| {
+            result.success
+                && result.phase == ExecutionPhase::Command
+                && command_plan_command(report, result).is_some_and(|command| command.mutates)
+        })
+        .count();
+    vec![RecoveryAction {
+        kind: RecoveryActionKind::DomainRecovery,
+        summary: domain_recovery_summary(step),
+        commands: domain_recovery_commands(step),
+        notes: domain_recovery_notes(step, failed, completed_mutating_commands),
+    }]
+}
+
+fn requires_domain_recovery(step: &ExecutionStep) -> bool {
+    matches!(
+        step.risk,
+        RiskClass::Destructive | RiskClass::PotentialDataLoss | RiskClass::Irreversible
+    ) || matches!(
+        step.operation,
+        Operation::Rollback
+            | Operation::Shrink
+            | Operation::RemoveDevice
+            | Operation::Destroy
+            | Operation::Detach
+            | Operation::Close
+            | Operation::Unmount
+            | Operation::Logout
+            | Operation::Deactivate
+            | Operation::Stop
+    )
+}
+
+fn command_plan_command<'a>(
+    report: &'a ExecutionReport,
+    result: &ExecutionCommandResult,
+) -> Option<&'a ExecutionCommand> {
+    report
+        .command_plan
+        .iter()
+        .find(|step| step.action_id == result.action_id)?
+        .commands
+        .iter()
+        .find(|command| command.argv == result.argv)
+}
+
+fn domain_recovery_summary(step: &ExecutionStep) -> String {
+    format!(
+        "Plan domain-specific recovery for {:?} action {} after partial execution",
+        step.operation, step.action_id
+    )
+}
+
+fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
+    let mut commands = Vec::new();
+    match (
+        step.operation,
+        command_step_collection(step),
+        command_step_target(step),
+    ) {
+        (Operation::Rollback, Some("snapshots"), Some(target)) if is_zfs_snapshot_name(target) => {
+            commands.push(command(
+                ["zfs", "list", "-t", "snapshot", "-H", "-p", target],
+                false,
+                "inspect the rollback snapshot before deciding whether to retry or roll forward",
+            ));
+            if let Some(dataset) = target.split_once('@').map(|(dataset, _)| dataset) {
+                commands.push(command(
+                    ["zfs", "list", "-H", "-p", dataset],
+                    false,
+                    "inspect the rolled-back dataset state after the failed rollback attempt",
+                ));
+            }
+        }
+        (Operation::Rollback, Some("lvmSnapshots"), Some(target)) => {
+            commands.push(command(
+                ["lvs", "--reportformat", "json", target],
+                false,
+                "inspect LVM snapshot and merge state before deciding whether to retry",
+            ));
+        }
+        (_, _, Some(target)) => {
+            commands.push(command(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "inspect the failed action target before choosing rollback or roll-forward",
+            ));
+        }
+        _ => {}
+    }
+    commands.extend(state_inspection_commands());
+    commands
+}
+
+fn domain_recovery_notes(
+    step: &ExecutionStep,
+    failed: &ExecutionCommandResult,
+    completed_mutating_commands: usize,
+) -> Vec<String> {
+    let mut notes = vec![
+        format!(
+            "{completed_mutating_commands} mutating command(s) completed before the failed command in this apply run"
+        ),
+        format!(
+            "failed {:?} command for {}: {}",
+            failed.phase,
+            failed.action_id,
+            failed.argv.join(" ")
+        ),
+        "do not retry the failed action until fresh topology proves whether the target already changed".to_string(),
+    ];
+
+    match (step.operation, command_step_collection(step)) {
+        (Operation::Rollback, Some("snapshots")) => {
+            notes.push(
+                "for ZFS rollback, prefer cloning the snapshot or taking a fresh snapshot of the current dataset before any retry".to_string(),
+            );
+            notes.push(
+                "review newer snapshots, clones, mountpoints, shares, and dependent services before choosing rollback or roll-forward".to_string(),
+            );
+        }
+        (Operation::Rollback, Some("lvmSnapshots")) => {
+            notes.push(
+                "for LVM snapshot merge rollback, inspect origin activation and merge status before rerunning lvconvert --merge".to_string(),
+            );
+            notes.push(
+                "keep the origin, snapshot, and VG metadata backups intact until the merge outcome is verified".to_string(),
+            );
+        }
+        (Operation::RemoveDevice | Operation::Destroy | Operation::Detach, _) => {
+            notes.push(
+                "verify consumers, redundancy, and metadata health before retrying teardown or device removal".to_string(),
+            );
+            notes.push(
+                "prefer roll-forward repair of the partially changed topology over blind rollback when data placement may have moved".to_string(),
+            );
+        }
+        _ => {
+            notes.push(
+                "choose rollback only when domain-specific tooling proves it is safer than completing the remaining plan".to_string(),
+            );
+        }
+    }
+    notes
+}
+
+fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
+    step.action_id
+        .split(':')
+        .next()
+        .map(|collection| match collection {
+            "snapshot" => "snapshots",
+            "filesystem" => "filesystems",
+            other => other,
+        })
+}
+
+fn command_step_target(step: &ExecutionStep) -> Option<&str> {
+    step.action_id
+        .split(':')
+        .nth(1)
+        .filter(|target| !target.is_empty())
 }
 
 fn failed_result_notes(result: &ExecutionCommandResult) -> Vec<String> {
@@ -21404,6 +21592,80 @@ mod tests {
                 .recovery_actions
                 .iter()
                 .any(|action| { action.kind == RecoveryActionKind::PreserveRecoveryPoints })
+        );
+    }
+
+    #[test]
+    fn failed_snapshot_rollback_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home",
+                  "rollback": true
+                }
+              },
+              "apply": {
+                "allowPotentialDataLoss": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != ["zfs", "rollback", "tank/home@before"],
+                status_code: Some(if argv == ["zfs", "rollback", "tank/home@before"] {
+                    1
+                } else {
+                    0
+                }),
+                stdout: String::new(),
+                stderr: if argv == ["zfs", "rollback", "tank/home@before"] {
+                    "rollback failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success && result.argv == ["zfs", "rollback", "tank/home@before"]
+        }));
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Rollback"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "zfs",
+                    "list",
+                    "-t",
+                    "snapshot",
+                    "-H",
+                    "-p",
+                    "tank/home@before",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["zfs", "list", "-H", "-p", "tank/home"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("do not retry"))
+        );
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("cloning the snapshot"))
         );
     }
 

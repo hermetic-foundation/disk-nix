@@ -614,8 +614,11 @@ Blocked, non-ready, and failed reports include `recoveryActions` with
 machine-readable action kinds, read-only inspection commands, and operator notes.
 These actions are advisory: they steer operators toward current-state capture,
 policy review, missing-input resolution, validation before resume, and preserving
-recovery points after partial mutation. They do not automatically roll back
-storage because rollback safety is domain- and topology-specific.
+recovery points after partial mutation. Failed risky actions also include
+`domain-recovery` guidance with domain-specific read-only inspection commands
+where the failed action context is concrete, such as ZFS snapshot rollback
+checks. They do not automatically roll back storage because rollback safety is
+domain- and topology-specific.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

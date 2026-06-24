@@ -90,9 +90,10 @@ manual-review guidance, or non-ready command plans instead of guessing.
   mutation, especially when imperative changes should update declarative mounts,
   crypttab, swap, NFS exports, iSCSI boot, or generated files.
 - Deeper domain-specific recovery and rollback recipes for partially completed
-  apply runs. Apply reports now expose generic recovery actions for blocked,
-  non-ready, and failed execution states, but safe rollback and roll-forward
-  recipes still need per-domain topology awareness.
+  apply runs. Apply reports now expose generic recovery actions and targeted
+  failed-action domain recovery guidance for concrete risky actions, but safe
+  rollback and roll-forward recipes still need broader current-topology
+  awareness.
 - Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output
   formats. Probe reports now expose structured degradation categories, but
