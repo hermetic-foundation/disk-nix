@@ -264,6 +264,8 @@ pub enum TopologyDiagnosticKind {
     LuksCloseRequired,
     LuksOpenAlreadySatisfied,
     LuksOpenRequired,
+    MultipathDestroyAlreadySatisfied,
+    MultipathDestroyRequired,
     LoopCreateAlreadySatisfied,
     LoopCreateConflict,
     LoopCreateRequired,
@@ -782,6 +784,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
                         | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
                         | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
+                        | TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
                         | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
@@ -1395,6 +1398,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
                     | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
                     | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
+                    | TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
                     | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
@@ -1428,6 +1432,9 @@ fn topology_diagnostics_for_action(
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
         if let Some(diagnostic) = dm_map_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
+        if let Some(diagnostic) = multipath_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
         if let Some(diagnostic) = loop_absent_diagnostic(action, &query) {
@@ -1478,6 +1485,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(luks_close_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
     diagnostics.extend(dm_map_present_diagnostic(action, node, &query));
+    diagnostics.extend(multipath_present_diagnostic(action, node, &query));
     diagnostics.extend(loop_present_diagnostic(action, node, &query));
     diagnostics.extend(md_assemble_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
@@ -1905,6 +1913,55 @@ fn dm_map_present_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn multipath_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("multipathMaps")
+        || action.operation != Operation::Destroy
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("multipath map {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn multipath_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("multipathMaps")
+        || action.operation != Operation::Destroy
+    {
+        return None;
+    }
+
+    let message = multipath_identity_detail(node)
+        .map(|detail| format!("multipath map {query} is still present with {detail}"))
+        .unwrap_or_else(|| format!("multipath map {query} is still present"));
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::MultipathDestroyRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn multipath_identity_detail(node: &Node) -> Option<String> {
+    if let Some(wwid) = property_value_from_node(node, "multipath.wwid") {
+        return Some(format!("WWID {wwid}"));
+    }
+    property_value_from_node(node, "multipath.dm").map(|dm_name| format!("dm map {dm_name}"))
 }
 
 fn loop_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
@@ -14901,6 +14958,80 @@ mod tests {
                 && diagnostic
                     .message
                     .contains("still present with open count 2")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_multipath_destroy_when_map_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "multipathMaps": {
+                "mpath-old": {
+                  "operation": "destroy",
+                  "target": "mpath-old"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "multipathmaps:mpath-old:destroy"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_multipath_destroy_when_map_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "multipathMaps": {
+                "mpatha": {
+                  "operation": "destroy",
+                  "target": "/dev/mapper/mpatha"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("multipath:mpatha", NodeKind::MultipathDevice, "mpatha")
+                .with_path("/dev/mapper/mpatha")
+                .with_property("multipath.wwid", "3600508b400105e210000900000490000")
+                .with_property("multipath.dm", "dm-3"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "multipathmaps:mpatha:destroy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MultipathDestroyRequired
+                && diagnostic
+                    .message
+                    .contains("WWID 3600508b400105e210000900000490000")
         }));
     }
 

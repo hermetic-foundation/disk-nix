@@ -401,6 +401,9 @@ separately. Path removal is potential-data-loss because it can break
 redundancy, while `multipathMaps.<name>.operation = "destroy"` is
 offline-required host map flushing through `multipath -f`; target-side LUN data
 is not deleted, but filesystems, LVM, dm, and services must move away first.
+Current-topology comparison suppresses destroy actions when the map is already
+absent and keeps present maps actionable with a warning that includes the WWID
+or dm map name when probe metadata reports it.
 
 ZFS dataset and zvol `operation = "rescan"` actions are online read-only
 refreshes. Dataset rescan renders `zfs list -t filesystem`, `zfs get`, and
@@ -493,11 +496,12 @@ active session is not hidden by a configured but disconnected target. Login
 actions are suppressed only when a logged-in session is present; logout actions
 are suppressed only when the target is known and no logged-in session is
 present.
-Already-satisfied grow, shrink, device-mapper destroy, iSCSI login/logout, LVM
-activation/deactivation, LUKS open, loop create/destroy, LUN attach/detach,
-NVMe namespace attach/detach, mount, unmount, remount, NFS export/unexport,
-VDO start, VDO stop, MD assemble, ZFS pool import, LVM volume-group
-import/export, and set-property actions with no warning diagnostics are
+Already-satisfied grow, shrink, device-mapper destroy, multipath destroy,
+iSCSI login/logout, LVM activation/deactivation, LUKS open, loop
+create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
+unmount, remount, NFS export/unexport, VDO start, VDO stop, MD assemble, ZFS
+pool import, LVM volume-group import/export, and set-property actions with no
+warning diagnostics are
 suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 
