@@ -117,7 +117,8 @@ Examples:
   UUID property updates are offline-required identity metadata changes rendered
   through `cryptsetup config` or `cryptsetup luksUUID`. Mapper close keeps the
   LUKS header and backing data intact unless a separate format action is
-  requested.
+  requested. Logical LUKS declaration keys can declare the concrete mapper name
+  with `name`.
 - Btrfs subvolume creation is online, while destruction is destructive and
   suggests read-only snapshots or rename-first validation. Btrfs subvolume
   `operation = "rescan"` is online and read-only; it refreshes subvolume

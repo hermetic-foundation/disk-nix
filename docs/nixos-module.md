@@ -279,6 +279,9 @@ Typed LUKS declarations include:
 
 `targetSize` and `size` are serialized as aliases accepted by the planner for
 the desired opened mapper size.
+When a declaration key is only a friendly name, set `name` to the concrete LUKS
+mapper name used by `cryptsetup open`, `cryptsetup resize`, and
+`cryptsetup close`.
 
 Typed NFS client mount declarations include:
 

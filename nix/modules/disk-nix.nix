@@ -1395,7 +1395,7 @@ in
                 type = lib.types.str;
                 default = name;
                 defaultText = lib.literalExpression "<attribute name>";
-                description = "Mapper name for the opened LUKS device.";
+                description = "Mapper name for the opened LUKS device. Set this explicitly when the attribute name is only a friendly declaration key.";
               };
 
               device = lib.mkOption {
@@ -1483,7 +1483,7 @@ in
         )
       );
       default = { };
-      description = "Typed LUKS declarations used to generate both disk-nix spec and boot.initrd.luks.devices.";
+      description = "Typed LUKS declarations used to generate both disk-nix spec and boot.initrd.luks.devices. The name option supplies the concrete mapper name when the attribute name is logical.";
     };
 
     nfs.mounts = lib.mkOption {

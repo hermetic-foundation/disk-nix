@@ -14905,6 +14905,137 @@ mod tests {
     }
 
     #[test]
+    fn luks_device_lifecycle_accepts_mapper_names_for_logical_keys() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "luks": {
+                  "devices": {
+                    "rootMapping": {
+                      "name": "cryptroot",
+                      "device": "/dev/disk/by-id/root-luks",
+                      "operation": "grow"
+                    },
+                    "archiveMapping": {
+                      "name": "cryptarchive",
+                      "device": "/dev/disk/by-id/archive-luks",
+                      "operation": "open"
+                    },
+                    "headerIdentity": {
+                      "name": "cryptroot",
+                      "device": "/dev/disk/by-id/root-luks",
+                      "properties": {
+                        "label": "root",
+                        "luks.subsystem": "nixos",
+                        "luks.uuid": "01234567-89ab-cdef-0123-456789abcdef"
+                      }
+                    },
+                    "closedMapping": {
+                      "name": "cryptclosed",
+                      "device": "/dev/disk/by-id/closed-luks",
+                      "operation": "close"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:rootMapping:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "resize", "cryptroot"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:archiveMapping:open"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "open",
+                            "/dev/disk/by-id/archive-luks",
+                            "cryptarchive",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:headerIdentity:set-property:label"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "config",
+                            "/dev/disk/by-id/root-luks",
+                            "--label",
+                            "root",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:headerIdentity:set-property:luks.subsystem"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "config",
+                            "/dev/disk/by-id/root-luks",
+                            "--subsystem",
+                            "nixos",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:headerIdentity:set-property:luks.uuid"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "luksUUID",
+                            "/dev/disk/by-id/root-luks",
+                            "--uuid",
+                            "01234567-89ab-cdef-0123-456789abcdef",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luks.devices:closedMapping:close"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "close", "cryptclosed"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "luks.devices:archiveMapping:open"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["cryptsetup", "status", "cryptarchive"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "luks.devices:closedMapping:close"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "topology", "--json"])
+        }));
+    }
+
+    #[test]
     fn swap_lifecycle_requires_target_path_for_execute_readiness() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

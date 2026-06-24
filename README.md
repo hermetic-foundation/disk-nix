@@ -314,7 +314,8 @@ commands and verify the topology without erasing the backing LUKS header or
 encrypted data. LUKS header label and subsystem property updates render
 `cryptsetup config <device> --label` or `--subsystem`, and UUID updates render
 `cryptsetup luksUUID <device> --uuid`; missing backing devices stay non-ready
-until the LUKS header device is explicit.
+until the LUKS header device is explicit. Logical LUKS declaration keys can
+declare the concrete mapper name with `name`.
 LUKS keyslot and token plans use explicit `add-key`, `remove-key`,
 `import-token`, and `remove-token` lifecycle declarations to render
 `cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and
