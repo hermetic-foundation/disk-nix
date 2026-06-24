@@ -458,13 +458,16 @@ and to warn when a matched LVM object is known but inactive.
 LUKS open reconciliation uses `cryptsetup.active` topology metadata to suppress
 mapper opens that are already active and to warn when a matched mapper is
 known but inactive.
+VDO start reconciliation uses `vdo.operating-mode` topology metadata to
+suppress start actions only when the volume is already in `normal` mode; other
+known modes stay actionable with a warning.
 NFS export reconciliation compares the declared client and options against
 `nfs.export-client` and `nfs.export-option-*` topology properties.
 iSCSI login reconciliation checks all matching target and session nodes so an
 active session is not hidden by a configured but disconnected target.
-Already-satisfied grow, shrink, iSCSI login, LUKS open, mount, remount, NFS
-export, LVM activation, and set-property actions with no warning diagnostics
-are suppressed from the actionable plan and counted in
+Already-satisfied grow, shrink, iSCSI login, LVM activation, LUKS open, mount,
+remount, NFS export, VDO start, and set-property actions with no warning
+diagnostics are suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy
