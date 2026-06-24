@@ -148,6 +148,7 @@ disk-nix devices
 disk-nix partitions
 disk-nix filesystems
 disk-nix complex-filesystems
+disk-nix btrfs
 disk-nix zfs
 disk-nix volumes
 disk-nix pools
@@ -179,6 +180,7 @@ disk-nix devices --json
 disk-nix partitions --json
 disk-nix filesystems --json
 disk-nix complex-filesystems --json
+disk-nix btrfs --json
 disk-nix zfs --json
 disk-nix volumes --json
 disk-nix pools --json
@@ -258,6 +260,10 @@ Use these commands for:
   health/vdev state, and ZFS compression/dedup/checksum/copies/cache/sync/record-size,
   quota/reservation/encryption, and POSIX metadata policy properties when
   probes expose them
+- `btrfs`: Btrfs filesystems, subvolumes, snapshots, and qgroups, including
+  size, used/free capacity, utilization, mount targets, backing relationships,
+  allocation profiles, subvolume IDs/generations/parentage, snapshot UUID
+  lineage, and qgroup hierarchy and limits
 - `zfs`: ZFS pools, vdevs, datasets, snapshots, and zvols, including pool
   health/state, capacity, dedup ratio, fragmentation, altroot, status/action
   advisories, scan/error summaries, vdev roles and error counters, dataset

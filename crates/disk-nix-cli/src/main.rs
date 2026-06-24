@@ -88,6 +88,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List Btrfs filesystems, subvolumes, snapshots, qgroups, and members.
+    Btrfs {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List ZFS pools, vdevs, datasets, snapshots, and zvols.
     Zfs {
         /// Emit JSON for matching graph nodes.
@@ -405,6 +411,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_complex_filesystem_node)?;
             } else {
                 print_complex_filesystems(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Btrfs { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_btrfs_node)?;
+            } else {
+                print_btrfs(output, &graph)?;
             }
             Ok(())
         }
@@ -1583,6 +1598,33 @@ fn print_complex_filesystems(output: &mut impl Write, graph: &StorageGraph) -> i
     Ok(())
 }
 
+fn print_btrfs(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>12} {:>12} {:>12} {:>7} {:<18} {:>7} DETAILS",
+        "KIND", "NAME", "SIZE", "USED", "FREE", "USE%", "MOUNT", "BACKING"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_btrfs_node(node)) {
+        let usage = node.usage.as_ref();
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>12} {:>12} {:>12} {:>7} {:<18} {:>7} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            human_bytes(usage.and_then(|usage| usage.used_bytes)),
+            human_bytes(usage.and_then(|usage| usage.free_bytes)),
+            usage_percent(node),
+            property_value(node, "btrfs.mount-target")
+                .or_else(|| property_value(node, "mountpoint"))
+                .unwrap_or("-"),
+            backing_count(graph, node),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_zfs(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2535,6 +2577,19 @@ fn is_complex_filesystem_node(node: &Node) -> bool {
             || property.key.starts_with("bcachefs.")
             || property.key.starts_with("zfs.")
     })
+}
+
+fn is_btrfs_node(node: &Node) -> bool {
+    matches!(
+        node.kind,
+        NodeKind::BtrfsFilesystem
+            | NodeKind::BtrfsSubvolume
+            | NodeKind::BtrfsSnapshot
+            | NodeKind::BtrfsQgroup
+    ) || node
+        .properties
+        .iter()
+        .any(|property| property.key.starts_with("btrfs."))
 }
 
 fn is_zfs_node(node: &Node) -> bool {
@@ -4217,13 +4272,13 @@ mod tests {
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 
     use super::{
-        confirmation_file_accepts, is_cache_node, is_complex_filesystem_node, is_device_node,
-        is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node, is_lun_node,
-        is_lvm_node, is_mapping_node, is_multipath_node, is_network_storage_node, is_nfs_node,
-        is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node,
+        confirmation_file_accepts, is_btrfs_node, is_cache_node, is_complex_filesystem_node,
+        is_device_node, is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node,
+        is_lun_node, is_lvm_node, is_mapping_node, is_multipath_node, is_network_storage_node,
+        is_nfs_node, is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node,
         is_swap_node, is_vdo_node, is_volume_node, is_zfs_node, is_zram_node, iscsi_lun_count,
-        mount_details, nfs_mount_count, print_cache, print_complex_filesystems, print_devices,
-        print_encryption, print_filesystems, print_filtered_json, print_inspect,
+        mount_details, nfs_mount_count, print_btrfs, print_cache, print_complex_filesystems,
+        print_devices, print_encryption, print_filesystems, print_filtered_json, print_inspect,
         print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm, print_mappings,
         print_mounts, print_multipath, print_network_storage, print_nfs, print_nvme,
         print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
@@ -4286,6 +4341,11 @@ mod tests {
         assert!(is_volume_node(&bcachefs));
         assert!(is_pool_node(&bcachefs));
         assert!(is_complex_filesystem_node(&Node::new(
+            "btrfs:/mnt/persist",
+            NodeKind::BtrfsFilesystem,
+            "/mnt/persist"
+        )));
+        assert!(is_btrfs_node(&Node::new(
             "btrfs:/mnt/persist",
             NodeKind::BtrfsFilesystem,
             "/mnt/persist"
@@ -5756,6 +5816,95 @@ mod tests {
         ));
         assert!(output.contains("dedup=off checksum=sha512 primarycache=metadata"));
         assert!(output.contains("bcachefs-state=rw bcachefs-device-free=8589934592"));
+    }
+
+    #[test]
+    fn btrfs_table_includes_subvolume_qgroup_and_json_neighbors() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "block:/dev/nvme0n1p2",
+            NodeKind::Partition,
+            "/dev/nvme0n1p2",
+        ));
+        graph.add_node(
+            Node::new("btrfs:fs-uuid", NodeKind::BtrfsFilesystem, "/mnt/persist")
+                .with_size_bytes(536_870_912_000)
+                .with_usage(Usage {
+                    used_bytes: Some(214_748_364_800),
+                    free_bytes: Some(322_122_547_200),
+                    allocated_bytes: None,
+                })
+                .with_property("btrfs.mount-target", "/mnt/persist")
+                .with_property("btrfs.data-profile", "single")
+                .with_property("btrfs.metadata-profile", "DUP"),
+        );
+        graph.add_node(
+            Node::new(
+                "btrfs-subvolume:fs:@home",
+                NodeKind::BtrfsSubvolume,
+                "@home",
+            )
+            .with_property("btrfs.id", "257")
+            .with_property("btrfs.parent-id", "5")
+            .with_property("btrfs.top-level", "5")
+            .with_property("btrfs.mount-target", "/mnt/persist/@home"),
+        );
+        graph.add_node(
+            Node::new(
+                "btrfs-snapshot:fs:@home-before",
+                NodeKind::BtrfsSnapshot,
+                "@home-before",
+            )
+            .with_property("btrfs.id", "258")
+            .with_property("btrfs.parent-uuid", "home-subvol")
+            .with_property("btrfs.received-uuid", "received-home"),
+        );
+        graph.add_node(
+            Node::new("btrfs-qgroup:0/257", NodeKind::BtrfsQgroup, "0/257")
+                .with_property("btrfs.qgroup-id", "0/257")
+                .with_property("btrfs.qgroup-parents", "0/5")
+                .with_property("btrfs.max-referenced", "25GiB")
+                .with_property("btrfs.max-exclusive", "10GiB"),
+        );
+        graph.add_edge(Edge::new(
+            "block:/dev/nvme0n1p2",
+            "btrfs:fs-uuid",
+            Relationship::Backs,
+        ));
+        graph.add_edge(Edge::new(
+            "btrfs:fs-uuid",
+            "btrfs-subvolume:fs:@home",
+            Relationship::Contains,
+        ));
+        graph.add_edge(Edge::new(
+            "btrfs-subvolume:fs:@home",
+            "btrfs-snapshot:fs:@home-before",
+            Relationship::SnapshotOf,
+        ));
+
+        let mut output = Vec::new();
+        print_btrfs(&mut output, &graph).expect("Btrfs table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("MOUNT"));
+        assert!(output.contains("/mnt/persist"));
+        assert!(output.contains("500.0 GiB"));
+        assert!(output.contains("40.0%"));
+        assert!(output.contains("data-profile=single metadata-profile=DUP"));
+        assert!(output.contains("@home"));
+        assert!(output.contains("subvol-id=257 parent-id=5 top-level=5"));
+        assert!(output.contains("@home-before"));
+        assert!(output.contains("parent-uuid=home-subvol received-uuid=received-home"));
+        assert!(output.contains("qgroup=0/257 qgroup-parents=0/5"));
+        assert!(output.contains("max-rfer=25GiB max-excl=10GiB"));
+
+        let mut json = Vec::new();
+        print_filtered_json(&mut json, &graph, is_btrfs_node).expect("Btrfs json renders");
+        let json = String::from_utf8(json).expect("json is utf8");
+        assert!(json.contains("btrfs:fs-uuid"));
+        assert!(json.contains("btrfs-subvolume:fs:@home"));
+        assert!(json.contains("btrfs-snapshot:fs:@home-before"));
+        assert!(json.contains("block:/dev/nvme0n1p2"));
     }
 
     #[test]
