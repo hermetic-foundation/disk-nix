@@ -536,7 +536,9 @@ typed context, and optional advice with non-destructive alternatives.
 With `--probe-current`, the CLI also probes the current host and adds
 `topologyComparison`, including matched target counts, missing target counts,
 size diagnostics, filesystem type conflicts, and already-satisfied property or
-size checks. The comparison is advisory and does not mutate storage.
+size checks. Safe already-satisfied grow, shrink, and property actions that
+have no warning diagnostics are suppressed from the actionable plan and counted
+as `topologyComparison.summary.suppressedActionCount`.
 
 ## Apply Evaluation
 

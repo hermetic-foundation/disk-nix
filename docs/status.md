@@ -25,6 +25,9 @@ behavior across real storage stacks.
 - Guarded apply flow with dry-run reports, script generation, readiness
   summaries, manual-review markers, unresolved-input reporting, policy blocks,
   optional current-topology probing, and sequential execution of ready commands.
+- Current-topology reconciliation suppresses safe no-op grow, shrink, and
+  property actions when the graph proves they are already satisfied and no
+  warning diagnostics are present.
 - NixOS module options for steady-state resources plus imperative lifecycle
   declarations emitted into `/etc/disk-nix/spec.json`.
 - NixOS assertions for duplicate active identities across mountpoints, swaps,
@@ -64,8 +67,8 @@ manual-review guidance, or non-ready command plans instead of guessing.
   host support is available.
 - A VM-based destructive test harness that validates apply behavior on isolated
   disposable disks before trusting production mutations.
-- More reconciliation logic against the current storage graph so already
-  satisfied operations can be suppressed or downgraded before command rendering.
+- More reconciliation logic against the current storage graph for additional
+  operation types and multi-action groups before command rendering.
 - Stronger dependency ordering for multi-layer changes, such as growing an
   iSCSI LUN, refreshing multipath, growing a partition, resizing LUKS/LVM, and
   then growing a filesystem as one reviewed plan.

@@ -444,12 +444,13 @@ fn render_shell_script(report: &ExecutionReport) -> String {
 
     if let Some(comparison) = &report.topology_comparison {
         script.push_str(&format!(
-            "# Topology comparison: {} matched, {} missing, {} size diagnostics, {} type conflicts, {} already satisfied.\n\n",
+            "# Topology comparison: {} matched, {} missing, {} size diagnostics, {} type conflicts, {} already satisfied, {} suppressed.\n\n",
             comparison.summary.matched_count,
             comparison.summary.missing_count,
             comparison.summary.size_diagnostic_count,
             comparison.summary.type_conflict_count,
-            comparison.summary.already_satisfied_count
+            comparison.summary.already_satisfied_count,
+            comparison.summary.suppressed_action_count
         ));
     }
 

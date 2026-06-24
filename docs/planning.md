@@ -424,8 +424,10 @@ use this context to build command plans without relying on action-id parsing.
 a `topologyComparison` section to the plan. The comparison matches action
 targets against the storage graph and reports missing targets, current size
 state versus `desiredSize`, filesystem type conflicts, and already-satisfied
-property updates where the current graph has enough data. It is advisory and
-does not remove actions from the plan.
+property updates where the current graph has enough data. Already-satisfied
+grow, shrink, and set-property actions with no warning diagnostics are
+suppressed from the actionable plan and counted in
+`topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy
 
@@ -440,7 +442,8 @@ to the detailed blocked action list. When policy allows an action, the report
 also includes a `commandSummary` plus a `commandPlan` with planned command
 argv, mutation markers, manual-review flags, readiness, unresolved inputs, and
 notes. If `--probe-current` is set, the report also includes the same
-`topologyComparison` emitted by `plan`. It also includes a
+`topologyComparison` emitted by `plan`, including any safe no-op actions
+suppressed before command rendering. It also includes a
 `verificationSummary` plus a `verificationPlan` with read-only post-apply
 commands and checks for the relevant storage domain. Executed reports also
 include `executionResults` with command phase, argv, success, exit status,

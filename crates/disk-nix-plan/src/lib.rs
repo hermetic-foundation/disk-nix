@@ -118,6 +118,7 @@ pub struct TopologyComparisonSummary {
     pub size_diagnostic_count: usize,
     pub type_conflict_count: usize,
     pub already_satisfied_count: usize,
+    pub suppressed_action_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -526,28 +527,8 @@ pub fn plan_from_value(value: &Value) -> Plan {
         }
     }
 
-    let summary = PlanSummary {
-        action_count: actions.len(),
-        offline_required_count: actions
-            .iter()
-            .filter(|action| action.risk == RiskClass::OfflineRequired)
-            .count(),
-        destructive_count: actions
-            .iter()
-            .filter(|action| action.risk == RiskClass::Destructive || action.destructive)
-            .count(),
-        potential_data_loss_count: actions
-            .iter()
-            .filter(|action| action.risk == RiskClass::PotentialDataLoss)
-            .count(),
-        unsupported_count: actions
-            .iter()
-            .filter(|action| action.risk == RiskClass::Unsupported)
-            .count(),
-    };
-
     Plan {
-        summary,
+        summary: plan_summary(&actions),
         actions,
         topology_comparison: None,
     }
@@ -560,6 +541,9 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
         .iter()
         .flat_map(|action| topology_diagnostics_for_action(action, graph))
         .collect();
+
+    let suppressed_action_ids = already_satisfied_action_ids(&plan.actions, &diagnostics);
+    let suppressed_action_count = suppressed_action_ids.len();
 
     let summary = TopologyComparisonSummary {
         action_count: plan.actions.len(),
@@ -596,13 +580,74 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                 )
             })
             .count(),
+        suppressed_action_count,
     };
+
+    if suppressed_action_count > 0 {
+        plan.actions
+            .retain(|action| !suppressed_action_ids.contains(&action.id));
+        plan.summary = plan_summary(&plan.actions);
+    }
 
     plan.topology_comparison = Some(TopologyComparison {
         summary,
         diagnostics,
     });
     plan
+}
+
+fn plan_summary(actions: &[PlannedAction]) -> PlanSummary {
+    PlanSummary {
+        action_count: actions.len(),
+        offline_required_count: actions
+            .iter()
+            .filter(|action| action.risk == RiskClass::OfflineRequired)
+            .count(),
+        destructive_count: actions
+            .iter()
+            .filter(|action| action.risk == RiskClass::Destructive || action.destructive)
+            .count(),
+        potential_data_loss_count: actions
+            .iter()
+            .filter(|action| action.risk == RiskClass::PotentialDataLoss)
+            .count(),
+        unsupported_count: actions
+            .iter()
+            .filter(|action| action.risk == RiskClass::Unsupported)
+            .count(),
+    }
+}
+
+fn already_satisfied_action_ids(
+    actions: &[PlannedAction],
+    diagnostics: &[TopologyDiagnostic],
+) -> Vec<String> {
+    let mut ids = Vec::new();
+    for action in actions {
+        if !matches!(
+            action.operation,
+            Operation::Grow | Operation::Shrink | Operation::SetProperty
+        ) {
+            continue;
+        }
+        let action_diagnostics = diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.action_id == action.id);
+        let mut already_satisfied = false;
+        let mut has_warning = false;
+        for diagnostic in action_diagnostics {
+            already_satisfied |= matches!(
+                diagnostic.kind,
+                TopologyDiagnosticKind::SizeAlreadySatisfied
+                    | TopologyDiagnosticKind::PropertyAlreadySatisfied
+            );
+            has_warning |= diagnostic.level == TopologyDiagnosticLevel::Warning;
+        }
+        if already_satisfied && !has_warning {
+            ids.push(action.id.clone());
+        }
+    }
+    ids
 }
 
 fn topology_diagnostics_for_action(
@@ -11006,6 +11051,16 @@ mod tests {
         assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(comparison.summary.type_conflict_count, 1);
         assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.summary.action_count, 1);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "datasets:tank/home:set-property:compression")
+        );
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "filesystem:home:grow" && action.operation == Operation::Grow
+        }));
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.kind == TopologyDiagnosticKind::SizeBelowDesired
                 && diagnostic.action_id == "filesystem:home:grow"
@@ -11017,6 +11072,45 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
                 && diagnostic.action_id == "datasets:tank/home:set-property:compression"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_satisfied_actions_with_warnings() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "home": {
+                  "mountpoint": "/home",
+                  "fsType": "btrfs",
+                  "resizePolicy": "grow-only",
+                  "desiredSize": "100GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("filesystem:/home", NodeKind::Filesystem, "/home")
+                .with_path("/home")
+                .with_size_bytes(500 * 1024 * 1024 * 1024)
+                .with_property("filesystem.type", "ext4"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.type_conflict_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.summary.action_count, 1);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "filesystem:home:grow" && action.operation == Operation::Grow
         }));
     }
 
