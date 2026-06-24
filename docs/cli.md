@@ -564,9 +564,12 @@ the number of graph-derived dependency edges as `graphDependencyEdgeCount`.
 With `--probe-current`, the CLI also probes the current host and adds
 `topologyComparison`, including matched target counts, missing target counts,
 size diagnostics, filesystem type conflicts, and already-satisfied property or
-size checks. Safe already-satisfied grow, shrink, and property actions that
-have no warning diagnostics are suppressed from the actionable plan and counted
-as `topologyComparison.summary.suppressedActionCount`.
+size checks. Mount actions are also compared with `mount.source` when the
+current graph has mountpoint data. Safe already-satisfied grow, shrink, mount,
+and property actions that have no warning diagnostics are suppressed from the
+actionable plan and counted as
+`topologyComparison.summary.suppressedActionCount`; mountpoints using a
+different source stay actionable with a warning diagnostic.
 
 ## Apply Evaluation
 

@@ -445,9 +445,9 @@ use this context to build command plans without relying on action-id parsing.
 a `topologyComparison` section to the plan. The comparison matches action
 targets against the storage graph and reports missing targets, current size
 state versus `desiredSize`, filesystem type conflicts, and already-satisfied
-property updates where the current graph has enough data. Already-satisfied
-grow, shrink, and set-property actions with no warning diagnostics are
-suppressed from the actionable plan and counted in
+mount or property updates where the current graph has enough data.
+Already-satisfied grow, shrink, mount, and set-property actions with no warning
+diagnostics are suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy

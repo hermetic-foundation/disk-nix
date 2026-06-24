@@ -238,6 +238,8 @@ pub enum TopologyDiagnosticKind {
     SizeAlreadySatisfied,
     SizeConflict,
     FilesystemTypeConflict,
+    MountAlreadySatisfied,
+    MountSourceConflict,
     PropertyAlreadySatisfied,
     PropertyDiffers,
 }
@@ -720,6 +722,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                 matches!(
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::PropertyAlreadySatisfied
                 )
             })
@@ -1275,7 +1278,7 @@ fn already_satisfied_action_ids(
     for action in actions {
         if !matches!(
             action.operation,
-            Operation::Grow | Operation::Shrink | Operation::SetProperty
+            Operation::Grow | Operation::Shrink | Operation::Mount | Operation::SetProperty
         ) {
             continue;
         }
@@ -1288,6 +1291,7 @@ fn already_satisfied_action_ids(
             already_satisfied |= matches!(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
+                    | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::PropertyAlreadySatisfied
             );
             has_warning |= diagnostic.level == TopologyDiagnosticLevel::Warning;
@@ -1331,6 +1335,7 @@ fn topology_diagnostics_for_action(
 
     diagnostics.extend(size_diagnostic(action, node, &query));
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
+    diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics
 }
@@ -1438,6 +1443,40 @@ fn property_diagnostic(
             TopologyDiagnosticLevel::Warning,
             TopologyDiagnosticKind::PropertyDiffers,
             format!("property {property} is {current}, desired {desired}"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn mount_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Mount {
+        return None;
+    }
+    let desired_source = action.context.device.as_deref()?;
+    let current_source = property_value_from_node(node, "mount.source")?;
+    let (level, kind, message) = if current_source == desired_source {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::MountAlreadySatisfied,
+            format!("mountpoint {query} already uses source {desired_source}"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::MountSourceConflict,
+            format!("mountpoint {query} uses source {current_source}, desired {desired_source}"),
         )
     };
 
@@ -12046,6 +12085,111 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
                 && diagnostic.action_id == "datasets:tank/home:set-property:compression"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_already_mounted_sources() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "backup": {
+                  "operation": "mount",
+                  "mountpoint": "/backup",
+                  "device": "/dev/disk/by-label/backup",
+                  "fsType": "xfs"
+                }
+              },
+              "nfs": {
+                "mounts": {
+                  "/srv/shared": {
+                    "operation": "mount",
+                    "source": "nas.example.com:/srv/shared",
+                    "fsType": "nfs4"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("mount:/backup", NodeKind::Mountpoint, "/backup")
+                .with_property("mount.source", "/dev/disk/by-label/backup"),
+        );
+        graph.add_node(
+            Node::new("mount:/srv/shared", NodeKind::NfsMount, "/srv/shared")
+                .with_property("mount.source", "nas.example.com:/srv/shared"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "filesystems:backup:mount")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "nfs.mounts:/srv/shared:mount")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:backup:mount"
+                && diagnostic.kind == TopologyDiagnosticKind::MountAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "nfs.mounts:/srv/shared:mount"
+                && diagnostic.kind == TopologyDiagnosticKind::MountAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_mount_action_when_source_differs() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "backup": {
+                  "operation": "mount",
+                  "mountpoint": "/backup",
+                  "device": "/dev/disk/by-label/backup",
+                  "fsType": "xfs"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("mount:/backup", NodeKind::Mountpoint, "/backup")
+                .with_property("mount.source", "/dev/disk/by-label/other"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "filesystems:backup:mount")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:backup:mount"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MountSourceConflict
         }));
     }
 
