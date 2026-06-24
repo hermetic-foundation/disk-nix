@@ -200,10 +200,12 @@ Examples:
   updates require `auto`, `sync`, or `async`; unsupported properties and
   invalid values are classified as unsupported before execution. Logical VDO
   volume names can declare the concrete VDO name with `target`.
-  Current-topology comparison suppresses VDO destroy actions only when the
-  volume is already absent; present targets remain actionable with warnings
-  that include operating mode, size, backing-device, write-policy, or LVM VDO
-  utilization metadata when available.
+  Current-topology comparison suppresses VDO grow when current byte size or
+  VDO logical-size metadata already satisfies `desiredSize`, and keeps
+  below-target or unknown current sizes actionable. VDO destroy actions are
+  suppressed only when the volume is already absent; present targets remain
+  actionable with warnings that include operating mode, size, backing-device,
+  write-policy, or LVM VDO utilization metadata when available.
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV growth is also online when the volume group has free
   extents; LV removal is destructive because it deletes the volume contents.
@@ -575,10 +577,13 @@ NVMe namespace attach/detach reconciliation suppresses attach actions only
 when the declared namespace path is already visible and suppresses detach
 actions only when the declared namespace path is already absent; opposite
 states stay actionable with a warning.
-VDO destroy reconciliation suppresses removal only when the VDO volume is
-already absent. Present VDO removal targets stay actionable with warnings that
-include available operating-mode, size, backing-device, write-policy, and LVM
-VDO utilization metadata. VDO start/stop reconciliation uses
+VDO grow reconciliation suppresses growth when current byte size or VDO
+logical-size metadata already satisfies `desiredSize`; below-target or unknown
+current sizes stay actionable. VDO destroy reconciliation suppresses removal
+only when the VDO volume is already absent. Present VDO removal targets stay
+actionable with warnings that include available operating-mode, size,
+backing-device, write-policy, and LVM VDO utilization metadata. VDO start/stop
+reconciliation uses
 `vdo.operating-mode` topology metadata to suppress start actions only when the
 volume is already in `normal` mode and stop actions only when the mode
 explicitly reports stopped, not-running, or inactive; opposite states stay

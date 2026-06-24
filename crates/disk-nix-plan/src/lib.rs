@@ -337,6 +337,7 @@ pub enum TopologyDiagnosticKind {
     SnapshotRollbackPointMissing,
     VdoDestroyAlreadySatisfied,
     VdoDestroyRequired,
+    VdoGrowRequired,
     VdoStartAlreadySatisfied,
     VdoStartRequired,
     VdoStopAlreadySatisfied,
@@ -1681,6 +1682,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(swap_active_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics.extend(vdo_destroy_present_diagnostic(action, node, &query));
+    diagnostics.extend(vdo_grow_diagnostic(action, node, &query));
     diagnostics.extend(vdo_start_diagnostic(action, node, &query));
     diagnostics.extend(vdo_stop_diagnostic(action, node, &query));
     diagnostics.extend(zfs_object_create_present_diagnostic(action, node, &query));
@@ -4231,6 +4233,72 @@ fn vdo_destroy_details(node: &Node) -> Vec<String> {
         property_value_from_node(node, property).map(|value| format!("{label} {value}"))
     })
     .collect()
+}
+
+fn vdo_grow_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Grow
+        || action.context.collection.as_deref() != Some("vdoVolumes")
+        || node.size_bytes.is_some()
+    {
+        return None;
+    }
+
+    let desired = action.context.desired_size.as_deref()?;
+    let desired_bytes = parse_size_bytes(desired);
+    let current = vdo_logical_size(node);
+
+    let (level, kind, message) = match (desired_bytes, current) {
+        (Some(desired_bytes), Some((current, current_bytes))) if current_bytes >= desired_bytes => {
+            (
+                TopologyDiagnosticLevel::Info,
+                TopologyDiagnosticKind::SizeAlreadySatisfied,
+                format!(
+                    "VDO volume {query} logical size {current} already satisfies desired size {desired}"
+                ),
+            )
+        }
+        (Some(_), Some((current, _))) => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::SizeBelowDesired,
+            format!("VDO volume {query} logical size {current} is below desired size {desired}"),
+        ),
+        (None, _) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::VdoGrowRequired,
+            format!(
+                "VDO volume {query} desired size {desired} could not be parsed; grow remains actionable"
+            ),
+        ),
+        (Some(_), None) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::VdoGrowRequired,
+            format!(
+                "VDO volume {query} current logical size is unknown; grow to {desired} remains actionable"
+            ),
+        ),
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn vdo_logical_size(node: &Node) -> Option<(&str, u64)> {
+    ["vdo.logical-size", "lvm.vdo-logical-size"]
+        .into_iter()
+        .find_map(|property| {
+            let value = property_value_from_node(node, property)?;
+            parse_size_bytes(value).map(|bytes| (value, bytes))
+        })
 }
 
 fn vdo_start_diagnostic(
@@ -17781,6 +17849,84 @@ mod tests {
                 && diagnostic.kind == TopologyDiagnosticKind::VdoDestroyRequired
                 && diagnostic.message.contains("used 128.00m")
                 && diagnostic.message.contains("saving 72.50")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_vdo_grow_from_logical_size_metadata() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "operation": "grow",
+                  "desiredSize": "2TiB"
+                },
+                "small": {
+                  "operation": "grow",
+                  "desiredSize": "4TiB"
+                },
+                "unknown": {
+                  "operation": "grow",
+                  "desiredSize": "4TiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_path("/dev/mapper/archive")
+                .with_property("vdo.logical-size", "4TiB"),
+        );
+        graph.add_node(
+            Node::new("vdo:small", NodeKind::VdoVolume, "small")
+                .with_path("/dev/mapper/small")
+                .with_property("vdo.logical-size", "1TiB"),
+        );
+        graph.add_node(
+            Node::new("vdo:unknown", NodeKind::VdoVolume, "unknown")
+                .with_path("/dev/mapper/unknown"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.summary.action_count, 2);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "vdovolumes:archive:grow")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:archive:grow"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::SizeAlreadySatisfied
+                && diagnostic
+                    .message
+                    .contains("logical size 4TiB already satisfies desired size 2TiB")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:small:grow"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::SizeBelowDesired
+                && diagnostic
+                    .message
+                    .contains("logical size 1TiB is below desired size 4TiB")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:unknown:grow"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::VdoGrowRequired
+                && diagnostic
+                    .message
+                    .contains("current logical size is unknown")
         }));
     }
 

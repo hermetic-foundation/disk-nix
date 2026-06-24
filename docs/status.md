@@ -42,8 +42,8 @@ behavior across real storage stacks.
   login/logout, LVM logical-volume activation/deactivation, LUKS open, LUKS
   close, loop create/destroy, LUN attach/detach, NVMe namespace attach/detach,
   backing-file create/grow, LVM physical-volume create, swap
-  deactivate/destroy, mount, unmount, remount, NFS export/unexport, VDO start,
-  VDO stop, MD create/assemble/stop/member add/member removal/member
+  deactivate/destroy, mount, unmount, remount, NFS export/unexport, VDO grow,
+  VDO start, VDO stop, MD create/assemble/stop/member add/member removal/member
   replacement, multipath path add/removal, ZFS pool create/import, ZFS
   dataset/zvol create, Btrfs subvolume create, Btrfs qgroup create, LVM
   volume/thin-pool create, LVM volume-group create/import/export, and property
@@ -62,8 +62,9 @@ behavior across real storage stacks.
   mapped to different backing files, backing-file create targets with different
   or unknown current size, still-mapped loop detach targets, absent LUN attach
   paths, visible LUN detach paths, absent NVMe namespace attach
-  paths, visible NVMe namespace detach paths, non-normal VDO start modes,
-  running VDO stop targets, active swap teardown targets, active or
+  paths, visible NVMe namespace detach paths, unknown or below-target VDO grow
+  sizes, non-normal VDO start modes, running VDO stop targets, active swap
+  teardown targets, active or
   unknown-state MD stop targets, absent MD member-add devices, still-attached MD
   member-removal devices, incomplete MD member replacements, degraded or failed
   MD arrays, absent multipath path-add devices, still-attached multipath path
