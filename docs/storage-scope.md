@@ -108,6 +108,8 @@ The current probe layer normalizes:
 - `nvme list --output-format=json` for NVMe namespace controller/subsystem,
   transport, namespace id, namespace UUID, NGUID, EUI-64, ANA state, LBA
   format, sector geometry, capacity, used bytes, and generic namespace path
+- `nvme list-subsys -o json` for NVMe subsystem, host NQN, controller path,
+  fabrics endpoint, path state, and ANA topology
 - `nvme id-ns -o json` for NVMe namespace size/capacity/usage counters,
   feature flags, formatted LBA descriptor, metadata size, and namespace capacity
   metadata when namespace paths are discovered by `nvme list`
@@ -200,15 +202,15 @@ The current probe layer normalizes:
   path-group policy/priority/status, parsed backing-path SCSI coordinates, and
   split dm/checker/online path state plus additional path flags such as ghost
   or faulty state tokens
-- NVMe controllers and namespaces through `nvme list -o json` for namespace
-  path, generic namespace path, serial, model/product, firmware, subsystem,
-  controller, controller id, transport, address, namespace id/index, capacity,
-  usage, LBA format, maximum LBA, and sector size; `nvme id-ns -o json` adds
-  namespace feature/capacity counters and formatted LBA descriptor metadata,
-  while `nvme id-ctrl -o json` adds controller capability, namespace count,
-  queue, cache, sanitize, ANA, thermal, and capacity metadata, and
-  `nvme smart-log -o json` adds controller health, error, temperature, lifetime
-  usage, and power telemetry
+- NVMe subsystems, controllers, and namespaces through `nvme list-subsys -o json` for subsystem, host NQN, controller path, fabrics endpoint, path state,
+  and ANA topology; `nvme list -o json` adds namespace path, generic namespace
+  path, serial, model/product, firmware, subsystem, controller, controller id,
+  transport, address, namespace id/index, capacity, usage, LBA format, maximum
+  LBA, and sector size; `nvme id-ns -o json` adds namespace feature/capacity
+  counters and formatted LBA descriptor metadata, while `nvme id-ctrl -o json`
+  adds controller capability, namespace count, queue, cache, sanitize, ANA,
+  thermal, and capacity metadata, and `nvme smart-log -o json` adds controller
+  health, error, temperature, lifetime usage, and power telemetry
 
 LVM probing may report `partial` when the process lacks permission to talk to
 device-mapper. That should not prevent the rest of discovery from succeeding.

@@ -324,14 +324,15 @@ Use these commands for:
   path count, host path, SCSI host/channel/id/LUN coordinates, major/minor,
   path-group policy, priority, group status, dm/checker/online state columns,
   extra path flags, and raw path state when `multipath -ll` exposes them
-- `nvme`: NVMe controllers and namespaces, including path, serial, model,
-  firmware, namespace index/id, generic namespace path, subsystem, controller,
-  controller id, transport, address, namespace capacity, LBA format, maximum
-  LBA, sector size, formatted LBA descriptor, namespace feature/capacity
-  counters, controller capabilities/capacity, physical size, used bytes, free
-  bytes, utilization, temperature, spare capacity, media errors, unsafe
-  shutdowns, error-log count, and power-on telemetry when `nvme list -o json`,
-  `nvme id-ns -o json`, `nvme id-ctrl -o json`, and
+- `nvme`: NVMe subsystems, controllers, and namespaces, including path, serial,
+  model, firmware, namespace index/id, generic namespace path, subsystem NQN,
+  host NQN, controller, controller id, transport, address, fabrics endpoint,
+  path state, ANA state, namespace capacity, LBA format, maximum LBA, sector
+  size, formatted LBA descriptor, namespace feature/capacity counters,
+  controller capabilities/capacity, physical size, used bytes, free bytes,
+  utilization, temperature, spare capacity, media errors, unsafe shutdowns,
+  error-log count, and power-on telemetry when `nvme list-subsys -o json`,
+  `nvme list -o json`, `nvme id-ns -o json`, `nvme id-ctrl -o json`, and
   `nvme smart-log -o json` expose them
 - `raid`: MD RAID arrays and member devices, including array UUID, scan-level
   metadata version, array name, spare count, device hints, active detail

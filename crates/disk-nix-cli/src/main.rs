@@ -2307,6 +2307,7 @@ fn is_device_node(node: &Node) -> bool {
             | NodeKind::Zvol
             | NodeKind::CacheDevice
             | NodeKind::MultipathDevice
+            | NodeKind::NvmeSubsystem
             | NodeKind::NvmeNamespace
             | NodeKind::LoopDevice
             | NodeKind::BcachefsDevice
@@ -2497,7 +2498,7 @@ fn is_multipath_node(node: &Node) -> bool {
 fn is_nvme_node(node: &Node) -> bool {
     matches!(
         node.kind,
-        NodeKind::NvmeController | NodeKind::NvmeNamespace
+        NodeKind::NvmeSubsystem | NodeKind::NvmeController | NodeKind::NvmeNamespace
     ) || node
         .properties
         .iter()
@@ -2659,9 +2660,17 @@ fn usage_details(node: &Node) -> String {
         ("nvme.eui64", "eui64"),
         ("nvme.nguid", "nguid"),
         ("nvme.subsystem", "subsystem"),
+        ("nvme.subsystem-name", "subsystem-name"),
+        ("nvme.subsystem-nqn", "subsystem-nqn"),
+        ("nvme.hostnqn", "hostnqn"),
         ("nvme.controller", "controller"),
         ("nvme.address", "address"),
         ("nvme.transport", "transport"),
+        ("nvme.traddr", "traddr"),
+        ("nvme.trsvcid", "trsvcid"),
+        ("nvme.host-traddr", "host-traddr"),
+        ("nvme.host-iface", "host-iface"),
+        ("nvme.path-state", "path-state"),
         ("nvme.controller-id", "controller-id"),
         ("nvme.namespace-capacity", "namespace-capacity"),
         ("nvme.lba-format", "lba-format"),

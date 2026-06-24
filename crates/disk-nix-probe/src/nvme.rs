@@ -70,6 +70,55 @@ pub fn normalize_nvme_list_json(bytes: &[u8]) -> Result<StorageGraph, ProbeError
     Ok(graph)
 }
 
+pub fn normalize_nvme_subsystems_json(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
+    let value: Value = serde_json::from_slice(bytes).map_err(|error| {
+        ProbeError::Adapter(format!("failed to parse nvme list-subsys JSON: {error}"))
+    })?;
+    let mut graph = StorageGraph::empty();
+    let Some(subsystems) = value
+        .get("Subsystems")
+        .or_else(|| value.get("subsystems"))
+        .and_then(Value::as_array)
+    else {
+        return Ok(graph);
+    };
+
+    for (index, subsystem) in subsystems.iter().enumerate() {
+        let name = field_string_any(subsystem, &["Name", "name"])
+            .or_else(|| field_string_any(subsystem, &["Subsystem", "SubSystem"]));
+        let nqn = field_string_any(subsystem, &["NQN", "SubsystemNQN", "subnqn", "nqn"]);
+        let hostnqn = field_string_any(subsystem, &["HostNQN", "hostnqn"]);
+        let node_name = name
+            .clone()
+            .or_else(|| nqn.clone())
+            .unwrap_or_else(|| format!("subsystem-{index}"));
+        let subsystem_id = nvme_subsystem_id(&node_name);
+        let mut node = Node::new(
+            subsystem_id.clone(),
+            NodeKind::NvmeSubsystem,
+            node_name.clone(),
+        )
+        .with_property("nvme.subsystem-name", node_name.clone());
+
+        if let Some(name) = name {
+            node = node.with_property("nvme.subsystem", name);
+        }
+        if let Some(nqn) = nqn.clone() {
+            node = node.with_property("nvme.subsystem-nqn", nqn);
+        }
+        if let Some(hostnqn) = hostnqn {
+            node = node.with_property("nvme.hostnqn", hostnqn);
+        }
+        graph.add_node(node);
+
+        for path in subsystem_paths(subsystem) {
+            add_subsystem_path(&mut graph, &subsystem_id, &node_name, nqn.as_deref(), path);
+        }
+    }
+
+    Ok(graph)
+}
+
 pub fn normalize_nvme_id_ns_json(path: &str, bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
     let value: Value = serde_json::from_slice(bytes).map_err(|error| {
         ProbeError::Adapter(format!(
@@ -531,6 +580,111 @@ fn add_controller(graph: &mut StorageGraph, controller: &str, summary: Controlle
     graph.add_node(node);
 }
 
+fn add_subsystem_path(
+    graph: &mut StorageGraph,
+    subsystem_id: &str,
+    subsystem_name: &str,
+    subsystem_nqn: Option<&str>,
+    path: &Value,
+) {
+    let Some(controller) = field_string_any(
+        path,
+        &[
+            "Name",
+            "Controller",
+            "ControllerName",
+            "Device",
+            "ControllerPath",
+        ],
+    ) else {
+        return;
+    };
+    let name = controller.trim_start_matches("/dev/").to_string();
+    let mut node = Node::new(
+        nvme_controller_id(&name),
+        NodeKind::NvmeController,
+        name.clone(),
+    )
+    .with_path(controller_path(&name))
+    .with_property("nvme.controller", name.clone())
+    .with_property("nvme.subsystem", subsystem_name.to_string());
+
+    if let Some(nqn) = subsystem_nqn {
+        node = node.with_property("nvme.subsystem-nqn", nqn.to_string());
+    }
+    for (key, property) in [
+        ("Transport", "nvme.transport"),
+        ("TrType", "nvme.transport"),
+        ("Address", "nvme.address"),
+        ("TransportAddress", "nvme.address"),
+        ("TRADDR", "nvme.traddr"),
+        ("TRSVCID", "nvme.trsvcid"),
+        ("HostTRADDR", "nvme.host-traddr"),
+        ("HostIface", "nvme.host-iface"),
+        ("State", "nvme.path-state"),
+        ("ANAState", "nvme.ana-state"),
+    ] {
+        if let Some(value) = field_string(path, key) {
+            node = node.with_property(property, value);
+        }
+    }
+
+    graph.add_node(node);
+    graph.add_edge(Edge::new(
+        subsystem_id.to_string(),
+        nvme_controller_id(&name),
+        Relationship::Contains,
+    ));
+
+    for namespace in subsystem_namespaces(path) {
+        if let Some(namespace_path) = field_string_any(
+            namespace,
+            &["Name", "Path", "DevicePath", "NamespacePath", "BlockDevice"],
+        ) {
+            let mut node = Node::new(
+                format!("block:{namespace_path}"),
+                NodeKind::NvmeNamespace,
+                namespace_path.clone(),
+            )
+            .with_path(namespace_path.clone())
+            .with_property("nvme.controller", name.clone())
+            .with_property("nvme.subsystem", subsystem_name.to_string());
+            if let Some(nqn) = subsystem_nqn {
+                node = node.with_property("nvme.subsystem-nqn", nqn.to_string());
+            }
+            if let Some(nsid) = field_string_any(namespace, &["NSID", "Namespace", "NameSpace"]) {
+                node = node.with_property("nvme.namespace-id", nsid);
+            }
+            graph.add_node(node);
+            graph.add_edge(Edge::new(
+                nvme_controller_id(&name),
+                format!("block:{namespace_path}"),
+                Relationship::Contains,
+            ));
+        }
+    }
+}
+
+fn subsystem_paths(subsystem: &Value) -> Vec<&Value> {
+    ["Paths", "Controllers", "paths", "controllers"]
+        .iter()
+        .filter_map(|key| subsystem.get(key).and_then(Value::as_array))
+        .flat_map(|values| values.iter())
+        .collect()
+}
+
+fn subsystem_namespaces(path: &Value) -> Vec<&Value> {
+    ["Namespaces", "NameSpaces", "namespaces"]
+        .iter()
+        .filter_map(|key| path.get(key).and_then(Value::as_array))
+        .flat_map(|values| values.iter())
+        .collect()
+}
+
+fn nvme_subsystem_id(name: &str) -> String {
+    format!("nvme-subsystem:{name}")
+}
+
 fn nvme_controller_id(controller: &str) -> String {
     format!("nvme-controller:{}", controller.trim_start_matches("/dev/"))
 }
@@ -565,6 +719,10 @@ fn field_string(value: &Value, key: &str) -> Option<String> {
     } else {
         Some(value.to_string())
     }
+}
+
+fn field_string_any(value: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| field_string(value, key))
 }
 
 #[cfg(test)]
@@ -634,6 +792,38 @@ mod tests {
   "lbafs": [
     { "ms": 0, "ds": 9, "rp": 0 },
     { "ms": 8, "ds": 12, "rp": 1 }
+  ]
+}
+"#;
+
+    const NVME_SUBSYSTEMS: &[u8] = br#"
+{
+  "Subsystems": [
+    {
+      "Name": "nvme-subsys0",
+      "NQN": "nqn.2014-08.org.nvmexpress:uuid:12345678",
+      "HostNQN": "nqn.2014-08.org.nvmexpress:host:disk-nix",
+      "Paths": [
+        {
+          "Name": "nvme0",
+          "Transport": "pcie",
+          "Address": "0000:01:00.0",
+          "State": "live",
+          "ANAState": "optimized",
+          "Namespaces": [
+            { "Name": "/dev/nvme0n1", "NSID": 1 }
+          ]
+        },
+        {
+          "Name": "nvme1",
+          "Transport": "tcp",
+          "TRADDR": "192.0.2.10",
+          "TRSVCID": "4420",
+          "State": "connecting",
+          "ANAState": "inaccessible"
+        }
+      ]
+    }
   ]
 }
 "#;
@@ -853,6 +1043,54 @@ mod tests {
                 .any(|property| property.key == "nvme.id-ns.nvmcap"
                     && property.value == "1000000000")
         );
+    }
+
+    #[test]
+    fn normalizes_nvme_subsystem_topology_json() {
+        let graph = normalize_nvme_subsystems_json(NVME_SUBSYSTEMS).expect("fixture should parse");
+
+        let subsystem = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::NvmeSubsystem)
+            .expect("subsystem node should exist");
+        assert_eq!(subsystem.name, "nvme-subsys0");
+        assert!(subsystem.properties.iter().any(|property| {
+            property.key == "nvme.subsystem-nqn"
+                && property.value == "nqn.2014-08.org.nvmexpress:uuid:12345678"
+        }));
+        assert!(subsystem.properties.iter().any(|property| {
+            property.key == "nvme.hostnqn"
+                && property.value == "nqn.2014-08.org.nvmexpress:host:disk-nix"
+        }));
+
+        let tcp_controller = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nvme-controller:nvme1")
+            .expect("tcp controller node should exist");
+        assert!(
+            tcp_controller.properties.iter().any(|property| {
+                property.key == "nvme.traddr" && property.value == "192.0.2.10"
+            })
+        );
+        assert!(tcp_controller.properties.iter().any(|property| {
+            property.key == "nvme.path-state" && property.value == "connecting"
+        }));
+        assert!(tcp_controller.properties.iter().any(|property| {
+            property.key == "nvme.ana-state" && property.value == "inaccessible"
+        }));
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "nvme-subsystem:nvme-subsys0"
+                && edge.to.0 == "nvme-controller:nvme0"
+                && edge.relationship == Relationship::Contains
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "nvme-controller:nvme0"
+                && edge.to.0 == "block:/dev/nvme0n1"
+                && edge.relationship == Relationship::Contains
+        }));
     }
 
     #[test]

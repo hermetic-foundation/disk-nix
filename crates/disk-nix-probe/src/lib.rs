@@ -1304,6 +1304,7 @@ fn collect_nvme(result: &mut ProbeResult) {
                         "normalized {node_count} graph nodes from NVMe JSON"
                     )),
                 });
+                collect_nvme_subsystems(result);
                 collect_nvme_namespace_details(result, namespace_paths);
                 collect_nvme_controller_details(result, controllers.clone());
                 collect_nvme_smart_logs(result, controllers);
@@ -1316,6 +1317,38 @@ fn collect_nvme(result: &mut ProbeResult) {
         },
         Err(message) => result.reports.push(ProbeReport {
             adapter: "nvme".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
+    }
+}
+
+fn collect_nvme_subsystems(result: &mut ProbeResult) {
+    match run_report("nvme", &["list-subsys", "-o", "json"]) {
+        Ok(output) => match nvme::normalize_nvme_subsystems_json(&output) {
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "nvme-list-subsys".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from NVMe subsystem JSON"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "nvme-list-subsys".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "nvme-list-subsys".to_string(),
             status: if message.contains("not found") || message.contains("No such file") {
                 ProbeStatus::Unavailable
             } else {
