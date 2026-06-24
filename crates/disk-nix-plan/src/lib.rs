@@ -2730,6 +2730,8 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
         .get("target")
         .and_then(Value::as_str)
         .unwrap_or(name);
+    let snapshot_name = string_field(snapshot, &["name", "snapshotName", "snapshot-name"])
+        .unwrap_or_else(|| name.to_string());
     let snapshot_path = string_field(snapshot, &["path", "snapshotPath", "snapshot-path"]);
     let hold = string_field(snapshot, &["hold", "holdTag"]);
     let release_hold = string_field(snapshot, &["releaseHold", "release-hold"]);
@@ -2767,7 +2769,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
             destructive: false,
             context: ActionContext {
                 collection: Some("snapshots".to_string()),
-                name: Some(name.to_string()),
+                name: Some(snapshot_name.clone()),
                 target: Some(target.to_string()),
                 snapshot_path: snapshot_path.clone(),
                 read_only,
@@ -2787,11 +2789,19 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
     }
 
     if let Some(hold) = hold {
-        actions.push(snapshot_hold_action(name, target, &hold, read_only, false));
+        actions.push(snapshot_hold_action(
+            name,
+            &snapshot_name,
+            target,
+            &hold,
+            read_only,
+            false,
+        ));
     }
     if let Some(release_hold) = release_hold {
         actions.push(snapshot_hold_action(
             name,
+            &snapshot_name,
             target,
             &release_hold,
             read_only,
@@ -2801,13 +2811,13 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
     if let Some(clone_to) = clone_to {
         actions.push(PlannedAction {
             id: format!("snapshot:{name}:clone:{clone_to}"),
-            description: format!("clone snapshot {name} to {clone_to}"),
+            description: format!("clone snapshot {snapshot_name} to {clone_to}"),
             operation: Operation::Clone,
             risk: RiskClass::Reversible,
             destructive: false,
             context: ActionContext {
                 collection: Some("snapshots".to_string()),
-                name: Some(name.to_string()),
+                name: Some(snapshot_name.clone()),
                 target: Some(clone_to),
                 read_only,
                 ..ActionContext::default()
@@ -2826,13 +2836,13 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
     if let Some(rename_to) = rename_to {
         actions.push(PlannedAction {
             id: format!("snapshot:{name}:rename:{rename_to}"),
-            description: format!("rename snapshot {name} to {rename_to}"),
+            description: format!("rename snapshot {snapshot_name} to {rename_to}"),
             operation: Operation::Rename,
             risk: RiskClass::OfflineRequired,
             destructive: false,
             context: ActionContext {
                 collection: Some("snapshots".to_string()),
-                name: Some(name.to_string()),
+                name: Some(snapshot_name.clone()),
                 target: Some(target.to_string()),
                 rename_to: Some(rename_to),
                 read_only,
@@ -2853,13 +2863,13 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
     if destroy {
         actions.push(PlannedAction {
             id: format!("snapshot:{name}:destroy"),
-            description: format!("destroy snapshot {name} for {target}"),
+            description: format!("destroy snapshot {snapshot_name} for {target}"),
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             destructive: true,
             context: ActionContext {
                 collection: Some("snapshots".to_string()),
-                name: Some(name.to_string()),
+                name: Some(snapshot_name.clone()),
                 target: Some(target.to_string()),
                 read_only,
                 ..ActionContext::default()
@@ -2875,13 +2885,13 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
     } else if rollback {
         actions.push(PlannedAction {
             id: format!("snapshot:{name}:rollback"),
-            description: format!("roll back {target} to snapshot {name}"),
+            description: format!("roll back {target} to snapshot {snapshot_name}"),
             operation: Operation::Rollback,
             risk: RiskClass::PotentialDataLoss,
             destructive: false,
             context: ActionContext {
                 collection: Some("snapshots".to_string()),
-                name: Some(name.to_string()),
+                name: Some(snapshot_name.clone()),
                 target: Some(target.to_string()),
                 read_only,
                 recursive_rollback,
@@ -2901,13 +2911,13 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
     {
         actions.push(PlannedAction {
             id: format!("snapshot:{name}:create"),
-            description: format!("create snapshot {name} for {target}"),
+            description: format!("create snapshot {snapshot_name} for {target}"),
             operation: Operation::Snapshot,
             risk: RiskClass::Reversible,
             destructive: false,
             context: ActionContext {
                 collection: Some("snapshots".to_string()),
-                name: Some(name.to_string()),
+                name: Some(snapshot_name),
                 target: Some(target.to_string()),
                 read_only,
                 ..ActionContext::default()
@@ -2918,7 +2928,8 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
 }
 
 fn snapshot_hold_action(
-    name: &str,
+    action_name: &str,
+    snapshot_name: &str,
     target: &str,
     tag: &str,
     read_only: Option<bool>,
@@ -2931,16 +2942,16 @@ fn snapshot_hold_action(
     };
     PlannedAction {
         id: format!(
-            "snapshot:{name}:{}:{tag}",
+            "snapshot:{action_name}:{}:{tag}",
             if release { "release-hold" } else { "hold" }
         ),
-        description: format!("{verb} snapshot {name} for {target} with tag {tag}"),
+        description: format!("{verb} snapshot {snapshot_name} for {target} with tag {tag}"),
         operation: Operation::SetProperty,
         risk: RiskClass::Safe,
         destructive: false,
         context: ActionContext {
             collection: Some("snapshots".to_string()),
-            name: Some(name.to_string()),
+            name: Some(snapshot_name.to_string()),
             target: Some(target.to_string()),
             property: Some(property.to_string()),
             property_value: Some(tag.to_string()),
@@ -10887,6 +10898,70 @@ mod tests {
             friendly_btrfs_rescan.context.snapshot_path.as_deref(),
             Some("/mnt/persist/@home-before-friendly")
         );
+    }
+
+    #[test]
+    fn plan_accepts_snapshot_name_aliases_for_logical_keys() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "before-hold": {
+                  "name": "tank/home@before",
+                  "target": "tank/home",
+                  "hold": "keep"
+                },
+                "before-clone": {
+                  "snapshotName": "tank/home@before",
+                  "target": "tank/home",
+                  "cloneTo": "tank/home-review"
+                },
+                "before-rescan": {
+                  "snapshot-name": "tank/home@before",
+                  "target": "tank/home",
+                  "operation": "rescan"
+                },
+                "before-destroy": {
+                  "name": "tank/home@old",
+                  "target": "tank/home",
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let hold = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:before-hold:hold:keep")
+            .expect("logical-key hold action exists");
+        assert_eq!(hold.context.name.as_deref(), Some("tank/home@before"));
+        assert_eq!(hold.context.target.as_deref(), Some("tank/home"));
+
+        let clone = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:before-clone:clone:tank/home-review")
+            .expect("logical-key clone action exists");
+        assert_eq!(clone.context.name.as_deref(), Some("tank/home@before"));
+        assert_eq!(clone.context.target.as_deref(), Some("tank/home-review"));
+
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:before-rescan:rescan")
+            .expect("logical-key rescan action exists");
+        assert_eq!(rescan.context.name.as_deref(), Some("tank/home@before"));
+        assert_eq!(rescan.context.target.as_deref(), Some("tank/home"));
+
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:before-destroy:destroy")
+            .expect("logical-key destroy action exists");
+        assert_eq!(destroy.context.name.as_deref(), Some("tank/home@old"));
+        assert_eq!(destroy.context.target.as_deref(), Some("tank/home"));
+        assert_eq!(destroy.risk, RiskClass::Destructive);
     }
 
     #[test]

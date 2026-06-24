@@ -392,8 +392,11 @@ domain. Btrfs snapshot declarations with `readOnly = true` render
 Snapshot deletion plans render policy-gated `zfs destroy` and
 `btrfs subvolume delete` commands for unambiguous ZFS snapshot names and Btrfs
 absolute snapshot paths.
-Snapshot rescan plans accept `path`, `snapshotPath`, or `snapshot-path` when a
-Btrfs snapshot uses a friendly map key instead of the absolute snapshot path.
+Snapshot lifecycle plans accept `name`, `snapshotName`, or `snapshot-name` when
+the declaration key is a friendly name instead of the concrete snapshot
+identity. Snapshot rescan plans also accept `path`, `snapshotPath`, or
+`snapshot-path` when a Btrfs snapshot uses a friendly map key instead of the
+absolute snapshot path.
 ZFS snapshot hold plans render safe `zfs hold <tag> <snapshot>` and
 `zfs release <tag> <snapshot>` updates from `hold` and `releaseHold`
 declarations so retention can be changed without deleting recovery points.

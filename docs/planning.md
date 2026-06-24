@@ -282,10 +282,11 @@ Examples:
   `zfs hold <tag> <snapshot>` and `zfs release <tag> <snapshot>`. ZFS snapshot
   `operation = "rescan"` and absolute Btrfs snapshot rescan declarations are
   online read-only refreshes for snapshot metadata, holds, read-only state, and
-  graph relationships. Btrfs snapshot rescans can also use `path`,
-  `snapshotPath`, or `snapshot-path` to provide the concrete snapshot path when
-  the snapshot map key is a friendly name. ZFS snapshot
-  clone declarations with `cloneTo`, `cloneTarget`, or `clone` render
+  graph relationships. Snapshot declarations can use `name`, `snapshotName`, or
+  `snapshot-name` to provide the concrete snapshot identity when the map key is
+  a friendly name. Btrfs snapshot rescans can also use `path`, `snapshotPath`,
+  or `snapshot-path` to provide the concrete snapshot path. ZFS snapshot clone
+  declarations with `cloneTo`, `cloneTarget`, or `clone` render
   reversible `zfs clone <snapshot> <dataset>` plans. ZFS rollback command
   rendering is available for review, and `recursiveRollback`, `recursive`, or
   `zfs.rollbackRecursive` render explicit `zfs rollback -r` details for
@@ -359,6 +360,8 @@ Lifecycle objects may use:
   or create plans
 - `target`, `path`, or `mountpoint`: explicit target path or object identity
   when it differs from the attribute name
+- `name`, `snapshotName`, or `snapshot-name`: explicit snapshot identity when a
+  snapshot declaration uses a friendly attribute name
 - `device` or `disk`: backing device path for disk, partition, and LUN operations
 - `level` or `raidLevel`: MD RAID level for reviewed array creation
 - `client`: NFS export client or network selector

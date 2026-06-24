@@ -456,6 +456,9 @@ Address fields have domain-specific meaning:
   snapshot path when the attribute name is a friendly key. NFS client mounts
   use the typed `mountpoint` field instead.
 
+- `name`, `snapshotName`, `snapshot-name`: concrete snapshot identity for ZFS
+  snapshot lifecycle actions when the declaration key is a friendly name
+
 - `snapshotPath`: explicit snapshot identity alias for `path`, useful for
   Btrfs snapshot rescans with non-path attribute names
 
@@ -742,7 +745,8 @@ Example lifecycle planning through NixOS options:
       ];
     };
     nvmeNamespaces."/dev/nvme1".operation = "rescan";
-    snapshots."tank/home@before-upgrade" = {
+    snapshots.beforeUpgrade = {
+      name = "tank/home@before-upgrade";
       target = "tank/home";
       renameTo = "tank/home@before-upgrade-retained";
     };

@@ -529,6 +529,27 @@ let
           example = "tank/home";
         };
 
+        name = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Concrete snapshot identity when the attribute name is only a friendly declaration key.";
+          example = "tank/home@before-upgrade";
+        };
+
+        snapshotName = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Alias for name, copied into the planner spec for explicit snapshot identity.";
+          example = "tank/home@before-upgrade";
+        };
+
+        "snapshot-name" = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Kebab-case alias for snapshotName, copied into the planner spec.";
+          example = "tank/home@before-upgrade";
+        };
+
         path = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -755,6 +776,8 @@ let
     // cleanSpecAttrs {
       inherit (snapshot)
         target
+        name
+        snapshotName
         path
         snapshotPath
         operation
@@ -776,6 +799,7 @@ let
         readonly
         preserveData
         ;
+      "snapshot-name" = snapshot."snapshot-name";
       "snapshot-path" = snapshot."snapshot-path";
       "zfs.rollbackRecursive" = snapshot."zfs.rollbackRecursive";
     }
@@ -1799,7 +1823,7 @@ in
     snapshots = lib.mkOption {
       type = snapshotAttrs;
       default = { };
-      description = "Typed snapshot lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed snapshot lifecycle declarations emitted into the disk-nix planner spec. A logical attribute name can set name, snapshotName, or snapshot-name to the concrete snapshot identity.";
     };
 
     apply = {

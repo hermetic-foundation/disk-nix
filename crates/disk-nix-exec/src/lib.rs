@@ -13811,6 +13811,140 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_lifecycle_accepts_names_for_logical_keys() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "before-hold": {
+                  "name": "tank/home@before",
+                  "target": "tank/home",
+                  "hold": "keep"
+                },
+                "old-release": {
+                  "snapshotName": "tank/home@old",
+                  "target": "tank/home",
+                  "releaseHold": "expired"
+                },
+                "before-rescan": {
+                  "snapshot-name": "tank/home@before",
+                  "target": "tank/home",
+                  "operation": "rescan"
+                },
+                "before-clone": {
+                  "name": "tank/home@before",
+                  "target": "tank/home",
+                  "cloneTo": "tank/home-review"
+                },
+                "before-rename": {
+                  "name": "tank/home@before-rename",
+                  "target": "tank/home",
+                  "renameTo": "tank/home@retained"
+                },
+                "before-rollback": {
+                  "name": "tank/home@before",
+                  "target": "tank/home",
+                  "rollback": true,
+                  "recursiveRollback": true
+                },
+                "old-destroy": {
+                  "name": "tank/home@old",
+                  "target": "tank/home",
+                  "destroy": true
+                }
+              },
+              "apply": {
+                "allowOffline": true,
+                "allowDestructive": true,
+                "allowPotentialDataLoss": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:before-hold:hold:keep"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "hold", "keep", "tank/home@before"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:old-release:release-hold:expired"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "release", "expired", "tank/home@old"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:before-rescan:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "zfs",
+                            "list",
+                            "-t",
+                            "snapshot",
+                            "-H",
+                            "-p",
+                            "tank/home@before",
+                        ]
+                        && !command.mutates
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:before-clone:clone:tank/home-review"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "clone", "tank/home@before", "tank/home-review"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:before-rename:rename:tank/home@retained"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "zfs",
+                            "rename",
+                            "tank/home@before-rename",
+                            "tank/home@retained",
+                        ]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:before-rollback:rollback"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "rollback", "-r", "tank/home@before"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:old-destroy:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "destroy", "tank/home@old"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "snapshot:before-hold:hold:keep"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "holds", "tank/home@before"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "snapshot:old-destroy:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "inspect", "tank/home", "--json"])
+        }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
+    }
+
+    #[test]
     fn snapshot_rescan_reports_read_only_metadata_commands() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

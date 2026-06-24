@@ -833,8 +833,10 @@ ZFS names and `mv -- <old> <new>` for absolute Btrfs snapshot paths.
 Snapshot `operation = "rescan"` declarations render read-only ZFS
 `zfs list`, `zfs get`, and `zfs holds` probes or Btrfs `subvolume show` and
 read-only property probes, plus graph inspection for snapshot/source
-relationships. Btrfs snapshot rescans can use `path`, `snapshotPath`, or
-`snapshot-path` when the snapshot map key is a friendly name instead of the
+relationships. Snapshot declarations can use `name`, `snapshotName`, or
+`snapshot-name` when the map key is a friendly name instead of the concrete
+snapshot identity. Btrfs snapshot rescans can also use `path`, `snapshotPath`,
+or `snapshot-path` when the snapshot map key is a friendly name instead of the
 absolute snapshot path.
 ZFS snapshot rollback declarations render reviewed `zfs rollback` command
 details internally, and `recursiveRollback`, `recursive`, or
