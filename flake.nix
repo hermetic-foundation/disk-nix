@@ -834,6 +834,10 @@
               and .properties.spec["$ref"] == "#/$defs/specBody"
               and .properties.apply["$ref"] == "#/$defs/applyPolicy"
               and .properties.swaps["$ref"] == "#/$defs/lifecycleMap"
+              and .properties.zram["$ref"] == "#/$defs/zramSpec"
+              and ."$defs".specBody.properties.zram["$ref"] == "#/$defs/zramSpec"
+              and ."$defs".zramSpec.properties.operation["$ref"] == "#/$defs/operation"
+              and ."$defs".zramSpec.properties.swapDevices.minimum == 1
               and .properties.luks["$ref"] == "#/$defs/luksSpec"
               and .properties.nfs["$ref"] == "#/$defs/nfsSpec"
               and .properties.iscsi["$ref"] == "#/$defs/iscsiSpec"

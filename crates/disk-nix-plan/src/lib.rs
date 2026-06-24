@@ -1,6 +1,6 @@
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -464,6 +464,11 @@ pub fn plan_from_value(value: &Value) -> Plan {
     if let Some(swaps) = spec.get("swaps").and_then(Value::as_object) {
         for (name, swap) in swaps {
             add_swap_actions(&mut actions, name, swap);
+        }
+    }
+    if let Some(zram) = spec.get("zram").and_then(Value::as_object) {
+        if !zram.is_empty() {
+            add_zram_actions(&mut actions, zram);
         }
     }
     if let Some(luks) = spec
@@ -1671,6 +1676,84 @@ fn classify_swap_property_change(property: &str) -> (RiskClass, Option<Advice>) 
 
 fn is_swap_identity_property(property: &str) -> bool {
     matches!(property, "label" | "swap.label" | "uuid" | "swap.uuid")
+}
+
+fn add_zram_actions(actions: &mut Vec<PlannedAction>, zram: &Map<String, Value>) {
+    let operation = zram
+        .get("operation")
+        .or_else(|| zram.get("action"))
+        .and_then(Value::as_str)
+        .and_then(parse_operation);
+    let context = ActionContext {
+        collection: Some("zram".to_string()),
+        name: Some("zram".to_string()),
+        target: Some("zram".to_string()),
+        ..ActionContext::default()
+    };
+
+    match operation {
+        Some(Operation::Rescan) => actions.push(PlannedAction {
+            id: "zram:rescan".to_string(),
+            description: "refresh zram compressed swap inventory".to_string(),
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            destructive: false,
+            context: context.clone(),
+            advice: Some(Advice {
+                summary: "zram rescan refreshes generated compressed swap state".to_string(),
+                alternatives: vec![
+                    "review zramctl output before changing generated zramSwap settings".to_string(),
+                    "coordinate swapoff and setup when active zram devices must be recreated"
+                        .to_string(),
+                ],
+            }),
+        }),
+        _ => actions.push(PlannedAction {
+            id: "zram:inspect".to_string(),
+            description: "inspect zram compressed swap declaration".to_string(),
+            operation: Operation::SetProperty,
+            risk: RiskClass::Safe,
+            destructive: false,
+            context: context.clone(),
+            advice: None,
+        }),
+    }
+
+    add_zram_property_actions(actions, zram, &context);
+}
+
+fn add_zram_property_actions(
+    actions: &mut Vec<PlannedAction>,
+    zram: &Map<String, Value>,
+    context: &ActionContext,
+) {
+    let Some(properties) = zram.get("properties").and_then(Value::as_object) else {
+        return;
+    };
+
+    for (property, value) in properties {
+        actions.push(PlannedAction {
+            id: format!("zram:set-property:{property}"),
+            description: format!("set zram property {property}"),
+            operation: Operation::SetProperty,
+            risk: RiskClass::Unsupported,
+            destructive: false,
+            context: ActionContext {
+                property: Some(property.to_string()),
+                property_value: Some(property_value(value)),
+                ..context.clone()
+            },
+            advice: Some(Advice {
+                summary: format!("zram property {property} requires generator reconciliation"),
+                alternatives: vec![
+                    "use services.disk-nix.zram options to derive NixOS zramSwap".to_string(),
+                    "run a zram rescan before recreating active compressed swap devices".to_string(),
+                    "coordinate swapoff before changing live zram algorithm, priority, size, or writeback device"
+                        .to_string(),
+                ],
+            }),
+        });
+    }
 }
 
 fn swap_format_action(
@@ -4799,6 +4882,19 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::ZramDevice,
+            operation: Operation::Rescan,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "zram inventory refresh reads compressed swap state from zramctl"
+                    .to_string(),
+                alternatives: vec![
+                    "derive steady-state zram devices through NixOS zramSwap".to_string(),
+                    "coordinate swapoff before recreating active zram devices".to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::LuksContainer,
             operation: Operation::Format,
             risk: RiskClass::Destructive,
@@ -7695,6 +7791,7 @@ mod tests {
                 RiskClass::Online,
             ),
             (NodeKind::Swap, Operation::Rescan, RiskClass::Online),
+            (NodeKind::ZramDevice, Operation::Rescan, RiskClass::Online),
             (
                 NodeKind::BtrfsSubvolume,
                 Operation::Rescan,
@@ -9176,6 +9273,55 @@ mod tests {
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("swap.label"))
+        }));
+    }
+
+    #[test]
+    fn plan_classifies_zram_rescan_and_properties() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "zram": {
+                "enable": true,
+                "operation": "rescan",
+                "swapDevices": 2,
+                "memoryPercent": 40,
+                "memoryMax": 8589934592,
+                "priority": 20,
+                "algorithm": "zstd",
+                "properties": {
+                  "zram.compression-ratio-target": "2.0"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.unsupported_count, 1);
+
+        let rescan = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "zram:rescan")
+            .expect("zram rescan action exists");
+        assert_eq!(rescan.operation, Operation::Rescan);
+        assert_eq!(rescan.risk, RiskClass::Online);
+        assert!(!rescan.destructive);
+        assert_eq!(rescan.context.collection.as_deref(), Some("zram"));
+
+        let property = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "zram:set-property:zram.compression-ratio-target")
+            .expect("zram property action exists");
+        assert_eq!(property.operation, Operation::SetProperty);
+        assert_eq!(property.risk, RiskClass::Unsupported);
+        assert_eq!(property.context.property_value.as_deref(), Some("2.0"));
+        assert!(property.advice.as_ref().is_some_and(|advice| {
+            advice
+                .alternatives
+                .iter()
+                .any(|alternative| alternative.contains("zramSwap"))
         }));
     }
 

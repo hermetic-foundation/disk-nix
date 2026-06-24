@@ -730,6 +730,9 @@ fn spec_schema() -> serde_json::Value {
             "swaps": {
                 "$ref": "#/$defs/lifecycleMap"
             },
+            "zram": {
+                "$ref": "#/$defs/zramSpec"
+            },
             "luks": {
                 "$ref": "#/$defs/luksSpec"
             },
@@ -822,6 +825,7 @@ fn spec_schema() -> serde_json::Value {
                 "properties": {
                     "filesystems": { "$ref": "#/$defs/filesystemMap" },
                     "swaps": { "$ref": "#/$defs/lifecycleMap" },
+                    "zram": { "$ref": "#/$defs/zramSpec" },
                     "luks": { "$ref": "#/$defs/luksSpec" },
                     "nfs": { "$ref": "#/$defs/nfsSpec" },
                     "iscsi": { "$ref": "#/$defs/iscsiSpec" },
@@ -910,6 +914,26 @@ fn spec_schema() -> serde_json::Value {
             "lifecycleMap": {
                 "type": "object",
                 "additionalProperties": { "$ref": "#/$defs/lifecycleObject" }
+            },
+            "zramSpec": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "enable": { "type": "boolean" },
+                    "operation": { "$ref": "#/$defs/operation" },
+                    "action": { "$ref": "#/$defs/operation" },
+                    "swapDevices": { "type": "integer", "minimum": 1 },
+                    "memoryPercent": { "type": "integer", "minimum": 1 },
+                    "memoryMax": { "type": ["integer", "null"] },
+                    "priority": { "type": "integer" },
+                    "algorithm": { "type": "string" },
+                    "writebackDevice": { "type": ["string", "null"] },
+                    "preserveData": { "type": "boolean", "default": true },
+                    "properties": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                }
             },
             "luksSpec": {
                 "type": "object",

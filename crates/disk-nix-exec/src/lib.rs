@@ -981,6 +981,15 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Rescan if collection == Some("zram") => (
+            zram_rescan_commands("verify zram compressed swap inventory after refresh"),
+            vec![
+                "zram devices, algorithms, sizes, memory use, and swap state are reviewed"
+                    .to_string(),
+                "NixOS zramSwap settings still match the generated compressed swap topology"
+                    .to_string(),
+            ],
+        ),
         Operation::Grow if collection == Some("luks.devices") => (
             vec![
                 command(
@@ -3588,6 +3597,16 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Rescan if collection == Some("zram") => (
+            zram_rescan_commands("refresh zram compressed swap inventory"),
+            vec![
+                "use services.disk-nix.zram to reconcile generated NixOS zramSwap settings"
+                    .to_string(),
+                "coordinate swapoff before changing live zram size, algorithm, priority, or writeback device"
+                    .to_string(),
+            ],
+            true,
+        ),
         Operation::Grow if collection == Some("luks.devices") => {
             let mapper = target.unwrap_or("<mapper>");
             let device = action.context.device.as_deref();
@@ -9958,6 +9977,32 @@ fn swap_inspect_json_command(target: Option<&str>, note: &'static str) -> Execut
     }
 }
 
+fn zram_rescan_commands(note: &'static str) -> Vec<ExecutionCommand> {
+    vec![
+        command(
+            [
+                "zramctl",
+                "--bytes",
+                "--raw",
+                "--noheadings",
+                "--output-all",
+            ],
+            false,
+            note,
+        ),
+        command(
+            ["swapon", "--show", "--bytes", "--raw"],
+            false,
+            "refresh active swap view for zram devices",
+        ),
+        command(
+            ["disk-nix", "swap"],
+            false,
+            "inspect modeled zram swap devices after refresh",
+        ),
+    ]
+}
+
 fn swap_resize_command(target: Option<&str>, desired_size: Option<&str>) -> ExecutionCommand {
     let Some(target) = target else {
         return command_vec_with_readiness(
@@ -14899,6 +14944,69 @@ mod tests {
                     command.argv == ["mkswap", "<swap>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["swap target path"]
+                })
+        }));
+    }
+
+    #[test]
+    fn zram_rescan_reports_read_only_inventory_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "zram": {
+                  "enable": true,
+                  "operation": "rescan",
+                  "swapDevices": 2,
+                  "algorithm": "zstd"
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_plan.len(), 1);
+        assert_eq!(report.command_plan[0].action_id, "zram:rescan");
+        assert!(
+            report.command_plan[0].commands.iter().all(|command| {
+                !command.mutates && command.readiness == CommandReadiness::Ready
+            })
+        );
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv
+                == [
+                    "zramctl",
+                    "--bytes",
+                    "--raw",
+                    "--noheadings",
+                    "--output-all",
+                ]
+        }));
+        assert!(
+            report.command_plan[0]
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["swapon", "--show", "--bytes", "--raw"] })
+        );
+        assert!(
+            report.command_plan[0]
+                .commands
+                .iter()
+                .any(|command| command.argv == ["disk-nix", "swap"])
+        );
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "zram:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "zramctl",
+                            "--bytes",
+                            "--raw",
+                            "--noheadings",
+                            "--output-all",
+                        ]
                 })
         }));
     }
