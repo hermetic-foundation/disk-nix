@@ -135,7 +135,8 @@ The current probe layer normalizes:
   transport, port/mount address, transfer sizes, timeout/retransmit settings,
   local locking, lookup cache, FS-Cache, age, and mount options
 - MD RAID arrays through `mdadm --detail --scan` and `mdadm --detail <array>`
-  for array UUID, level, state, size, device counts, and member devices
+  for array UUID, level, state, size, device counts, and member number,
+  major/minor, raid-device, and state
 - Multipath maps through `multipath -ll` for map name, WWID, dm device,
   vendor/product, map features, hardware handler, write-protect state,
   path-group policy/priority/status, and backing path device state

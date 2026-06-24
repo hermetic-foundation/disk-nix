@@ -201,8 +201,9 @@ Use these commands for:
   including model/vendor, transport, rotational, NVMe model/firmware/namespace
   geometry, partition table/number, filesystem type, loop
   backing/offset/autoclear metadata, multipath path host/major-minor/state
-  details, MD RAID member state, active swap state/type/priority, and udev
-  by-id/by-path links, encoded labels, filesystem UUID sub-identifiers,
+  details, MD RAID member number/major/minor/raid-device/state, active swap
+  state/type/priority, and udev by-id/by-path links, encoded labels,
+  filesystem UUID sub-identifiers,
   partition table metadata, major/minor numbers, and device-mapper flags when
   probes expose them
 - `partitions`: partition nodes with size, PARTUUID, path, filesystem type,
@@ -295,7 +296,8 @@ Use these commands for:
   version, level, state, size, raid, total, active, working, failed, and spare
   device counts, event counters, chunk/layout details, consistency policy,
   rebuild, resync, and check progress, intent bitmap, timestamps, and
-  per-member state when `mdadm --detail` exposes them
+  per-member number, major/minor, raid-device, and state when `mdadm --detail`
+  exposes them
 - `loop`: loop devices and backing files/devices, including backing path,
   offset, size limit, logical sector size, major/minor, autoclear,
   read-only, and direct-I/O settings when `losetup --json` exposes them

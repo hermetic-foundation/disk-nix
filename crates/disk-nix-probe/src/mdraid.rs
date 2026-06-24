@@ -39,6 +39,10 @@ struct MdArray {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MdMember {
     path: String,
+    number: Option<String>,
+    major: Option<String>,
+    minor: Option<String>,
+    raid_device: Option<String>,
     state: Option<String>,
 }
 
@@ -221,8 +225,16 @@ fn add_array(graph: &mut StorageGraph, array: MdArray) {
         let mut member_node =
             Node::new(member_id.clone(), NodeKind::Partition, member.path.clone())
                 .with_path(member.path);
-        if let Some(state) = member.state {
-            member_node = member_node.with_property("md.member-state", state);
+        for (key, value) in [
+            ("md.member-number", member.number),
+            ("md.member-major", member.major),
+            ("md.member-minor", member.minor),
+            ("md.member-raid-device", member.raid_device),
+            ("md.member-state", member.state),
+        ] {
+            if let Some(value) = value {
+                member_node = member_node.with_property(key, value);
+            }
         }
         graph.add_node(member_node);
         graph.add_edge(Edge::new(member_id, id.clone(), Relationship::MemberOf));
@@ -233,10 +245,15 @@ fn parse_member_line(line: &str) -> Option<MdMember> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     let path = parts.iter().rev().find(|part| part.starts_with("/dev/"))?;
     let path_index = parts.iter().position(|part| part == path)?;
-    let state = (path_index > 0).then(|| parts[5..path_index].join(" "));
+    let state_start = if path_index >= 5 { 4 } else { 0 };
+    let state = (path_index > state_start).then(|| parts[state_start..path_index].join(" "));
 
     Some(MdMember {
         path: (*path).to_string(),
+        number: parts.first().copied().map(ToOwned::to_owned),
+        major: parts.get(1).copied().map(ToOwned::to_owned),
+        minor: parts.get(2).copied().map(ToOwned::to_owned),
+        raid_device: parts.get(3).copied().map(ToOwned::to_owned),
         state,
     })
 }
@@ -359,5 +376,27 @@ mod tests {
                 .count(),
             2
         );
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::Partition
+                && node.name == "/dev/sda1"
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.member-number" && property.value == "0")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.member-major" && property.value == "8")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.member-minor" && property.value == "1")
+                && node.properties.iter().any(|property| {
+                    property.key == "md.member-raid-device" && property.value == "0"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "md.member-state" && property.value == "active sync"
+                })
+        }));
     }
 }

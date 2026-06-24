@@ -2814,6 +2814,10 @@ fn usage_details(node: &Node) -> String {
         ("md.intent-bitmap", "bitmap"),
         ("md.creation-time", "created"),
         ("md.update-time", "updated"),
+        ("md.member-number", "member-number"),
+        ("md.member-major", "member-major"),
+        ("md.member-minor", "member-minor"),
+        ("md.member-raid-device", "member-raid-device"),
         ("md.member-state", "member-state"),
         ("iscsi.portal", "portal"),
         ("iscsi.persistent-portal", "persistent-portal"),
@@ -5367,11 +5371,19 @@ mod tests {
         graph.add_node(
             Node::new("block:/dev/sda1", NodeKind::Partition, "/dev/sda1")
                 .with_path("/dev/sda1")
+                .with_property("md.member-number", "0")
+                .with_property("md.member-major", "8")
+                .with_property("md.member-minor", "1")
+                .with_property("md.member-raid-device", "0")
                 .with_property("md.member-state", "active sync"),
         );
         graph.add_node(
             Node::new("block:/dev/sdb1", NodeKind::Partition, "/dev/sdb1")
                 .with_path("/dev/sdb1")
+                .with_property("md.member-number", "1")
+                .with_property("md.member-major", "8")
+                .with_property("md.member-minor", "17")
+                .with_property("md.member-raid-device", "1")
                 .with_property("md.member-state", "active sync"),
         );
         graph.add_edge(Edge::new(
@@ -5410,8 +5422,14 @@ mod tests {
         assert!(output.contains("resync=delayed check=10% complete bitmap=Internal"));
         assert!(output.contains("/dev/sda1"));
         assert!(output.contains("active sync"));
+        assert!(
+            output.contains("member-number=0 member-major=8 member-minor=1 member-raid-device=0")
+        );
         assert!(output.contains("member-state=active sync"));
         assert!(output.contains("/dev/sdb1"));
+        assert!(
+            output.contains("member-number=1 member-major=8 member-minor=17 member-raid-device=1")
+        );
     }
 
     #[test]
