@@ -3069,15 +3069,18 @@ fn usage_details(node: &Node) -> String {
         ("xfs.meta-data.bigtime", "bigtime"),
         ("xfs.meta-data.inobtcount", "xfs-inobtcount"),
         ("xfs.meta-data.nrext64", "xfs-nrext64"),
+        ("xfs.naming.version", "xfs-naming-version"),
         ("xfs.naming.bsize", "xfs-naming-bsize"),
         ("xfs.naming.ascii-ci", "xfs-ascii-ci"),
         ("xfs.naming.ftype", "xfs-ftype"),
+        ("xfs.log.type", "xfs-log-type"),
         ("xfs.log.bsize", "xfs-log-bsize"),
         ("xfs.log.blocks", "log-blocks"),
         ("xfs.log.version", "xfs-log-version"),
         ("xfs.log.sectsz", "xfs-log-sectsz"),
         ("xfs.log.sunit", "xfs-log-sunit"),
         ("xfs.log.lazy-count", "xfs-log-lazy-count"),
+        ("xfs.realtime.type", "xfs-realtime-type"),
         ("xfs.realtime.extsz", "xfs-realtime-extsz"),
         ("xfs.realtime.blocks", "xfs-realtime-blocks"),
         ("xfs.realtime.rtextents", "xfs-realtime-rtextents"),
@@ -3882,21 +3885,24 @@ mod tests {
             .with_property("xfs.meta-data.bigtime", "1")
             .with_property("xfs.meta-data.inobtcount", "1")
             .with_property("xfs.meta-data.nrext64", "0")
+            .with_property("xfs.naming.version", "2")
             .with_property("xfs.naming.bsize", "4096")
             .with_property("xfs.naming.ascii-ci", "0")
             .with_property("xfs.naming.ftype", "1")
+            .with_property("xfs.log.type", "internal log")
             .with_property("xfs.log.bsize", "4096")
             .with_property("xfs.log.blocks", "2560")
             .with_property("xfs.log.version", "2")
             .with_property("xfs.log.sectsz", "512")
             .with_property("xfs.log.sunit", "0")
             .with_property("xfs.log.lazy-count", "1")
+            .with_property("xfs.realtime.type", "none")
             .with_property("xfs.realtime.extsz", "4096")
             .with_property("xfs.realtime.blocks", "0")
             .with_property("xfs.realtime.rtextents", "0");
         assert_eq!(
             usage_details(&xfs),
-            "xfs-source=/dev/mapper/vg-root xfs-isize=512 xfs-agcount=4 xfs-agsize=65536 xfs-sectsz=512 xfs-attr=2 xfs-projid32bit=1 xfs-crc=1 xfs-finobt=1 xfs-sparse=1 xfs-rmapbt=0 xfs-blocks=262144 xfs-bsize=4096 xfs-imaxpct=25 xfs-sunit=0 xfs-swidth=0 reflink=1 bigtime=1 xfs-inobtcount=1 xfs-nrext64=0 xfs-naming-bsize=4096 xfs-ascii-ci=0 xfs-ftype=1 xfs-log-bsize=4096 log-blocks=2560 xfs-log-version=2 xfs-log-sectsz=512 xfs-log-sunit=0 xfs-log-lazy-count=1 xfs-realtime-extsz=4096 xfs-realtime-blocks=0 xfs-realtime-rtextents=0"
+            "xfs-source=/dev/mapper/vg-root xfs-isize=512 xfs-agcount=4 xfs-agsize=65536 xfs-sectsz=512 xfs-attr=2 xfs-projid32bit=1 xfs-crc=1 xfs-finobt=1 xfs-sparse=1 xfs-rmapbt=0 xfs-blocks=262144 xfs-bsize=4096 xfs-imaxpct=25 xfs-sunit=0 xfs-swidth=0 reflink=1 bigtime=1 xfs-inobtcount=1 xfs-nrext64=0 xfs-naming-version=2 xfs-naming-bsize=4096 xfs-ascii-ci=0 xfs-ftype=1 xfs-log-type=internal log xfs-log-bsize=4096 log-blocks=2560 xfs-log-version=2 xfs-log-sectsz=512 xfs-log-sunit=0 xfs-log-lazy-count=1 xfs-realtime-type=none xfs-realtime-extsz=4096 xfs-realtime-blocks=0 xfs-realtime-rtextents=0"
         );
 
         let ext = Node::new("fs:/dev/sda2", NodeKind::Filesystem, "ext4")
@@ -4205,8 +4211,11 @@ mod tests {
                 .with_property("xfs.data.imaxpct", "25")
                 .with_property("xfs.meta-data.reflink", "1")
                 .with_property("xfs.meta-data.bigtime", "1")
+                .with_property("xfs.naming.version", "2")
                 .with_property("xfs.naming.ftype", "1")
+                .with_property("xfs.log.type", "internal log")
                 .with_property("xfs.log.blocks", "2560")
+                .with_property("xfs.realtime.type", "none")
                 .with_property("xfs.realtime.blocks", "0"),
         );
         graph.add_node(
@@ -4330,7 +4339,10 @@ mod tests {
         assert!(output.contains("xfs-source=/dev/mapper/vg-root xfs-isize=512 xfs-agcount=4"));
         assert!(output.contains("xfs-crc=1 xfs-blocks=262144 xfs-bsize=4096"));
         assert!(output.contains("xfs-imaxpct=25 reflink=1 bigtime=1"));
-        assert!(output.contains("xfs-ftype=1 log-blocks=2560 xfs-realtime-blocks=0"));
+        assert!(output.contains(
+            "xfs-naming-version=2 xfs-ftype=1 xfs-log-type=internal log log-blocks=2560"
+        ));
+        assert!(output.contains("xfs-realtime-type=none xfs-realtime-blocks=0"));
         assert!(output.contains(
             "fstype=ext4 ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197"
         ));

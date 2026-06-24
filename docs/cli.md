@@ -216,8 +216,8 @@ Use these commands for:
   cluster geometry, NTFS volume identity, version, cluster sizing, and MFT
   record sizing, F2FS block usage, valid inode/node counts, segment layout,
   section/zone geometry, log sizing, version, and overprovisioning metadata,
-  XFS source, allocation-group, inode, data, naming, log, realtime, and
-  metadata feature details,
+  XFS source, allocation-group, inode, data, naming format, log type/sizing,
+  realtime type/geometry, and metadata feature details,
   bcachefs external/internal UUID, superblock magic, version/upgrade state,
   member-device, mounted usage, and filesystem/member data-type byte
   accounting, Btrfs Data/Metadata/System allocation profiles and byte counts,

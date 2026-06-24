@@ -94,6 +94,10 @@ fn parse_xfs_info(bytes: &[u8]) -> Result<XfsInfo, ProbeError> {
             continue;
         }
 
+        if let Some((key, value)) = section_preamble(&current_section, line) {
+            properties.push((current_section.clone(), key, value));
+        }
+
         for token in line.split_whitespace() {
             let token = token.trim_end_matches(',');
             let Some((key, value)) = token.split_once('=') else {
@@ -109,6 +113,26 @@ fn parse_xfs_info(bytes: &[u8]) -> Result<XfsInfo, ProbeError> {
     }
 
     Ok(XfsInfo { properties })
+}
+
+fn section_preamble(section: &str, line: &str) -> Option<(String, String)> {
+    let (_, after_equals) = line.split_once('=')?;
+    let words: Vec<&str> = after_equals
+        .split_whitespace()
+        .take_while(|word| !word.contains('='))
+        .collect();
+    if words.is_empty() {
+        return None;
+    }
+
+    match section {
+        "naming" if words.first() == Some(&"version") => words
+            .get(1)
+            .map(|version| ("version".to_string(), (*version).to_string())),
+        "log" => Some(("type".to_string(), words.join(" "))),
+        "realtime" => Some(("type".to_string(), words.join(" "))),
+        _ => None,
+    }
 }
 
 fn section_name(line: &str) -> Option<&str> {
@@ -194,6 +218,20 @@ realtime =none                   extsz=4096   blocks=0, rtextents=0
                 .properties
                 .iter()
                 .any(|property| { property.key == "xfs.log.blocks" && property.value == "2560" })
+        );
+        assert!(
+            mount
+                .properties
+                .iter()
+                .any(|property| { property.key == "xfs.naming.version" && property.value == "2" })
+        );
+        assert!(mount.properties.iter().any(|property| {
+            property.key == "xfs.log.type" && property.value == "internal log"
+        }));
+        assert!(
+            mount.properties.iter().any(|property| {
+                property.key == "xfs.realtime.type" && property.value == "none"
+            })
         );
 
         let filesystem = graph

@@ -68,7 +68,7 @@ The current probe layer normalizes:
 - `xfs_info` for mounted XFS filesystem geometry, allocation group layout,
   inode size, sector size, metadata feature flags such as reflink, bigtime,
   finobt, sparse, and rmapbt, data allocation parameters, naming format, log
-  geometry, and realtime extent/block counters
+  type/geometry, and realtime type plus extent/block counters
 - `ntfsinfo -m` for NTFS volume identity, serial, state, version, sector and
   cluster sizing, index block size, MFT record size, and allocated size
 - `dump.exfat`, `exfatlabel`, and `tune.exfat` for exFAT GUID/serial,
