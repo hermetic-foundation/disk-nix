@@ -155,11 +155,15 @@ fn add_partition(
     if let Some(size_bytes) = parse_size_bytes(partition.size.as_deref()) {
         node = node.with_size_bytes(size_bytes);
     }
+    let start_bytes = parse_size_bytes(partition.start.as_deref()).map(|value| value.to_string());
+    let end_bytes = parse_size_bytes(partition.end.as_deref()).map(|value| value.to_string());
 
     for (key, value) in [
         ("partition.number", Some(partition.number)),
         ("partition.start", partition.start),
+        ("partition.start-bytes", start_bytes),
         ("partition.end", partition.end),
+        ("partition.end-bytes", end_bytes),
         ("partition.type", partition.partition_type),
         ("partition.name", partition.name),
         ("partition.flags", partition.flags),
@@ -274,6 +278,12 @@ BYT;
         assert_eq!(partition.size_bytes, Some(1_073_741_824));
         assert!(partition.properties.iter().any(|property| {
             property.key == "partition.flags" && property.value == "boot, esp"
+        }));
+        assert!(partition.properties.iter().any(|property| {
+            property.key == "partition.start-bytes" && property.value == "1048576"
+        }));
+        assert!(partition.properties.iter().any(|property| {
+            property.key == "partition.end-bytes" && property.value == "1074790399"
         }));
         assert!(graph.nodes.iter().any(|node| {
             node.id.0 == "block:/dev/nvme0n1p2"

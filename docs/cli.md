@@ -213,8 +213,8 @@ Use these commands for:
   partition table metadata, major/minor numbers, and device-mapper flags when
   probes expose them
 - `partitions`: partition nodes with size, PARTUUID, path, filesystem type,
-  `blkid` signature details, partition number, start/end geometry, type/name,
-  and flags when probes expose them
+  `blkid` signature details, partition number, raw start/end geometry,
+  normalized byte offsets, type/name, and flags when probes expose them
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
   bcachefs filesystems, ZFS datasets/snapshots, and NFS exports, with selected
   filesystem metadata details such as `blkid` version/block-size/usage, exFAT

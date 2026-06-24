@@ -2580,7 +2580,9 @@ fn usage_details(node: &Node) -> String {
         ("partition.table", "ptable"),
         ("partition.number", "partno"),
         ("partition.start", "start"),
+        ("partition.start-bytes", "start-bytes"),
         ("partition.end", "end"),
+        ("partition.end-bytes", "end-bytes"),
         ("partition.type", "type"),
         ("partition.name", "part-name"),
         ("partition.flags", "flags"),
@@ -4008,7 +4010,9 @@ mod tests {
             })
             .with_property("partition.number", "1")
             .with_property("partition.start", "1049kB")
+            .with_property("partition.start-bytes", "1049000")
             .with_property("partition.end", "538MB")
+            .with_property("partition.end-bytes", "538000000")
             .with_property("partition.type", "fat32")
             .with_property("partition.name", "ESP")
             .with_property("partition.flags", "boot, esp")
@@ -4027,7 +4031,7 @@ mod tests {
         assert!(output.contains("DETAILS"));
         assert!(output.contains("1111-2222"));
         assert!(output.contains(
-            "fstype=vfat blkid-type=vfat version=FAT32 blkid-block-size=512 usage=filesystem partlabel=EFI System Partition partno=1 start=1049kB end=538MB type=fat32 part-name=ESP flags=boot, esp"
+            "fstype=vfat blkid-type=vfat version=FAT32 blkid-block-size=512 usage=filesystem partlabel=EFI System Partition partno=1 start=1049kB start-bytes=1049000 end=538MB end-bytes=538000000 type=fat32 part-name=ESP flags=boot, esp"
         ));
     }
 

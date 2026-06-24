@@ -52,7 +52,8 @@ The current probe layer normalizes:
 - `blkid -o export` for filesystem and block signatures, UUIDs, labels,
   PARTUUID/PARTLABEL, signature usage, versions, and block sizes
 - `parted -lm` for partition table type, disk sector sizes, partition numbers,
-  start/end offsets, partition sizes, names, types, and flags
+  raw start/end offsets, normalized byte offsets, partition sizes, names, types,
+  and flags
 - `udevadm info --export-db` for block-device udev identity, by-id/by-path
   symlinks, serials, WWNs, filesystem IDs, encoded/safe labels, UUID
   sub-identifiers, filesystem block-size/last-block geometry, partition
