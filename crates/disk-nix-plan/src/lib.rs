@@ -2092,6 +2092,28 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
             }
             _ => &[property],
         }),
+        Some("datasets" | "zvols") => Some(match normalized.as_str() {
+            "mountpoint" => &["zfs.mountpoint", property],
+            "compression" => &["zfs.compression", property],
+            "quota" => &["zfs.quota", property],
+            "reservation" => &["zfs.reservation", property],
+            "encryption" => &["zfs.encryption", property],
+            "keystatus" | "key-status" => &["zfs.keystatus", property],
+            "volsize" | "vol-size" => &["zfs.volsize", property],
+            "recordsize" | "record-size" => &["zfs.recordsize", property],
+            "dedup" => &["zfs.dedup", property],
+            "checksum" => &["zfs.checksum", property],
+            "copies" => &["zfs.copies", property],
+            "sync" => &["zfs.sync", property],
+            "primarycache" | "primary-cache" => &["zfs.primarycache", property],
+            "secondarycache" | "secondary-cache" => &["zfs.secondarycache", property],
+            "atime" => &["zfs.atime", property],
+            "relatime" => &["zfs.relatime", property],
+            "snapdir" | "snap-dir" => &["zfs.snapdir", property],
+            "acltype" | "acl-type" => &["zfs.acltype", property],
+            "xattr" => &["zfs.xattr", property],
+            _ => &[property],
+        }),
         _ => None,
     };
 
@@ -2131,6 +2153,9 @@ fn comparable_property_value(action: &PlannedAction, property: &str, value: &str
             }
             _ => value.to_string(),
         },
+        Some("datasets" | "zvols") => {
+            normalize_zfs_property_value(&normalized_property, &normalized_value, value)
+        }
         _ => value.to_string(),
     }
 }
@@ -2141,6 +2166,31 @@ fn normalize_cache_property_value(property: &str, value: &str) -> String {
             value.replace('-', "")
         }
         _ => value.to_string(),
+    }
+}
+
+fn normalize_zfs_property_value(property: &str, normalized_value: &str, raw_value: &str) -> String {
+    match property {
+        "dedup" | "atime" | "relatime" => normalize_zfs_boolean_property_value(normalized_value)
+            .map(str::to_string)
+            .unwrap_or_else(|| normalized_value.to_string()),
+        "primarycache" | "primary-cache" | "secondarycache" | "secondary-cache" => {
+            normalized_value.to_string()
+        }
+        "mountpoint" | "compression" | "quota" | "reservation" | "encryption" | "keystatus"
+        | "key-status" | "volsize" | "vol-size" | "recordsize" | "record-size" | "checksum"
+        | "copies" | "sync" | "snapdir" | "snap-dir" | "acltype" | "acl-type" | "xattr" => {
+            normalized_value.to_string()
+        }
+        _ => raw_value.to_string(),
+    }
+}
+
+fn normalize_zfs_boolean_property_value(value: &str) -> Option<&'static str> {
+    match value {
+        "on" | "yes" | "true" | "enabled" | "enable" | "1" => Some("on"),
+        "off" | "no" | "false" | "disabled" | "disable" | "0" => Some("off"),
+        _ => None,
     }
 }
 
@@ -7367,6 +7417,7 @@ fn normalize_storage_property_name(value: &str) -> String {
     value
         .trim()
         .trim_start_matches("vdo.")
+        .trim_start_matches("zfs.")
         .chars()
         .map(|character| match character {
             'A'..='Z' => character.to_ascii_lowercase(),
@@ -16867,6 +16918,79 @@ mod tests {
     }
 
     #[test]
+    fn topology_comparison_reconciles_zfs_dataset_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "datasets": {
+                "tank/home": {
+                  "properties": {
+                    "compression": "zstd",
+                    "mountpoint": "/home",
+                    "atime": true
+                  }
+                },
+                "tank/archive": {
+                  "properties": {
+                    "compression": "lz4"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zfs:dataset:tank/home", NodeKind::ZfsDataset, "tank/home")
+                .with_property("zfs.compression", "zstd")
+                .with_property("zfs.mountpoint", "/home")
+                .with_property("zfs.atime", "on"),
+        );
+        graph.add_node(
+            Node::new(
+                "zfs:dataset:tank/archive",
+                NodeKind::ZfsDataset,
+                "tank/archive",
+            )
+            .with_property("zfs.compression", "zstd"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 4);
+        assert_eq!(comparison.summary.matched_count, 4);
+        assert_eq!(comparison.summary.already_satisfied_count, 3);
+        assert_eq!(comparison.summary.suppressed_action_count, 3);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "datasets:tank/archive:set-property:compression"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/home:set-property:compression"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/home:set-property:mountpoint"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/home:set-property:atime"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/archive:set-property:compression"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic.message.contains("zstd")
+                && diagnostic.message.contains("lz4")
+        }));
+    }
+
+    #[test]
     fn topology_comparison_reports_matching_filesystem_format_type() {
         let plan = plan_from_json_bytes(
             br#"{
@@ -20013,23 +20137,25 @@ mod tests {
             .expect("comparison should be present");
 
         assert_eq!(comparison.summary.action_count, 6);
-        assert_eq!(comparison.summary.already_satisfied_count, 2);
-        assert_eq!(comparison.summary.suppressed_action_count, 2);
-        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(comparison.summary.already_satisfied_count, 4);
+        assert_eq!(comparison.summary.suppressed_action_count, 4);
+        assert_eq!(plan.summary.action_count, 2);
         assert!(plan.actions.iter().any(|action| {
             action.id == "datasets:tank/conflict:create" && action.operation == Operation::Create
         }));
         assert!(plan.actions.iter().any(|action| {
             action.id == "zvols:tank/vm/tmp:create" && action.operation == Operation::Create
         }));
-        assert!(plan.actions.iter().any(|action| {
-            action.id == "datasets:tank/home:set-property:compression"
-                && action.operation == Operation::SetProperty
-        }));
-        assert!(plan.actions.iter().any(|action| {
-            action.id == "datasets:tank/home:set-property:mountpoint"
-                && action.operation == Operation::SetProperty
-        }));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "datasets:tank/home:set-property:compression")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "datasets:tank/home:set-property:mountpoint")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "datasets:tank/home:create"
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
@@ -20043,6 +20169,14 @@ mod tests {
                 && diagnostic.message.contains("compression zstd")
         }));
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/home:set-property:compression"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/home:set-property:mountpoint"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "datasets:tank/conflict:create"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectCreateRequired
@@ -20053,6 +20187,75 @@ mod tests {
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectCreateRequired
                 && diagnostic.message.contains("not desired size 20GiB")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_zvol_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "zvols": {
+                "tank/vm/root": {
+                  "properties": {
+                    "volSize": "20G",
+                    "dedup": false,
+                    "primaryCache": "metadata"
+                  }
+                },
+                "tank/vm/tmp": {
+                  "properties": {
+                    "volSize": "12G"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zvol:tank/vm/root", NodeKind::Zvol, "tank/vm/root")
+                .with_property("zfs.volsize", "20G")
+                .with_property("zfs.dedup", "off")
+                .with_property("zfs.primarycache", "metadata"),
+        );
+        graph.add_node(
+            Node::new("zvol:tank/vm/tmp", NodeKind::Zvol, "tank/vm/tmp")
+                .with_property("zfs.volsize", "10G"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 4);
+        assert_eq!(comparison.summary.matched_count, 4);
+        assert_eq!(comparison.summary.already_satisfied_count, 3);
+        assert_eq!(comparison.summary.suppressed_action_count, 3);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "zvols:tank/vm/tmp:set-property:volSize"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/root:set-property:volSize"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/root:set-property:dedup"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/root:set-property:primaryCache"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/tmp:set-property:volSize"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic.message.contains("10G")
+                && diagnostic.message.contains("12G")
         }));
     }
 
