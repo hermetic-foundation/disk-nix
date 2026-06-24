@@ -1075,6 +1075,15 @@ fn collect_nvme(result: &mut ProbeResult) {
                     .iter()
                     .filter_map(|node| node.path.clone())
                     .collect();
+                let controllers: Vec<String> = graph
+                    .nodes
+                    .iter()
+                    .flat_map(|node| node.properties.iter())
+                    .filter(|property| property.key == "nvme.controller")
+                    .map(|property| property.value.clone())
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
                 let node_count = graph.nodes.len();
                 merge_graph(&mut result.graph, graph);
                 result.reports.push(ProbeReport {
@@ -1085,6 +1094,7 @@ fn collect_nvme(result: &mut ProbeResult) {
                     )),
                 });
                 collect_nvme_namespace_details(result, namespace_paths);
+                collect_nvme_controller_details(result, controllers);
             }
             Err(error) => result.reports.push(ProbeReport {
                 adapter: "nvme".to_string(),
@@ -1101,6 +1111,56 @@ fn collect_nvme(result: &mut ProbeResult) {
             },
             message: Some(message),
         }),
+    }
+}
+
+fn collect_nvme_controller_details(result: &mut ProbeResult, controllers: Vec<String>) {
+    let mut node_count = 0_usize;
+    let mut failures = Vec::new();
+    for controller in controllers {
+        let controller_path = if controller.starts_with("/dev/") {
+            controller.clone()
+        } else {
+            format!("/dev/{controller}")
+        };
+        match run_report("nvme", &["id-ctrl", controller_path.as_str(), "-o", "json"]) {
+            Ok(output) => match nvme::normalize_nvme_id_ctrl_json(&controller_path, &output) {
+                Ok(graph) => {
+                    node_count += graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                }
+                Err(error) => failures.push(format!("{controller_path}: {error}")),
+            },
+            Err(message) => failures.push(format!("{controller_path}: {message}")),
+        }
+    }
+
+    if node_count > 0 {
+        result.reports.push(ProbeReport {
+            adapter: "nvme-id-ctrl".to_string(),
+            status: if failures.is_empty() {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(format!(
+                "normalized {node_count} graph nodes from NVMe controller identity JSON{}",
+                if failures.is_empty() {
+                    String::new()
+                } else {
+                    format!("; {} controller probes failed", failures.len())
+                }
+            )),
+        });
+    } else if !failures.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "nvme-id-ctrl".to_string(),
+            status: ProbeStatus::Partial,
+            message: Some(format!(
+                "NVMe controller identity probes failed: {}",
+                failures.join("; ")
+            )),
+        });
     }
 }
 

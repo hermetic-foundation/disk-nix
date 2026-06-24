@@ -2470,11 +2470,13 @@ fn is_multipath_node(node: &Node) -> bool {
 }
 
 fn is_nvme_node(node: &Node) -> bool {
-    node.kind == NodeKind::NvmeNamespace
-        || node
-            .properties
-            .iter()
-            .any(|property| property.key.starts_with("nvme."))
+    matches!(
+        node.kind,
+        NodeKind::NvmeController | NodeKind::NvmeNamespace
+    ) || node
+        .properties
+        .iter()
+        .any(|property| property.key.starts_with("nvme."))
 }
 
 fn is_raid_node(node: &Node) -> bool {
@@ -2597,6 +2599,27 @@ fn usage_details(node: &Node) -> String {
         ("nvme.id-ns.nabspf", "nabspf"),
         ("nvme.id-ns.noiob", "noiob"),
         ("nvme.id-ns.nvmcap", "nvmcap"),
+        ("nvme.id-ctrl.vid", "vid"),
+        ("nvme.id-ctrl.ssvid", "ssvid"),
+        ("nvme.id-ctrl.rab", "rab"),
+        ("nvme.id-ctrl.ieee", "ieee"),
+        ("nvme.id-ctrl.cmic", "cmic"),
+        ("nvme.id-ctrl.mdts", "mdts"),
+        ("nvme.id-ctrl.version", "version"),
+        ("nvme.id-ctrl.controller-type", "controller-type"),
+        ("nvme.id-ctrl.total-nvm-capacity", "total-nvm-capacity"),
+        (
+            "nvme.id-ctrl.unallocated-nvm-capacity",
+            "unallocated-nvm-capacity",
+        ),
+        ("nvme.id-ctrl.namespace-count", "namespace-count"),
+        ("nvme.id-ctrl.oncs", "oncs"),
+        ("nvme.id-ctrl.volatile-write-cache", "volatile-write-cache"),
+        (
+            "nvme.id-ctrl.sanitize-capabilities",
+            "sanitize-capabilities",
+        ),
+        ("nvme.id-ctrl.ana-capabilities", "ana-capabilities"),
         ("lsblk.type", "lsblk-type"),
         ("lsblk.logical-sector-size", "logical-sector"),
         ("lsblk.physical-sector-size", "physical-sector"),
@@ -6002,6 +6025,30 @@ mod tests {
     fn nvme_table_includes_namespace_identity_and_geometry() {
         let mut graph = StorageGraph::empty();
         graph.add_node(
+            Node::new("nvme-controller:nvme0", NodeKind::NvmeController, "nvme0")
+                .with_path("/dev/nvme0")
+                .with_identity(Identity {
+                    serial: Some("SERIAL123".to_string()),
+                    ..Identity::default()
+                })
+                .with_property("nvme.controller", "nvme0")
+                .with_property("nvme.model", "Example NVMe")
+                .with_property("nvme.firmware", "1.0")
+                .with_property("nvme.subsystem", "nqn.2014-08.org.nvmexpress:uuid:12345678")
+                .with_property("nvme.controller-id", "1")
+                .with_property("nvme.id-ctrl.vid", "5197")
+                .with_property("nvme.id-ctrl.ssvid", "5197")
+                .with_property("nvme.id-ctrl.mdts", "9")
+                .with_property("nvme.id-ctrl.controller-type", "1")
+                .with_property("nvme.id-ctrl.total-nvm-capacity", "1000000000")
+                .with_property("nvme.id-ctrl.unallocated-nvm-capacity", "500000000")
+                .with_property("nvme.id-ctrl.namespace-count", "16")
+                .with_property("nvme.id-ctrl.oncs", "95")
+                .with_property("nvme.id-ctrl.volatile-write-cache", "1")
+                .with_property("nvme.id-ctrl.sanitize-capabilities", "7")
+                .with_property("nvme.id-ctrl.ana-capabilities", "3"),
+        );
+        graph.add_node(
             Node::new(
                 "block:/dev/nvme0n1",
                 NodeKind::NvmeNamespace,
@@ -6062,6 +6109,15 @@ mod tests {
         assert!(output.contains("SERIAL"));
         assert!(output.contains("CONTROLLER"));
         assert!(output.contains("USE%"));
+        assert!(output.contains("nvme-controller"));
+        assert!(output.contains("nvme0"));
+        assert!(output.contains("nqn.2014-08.org.nvmexpress:uuid:12345678"));
+        assert!(output.contains("vid=5197 ssvid=5197 mdts=9 controller-type=1"));
+        assert!(
+            output.contains("total-nvm-capacity=1000000000 unallocated-nvm-capacity=500000000")
+        );
+        assert!(output.contains("namespace-count=16 oncs=95 volatile-write-cache=1"));
+        assert!(output.contains("sanitize-capabilities=7 ana-capabilities=3"));
         assert!(output.contains("/dev/nvme0n1"));
         assert!(output.contains("SERIAL123"));
         assert!(output.contains("nvme0"));

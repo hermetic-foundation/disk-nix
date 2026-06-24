@@ -1,4 +1,4 @@
-use disk_nix_model::{Identity, Node, NodeKind, StorageGraph, Usage};
+use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -161,12 +161,125 @@ pub fn normalize_nvme_id_ns_json(path: &str, bytes: &[u8]) -> Result<StorageGrap
     Ok(graph)
 }
 
+pub fn normalize_nvme_id_ctrl_json(
+    controller: &str,
+    bytes: &[u8],
+) -> Result<StorageGraph, ProbeError> {
+    let value: Value = serde_json::from_slice(bytes).map_err(|error| {
+        ProbeError::Adapter(format!(
+            "failed to parse nvme id-ctrl JSON for {controller}: {error}"
+        ))
+    })?;
+    let name = controller.trim_start_matches("/dev/");
+    let mut node = Node::new(
+        nvme_controller_id(name),
+        NodeKind::NvmeController,
+        name.to_string(),
+    )
+    .with_path(controller_path(name));
+
+    let serial = field_string(&value, "sn");
+    if serial.is_some() {
+        node = node.with_identity(Identity {
+            serial,
+            ..Identity::default()
+        });
+    }
+
+    for (key, property) in [
+        ("mn", "nvme.model"),
+        ("fr", "nvme.firmware"),
+        ("cntlid", "nvme.controller-id"),
+        ("vid", "nvme.id-ctrl.vid"),
+        ("ssvid", "nvme.id-ctrl.ssvid"),
+        ("rab", "nvme.id-ctrl.rab"),
+        ("ieee", "nvme.id-ctrl.ieee"),
+        ("cmic", "nvme.id-ctrl.cmic"),
+        ("mdts", "nvme.id-ctrl.mdts"),
+        ("ver", "nvme.id-ctrl.version"),
+        ("rtd3r", "nvme.id-ctrl.rtd3r"),
+        ("rtd3e", "nvme.id-ctrl.rtd3e"),
+        ("oaes", "nvme.id-ctrl.oaes"),
+        ("ctratt", "nvme.id-ctrl.ctratt"),
+        ("rrls", "nvme.id-ctrl.rrls"),
+        ("cntrltype", "nvme.id-ctrl.controller-type"),
+        ("fguid", "nvme.id-ctrl.fguid"),
+        ("crdt1", "nvme.id-ctrl.crdt1"),
+        ("crdt2", "nvme.id-ctrl.crdt2"),
+        ("crdt3", "nvme.id-ctrl.crdt3"),
+        ("nvmsr", "nvme.id-ctrl.nvmsr"),
+        ("vwci", "nvme.id-ctrl.vwci"),
+        ("mec", "nvme.id-ctrl.mec"),
+        ("oacs", "nvme.id-ctrl.oacs"),
+        ("acl", "nvme.id-ctrl.acl"),
+        ("aerl", "nvme.id-ctrl.aerl"),
+        ("frmw", "nvme.id-ctrl.frmw"),
+        ("lpa", "nvme.id-ctrl.lpa"),
+        ("elpe", "nvme.id-ctrl.elpe"),
+        ("npss", "nvme.id-ctrl.npss"),
+        ("avscc", "nvme.id-ctrl.avscc"),
+        ("apsta", "nvme.id-ctrl.apsta"),
+        ("wctemp", "nvme.id-ctrl.warning-composite-temp"),
+        ("cctemp", "nvme.id-ctrl.critical-composite-temp"),
+        ("mtfa", "nvme.id-ctrl.mtfa"),
+        ("hmpre", "nvme.id-ctrl.hmpre"),
+        ("hmmin", "nvme.id-ctrl.hmmin"),
+        ("tnvmcap", "nvme.id-ctrl.total-nvm-capacity"),
+        ("unvmcap", "nvme.id-ctrl.unallocated-nvm-capacity"),
+        ("rpmbs", "nvme.id-ctrl.rpmbs"),
+        ("edstt", "nvme.id-ctrl.edstt"),
+        ("dsto", "nvme.id-ctrl.dsto"),
+        ("fwug", "nvme.id-ctrl.fwug"),
+        ("kas", "nvme.id-ctrl.kas"),
+        ("hctma", "nvme.id-ctrl.hctma"),
+        ("mntmt", "nvme.id-ctrl.minimum-thermal-management-temp"),
+        ("mxtmt", "nvme.id-ctrl.maximum-thermal-management-temp"),
+        ("sanicap", "nvme.id-ctrl.sanitize-capabilities"),
+        ("hmminds", "nvme.id-ctrl.hmminds"),
+        ("hmmaxd", "nvme.id-ctrl.hmmaxd"),
+        ("nsetidmax", "nvme.id-ctrl.namespace-set-id-max"),
+        ("endgidmax", "nvme.id-ctrl.endurance-group-id-max"),
+        ("anatt", "nvme.id-ctrl.ana-transition-time"),
+        ("anacap", "nvme.id-ctrl.ana-capabilities"),
+        ("anagrpmax", "nvme.id-ctrl.ana-group-max"),
+        ("nanagrpid", "nvme.id-ctrl.ana-group-identifiers"),
+        ("pels", "nvme.id-ctrl.persistent-event-log-size"),
+        ("domainid", "nvme.id-ctrl.domain-id"),
+        ("sqes", "nvme.id-ctrl.sqes"),
+        ("cqes", "nvme.id-ctrl.cqes"),
+        ("maxcmd", "nvme.id-ctrl.maxcmd"),
+        ("nn", "nvme.id-ctrl.namespace-count"),
+        ("oncs", "nvme.id-ctrl.oncs"),
+        ("fuses", "nvme.id-ctrl.fuses"),
+        ("fna", "nvme.id-ctrl.fna"),
+        ("vwc", "nvme.id-ctrl.volatile-write-cache"),
+        ("awun", "nvme.id-ctrl.awun"),
+        ("awupf", "nvme.id-ctrl.awupf"),
+        ("icsvscc", "nvme.id-ctrl.icsvscc"),
+        ("nwpc", "nvme.id-ctrl.nwpc"),
+        ("acwu", "nvme.id-ctrl.acwu"),
+        ("sgls", "nvme.id-ctrl.sgls"),
+        ("mnan", "nvme.id-ctrl.mnan"),
+        ("subnqn", "nvme.subsystem"),
+    ] {
+        if let Some(value) = field_string(&value, key) {
+            node = node.with_property(property, value);
+        }
+    }
+
+    node = node.with_property("nvme.controller", name.to_string());
+
+    let mut graph = StorageGraph::empty();
+    graph.add_node(node);
+    Ok(graph)
+}
+
 fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
     let Some(path) = device.device_path else {
         return;
     };
     let id = format!("block:{path}");
-    let mut node = Node::new(id, NodeKind::NvmeNamespace, path.clone()).with_path(path);
+    let mut node = Node::new(id, NodeKind::NvmeNamespace, path.clone()).with_path(path.clone());
 
     let size_bytes = device.physical_size.or(device.namespace_capacity);
     if let Some(size_bytes) = size_bytes {
@@ -184,6 +297,16 @@ fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
     if !usage.is_empty() {
         node = node.with_usage(usage);
     }
+
+    let controller = device.controller.clone();
+    let controller_id = device.controller_id;
+    let serial = device.serial_number.clone();
+    let model = device.model_number.clone();
+    let product = device.product_name.clone();
+    let firmware = device.firmware.clone();
+    let subsystem = device.subsystem.clone();
+    let address = device.address.clone();
+    let transport = device.transport.clone();
 
     if let Some(serial) = device.serial_number {
         node = node.with_identity(Identity {
@@ -238,6 +361,84 @@ fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
     }
 
     graph.add_node(node);
+
+    if let Some(controller) = controller {
+        add_controller(
+            graph,
+            &controller,
+            ControllerSummary {
+                serial,
+                model,
+                product,
+                firmware,
+                subsystem,
+                address,
+                transport,
+                controller_id,
+            },
+        );
+        graph.add_edge(Edge::new(
+            nvme_controller_id(&controller),
+            format!("block:{path}"),
+            Relationship::Contains,
+        ));
+    }
+}
+
+struct ControllerSummary {
+    serial: Option<String>,
+    model: Option<String>,
+    product: Option<String>,
+    firmware: Option<String>,
+    subsystem: Option<String>,
+    address: Option<String>,
+    transport: Option<String>,
+    controller_id: Option<u64>,
+}
+
+fn add_controller(graph: &mut StorageGraph, controller: &str, summary: ControllerSummary) {
+    let name = controller.trim_start_matches("/dev/");
+    let mut node = Node::new(
+        nvme_controller_id(name),
+        NodeKind::NvmeController,
+        name.to_string(),
+    )
+    .with_path(controller_path(name));
+
+    if summary.serial.is_some() {
+        node = node.with_identity(Identity {
+            serial: summary.serial,
+            ..Identity::default()
+        });
+    }
+
+    for (key, value) in [
+        ("nvme.controller", Some(name.to_string())),
+        ("nvme.model", summary.model),
+        ("nvme.product", summary.product),
+        ("nvme.firmware", summary.firmware),
+        ("nvme.subsystem", summary.subsystem),
+        ("nvme.address", summary.address),
+        ("nvme.transport", summary.transport),
+        (
+            "nvme.controller-id",
+            summary.controller_id.map(|value| value.to_string()),
+        ),
+    ] {
+        if let Some(value) = value {
+            node = node.with_property(key, value);
+        }
+    }
+
+    graph.add_node(node);
+}
+
+fn nvme_controller_id(controller: &str) -> String {
+    format!("nvme-controller:{}", controller.trim_start_matches("/dev/"))
+}
+
+fn controller_path(controller: &str) -> String {
+    format!("/dev/{}", controller.trim_start_matches("/dev/"))
 }
 
 fn field_u64(value: &Value, key: &str) -> Option<u64> {
@@ -270,7 +471,7 @@ fn field_string(value: &Value, key: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use disk_nix_model::NodeKind;
+    use disk_nix_model::{NodeKind, Relationship};
 
     use super::*;
 
@@ -336,6 +537,51 @@ mod tests {
     { "ms": 0, "ds": 9, "rp": 0 },
     { "ms": 8, "ds": 12, "rp": 1 }
   ]
+}
+"#;
+
+    const NVME_ID_CTRL: &[u8] = br#"
+{
+  "vid": 5197,
+  "ssvid": 5197,
+  "sn": "SERIAL123",
+  "mn": "Example NVMe",
+  "fr": "1.0",
+  "rab": 6,
+  "ieee": 7358820,
+  "cmic": 0,
+  "mdts": 9,
+  "cntlid": 1,
+  "ver": 66560,
+  "rtd3r": 100000,
+  "rtd3e": 500000,
+  "oaes": 512,
+  "ctratt": 4,
+  "rrls": 0,
+  "cntrltype": 1,
+  "fguid": "12345678-1234-1234-1234-123456789abc",
+  "oacs": 23,
+  "acl": 3,
+  "aerl": 7,
+  "frmw": 18,
+  "lpa": 6,
+  "elpe": 63,
+  "npss": 4,
+  "wctemp": 343,
+  "cctemp": 353,
+  "tnvmcap": "1000000000",
+  "unvmcap": "500000000",
+  "sanicap": 7,
+  "anacap": 3,
+  "anagrpmax": 32,
+  "nanagrpid": 8,
+  "sqes": 102,
+  "cqes": 68,
+  "nn": 16,
+  "oncs": 95,
+  "vwc": 1,
+  "sgls": 1,
+  "subnqn": "nqn.2014-08.org.nvmexpress:uuid:12345678"
 }
 "#;
 
@@ -418,6 +664,26 @@ mod tests {
                 .iter()
                 .any(|property| property.key == "nvme.ana-state" && property.value == "optimized")
         );
+
+        let controller = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::NvmeController)
+            .expect("controller node should exist");
+        assert_eq!(controller.name, "nvme0");
+        assert_eq!(controller.path.as_deref(), Some("/dev/nvme0"));
+        assert_eq!(controller.identity.serial.as_deref(), Some("SERIAL123"));
+        assert!(
+            controller
+                .properties
+                .iter()
+                .any(|property| property.key == "nvme.controller" && property.value == "nvme0")
+        );
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "nvme-controller:nvme0"
+                && edge.to.0 == "block:/dev/nvme0n1"
+                && edge.relationship == Relationship::Contains
+        }));
     }
 
     #[test]
@@ -461,5 +727,41 @@ mod tests {
                 .any(|property| property.key == "nvme.id-ns.nvmcap"
                     && property.value == "1000000000")
         );
+    }
+
+    #[test]
+    fn normalizes_nvme_id_ctrl_json() {
+        let graph =
+            normalize_nvme_id_ctrl_json("/dev/nvme0", NVME_ID_CTRL).expect("fixture should parse");
+
+        let node = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::NvmeController)
+            .expect("controller node should exist");
+
+        assert_eq!(node.name, "nvme0");
+        assert_eq!(node.path.as_deref(), Some("/dev/nvme0"));
+        assert_eq!(node.identity.serial.as_deref(), Some("SERIAL123"));
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "nvme.model" && property.value == "Example NVMe")
+        );
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "nvme.controller-id" && property.value == "1")
+        );
+        assert!(node.properties.iter().any(|property| {
+            property.key == "nvme.id-ctrl.total-nvm-capacity" && property.value == "1000000000"
+        }));
+        assert!(node.properties.iter().any(|property| property.key
+            == "nvme.id-ctrl.namespace-count"
+            && property.value == "16"));
+        assert!(node.properties.iter().any(|property| {
+            property.key == "nvme.subsystem"
+                && property.value == "nqn.2014-08.org.nvmexpress:uuid:12345678"
+        }));
     }
 }
