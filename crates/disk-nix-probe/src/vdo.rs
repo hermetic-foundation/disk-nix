@@ -310,8 +310,45 @@ fn add_verbose_stats(graph: &mut StorageGraph, stats: VdoVerboseStats) {
     )
     .with_path(stats.device);
 
+    let mut data_blocks_used = None;
+    let mut overhead_blocks_used = None;
+    let mut logical_blocks_used = None;
     for (key, value) in stats.properties {
+        match key.as_str() {
+            "vdo.data-blocks-used" => data_blocks_used = parse_block_count(&value),
+            "vdo.overhead-blocks-used" => overhead_blocks_used = parse_block_count(&value),
+            "vdo.logical-blocks-used" => logical_blocks_used = parse_block_count(&value),
+            _ => {}
+        }
         node = node.with_property(key, value);
+    }
+
+    if let Some(bytes) = data_blocks_used.and_then(blocks_to_bytes) {
+        node = node.with_property("vdo.data-blocks-used-bytes", bytes.to_string());
+    }
+    if let Some(bytes) = overhead_blocks_used.and_then(blocks_to_bytes) {
+        node = node.with_property("vdo.overhead-blocks-used-bytes", bytes.to_string());
+    }
+    if let Some(bytes) = logical_blocks_used.and_then(blocks_to_bytes) {
+        node = node.with_property("vdo.logical-blocks-used-bytes", bytes.to_string());
+    }
+
+    let physical_used_bytes = match (
+        data_blocks_used.and_then(blocks_to_bytes),
+        overhead_blocks_used.and_then(blocks_to_bytes),
+    ) {
+        (Some(data), Some(overhead)) => data.checked_add(overhead),
+        (Some(data), None) => Some(data),
+        (None, Some(overhead)) => Some(overhead),
+        (None, None) => None,
+    };
+    let usage = Usage {
+        used_bytes: physical_used_bytes,
+        free_bytes: None,
+        allocated_bytes: logical_blocks_used.and_then(blocks_to_bytes),
+    };
+    if !usage.is_empty() {
+        node = node.with_usage(usage);
     }
 
     graph.add_node(node);
@@ -383,6 +420,18 @@ fn parse_stats_size(value: Option<&str>) -> Option<u64> {
             .ok()
             .map(|blocks| blocks.saturating_mul(1024))
     }
+}
+
+fn parse_block_count(value: &str) -> Option<u64> {
+    value
+        .split_whitespace()
+        .next()
+        .map(|value| value.replace(',', ""))
+        .and_then(|value| value.parse::<u64>().ok())
+}
+
+fn blocks_to_bytes(blocks: u64) -> Option<u64> {
+    blocks.checked_mul(4096)
 }
 
 fn trim_percent(value: &str) -> String {
@@ -513,6 +562,26 @@ Device                    1K-blocks    Used Available Use% Space saving%
         assert!(archive.properties.iter().any(|property| {
             property.key == "vdo.overhead-blocks-used" && property.value == "8192"
         }));
+        assert!(archive.properties.iter().any(|property| {
+            property.key == "vdo.data-blocks-used-bytes" && property.value == "268435456"
+        }));
+        assert!(archive.properties.iter().any(|property| {
+            property.key == "vdo.overhead-blocks-used-bytes" && property.value == "33554432"
+        }));
+        assert!(archive.properties.iter().any(|property| {
+            property.key == "vdo.logical-blocks-used-bytes" && property.value == "1073741824"
+        }));
+        assert_eq!(
+            archive.usage.as_ref().and_then(|usage| usage.used_bytes),
+            Some(301_989_888)
+        );
+        assert_eq!(
+            archive
+                .usage
+                .as_ref()
+                .and_then(|usage| usage.allocated_bytes),
+            Some(1_073_741_824)
+        );
 
         let recovering = graph
             .nodes

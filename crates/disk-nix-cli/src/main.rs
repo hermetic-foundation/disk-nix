@@ -3301,8 +3301,11 @@ fn usage_details(node: &Node) -> String {
         ("vdo.version", "vdo-version"),
         ("vdo.release-version", "vdo-release"),
         ("vdo.data-blocks-used", "data-blocks"),
+        ("vdo.data-blocks-used-bytes", "data-bytes"),
         ("vdo.overhead-blocks-used", "overhead-blocks"),
+        ("vdo.overhead-blocks-used-bytes", "overhead-bytes"),
         ("vdo.logical-blocks-used", "logical-blocks"),
+        ("vdo.logical-blocks-used-bytes", "logical-bytes"),
         ("dm.name", "dm-name"),
         ("dm.uuid", "dm-uuid"),
         ("dm.major", "dm-major"),
@@ -6646,8 +6649,11 @@ mod tests {
                 .with_property("vdo.version", "47")
                 .with_property("vdo.release-version", "133524")
                 .with_property("vdo.data-blocks-used", "65536")
+                .with_property("vdo.data-blocks-used-bytes", "268435456")
                 .with_property("vdo.overhead-blocks-used", "4096")
-                .with_property("vdo.logical-blocks-used", "262144"),
+                .with_property("vdo.overhead-blocks-used-bytes", "16777216")
+                .with_property("vdo.logical-blocks-used", "262144")
+                .with_property("vdo.logical-blocks-used-bytes", "1073741824"),
         );
         graph.add_node(
             Node::new(
@@ -6685,7 +6691,9 @@ mod tests {
         assert!(output.contains("index-memory=0.25 block-map-cache=128M"));
         assert!(output.contains("compression=enabled deduplication=enabled"));
         assert!(output.contains("vdo-version=47 vdo-release=133524"));
-        assert!(output.contains("data-blocks=65536 overhead-blocks=4096 logical-blocks=262144"));
+        assert!(output.contains("data-blocks=65536 data-bytes=268435456"));
+        assert!(output.contains("overhead-blocks=4096 overhead-bytes=16777216"));
+        assert!(output.contains("logical-blocks=262144 logical-bytes=1073741824"));
         assert!(output.contains("vg0/archive:0"));
         assert!(output.contains("vdo-mode=normal"));
         assert!(output.contains("vdo-compression-state=online"));
