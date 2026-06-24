@@ -128,7 +128,8 @@ fn parse_client_options(value: &str) -> Option<(String, Vec<(String, String)>)> 
 
 fn add_mount(graph: &mut StorageGraph, mount: NfsMount) {
     let mount_id = format!("mount:{}", mount.target);
-    let mut mount_node = Node::new(mount_id.clone(), NodeKind::NfsMount, mount.target.clone());
+    let mut mount_node = Node::new(mount_id.clone(), NodeKind::NfsMount, mount.target.clone())
+        .with_path(mount.target.clone());
     mount_node = mount_node.with_property("nfs.source", mount.source.clone());
     for (key, value) in &mount.options {
         mount_node = mount_node.with_property(format!("nfs.{key}"), value.clone());
@@ -156,6 +157,7 @@ fn add_mount(graph: &mut StorageGraph, mount: NfsMount) {
 fn add_export(graph: &mut StorageGraph, export: NfsExport) {
     let export_id = format!("nfs-export:{}:{}", export.path, export.client);
     let mut export_node = Node::new(export_id, NodeKind::NfsExport, export.path.clone())
+        .with_path(export.path.clone())
         .with_property("nfs.export", export.path)
         .with_property("nfs.export-client", export.client)
         .with_property("nfs.exportfs", "true");
@@ -289,6 +291,7 @@ storage.example:/export/home mounted on /home:
         );
         assert!(graph.nodes.iter().any(|node| {
             node.name == "/home"
+                && node.path.as_deref() == Some("/home")
                 && node
                     .properties
                     .iter()
@@ -342,6 +345,7 @@ storage.example:/export/home mounted on /home:
         }));
         assert!(graph.nodes.iter().any(|node| {
             node.name == "/mnt/backups"
+                && node.path.as_deref() == Some("/mnt/backups")
                 && node.properties.iter().any(|property| {
                     property.key == "nfs.source" && property.value == "10.0.0.11:/srv/backups"
                 })
@@ -367,6 +371,7 @@ storage.example:/export/home mounted on /home:
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::NfsExport
                 && node.name == "/srv/share"
+                && node.path.as_deref() == Some("/srv/share")
                 && node.properties.iter().any(|property| {
                     property.key == "nfs.export-client" && property.value == "192.0.2.0/24"
                 })
@@ -387,6 +392,7 @@ storage.example:/export/home mounted on /home:
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::NfsExport
                 && node.name == "/srv/read-only"
+                && node.path.as_deref() == Some("/srv/read-only")
                 && node.properties.iter().any(|property| {
                     property.key == "nfs.export-client" && property.value == "198.51.100.10"
                 })
