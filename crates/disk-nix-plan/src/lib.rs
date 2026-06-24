@@ -250,6 +250,8 @@ pub enum TopologyDiagnosticKind {
     BcacheDetachRequired,
     BackingFileCreateAlreadySatisfied,
     BackingFileCreateRequired,
+    PartitionCreateAlreadySatisfied,
+    PartitionCreateRequired,
     LvmPvCreateAlreadySatisfied,
     LvmPvCreateRequired,
     LvmVolumeCreateAlreadySatisfied,
@@ -833,6 +835,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
+                        | TopologyDiagnosticKind::PartitionCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgCreateAlreadySatisfied
@@ -1478,6 +1481,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
+                    | TopologyDiagnosticKind::PartitionCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgCreateAlreadySatisfied
@@ -1667,6 +1671,7 @@ fn topology_diagnostics_for_action(
         action, node, graph, &query,
     ));
     diagnostics.extend(loop_present_diagnostic(action, node, &query));
+    diagnostics.extend(partition_create_diagnostic(action, node, &query));
     diagnostics.extend(backing_file_create_diagnostic(action, node, &query));
     diagnostics.extend(md_create_diagnostic(action, node, &query));
     diagnostics.extend(md_assemble_diagnostic(action, node, &query));
@@ -1829,6 +1834,83 @@ fn filesystem_type_diagnostic(
         kind: TopologyDiagnosticKind::FilesystemTypeConflict,
         query: query.to_string(),
         message: format!("desired filesystem type {desired} differs from current {current}"),
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn partition_create_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Create
+        || action.context.collection.as_deref() != Some("partitions")
+    {
+        return None;
+    }
+
+    if node.kind != NodeKind::Partition {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::PartitionCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a partition; parted mkpart remains actionable only after target review",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let desired = action.context.desired_size.as_deref();
+    let desired_bytes = desired.and_then(parse_size_bytes);
+    let (level, kind, message) = match (desired, desired_bytes, node.size_bytes) {
+        (Some(desired), Some(desired_bytes), Some(current_bytes))
+            if current_bytes == desired_bytes =>
+        {
+            (
+                TopologyDiagnosticLevel::Info,
+                TopologyDiagnosticKind::PartitionCreateAlreadySatisfied,
+                format!(
+                    "partition {query} already exists with desired size {desired} ({current_bytes} bytes)"
+                ),
+            )
+        }
+        (None, _, _) => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::PartitionCreateAlreadySatisfied,
+            format!("partition {query} already exists"),
+        ),
+        (Some(desired), Some(_), Some(current_bytes)) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::PartitionCreateRequired,
+            format!(
+                "partition {query} already exists with size {current_bytes} bytes, not desired size {desired}; use grow or recreate only after data-preservation review"
+            ),
+        ),
+        (Some(desired), None, _) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::PartitionCreateRequired,
+            format!(
+                "partition {query} already exists, but desired size {desired} could not be compared"
+            ),
+        ),
+        (Some(desired), Some(_), None) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::PartitionCreateRequired,
+            format!(
+                "partition {query} already exists, but current size is unknown; desired size is {desired}"
+            ),
+        ),
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
         current: Some(current_node_summary(node)),
     })
 }
@@ -15949,6 +16031,127 @@ mod tests {
                         | TopologyDiagnosticKind::SizeBelowDesired
                         | TopologyDiagnosticKind::SizeConflict
                 )
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_partition_create_when_target_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "partitions": {
+                "boot": {
+                  "operation": "create",
+                  "target": "/dev/disk/by-partuuid/boot",
+                  "device": "/dev/disk/by-id/nvme-root",
+                  "partitionNumber": 1,
+                  "desiredSize": "1GiB"
+                },
+                "root": {
+                  "operation": "create",
+                  "target": "/dev/disk/by-partuuid/root",
+                  "device": "/dev/disk/by-id/nvme-root",
+                  "partitionNumber": 2,
+                  "desiredSize": "64GiB"
+                },
+                "scratch": {
+                  "operation": "create",
+                  "target": "/dev/disk/by-partuuid/scratch",
+                  "device": "/dev/disk/by-id/nvme-root",
+                  "partitionNumber": 3
+                },
+                "wrong": {
+                  "operation": "create",
+                  "target": "/dev/disk/by-partuuid/wrong",
+                  "device": "/dev/disk/by-id/nvme-root",
+                  "partitionNumber": 4
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "partition:/dev/disk/by-partuuid/boot",
+                NodeKind::Partition,
+                "/dev/disk/by-partuuid/boot",
+            )
+            .with_path("/dev/disk/by-partuuid/boot")
+            .with_size_bytes(1024 * 1024 * 1024),
+        );
+        graph.add_node(
+            Node::new(
+                "partition:/dev/disk/by-partuuid/root",
+                NodeKind::Partition,
+                "/dev/disk/by-partuuid/root",
+            )
+            .with_path("/dev/disk/by-partuuid/root")
+            .with_size_bytes(32 * 1024 * 1024 * 1024),
+        );
+        graph.add_node(
+            Node::new(
+                "partition:/dev/disk/by-partuuid/scratch",
+                NodeKind::Partition,
+                "/dev/disk/by-partuuid/scratch",
+            )
+            .with_path("/dev/disk/by-partuuid/scratch"),
+        );
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-partuuid/wrong",
+                NodeKind::PhysicalDisk,
+                "/dev/disk/by-partuuid/wrong",
+            )
+            .with_path("/dev/disk/by-partuuid/wrong"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 4);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.summary.action_count, 2);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "partitions:boot:create")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "partitions:scratch:create")
+        );
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "partitions:root:create" && action.operation == Operation::Create
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "partitions:wrong:create" && action.operation == Operation::Create
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "partitions:boot:create"
+                && diagnostic.kind == TopologyDiagnosticKind::PartitionCreateAlreadySatisfied
+                && diagnostic.message.contains("desired size 1GiB")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "partitions:scratch:create"
+                && diagnostic.kind == TopologyDiagnosticKind::PartitionCreateAlreadySatisfied
+                && diagnostic.message.contains("already exists")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "partitions:root:create"
+                && diagnostic.kind == TopologyDiagnosticKind::PartitionCreateRequired
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.message.contains("not desired size 64GiB")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "partitions:wrong:create"
+                && diagnostic.kind == TopologyDiagnosticKind::PartitionCreateRequired
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.message.contains("not a partition")
         }));
     }
 
