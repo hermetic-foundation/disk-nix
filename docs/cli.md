@@ -616,9 +616,13 @@ storage origins. `operation = "rescan"` renders read-only `stat`, `du`, and
 graph inspection commands. `operation = "grow"` renders `truncate --size`
 only when a concrete file path and desired size are declared; logical names
 can supply the file path with `target` or `path`.
-Device-mapper command plans use `dmMaps` declarations for read-only map
-refreshes. `operation = "rescan"` renders `dmsetup info`, `dmsetup deps -o devname`, `dmsetup table`, `dmsetup status`, and graph inspection commands
-when a concrete `/dev/mapper/*` or `/dev/dm-*` target is declared.
+Device-mapper command plans use `dmMaps` declarations for map refreshes and
+reviewed mapper renames. `operation = "rescan"` renders `dmsetup info`,
+`dmsetup deps -o devname`, `dmsetup table`, `dmsetup status`, and graph
+inspection commands when a concrete `/dev/mapper/*` or `/dev/dm-*` target is
+declared. `operation = "rename"` renders `dmsetup rename` with an
+offline-required policy gate because dependent consumers must move to the new
+mapper name.
 Btrfs filesystem device-removal plans use Btrfs allocation inspection and
 domain-specific `btrfs device remove` rendering, but the mutating command is
 blocked by default until `allowPotentialDataLoss=true` is set.

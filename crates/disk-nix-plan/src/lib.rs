@@ -5779,6 +5779,21 @@ pub fn default_capabilities() -> Vec<Capability> {
             }),
         },
         Capability {
+            node_kind: NodeKind::DeviceMapper,
+            operation: Operation::Rename,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "device-mapper rename changes the visible mapper path without deleting mapped data"
+                    .to_string(),
+                alternatives: vec![
+                    "update dependent LUKS, LVM, VDO, multipath, filesystem, mount, and service declarations before applying"
+                        .to_string(),
+                    "prefer the owning LUKS, LVM, VDO, multipath, or cache declaration when the map is domain-managed"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
             node_kind: NodeKind::ZfsPool,
             operation: Operation::Create,
             risk: RiskClass::Destructive,
@@ -8003,6 +8018,11 @@ mod tests {
             (NodeKind::BackingFile, Operation::Rescan, RiskClass::Online),
             (NodeKind::BackingFile, Operation::Grow, RiskClass::Online),
             (NodeKind::DeviceMapper, Operation::Rescan, RiskClass::Online),
+            (
+                NodeKind::DeviceMapper,
+                Operation::Rename,
+                RiskClass::OfflineRequired,
+            ),
             (NodeKind::CacheDevice, Operation::Rescan, RiskClass::Online),
             (NodeKind::VdoVolume, Operation::Rescan, RiskClass::Online),
             (NodeKind::ZfsSnapshot, Operation::Rescan, RiskClass::Online),
@@ -10713,14 +10733,19 @@ mod tests {
                 "cryptroot": {
                   "operation": "rescan",
                   "target": "/dev/mapper/cryptroot"
+                },
+                "cryptswap": {
+                  "operation": "rename",
+                  "target": "/dev/mapper/cryptswap",
+                  "renameTo": "cryptswap-retired"
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 1);
-        assert_eq!(plan.summary.offline_required_count, 0);
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.offline_required_count, 1);
         assert_eq!(plan.summary.destructive_count, 0);
         let rescan = plan
             .actions
@@ -10740,6 +10765,22 @@ mod tests {
                 .as_ref()
                 .is_some_and(|advice| advice.summary.contains("device-mapper rescan"))
         );
+        let rename = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "dmmaps:cryptswap:rename")
+            .expect("device-mapper rename action exists");
+        assert_eq!(rename.operation, Operation::Rename);
+        assert_eq!(rename.risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            rename.context.target.as_deref(),
+            Some("/dev/mapper/cryptswap")
+        );
+        assert_eq!(
+            rename.context.rename_to.as_deref(),
+            Some("cryptswap-retired")
+        );
+        assert!(!rename.destructive);
     }
 
     #[test]

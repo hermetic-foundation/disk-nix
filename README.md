@@ -253,8 +253,11 @@ focused graph inspection so loop devices, swapfiles, and filesystem consumers
 can be refreshed separately.
 Device-mapper map rescan plans use `dmMaps` declarations and render read-only
 `dmsetup info`, `dmsetup deps -o devname`, `dmsetup table`, `dmsetup status`,
-and graph inspection commands; mutating mapper lifecycle remains modeled
-through LUKS, LVM, VDO, multipath, or cache-specific declarations.
+and graph inspection commands. `operation = "rename"` renders reviewed
+`dmsetup rename` commands for concrete mapper paths and remains offline-required
+because dependent consumers must be updated together; other mutating mapper
+lifecycle remains modeled through LUKS, LVM, VDO, multipath, or cache-specific
+declarations.
 LVM cache apply plans use separate `lvmCaches` declarations and render
 `lvconvert --type cache`, `lvconvert --uncache`, and `lvchange --cachemode` or
 `--cachepolicy` commands when an origin `vg/lv` and cache-pool LV are declared.

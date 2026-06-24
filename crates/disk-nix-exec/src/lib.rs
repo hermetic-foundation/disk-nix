@@ -1218,6 +1218,30 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Rename if collection == Some("dmMaps") => {
+            let rename_to = dm_map_rename_to(action);
+            let renamed_target = rename_to
+                .as_ref()
+                .map(|name| format!("/dev/mapper/{name}"));
+            let renamed_target = renamed_target.as_deref();
+            (
+                vec![
+                    dmsetup_info_command(renamed_target, "verify device-mapper identity after rename"),
+                    dmsetup_deps_command(renamed_target),
+                    dmsetup_status_command(renamed_target),
+                    dm_map_inspect_json_command(
+                        renamed_target,
+                        "verify modeled device-mapper relationships after rename",
+                    ),
+                ],
+                vec![
+                    "renamed device-mapper path resolves with the expected name, UUID, dependencies, and status"
+                        .to_string(),
+                    "dependent LUKS, LVM, VDO, multipath, filesystem, or mount consumers are updated to the new mapper path"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Create | Operation::Grow if collection == Some("partitions") => (
             vec![
                 command(
@@ -3427,6 +3451,25 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "device-mapper rescan is read-only and does not reload or remove maps"
                         .to_string(),
                     "use domain-specific LUKS, LVM, VDO, multipath, or cache actions for mutating mapper lifecycle"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Rename if collection == Some("dmMaps") => {
+            let target = dm_map_target_path(action);
+            let rename_to = dm_map_rename_to(action);
+            (
+                vec![
+                    dmsetup_info_command(target, "inspect device-mapper identity before rename"),
+                    dmsetup_deps_command(target),
+                    dmsetup_rename_command(target, rename_to.as_deref()),
+                    dm_map_inspect_command(target),
+                ],
+                vec![
+                    "device-mapper rename changes the visible mapper path and can break consumers until declarations are updated"
+                        .to_string(),
+                    "prefer LUKS, LVM, VDO, multipath, or cache-specific rename workflows when the mapper is owned by a higher-level domain"
                         .to_string(),
                 ],
                 true,
@@ -11734,6 +11777,16 @@ fn is_dm_map_target(target: &str) -> bool {
     target.starts_with("/dev/mapper/") || target.starts_with("/dev/dm-")
 }
 
+fn dm_map_rename_to(action: &PlannedAction) -> Option<String> {
+    action
+        .context
+        .rename_to
+        .as_deref()
+        .and_then(|rename_to| rename_to.strip_prefix("/dev/mapper/").or(Some(rename_to)))
+        .filter(|rename_to| !rename_to.is_empty() && !rename_to.contains('/'))
+        .map(ToString::to_string)
+}
+
 fn dmsetup_info_command(target: Option<&str>, description: &'static str) -> ExecutionCommand {
     match target {
         Some(target) => command(
@@ -11765,6 +11818,47 @@ fn dmsetup_info_command(target: Option<&str>, description: &'static str) -> Exec
             description,
         ),
     }
+}
+
+fn dmsetup_rename_command(target: Option<&str>, rename_to: Option<&str>) -> ExecutionCommand {
+    match (target, rename_to) {
+        (Some(target), Some(rename_to)) => command_vec(
+            vec![
+                "dmsetup".to_string(),
+                "rename".to_string(),
+                target.to_string(),
+                rename_to.to_string(),
+            ],
+            true,
+            "rename the reviewed device-mapper map",
+        ),
+        (target, rename_to) => command_vec_with_readiness(
+            vec![
+                "dmsetup".to_string(),
+                "rename".to_string(),
+                target.unwrap_or("<dm-map>").to_string(),
+                rename_to.unwrap_or("<new-dm-map-name>").to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing_dm_map_rename_inputs(target, rename_to),
+            "rename the device-mapper map after selecting a concrete mapper path and new map name",
+        ),
+    }
+}
+
+fn missing_dm_map_rename_inputs(
+    target: Option<&str>,
+    rename_to: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if target.is_none() {
+        missing.push("device-mapper path");
+    }
+    if rename_to.is_none() {
+        missing.push("new device-mapper name");
+    }
+    missing
 }
 
 fn dmsetup_deps_command(target: Option<&str>) -> ExecutionCommand {
@@ -19973,6 +20067,119 @@ mod tests {
                     command.argv == ["disk-nix", "inspect", "<dm-map>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["device-mapper path"]
+                })
+        }));
+    }
+
+    #[test]
+    fn dm_map_rename_reports_dmsetup_command() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "dmMaps": {
+                  "cryptswap": {
+                    "operation": "rename",
+                    "target": "/dev/mapper/cryptswap",
+                    "renameTo": "/dev/mapper/cryptswap-retired"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "dmmaps:cryptswap:rename"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "dmsetup",
+                            "info",
+                            "-c",
+                            "--noheadings",
+                            "-o",
+                            "name,uuid,major,minor,open,segments,events",
+                            "/dev/mapper/cryptswap",
+                        ]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "dmsetup",
+                            "rename",
+                            "/dev/mapper/cryptswap",
+                            "cryptswap-retired",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "dmmaps:cryptswap:rename"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "dmsetup",
+                            "info",
+                            "-c",
+                            "--noheadings",
+                            "-o",
+                            "name,uuid,major,minor,open,segments,events",
+                            "/dev/mapper/cryptswap-retired",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "disk-nix",
+                            "inspect",
+                            "/dev/mapper/cryptswap-retired",
+                            "--json",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
+    fn dm_map_rename_requires_concrete_path_and_new_name_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "dmMaps": {
+                  "cryptswap": {
+                    "operation": "rename",
+                    "renameTo": "/tmp/not-a-mapper-name"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "dmmaps:cryptswap:rename"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["dmsetup", "rename", "<dm-map>", "<new-dm-map-name>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == ["device-mapper path", "new device-mapper name"]
                 })
         }));
     }

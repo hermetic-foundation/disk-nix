@@ -613,6 +613,11 @@
                 operation = "rescan";
                 target = "/dev/mapper/cryptroot";
               };
+              dmMaps.cryptswap = {
+                operation = "rename";
+                target = "/dev/mapper/cryptswap";
+                renameTo = "cryptswap-retired";
+              };
               mdRaids.root = {
                 target = "/dev/md/root";
                 raidLevel = "1";
@@ -1586,6 +1591,9 @@
                     and .spec.backingFiles.inventoryImage.path == "/var/lib/images/inventory.img"
                     and .spec.dmMaps.cryptroot.operation == "rescan"
                     and .spec.dmMaps.cryptroot.target == "/dev/mapper/cryptroot"
+                    and .spec.dmMaps.cryptswap.operation == "rename"
+                    and .spec.dmMaps.cryptswap.target == "/dev/mapper/cryptswap"
+                    and .spec.dmMaps.cryptswap.renameTo == "cryptswap-retired"
                     and .spec.mdRaids.root.target == "/dev/md/root"
                     and .spec.mdRaids.root.raidLevel == "1"
                     and (.spec.mdRaids.root.devices | index("/dev/disk/by-id/nvme-md-a") != null)

@@ -693,6 +693,11 @@ Example lifecycle planning through NixOS options:
       operation = "rescan";
       target = "/dev/mapper/cryptroot";
     };
+    dmMaps.cryptswap = {
+      operation = "rename";
+      target = "/dev/mapper/cryptswap";
+      renameTo = "cryptswap-retired";
+    };
     mdRaids.root = {
       target = "/dev/md/root";
       addDevices = [ "/dev/disk/by-id/nvme-md-spare" ];
