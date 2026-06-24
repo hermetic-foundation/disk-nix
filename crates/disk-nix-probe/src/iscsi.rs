@@ -35,6 +35,9 @@ struct IscsiNodeRecord {
     leading_login: Option<String>,
     auth_method: Option<String>,
     username: Option<String>,
+    username_in: Option<String>,
+    password_configured: bool,
+    password_in_configured: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -237,6 +240,9 @@ fn parse_node_records(bytes: &[u8]) -> Result<Vec<IscsiNodeRecord>, ProbeError> 
                 leading_login: None,
                 auth_method: None,
                 username: None,
+                username_in: None,
+                password_configured: false,
+                password_in_configured: false,
             });
         } else if lower.starts_with("portal:") {
             if let Some(record) = &mut current {
@@ -274,6 +280,25 @@ fn parse_node_records(bytes: &[u8]) -> Result<Vec<IscsiNodeRecord>, ProbeError> 
             if let Some(record) = &mut current {
                 record.username = value_after_colon(trimmed);
             }
+        } else if lower.starts_with("username_in:")
+            || lower.starts_with("username in:")
+            || lower.starts_with("node.session.auth.username_in:")
+        {
+            if let Some(record) = &mut current {
+                record.username_in = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("password:") || lower.starts_with("node.session.auth.password:")
+        {
+            if let Some(record) = &mut current {
+                record.password_configured = secret_is_configured(value_after_colon(trimmed));
+            }
+        } else if lower.starts_with("password_in:")
+            || lower.starts_with("password in:")
+            || lower.starts_with("node.session.auth.password_in:")
+        {
+            if let Some(record) = &mut current {
+                record.password_in_configured = secret_is_configured(value_after_colon(trimmed));
+            }
         } else if let Some(record) = parse_concise_node_record(trimmed) {
             flush_node_record(&mut records, &mut current);
             records.push(record);
@@ -299,6 +324,9 @@ fn parse_concise_node_record(value: &str) -> Option<IscsiNodeRecord> {
         leading_login: None,
         auth_method: None,
         username: None,
+        username_in: None,
+        password_configured: false,
+        password_in_configured: false,
     })
 }
 
@@ -340,6 +368,21 @@ fn add_node_record(graph: &mut StorageGraph, record: IscsiNodeRecord) {
     }
     if let Some(username) = &record.username {
         target_node = target_node.with_property("iscsi.node-auth-username", username.clone());
+    }
+    if let Some(username) = &record.username_in {
+        target_node = target_node.with_property("iscsi.node-auth-username-in", username.clone());
+    }
+    if record.password_configured {
+        target_node = target_node.with_property("iscsi.node-auth-password-configured", "true");
+    }
+    if record.password_in_configured {
+        target_node = target_node.with_property("iscsi.node-auth-password-in-configured", "true");
+    }
+    if record.username.is_some() || record.password_configured {
+        target_node = target_node.with_property("iscsi.node-auth-direction-out", "true");
+    }
+    if record.username_in.is_some() || record.password_in_configured {
+        target_node = target_node.with_property("iscsi.node-auth-direction-in", "true");
     }
 
     graph.add_node(target_node);
@@ -512,6 +555,12 @@ fn value_after_colon(value: &str) -> Option<String> {
         .split_once(':')
         .map(|(_, value)| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+fn secret_is_configured(value: Option<String>) -> bool {
+    value
+        .as_deref()
+        .is_some_and(|value| !matches!(value.trim(), "" | "<empty>" | "[]" | "(null)"))
 }
 
 fn parse_key_value(value: &str) -> Option<(String, String)> {
@@ -829,6 +878,9 @@ Target: iqn.2026-06.example:storage.disk1
     Leading Login: Yes
     AuthMethod: CHAP
     Username: node-user
+    Password: outbound-secret
+    Username_in: target-user
+    Password_in: inbound-secret
 10.0.0.12:3260,2 iqn.2026-06.example:storage.disk2
 "#,
         )
@@ -860,6 +912,29 @@ Target: iqn.2026-06.example:storage.disk1
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "iscsi.node-auth-method" && property.value == "CHAP"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-auth-username" && property.value == "node-user"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-auth-username-in" && property.value == "target-user"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-auth-password-configured"
+                        && property.value == "true"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-auth-password-in-configured"
+                        && property.value == "true"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-auth-direction-out" && property.value == "true"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-auth-direction-in" && property.value == "true"
+                })
+                && !node.properties.iter().any(|property| {
+                    property.value == "outbound-secret" || property.value == "inbound-secret"
                 })
         }));
         assert!(graph.nodes.iter().any(|node| {
