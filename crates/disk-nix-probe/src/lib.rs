@@ -1489,7 +1489,7 @@ fn collect_lvm(result: &mut ProbeResult) {
             "--reportformat",
             "json",
             "-o",
-            "lv_name,vg_name,segtype,seg_start,seg_size,chunk_size,thin_count,discards,zero,transaction_id,thin_id,devices,metadata_devices,seg_pe_ranges,seg_monitor,cache_metadata_format,cache_mode,cache_policy,cache_settings,vdo_compression,vdo_deduplication,vdo_write_policy",
+            "lv_name,vg_name,segtype,stripes,data_stripes,reshape_len,reshape_len_le,data_copies,data_offset,new_data_offset,parity_chunks,stripe_size,region_size,seg_start,seg_start_pe,seg_size,seg_size_pe,seg_tags,chunk_size,thin_count,discards,zero,transaction_id,thin_id,devices,metadata_devices,seg_pe_ranges,seg_le_ranges,seg_metadata_le_ranges,seg_monitor,cache_metadata_format,cache_mode,cache_policy,cache_settings,integrity_settings,vdo_compression,vdo_deduplication,vdo_minimum_io_size,vdo_block_map_cache_size,vdo_block_map_era_length,vdo_use_sparse_index,vdo_index_memory_size,vdo_slab_size,vdo_ack_threads,vdo_bio_threads,vdo_bio_rotation,vdo_cpu_threads,vdo_hash_zone_threads,vdo_logical_threads,vdo_physical_threads,vdo_max_discard,vdo_header_size,vdo_use_metadata_hints,vdo_write_policy",
         ],
     );
 

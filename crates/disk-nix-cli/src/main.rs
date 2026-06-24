@@ -2652,8 +2652,21 @@ fn usage_details(node: &Node) -> String {
         ("lvm.attr", "attr"),
         ("lvm.layout", "layout"),
         ("lvm.segment-type", "segment-type"),
+        ("lvm.segment-stripes", "stripes"),
+        ("lvm.segment-data-stripes", "data-stripes"),
+        ("lvm.reshape-length", "reshape-length"),
+        ("lvm.reshape-length-extents", "reshape-extents"),
+        ("lvm.data-copies", "data-copies"),
+        ("lvm.data-offset", "data-offset"),
+        ("lvm.new-data-offset", "new-data-offset"),
+        ("lvm.parity-chunks", "parity-chunks"),
+        ("lvm.stripe-size", "stripe-size"),
+        ("lvm.region-size", "region-size"),
         ("lvm.segment-start", "segment-start"),
+        ("lvm.segment-start-extent", "segment-start-pe"),
         ("lvm.segment-size", "segment-size"),
+        ("lvm.segment-size-extents", "segment-size-pe"),
+        ("lvm.segment-tags", "segment-tags"),
         ("lvm.chunk-size", "chunk-size"),
         ("lvm.thin-count", "thin-count"),
         ("lvm.discards", "discards"),
@@ -2663,13 +2676,32 @@ fn usage_details(node: &Node) -> String {
         ("lvm.devices", "devices"),
         ("lvm.metadata-devices", "metadata-devices"),
         ("lvm.segment-pe-ranges", "pe-ranges"),
+        ("lvm.segment-le-ranges", "le-ranges"),
+        ("lvm.segment-metadata-le-ranges", "metadata-le-ranges"),
         ("lvm.segment-monitor", "segment-monitor"),
         ("lvm.cache-metadata-format", "cache-metadata-format"),
         ("lvm.segment-cache-mode", "segment-cache-mode"),
         ("lvm.segment-cache-policy", "segment-cache-policy"),
         ("lvm.cache-settings", "cache-settings"),
+        ("lvm.integrity-settings", "integrity-settings"),
         ("lvm.vdo-compression", "vdo-compression"),
         ("lvm.vdo-deduplication", "vdo-deduplication"),
+        ("lvm.vdo-minimum-io-size", "vdo-min-io"),
+        ("lvm.vdo-block-map-cache-size", "vdo-block-map-cache"),
+        ("lvm.vdo-block-map-era-length", "vdo-block-map-era"),
+        ("lvm.vdo-use-sparse-index", "vdo-sparse-index"),
+        ("lvm.vdo-index-memory-size", "vdo-index-memory"),
+        ("lvm.vdo-slab-size", "vdo-slab"),
+        ("lvm.vdo-ack-threads", "vdo-ack-threads"),
+        ("lvm.vdo-bio-threads", "vdo-bio-threads"),
+        ("lvm.vdo-bio-rotation", "vdo-bio-rotation"),
+        ("lvm.vdo-cpu-threads", "vdo-cpu-threads"),
+        ("lvm.vdo-hash-zone-threads", "vdo-hash-zone-threads"),
+        ("lvm.vdo-logical-threads", "vdo-logical-threads"),
+        ("lvm.vdo-physical-threads", "vdo-physical-threads"),
+        ("lvm.vdo-max-discard", "vdo-max-discard"),
+        ("lvm.vdo-header-size", "vdo-header"),
+        ("lvm.vdo-use-metadata-hints", "vdo-metadata-hints"),
         ("lvm.vdo-write-policy", "vdo-write-policy"),
         ("lvm.vdo-operating-mode", "vdo-mode"),
         ("lvm.vdo-compression-state", "vdo-compression-state"),
@@ -4859,9 +4891,22 @@ mod tests {
         graph.add_node(
             Node::new("lvm-segment:vg0/root:0", NodeKind::LvmSegment, "vg0/root:0")
                 .with_property("lvm.segment-type", "thin")
+                .with_property("lvm.segment-stripes", "2")
+                .with_property("lvm.segment-data-stripes", "2")
+                .with_property("lvm.reshape-length", "128.00m")
+                .with_property("lvm.data-copies", "2")
+                .with_property("lvm.stripe-size", "64.00k")
                 .with_property("lvm.segment-start", "0")
                 .with_property("lvm.segment-size", "200.00g")
-                .with_property("lvm.devices", "pool(0)"),
+                .with_property("lvm.segment-size-extents", "51200")
+                .with_property("lvm.devices", "pool(0)")
+                .with_property("lvm.segment-le-ranges", "0-51199")
+                .with_property("lvm.segment-metadata-le-ranges", "pool_tmeta:0-31")
+                .with_property("lvm.integrity-settings", "journal_sectors=2048")
+                .with_property("lvm.vdo-block-map-cache-size", "128.00m")
+                .with_property("lvm.vdo-use-sparse-index", "enabled")
+                .with_property("lvm.vdo-bio-threads", "4")
+                .with_property("lvm.vdo-max-discard", "4.00m"),
         );
         graph.add_edge(Edge::new(
             "lvm-pv:/dev/nvme0n1p3",
@@ -4910,10 +4955,14 @@ mod tests {
         assert!(output.contains("raid-integrity-block=4096 raid-integrity-mismatches=1"));
         assert!(output.contains("cache-mode=writeback cache-policy=smq"));
         assert!(output.contains("writecache-writeback=16 writecache-block-size=4096"));
-        assert!(
-            output
-                .contains("segment-type=thin segment-start=0 segment-size=200.00g devices=pool(0)")
-        );
+        assert!(output.contains("segment-type=thin stripes=2 data-stripes=2"));
+        assert!(output.contains("reshape-length=128.00m data-copies=2"));
+        assert!(output.contains("stripe-size=64.00k segment-start=0 segment-size=200.00g"));
+        assert!(output.contains("segment-size-pe=51200 devices=pool(0) le-ranges=0-51199"));
+        assert!(output.contains("metadata-le-ranges=pool_tmeta:0-31"));
+        assert!(output.contains("integrity-settings=journal_sectors=2048"));
+        assert!(output.contains("vdo-block-map-cache=128.00m vdo-sparse-index=enabled"));
+        assert!(output.contains("vdo-bio-threads=4 vdo-max-discard=4.00m"));
     }
 
     #[test]

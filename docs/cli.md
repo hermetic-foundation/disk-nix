@@ -292,9 +292,10 @@ Use these commands for:
   historical flags, PV format/device-id/extent/metadata-area state, VG
   permissions/allocation/lock/system-id and extent/PV/LV/snapshot counts,
   origin/pool relationships, thin-pool fullness behavior, segment device
-  mappings, cache policy, LVM RAID sync/recovery/integrity status, health,
-  tags, and backing/member counts when `pvs`, `vgs`, `lvs`, or `dmsetup` expose
-  them
+  mappings, stripe/reshape/range metadata, segment integrity settings, detailed
+  VDO segment tuning, cache policy, LVM RAID sync/recovery/integrity status,
+  health, tags, and backing/member counts when `pvs`, `vgs`, `lvs`, or
+  `dmsetup` expose them
 - `vdo`: native VDO volumes and LVM VDO segment metadata, including backing
   device, logical and physical size, status/stat counters, operating mode,
   recovery progress, configured and active write policy, LVM VDO compression

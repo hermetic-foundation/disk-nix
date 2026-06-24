@@ -172,8 +172,21 @@ struct LogicalVolumeSegment {
     lv_name: String,
     vg_name: String,
     segtype: Option<String>,
+    stripes: Option<String>,
+    data_stripes: Option<String>,
+    reshape_len: Option<String>,
+    reshape_len_le: Option<String>,
+    data_copies: Option<String>,
+    data_offset: Option<String>,
+    new_data_offset: Option<String>,
+    parity_chunks: Option<String>,
+    stripe_size: Option<String>,
+    region_size: Option<String>,
     seg_start: Option<String>,
+    seg_start_pe: Option<String>,
     seg_size: Option<String>,
+    seg_size_pe: Option<String>,
+    seg_tags: Option<String>,
     chunk_size: Option<String>,
     thin_count: Option<String>,
     discards: Option<String>,
@@ -183,13 +196,32 @@ struct LogicalVolumeSegment {
     devices: Option<String>,
     metadata_devices: Option<String>,
     seg_pe_ranges: Option<String>,
+    seg_le_ranges: Option<String>,
+    seg_metadata_le_ranges: Option<String>,
     seg_monitor: Option<String>,
     cache_metadata_format: Option<String>,
     cache_mode: Option<String>,
     cache_policy: Option<String>,
     cache_settings: Option<String>,
+    integrity_settings: Option<String>,
     vdo_compression: Option<String>,
     vdo_deduplication: Option<String>,
+    vdo_minimum_io_size: Option<String>,
+    vdo_block_map_cache_size: Option<String>,
+    vdo_block_map_era_length: Option<String>,
+    vdo_use_sparse_index: Option<String>,
+    vdo_index_memory_size: Option<String>,
+    vdo_slab_size: Option<String>,
+    vdo_ack_threads: Option<String>,
+    vdo_bio_threads: Option<String>,
+    vdo_bio_rotation: Option<String>,
+    vdo_cpu_threads: Option<String>,
+    vdo_hash_zone_threads: Option<String>,
+    vdo_logical_threads: Option<String>,
+    vdo_physical_threads: Option<String>,
+    vdo_max_discard: Option<String>,
+    vdo_header_size: Option<String>,
+    vdo_use_metadata_hints: Option<String>,
     vdo_write_policy: Option<String>,
 }
 
@@ -561,8 +593,21 @@ fn add_logical_volume_segment(
 
     for (key, value) in [
         ("lvm.segment-type", segment.segtype.clone()),
+        ("lvm.segment-stripes", segment.stripes.clone()),
+        ("lvm.segment-data-stripes", segment.data_stripes.clone()),
+        ("lvm.reshape-length", segment.reshape_len.clone()),
+        ("lvm.reshape-length-extents", segment.reshape_len_le.clone()),
+        ("lvm.data-copies", segment.data_copies.clone()),
+        ("lvm.data-offset", segment.data_offset.clone()),
+        ("lvm.new-data-offset", segment.new_data_offset.clone()),
+        ("lvm.parity-chunks", segment.parity_chunks.clone()),
+        ("lvm.stripe-size", segment.stripe_size.clone()),
+        ("lvm.region-size", segment.region_size.clone()),
         ("lvm.segment-start", segment.seg_start.clone()),
+        ("lvm.segment-start-extent", segment.seg_start_pe.clone()),
         ("lvm.segment-size", segment.seg_size.clone()),
+        ("lvm.segment-size-extents", segment.seg_size_pe.clone()),
+        ("lvm.segment-tags", segment.seg_tags.clone()),
         ("lvm.chunk-size", segment.chunk_size.clone()),
         ("lvm.thin-count", segment.thin_count.clone()),
         ("lvm.discards", segment.discards.clone()),
@@ -572,6 +617,11 @@ fn add_logical_volume_segment(
         ("lvm.devices", segment.devices.clone()),
         ("lvm.metadata-devices", segment.metadata_devices.clone()),
         ("lvm.segment-pe-ranges", segment.seg_pe_ranges.clone()),
+        ("lvm.segment-le-ranges", segment.seg_le_ranges.clone()),
+        (
+            "lvm.segment-metadata-le-ranges",
+            segment.seg_metadata_le_ranges.clone(),
+        ),
         ("lvm.segment-monitor", segment.seg_monitor.clone()),
         (
             "lvm.cache-metadata-format",
@@ -580,8 +630,52 @@ fn add_logical_volume_segment(
         ("lvm.segment-cache-mode", segment.cache_mode.clone()),
         ("lvm.segment-cache-policy", segment.cache_policy.clone()),
         ("lvm.cache-settings", segment.cache_settings.clone()),
+        ("lvm.integrity-settings", segment.integrity_settings.clone()),
         ("lvm.vdo-compression", segment.vdo_compression.clone()),
         ("lvm.vdo-deduplication", segment.vdo_deduplication.clone()),
+        (
+            "lvm.vdo-minimum-io-size",
+            segment.vdo_minimum_io_size.clone(),
+        ),
+        (
+            "lvm.vdo-block-map-cache-size",
+            segment.vdo_block_map_cache_size.clone(),
+        ),
+        (
+            "lvm.vdo-block-map-era-length",
+            segment.vdo_block_map_era_length.clone(),
+        ),
+        (
+            "lvm.vdo-use-sparse-index",
+            segment.vdo_use_sparse_index.clone(),
+        ),
+        (
+            "lvm.vdo-index-memory-size",
+            segment.vdo_index_memory_size.clone(),
+        ),
+        ("lvm.vdo-slab-size", segment.vdo_slab_size.clone()),
+        ("lvm.vdo-ack-threads", segment.vdo_ack_threads.clone()),
+        ("lvm.vdo-bio-threads", segment.vdo_bio_threads.clone()),
+        ("lvm.vdo-bio-rotation", segment.vdo_bio_rotation.clone()),
+        ("lvm.vdo-cpu-threads", segment.vdo_cpu_threads.clone()),
+        (
+            "lvm.vdo-hash-zone-threads",
+            segment.vdo_hash_zone_threads.clone(),
+        ),
+        (
+            "lvm.vdo-logical-threads",
+            segment.vdo_logical_threads.clone(),
+        ),
+        (
+            "lvm.vdo-physical-threads",
+            segment.vdo_physical_threads.clone(),
+        ),
+        ("lvm.vdo-max-discard", segment.vdo_max_discard.clone()),
+        ("lvm.vdo-header-size", segment.vdo_header_size.clone()),
+        (
+            "lvm.vdo-use-metadata-hints",
+            segment.vdo_use_metadata_hints.clone(),
+        ),
         ("lvm.vdo-write-policy", segment.vdo_write_policy.clone()),
     ] {
         if let Some(value) = value.filter(|value| !value.is_empty()) {
@@ -940,8 +1034,21 @@ mod tests {
             "lv_name": "root",
             "vg_name": "vg0",
             "segtype": "linear",
+            "stripes": "1",
+            "data_stripes": "1",
+            "reshape_len": "",
+            "reshape_len_le": "",
+            "data_copies": "1",
+            "data_offset": "0",
+            "new_data_offset": "",
+            "parity_chunks": "",
+            "stripe_size": "",
+            "region_size": "",
             "seg_start": "0",
+            "seg_start_pe": "0",
             "seg_size": "40.00g",
+            "seg_size_pe": "10240",
+            "seg_tags": "",
             "chunk_size": "",
             "thin_count": "",
             "discards": "",
@@ -951,21 +1058,53 @@ mod tests {
             "devices": "/dev/mapper/cryptroot(0)",
             "metadata_devices": "",
             "seg_pe_ranges": "/dev/mapper/cryptroot:0-10239",
+            "seg_le_ranges": "0-10239",
+            "seg_metadata_le_ranges": "",
             "seg_monitor": "monitored",
             "cache_metadata_format": "",
             "cache_mode": "",
             "cache_policy": "",
             "cache_settings": "",
+            "integrity_settings": "",
             "vdo_compression": "",
             "vdo_deduplication": "",
+            "vdo_minimum_io_size": "",
+            "vdo_block_map_cache_size": "",
+            "vdo_block_map_era_length": "",
+            "vdo_use_sparse_index": "",
+            "vdo_index_memory_size": "",
+            "vdo_slab_size": "",
+            "vdo_ack_threads": "",
+            "vdo_bio_threads": "",
+            "vdo_bio_rotation": "",
+            "vdo_cpu_threads": "",
+            "vdo_hash_zone_threads": "",
+            "vdo_logical_threads": "",
+            "vdo_physical_threads": "",
+            "vdo_max_discard": "",
+            "vdo_header_size": "",
+            "vdo_use_metadata_hints": "",
             "vdo_write_policy": ""
           },
           {
             "lv_name": "root-snap",
             "vg_name": "vg0",
             "segtype": "snapshot",
+            "stripes": "2",
+            "data_stripes": "2",
+            "reshape_len": "128.00m",
+            "reshape_len_le": "32",
+            "data_copies": "2",
+            "data_offset": "2048",
+            "new_data_offset": "4096",
+            "parity_chunks": "1",
+            "stripe_size": "64.00k",
+            "region_size": "512.00k",
             "seg_start": "0",
+            "seg_start_pe": "0",
             "seg_size": "10.00g",
+            "seg_size_pe": "2560",
+            "seg_tags": "hot",
             "chunk_size": "64.00k",
             "thin_count": "3",
             "discards": "passdown",
@@ -975,13 +1114,32 @@ mod tests {
             "devices": "root(0)",
             "metadata_devices": "root_tmeta(0)",
             "seg_pe_ranges": "root:0-2559",
+            "seg_le_ranges": "0-2559",
+            "seg_metadata_le_ranges": "root_tmeta:0-31",
             "seg_monitor": "monitored",
             "cache_metadata_format": "2",
             "cache_mode": "writeback",
             "cache_policy": "smq",
             "cache_settings": "migration_threshold=2048",
+            "integrity_settings": "journal_sectors=2048",
             "vdo_compression": "enabled",
             "vdo_deduplication": "enabled",
+            "vdo_minimum_io_size": "4096",
+            "vdo_block_map_cache_size": "128.00m",
+            "vdo_block_map_era_length": "16380",
+            "vdo_use_sparse_index": "enabled",
+            "vdo_index_memory_size": "256.00m",
+            "vdo_slab_size": "2.00g",
+            "vdo_ack_threads": "1",
+            "vdo_bio_threads": "4",
+            "vdo_bio_rotation": "64",
+            "vdo_cpu_threads": "2",
+            "vdo_hash_zone_threads": "1",
+            "vdo_logical_threads": "2",
+            "vdo_physical_threads": "2",
+            "vdo_max_discard": "4.00m",
+            "vdo_header_size": "512.00k",
+            "vdo_use_metadata_hints": "disabled",
             "vdo_write_policy": "auto"
           }
         ]
@@ -1072,8 +1230,37 @@ mod tests {
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::LvmSegment
                 && node.name == "vg0/root-snap:1"
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.segment-stripes" && property.value == "2")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.reshape-length" && property.value == "128.00m"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.data-copies" && property.value == "2")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.stripe-size" && property.value == "64.00k")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.segment-size-extents" && property.value == "2560"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.segment-tags" && property.value == "hot")
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.metadata-devices" && property.value == "root_tmeta(0)"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.segment-le-ranges" && property.value == "0-2559"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.segment-metadata-le-ranges"
+                        && property.value == "root_tmeta:0-31"
                 })
                 && node
                     .properties
@@ -1085,6 +1272,23 @@ mod tests {
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.cache-settings"
                         && property.value == "migration_threshold=2048"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.integrity-settings"
+                        && property.value == "journal_sectors=2048"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.vdo-block-map-cache-size" && property.value == "128.00m"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.vdo-use-sparse-index" && property.value == "enabled"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.vdo-bio-threads" && property.value == "4")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.vdo-max-discard" && property.value == "4.00m"
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.vdo-write-policy" && property.value == "auto"

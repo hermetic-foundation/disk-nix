@@ -104,11 +104,13 @@ The current probe layer normalizes:
   locality/exclusivity, device-mapper paths, parent links, read-ahead, table
   suspension/live/inactive state, loaded modules, host/historical flags, LVM
   cache block and hit/miss counters, writecache block sizing, LVM RAID
-  sync/recovery/integrity status, VDO-like logical volumes, and LVM VDO
-  operating mode, compression/index state, used size, and saving percentage
-  where attributes expose them
+  sync/recovery/integrity status, segment stripe/reshape/range metadata,
+  segment integrity settings, VDO-like logical volumes, LVM VDO operating mode,
+  compression/index state, used size, saving percentage, and detailed VDO
+  segment tuning where attributes expose them
 - LVM `lvs --segments` JSON reports for LV segment type, segment size/start,
-  physical extent ranges, and dependencies on backing PV devices or internal LVs
+  physical/logical extent ranges, stripe/reshape geometry, integrity settings,
+  VDO segment settings, and dependencies on backing PV devices or internal LVs
 - VDO `vdo status` output for VDO device path, backing storage device,
   logical/physical size, compression, deduplication, write policy, index, and
   cache settings; VDO lifecycle plans can start or stop existing VDO volumes
