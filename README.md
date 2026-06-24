@@ -30,6 +30,9 @@ topology views, adapter status reporting, lifecycle planning, policy-gated apply
 evaluation, NixOS module integration, and fixture-backed parser coverage for the
 storage graph.
 
+See [docs/status.md](docs/status.md) for the current feature-completeness
+status and remaining work.
+
 ## Development
 
 Use the flake:
