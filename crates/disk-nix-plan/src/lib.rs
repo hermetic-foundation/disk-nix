@@ -327,6 +327,8 @@ pub enum TopologyDiagnosticKind {
     VdoStartRequired,
     VdoStopAlreadySatisfied,
     VdoStopRequired,
+    ZfsObjectCreateAlreadySatisfied,
+    ZfsObjectCreateRequired,
     ZfsObjectDestroyAlreadySatisfied,
     ZfsObjectDestroyRequired,
     ZfsPoolImportAlreadySatisfied,
@@ -852,6 +854,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::VdoDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStartAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStopAlreadySatisfied
+                        | TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
                 )
@@ -1486,6 +1489,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::VdoDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStartAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStopAlreadySatisfied
+                    | TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
             );
@@ -1627,6 +1631,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(vdo_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(vdo_start_diagnostic(action, node, &query));
     diagnostics.extend(vdo_stop_diagnostic(action, node, &query));
+    diagnostics.extend(zfs_object_create_present_diagnostic(action, node, &query));
     diagnostics.extend(zfs_object_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(zfs_pool_import_diagnostic(action, node, &query));
     diagnostics
@@ -3764,6 +3769,95 @@ fn zfs_object_destroy_absent_diagnostic(
     })
 }
 
+fn zfs_object_create_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    let object_label = zfs_object_destroy_label(action)?;
+    let expected_kind = zfs_object_expected_kind(action)?;
+    if action.operation != Operation::Create {
+        return None;
+    }
+
+    if node.kind != expected_kind {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::ZfsObjectCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a ZFS {object_label}; zfs create remains actionable",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    if expected_kind == NodeKind::Zvol {
+        if let Some(desired) = action.context.desired_size.as_deref() {
+            match (parse_size_bytes(desired), node.size_bytes) {
+                (Some(desired_bytes), Some(current_bytes)) if current_bytes >= desired_bytes => {}
+                (Some(_), Some(current_bytes)) => {
+                    return Some(TopologyDiagnostic {
+                        action_id: action.id.clone(),
+                        level: TopologyDiagnosticLevel::Warning,
+                        kind: TopologyDiagnosticKind::ZfsObjectCreateRequired,
+                        query: query.to_string(),
+                        message: format!(
+                            "ZFS zvol {query} already exists with size {current_bytes} bytes, not desired size {desired}; use grow or shrink lifecycle instead of create when preserving data"
+                        ),
+                        current: Some(current_node_summary(node)),
+                    });
+                }
+                (Some(_), None) => {
+                    return Some(TopologyDiagnostic {
+                        action_id: action.id.clone(),
+                        level: TopologyDiagnosticLevel::Warning,
+                        kind: TopologyDiagnosticKind::ZfsObjectCreateRequired,
+                        query: query.to_string(),
+                        message: format!(
+                            "ZFS zvol {query} already exists, but current size is unknown; use rescan or grow/shrink lifecycle instead of create when preserving data"
+                        ),
+                        current: Some(current_node_summary(node)),
+                    });
+                }
+                (None, _) => {
+                    return Some(TopologyDiagnostic {
+                        action_id: action.id.clone(),
+                        level: TopologyDiagnosticLevel::Warning,
+                        kind: TopologyDiagnosticKind::ZfsObjectCreateRequired,
+                        query: query.to_string(),
+                        message: format!(
+                            "ZFS zvol {query} already exists, but desired size {desired} could not be parsed; review before treating create as satisfied"
+                        ),
+                        current: Some(current_node_summary(node)),
+                    });
+                }
+            }
+        }
+    }
+
+    let details = zfs_object_destroy_details(node);
+    let message = if details.is_empty() {
+        format!("ZFS {object_label} {query} already exists")
+    } else {
+        format!(
+            "ZFS {object_label} {query} already exists with {}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
 fn zfs_object_destroy_present_diagnostic(
     action: &PlannedAction,
     node: &Node,
@@ -3803,6 +3897,14 @@ fn zfs_object_destroy_label(action: &PlannedAction) -> Option<&'static str> {
     match action.context.collection.as_deref() {
         Some("datasets") => Some("dataset"),
         Some("zvols") => Some("zvol"),
+        _ => None,
+    }
+}
+
+fn zfs_object_expected_kind(action: &PlannedAction) -> Option<NodeKind> {
+    match action.context.collection.as_deref() {
+        Some("datasets") => Some(NodeKind::ZfsDataset),
+        Some("zvols") => Some(NodeKind::Zvol),
         _ => None,
     }
 }
@@ -17234,6 +17336,112 @@ mod tests {
             diagnostic.action_id == "pools:tank:import"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsPoolImportRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_zfs_object_create() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "datasets": {
+                "tank/home": {
+                  "operation": "create",
+                  "properties": {
+                    "compression": "zstd",
+                    "mountpoint": "/home"
+                  }
+                },
+                "tank/conflict": {
+                  "operation": "create"
+                }
+              },
+              "zvols": {
+                "tank/vm/root": {
+                  "operation": "create",
+                  "desiredSize": "20GiB"
+                },
+                "tank/vm/tmp": {
+                  "operation": "create",
+                  "desiredSize": "20GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zfs-dataset:tank/home", NodeKind::ZfsDataset, "tank/home")
+                .with_property("zfs.type", "filesystem")
+                .with_property("zfs.mountpoint", "/home")
+                .with_property("zfs.compression", "zstd"),
+        );
+        graph.add_node(
+            Node::new("zvol:tank/conflict", NodeKind::Zvol, "tank/conflict")
+                .with_size_bytes(8 * 1024 * 1024 * 1024)
+                .with_property("zfs.type", "volume")
+                .with_property("zfs.volsize", "8G"),
+        );
+        graph.add_node(
+            Node::new("zvol:tank/vm/root", NodeKind::Zvol, "tank/vm/root")
+                .with_size_bytes(20 * 1024 * 1024 * 1024)
+                .with_property("zfs.type", "volume")
+                .with_property("zfs.volsize", "20G")
+                .with_property("zfs.compression", "zstd"),
+        );
+        graph.add_node(
+            Node::new("zvol:tank/vm/tmp", NodeKind::Zvol, "tank/vm/tmp")
+                .with_size_bytes(10 * 1024 * 1024 * 1024)
+                .with_property("zfs.type", "volume")
+                .with_property("zfs.volsize", "10G"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 6);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.summary.action_count, 4);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "datasets:tank/conflict:create" && action.operation == Operation::Create
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "zvols:tank/vm/tmp:create" && action.operation == Operation::Create
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "datasets:tank/home:set-property:compression"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "datasets:tank/home:set-property:mountpoint"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/home:create"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
+                && diagnostic.message.contains("mountpoint /home")
+                && diagnostic.message.contains("compression zstd")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/root:create"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
+                && diagnostic.message.contains("volsize 20G")
+                && diagnostic.message.contains("compression zstd")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/conflict:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectCreateRequired
+                && diagnostic.message.contains("not a ZFS dataset")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/tmp:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectCreateRequired
+                && diagnostic.message.contains("not desired size 20GiB")
         }));
     }
 

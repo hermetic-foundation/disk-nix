@@ -244,19 +244,24 @@ Examples:
   remains destructive and recommends snapshots or rename-first validation.
   Logical declaration names can set `target` or `path` to the concrete
   `pool/name` dataset used by ZFS commands. Current-topology comparison
-  suppresses concrete dataset destroy actions only when the `pool/name` target
-  is already absent; present targets remain actionable with warnings that
-  include available mountpoint, quota, reservation, encryption, key status,
+  suppresses concrete dataset create actions when the matched node is already a
+  ZFS dataset, and suppresses destroy actions only when the `pool/name` target
+  is already absent. Existing non-dataset matches stay actionable for create
+  with warnings; present targets remain actionable for destroy with warnings
+  that include available mountpoint, quota, reservation, encryption, key status,
   origin, usage, or compression metadata.
 - zvol creation, growth, and property updates are online operations, with
   advice to verify pool capacity, reservation policy, and downstream block
   consumers. zvol `properties = { ... }` render create-time `-o key=value`
   options and `zfs set key=value <zvol>` reconciliation actions. Logical zvol
   names can likewise set `target` or `path` to the concrete `pool/name` zvol.
-  Current-topology comparison suppresses concrete zvol destroy actions only
-  when the `pool/name` target is already absent; present zvols remain
-  actionable with warnings that include available volsize, origin, usage,
-  reservation, encryption, or compression metadata.
+  Current-topology comparison suppresses concrete zvol create actions when the
+  matched node is already a ZFS zvol and any declared desired size is already
+  satisfied, and suppresses destroy actions only when the `pool/name` target is
+  already absent. Existing non-zvol matches or existing zvols with different or
+  unknown current size stay actionable for create with warnings; present zvols
+  remain actionable for destroy with warnings that include available volsize,
+  origin, usage, reservation, encryption, or compression metadata.
 - MD RAID creation and destruction are destructive because they write array
   metadata or remove array identity. Assemble and stop are offline-required but
   non-destructive: they activate or deactivate existing array metadata while
@@ -456,9 +461,12 @@ and export relationships. Zvol rescan renders the equivalent
 reservation, and block consumers. Logical declaration keys can use `target` or
 `path` for the concrete dataset or zvol name. Use property updates or grow only
 when state must actually change. Current-topology comparison suppresses
-concrete dataset and zvol destroy actions only when the declared `pool/name`
-target is already absent; present targets stay actionable with ZFS metadata
-warnings.
+concrete dataset create actions when the matched node is already a ZFS dataset,
+and concrete zvol create actions when the matched node is already a ZFS zvol
+and any declared desired size is already satisfied. Existing wrong-kind or
+wrong-size create targets stay actionable with warnings. Dataset and zvol
+destroy actions are suppressed only when the declared `pool/name` target is
+already absent; present targets stay actionable with ZFS metadata warnings.
 
 Btrfs qgroup `operation = "rescan"` actions are online read-only refreshes for
 quota hierarchy, referenced/exclusive usage, and limits. Qgroup create,

@@ -1060,10 +1060,12 @@ create-time `-o key=value` options from declared properties, and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations. Dataset
 `operation = "rescan"` renders read-only `zfs list`, `zfs get`, and graph
 inspection commands. With current-topology probing, concrete `pool/name`
-dataset destroy actions are suppressed only when the dataset is already absent;
-present datasets stay actionable with warnings that include mountpoint, quota,
-reservation, encryption, key status, origin, usage, or compression metadata
-when available. Dataset and zvol rename declarations render reviewed
+dataset create actions are suppressed when the matched node is already a ZFS
+dataset, and destroy actions are suppressed only when the dataset is already
+absent. Existing non-dataset matches stay actionable for create with warnings;
+present datasets stay actionable for destroy with warnings that include
+mountpoint, quota, reservation, encryption, key status, origin, usage, or
+compression metadata when available. Dataset and zvol rename declarations render reviewed
 `zfs rename <old> <new>` commands from `operation = "rename"` plus `renameTo`.
 ZFS clone promotion declarations render reviewed `zfs get origin <clone>`
 preflight checks and `zfs promote <clone>` commands from
@@ -1075,10 +1077,13 @@ properties, `zfs set volsize=...`, policy-gated `zfs destroy`, and
 read-only `operation = "rescan"` inventory/property probes plus
 `zfs set key=value` property reconciliation updates for `zvols` lifecycle
 declarations. Current-topology probing suppresses concrete `pool/name` zvol
-destroy actions only when the zvol is already absent; present zvols stay
-actionable with warnings that include volsize, origin, usage, reservation,
-encryption, or compression metadata when available. Zvol clone promotion uses
-the same reviewed `zfs promote` lifecycle path.
+create actions when the matched node is already a ZFS zvol and any declared
+desired size is already satisfied, and suppresses destroy actions only when the
+zvol is already absent. Existing non-zvol matches or existing zvols with
+different or unknown current size stay actionable for create with warnings;
+present zvols stay actionable for destroy with warnings that include volsize,
+origin, usage, reservation, encryption, or compression metadata when available.
+Zvol clone promotion uses the same reviewed `zfs promote` lifecycle path.
 Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
 `btrfs subvolume delete`, reviewed path renames with `mv -- <old> <new>`, and
 `btrfs property set -ts <path> ro true|false` for read-only property
