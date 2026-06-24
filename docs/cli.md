@@ -571,17 +571,18 @@ activation actions are compared with `lvm.active`, LUKS open actions are
 compared with `cryptsetup.active`, NFS export actions are compared with
 `nfs.export-client` and `nfs.export-option-*` properties, VDO start actions are
 compared with `vdo.operating-mode`, MD assemble actions are compared with
-`md.state`, `md.degraded-devices`, and `md.failed-devices`, and iSCSI login
-actions are compared with current session state across all matching
-target/session nodes when metadata is available. Safe already-satisfied grow,
-shrink, iSCSI login, LVM activation, LUKS open, mount, remount, NFS export, VDO
-start, MD assemble, and property actions that have no warning diagnostics are
-suppressed from the actionable plan and counted as
+`md.state`, `md.degraded-devices`, and `md.failed-devices`, ZFS pool import
+actions are compared with `zfs.state` and `zfs.health`, and iSCSI login actions
+are compared with current session state across all matching target/session
+nodes when metadata is available. Safe already-satisfied grow, shrink, iSCSI
+login, LVM activation, LUKS open, mount, remount, NFS export, VDO start, MD
+assemble, ZFS pool import, and property actions that have no warning diagnostics
+are suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 inactive LUKS mappers, non-normal VDO modes, degraded or failed MD arrays,
-mountpoints using a different source, export client/option differences, or
-known iSCSI targets without a logged-in session stay actionable with a warning
-diagnostic.
+degraded ZFS pools, mountpoints using a different source, export client/option
+differences, or known iSCSI targets without a logged-in session stay actionable
+with a warning diagnostic.
 
 ## Apply Evaluation
 
@@ -932,7 +933,9 @@ declared path-like vdev entries instead of topology keywords such as `mirror`.
 Pool import/export lifecycle
 declarations render `zpool import`, optional
 `zpool import -o readonly=on <pool>` for `readOnly = true`, and
-`zpool export <pool>` command plans.
+`zpool export <pool>` command plans. Current-topology probing suppresses a pool
+import only when the current pool is visible with `zfs.state = ONLINE` and
+`zfs.health = ONLINE`; degraded or faulted pools stay actionable with a warning.
 ZFS dataset command plans render reviewed `zfs create` commands, including
 create-time `-o key=value` options from declared properties, and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations. Dataset

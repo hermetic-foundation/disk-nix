@@ -256,6 +256,8 @@ pub enum TopologyDiagnosticKind {
     PropertyDiffers,
     VdoStartAlreadySatisfied,
     VdoStartRequired,
+    ZfsPoolImportAlreadySatisfied,
+    ZfsPoolImportRequired,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -745,6 +747,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                         | TopologyDiagnosticKind::PropertyAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStartAlreadySatisfied
+                        | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
                 )
             })
             .count(),
@@ -1302,6 +1305,7 @@ fn already_satisfied_action_ids(
             Operation::Grow
                 | Operation::Shrink
                 | Operation::Assemble
+                | Operation::Import
                 | Operation::Activate
                 | Operation::Login
                 | Operation::Open
@@ -1331,6 +1335,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                     | TopologyDiagnosticKind::PropertyAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStartAlreadySatisfied
+                    | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
             );
             has_warning |= diagnostic.level == TopologyDiagnosticLevel::Warning;
         }
@@ -1382,6 +1387,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(nfs_export_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics.extend(vdo_start_diagnostic(action, node, &query));
+    diagnostics.extend(zfs_pool_import_diagnostic(action, node, &query));
     diagnostics
 }
 
@@ -1780,6 +1786,43 @@ fn vdo_start_diagnostic(
     })
 }
 
+fn zfs_pool_import_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Import
+        || action.context.collection.as_deref() != Some("pools")
+    {
+        return None;
+    }
+    let state = property_value_from_node(node, "zfs.state")?;
+    let health = property_value_from_node(node, "zfs.health")?;
+    let online = zfs_status_is_online(state) && zfs_status_is_online(health);
+    let (level, kind, message) = if online {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied,
+            format!("ZFS pool {query} is already imported and online"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::ZfsPoolImportRequired,
+            format!("ZFS pool {query} is visible but not online: state={state}, health={health}"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
 fn iscsi_login_diagnostic(
     action: &PlannedAction,
     matches: &[&Node],
@@ -1868,6 +1911,10 @@ fn md_state_indicates_active(value: &str) -> bool {
 
 fn md_device_count_property(node: &Node, key: &str) -> Option<u64> {
     property_value_from_node(node, key).and_then(|value| value.trim().parse().ok())
+}
+
+fn zfs_status_is_online(value: &str) -> bool {
+    value.trim().eq_ignore_ascii_case("online")
 }
 
 fn property_value_from_node<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
@@ -13220,6 +13267,77 @@ mod tests {
             diagnostic.action_id == "mdraids:existing:assemble"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::MdAssembleRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_imported_online_zfs_pool() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "pools": {
+                "tank": {
+                  "operation": "import"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zfs-pool:tank", NodeKind::ZfsPool, "tank")
+                .with_property("zfs.state", "ONLINE")
+                .with_property("zfs.health", "ONLINE"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "pools:tank:import"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_zfs_pool_import_when_degraded() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "pools": {
+                "tank": {
+                  "operation": "import"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zfs-pool:tank", NodeKind::ZfsPool, "tank")
+                .with_property("zfs.state", "DEGRADED")
+                .with_property("zfs.health", "DEGRADED"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "pools:tank:import"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsPoolImportRequired
         }));
     }
 
