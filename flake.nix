@@ -925,6 +925,49 @@
             };
           }
         ];
+        nixosModuleLuksKeyslotCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              luksKeyslots.rootAdd = {
+                operation = "add-key";
+                device = "/dev/disk/by-id/root-luks";
+                keySlot = "4";
+                newKeyFile = "/run/keys/root-new";
+              };
+              luksKeyslots.rootRotate = {
+                device = "/dev/disk/by-id/root-luks";
+                "key-slot" = "4";
+                "key-file" = "/run/keys/root-old";
+                properties.keyFile = "/run/keys/root-rotated";
+              };
+            };
+          }
+        ];
+        nixosModuleLuksTokenCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              luksTokens.rootImport = {
+                operation = "import-token";
+                device = "/dev/disk/by-id/root-luks";
+                tokenId = "7";
+                tokenFile = "/run/keys/root-token.json";
+              };
+              luksTokens.rootRotate = {
+                device = "/dev/disk/by-id/root-luks";
+                "token-id" = "7";
+                properties.tokenFile = "/run/keys/root-token-rotated.json";
+              };
+            };
+          }
+        ];
         nixosModuleBackingFileCollisionTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -2296,6 +2339,8 @@
             collisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleCollisionTest.config.system.build.toplevel).success))}
             diskCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDiskCollisionTest.config.system.build.toplevel).success))}
             partitionCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModulePartitionCollisionTest.config.system.build.toplevel).success))}
+            luksKeyslotCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLuksKeyslotCollisionTest.config.system.build.toplevel).success))}
+            luksTokenCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLuksTokenCollisionTest.config.system.build.toplevel).success))}
             backingFileCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBackingFileCollisionTest.config.system.build.toplevel).success))}
             btrfsSubvolumeCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBtrfsSubvolumeCollisionTest.config.system.build.toplevel).success))}
             btrfsQgroupCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBtrfsQgroupCollisionTest.config.system.build.toplevel).success))}
@@ -2320,6 +2365,8 @@
             test "$collisionSuccess" = false
             test "$diskCollisionSuccess" = false
             test "$partitionCollisionSuccess" = false
+            test "$luksKeyslotCollisionSuccess" = false
+            test "$luksTokenCollisionSuccess" = false
             test "$backingFileCollisionSuccess" = false
             test "$btrfsSubvolumeCollisionSuccess" = false
             test "$btrfsQgroupCollisionSuccess" = false

@@ -1029,6 +1029,8 @@ let
   activeThinPools = activeLifecycleAttrs cfg.thinPools;
   activeLvmSnapshots = activeLifecycleAttrs cfg.lvmSnapshots;
   activeLvmCaches = activeLifecycleAttrs cfg.lvmCaches;
+  activeLuksKeyslots = activeLifecycleAttrs cfg.luksKeyslots;
+  activeLuksTokens = activeLifecycleAttrs cfg.luksTokens;
   activeLoopDevices = activeLifecycleAttrs cfg.loopDevices;
   activeBackingFiles = activeLifecycleAttrs cfg.backingFiles;
   activeDmMaps = activeLifecycleAttrs cfg.dmMaps;
@@ -1111,6 +1113,63 @@ let
     lib.mapAttrsToList nvmeNamespaceIdentity activeNvmeNamespaces
   );
   activeCacheIdentities = lib.mapAttrsToList lifecycleIdentity activeCaches;
+  numericString = value: builtins.match "[0-9]+" value != null;
+  numericNameSuffix =
+    name:
+    let
+      suffix = lib.last (lib.splitString ":" name);
+    in
+    if numericString suffix then suffix else null;
+  luksHeaderDevice =
+    name: object:
+    if object.device != null then
+      object.device
+    else if object.target != null && lib.hasPrefix "/" object.target then
+      object.target
+    else if lib.hasPrefix "/dev/" name then
+      name
+    else
+      null;
+  luksKeyslotId =
+    name: keyslot:
+    if keyslot.keySlot != null then
+      keyslot.keySlot
+    else if keyslot."key-slot" != null then
+      keyslot."key-slot"
+    else if keyslot.slot != null then
+      keyslot.slot
+    else
+      numericNameSuffix name;
+  luksTokenId =
+    name: token:
+    if token.tokenId != null then
+      token.tokenId
+    else if token."token-id" != null then
+      token."token-id"
+    else if token.token != null then
+      token.token
+    else
+      numericNameSuffix name;
+  luksKeyslotIdentity =
+    name: keyslot:
+    let
+      device = luksHeaderDevice name keyslot;
+      slot = luksKeyslotId name keyslot;
+    in
+    if device != null && slot != null then "${device} keyslot ${slot}" else null;
+  luksTokenIdentity =
+    name: token:
+    let
+      device = luksHeaderDevice name token;
+      tokenId = luksTokenId name token;
+    in
+    if device != null && tokenId != null then "${device} token ${tokenId}" else null;
+  activeLuksKeyslotIdentities = lib.filter (identity: identity != null) (
+    lib.mapAttrsToList luksKeyslotIdentity activeLuksKeyslots
+  );
+  activeLuksTokenIdentities = lib.filter (identity: identity != null) (
+    lib.mapAttrsToList luksTokenIdentity activeLuksTokens
+  );
   activeBackingFilePaths = lib.filter (path: path != null) (
     lib.mapAttrsToList lifecyclePathTarget activeBackingFiles
   );
@@ -2476,6 +2535,16 @@ in
       {
         assertion = lib.length activeLuksMapperNames == lib.length (lib.unique activeLuksMapperNames);
         message = "services.disk-nix.luks.devices entries must resolve to unique mapper names.";
+      }
+      {
+        assertion =
+          lib.length activeLuksKeyslotIdentities == lib.length (lib.unique activeLuksKeyslotIdentities);
+        message = "services.disk-nix.luksKeyslots entries must resolve to unique active concrete device/keyslot selectors.";
+      }
+      {
+        assertion =
+          lib.length activeLuksTokenIdentities == lib.length (lib.unique activeLuksTokenIdentities);
+        message = "services.disk-nix.luksTokens entries must resolve to unique active concrete device/token selectors.";
       }
       {
         assertion =
