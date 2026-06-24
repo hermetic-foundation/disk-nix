@@ -1,7 +1,7 @@
 use std::{collections::BTreeSet, process::Command};
 
 use disk_nix_model::StorageGraph;
-use serde::Serialize;
+use serde::{Serialize, ser::SerializeStruct};
 use thiserror::Error;
 
 mod bcache;
@@ -43,11 +43,49 @@ pub enum ProbeStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
+pub enum ProbeIssueCategory {
+    None,
+    MissingTool,
+    PermissionDenied,
+    CommandFailed,
+    ParseFailed,
+    InaccessibleData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProbeReport {
     pub adapter: String,
     pub status: ProbeStatus,
     pub message: Option<String>,
+}
+
+impl ProbeReport {
+    #[must_use]
+    pub fn category(&self) -> ProbeIssueCategory {
+        match self.status {
+            ProbeStatus::Available => ProbeIssueCategory::None,
+            ProbeStatus::Unavailable | ProbeStatus::Partial | ProbeStatus::Failed => self
+                .message
+                .as_deref()
+                .map(|message| probe_category_for_status(&self.status, message))
+                .unwrap_or(ProbeIssueCategory::InaccessibleData),
+        }
+    }
+}
+
+impl Serialize for ProbeReport {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("ProbeReport", 4)?;
+        state.serialize_field("adapter", &self.adapter)?;
+        state.serialize_field("status", &self.status)?;
+        state.serialize_field("category", &self.category())?;
+        state.serialize_field("message", &self.message)?;
+        state.end()
+    }
 }
 
 pub trait ProbeAdapter {
@@ -2096,6 +2134,44 @@ fn run_report(command: &str, args: &[&str]) -> Result<Vec<u8>, String> {
     }
 }
 
+fn probe_category_for_message(message: &str) -> ProbeIssueCategory {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("not found") || lower.contains("no such file") {
+        ProbeIssueCategory::MissingTool
+    } else if lower.contains("permission denied")
+        || lower.contains("operation not permitted")
+        || lower.contains("not permitted")
+    {
+        ProbeIssueCategory::PermissionDenied
+    } else if lower.contains("inaccessible") || lower.contains("failed to access") {
+        ProbeIssueCategory::InaccessibleData
+    } else {
+        ProbeIssueCategory::CommandFailed
+    }
+}
+
+fn probe_category_for_status(status: &ProbeStatus, message: &str) -> ProbeIssueCategory {
+    let category = probe_category_for_message(message);
+    if matches!(status, ProbeStatus::Failed)
+        && category == ProbeIssueCategory::CommandFailed
+        && message_looks_like_parse_failure(message)
+    {
+        ProbeIssueCategory::ParseFailed
+    } else {
+        category
+    }
+}
+
+fn message_looks_like_parse_failure(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("parse")
+        || lower.contains("json")
+        || lower.contains("expected")
+        || lower.contains("invalid")
+        || lower.contains("missing field")
+        || lower.contains("unknown field")
+}
+
 fn run_report_accept_stdout_without_stderr(
     command: &str,
     args: &[&str],
@@ -2167,5 +2243,49 @@ mod tests {
         let result = ProbeResult::empty();
         assert!(result.graph.nodes.is_empty());
         assert!(result.reports.is_empty());
+    }
+
+    #[test]
+    fn probe_reports_expose_structured_issue_categories() {
+        let reports = vec![
+            ProbeReport {
+                adapter: "zfs".to_string(),
+                status: ProbeStatus::Unavailable,
+                message: Some("zpool not found or failed to run: No such file".to_string()),
+            },
+            ProbeReport {
+                adapter: "lvm".to_string(),
+                status: ProbeStatus::Partial,
+                message: Some("permission denied while reading device mapper state".to_string()),
+            },
+            ProbeReport {
+                adapter: "lsblk".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some("expected field blockdevices".to_string()),
+            },
+            ProbeReport {
+                adapter: "findmnt".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some("findmnt returned exit status 1".to_string()),
+            },
+            ProbeReport {
+                adapter: "findmnt".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("normalized 3 graph nodes".to_string()),
+            },
+        ];
+
+        assert_eq!(reports[0].category(), ProbeIssueCategory::MissingTool);
+        assert_eq!(reports[1].category(), ProbeIssueCategory::PermissionDenied);
+        assert_eq!(reports[2].category(), ProbeIssueCategory::ParseFailed);
+        assert_eq!(reports[3].category(), ProbeIssueCategory::CommandFailed);
+        assert_eq!(reports[4].category(), ProbeIssueCategory::None);
+
+        let json = serde_json::to_string(&reports).expect("reports should serialize");
+        assert!(json.contains(r#""category":"missing-tool""#));
+        assert!(json.contains(r#""category":"permission-denied""#));
+        assert!(json.contains(r#""category":"parse-failed""#));
+        assert!(json.contains(r#""category":"command-failed""#));
+        assert!(json.contains(r#""category":"none""#));
     }
 }

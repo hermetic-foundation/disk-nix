@@ -18,7 +18,7 @@ use disk_nix_plan::{
     compare_plan_with_topology, default_capabilities, plan_and_policy_from_json_bytes,
     plan_from_json_bytes,
 };
-use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeStatus};
+use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeIssueCategory, ProbeStatus};
 
 fn main() -> ExitCode {
     let stdout = io::stdout();
@@ -1553,15 +1553,27 @@ fn print_probe_reports(
             ProbeStatus::Partial => "partial",
             ProbeStatus::Failed => "failed",
         };
+        let category = match report.category() {
+            ProbeIssueCategory::None => "none",
+            ProbeIssueCategory::MissingTool => "missing-tool",
+            ProbeIssueCategory::PermissionDenied => "permission-denied",
+            ProbeIssueCategory::CommandFailed => "command-failed",
+            ProbeIssueCategory::ParseFailed => "parse-failed",
+            ProbeIssueCategory::InaccessibleData => "inaccessible-data",
+        };
 
         if let Some(message) = &report.message {
             writeln!(
                 output,
-                "  {:<12} {:<12} {}",
-                report.adapter, status, message
+                "  {:<12} {:<12} {:<18} {}",
+                report.adapter, status, category, message
             )?;
         } else {
-            writeln!(output, "  {:<12} {}", report.adapter, status)?;
+            writeln!(
+                output,
+                "  {:<12} {:<12} {}",
+                report.adapter, status, category
+            )?;
         }
     }
 

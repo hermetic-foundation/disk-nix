@@ -77,9 +77,10 @@ manual-review guidance, or non-ready command plans instead of guessing.
   mutation, especially when imperative changes should update declarative mounts,
   crypttab, swap, NFS exports, iSCSI boot, or generated files.
 - Recovery and rollback recipes for partially completed apply runs.
-- Better privilege and tool availability diagnostics for every adapter and
+- Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output
-  formats.
+  formats. Probe reports now expose structured degradation categories, but
+  per-tool remediation and renderer preflight coverage still need expansion.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
 - Deeper stability policy for JSON contracts, NixOS option compatibility, and

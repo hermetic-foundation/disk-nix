@@ -82,6 +82,12 @@ Each adapter reports one of:
   was not present
 - `failed`: the adapter unexpectedly failed
 
+Each report also includes a structured `category` in JSON and human output:
+`none`, `missing-tool`, `permission-denied`, `command-failed`,
+`parse-failed`, or `inaccessible-data`. Use this with `status` to decide
+whether installing tooling, changing privileges, or treating the topology as
+degraded is the right response.
+
 Unavailable or partial adapters are not fatal. They mean the graph is degraded
 for that storage domain. For example, a host without `zpool` can still report
 regular block devices, but it cannot report ZFS pool and dataset details.
