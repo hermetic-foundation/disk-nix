@@ -131,7 +131,7 @@ The current probe layer normalizes:
   numbers, open counts, segment/event counts, backing dependency edges, table
   target ranges, live target status, sanitized dm-crypt table details,
   structured linear, striped, thin, cache, and snapshot table payload fields,
-  and thin-pool/snapshot status usage counters
+  and cache/thin-pool/snapshot status usage counters
 - LVM `pvs`, `vgs`, and `lvs` JSON reports for PV/VG/LV topology, snapshots,
   thin pools, cache-like logical volumes, PV format/device sizing, PV extent
   allocation, PV metadata-area and device-id state, VG permissions/allocation

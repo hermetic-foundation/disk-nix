@@ -254,6 +254,7 @@ fn target_payload_properties(
     let fields = payload.split_whitespace().collect::<Vec<_>>();
     match (namespace, target) {
         ("table", target) => target_table_properties(target, &fields),
+        ("status", "cache") => cache_status_properties(&fields),
         ("status", "thin-pool") => thin_pool_status_properties(&fields),
         ("status", "snapshot") => snapshot_status_properties(&fields),
         _ => Vec::new(),
@@ -304,6 +305,32 @@ fn target_table_properties(target: &str, fields: &[&str]) -> Vec<(String, String
         }
         _ => Vec::new(),
     }
+}
+
+fn cache_status_properties(fields: &[&str]) -> Vec<(String, String)> {
+    let mut properties = properties_from_fields(
+        fields,
+        &[
+            ("metadata-block-size", 0),
+            ("cache-block-size", 2),
+            ("read-hits", 4),
+            ("read-misses", 5),
+            ("write-hits", 6),
+            ("write-misses", 7),
+            ("demotions", 8),
+            ("promotions", 9),
+            ("dirty-blocks", 10),
+        ],
+    );
+    if let Some((used, total)) = fields.get(1).and_then(|value| value.split_once('/')) {
+        properties.push(("metadata-used-blocks".to_string(), used.to_string()));
+        properties.push(("metadata-total-blocks".to_string(), total.to_string()));
+    }
+    if let Some((used, total)) = fields.get(3).and_then(|value| value.split_once('/')) {
+        properties.push(("cache-used-blocks".to_string(), used.to_string()));
+        properties.push(("cache-total-blocks".to_string(), total.to_string()));
+    }
+    properties
 }
 
 fn thin_pool_status_properties(fields: &[&str]) -> Vec<(String, String)> {
@@ -478,6 +505,18 @@ vg-root: 1 dependencies  : (253, 0) (dm-0)
         assert!(cache.properties.iter().any(|property| {
             property.key == "dm.table.segment.0.origin-device" && property.value == "253:12"
         }));
+        assert!(cache.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.metadata-total-blocks" && property.value == "256"
+        }));
+        assert!(cache.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.cache-used-blocks" && property.value == "32"
+        }));
+        assert!(cache.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.read-hits" && property.value == "900"
+        }));
+        assert!(cache.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.dirty-blocks" && property.value == "4"
+        }));
 
         let thinpool = graph
             .nodes
@@ -547,6 +586,7 @@ striped: 0 2097152 striped 2 128 8:1 0 8:2 0
     const STATUS: &[u8] = br#"
 cryptroot: 0 2097152 crypt 0 2097152
 vg-root: 0 2097152 linear A
+cachevol: 0 2097152 cache 8 64/256 128 32/1024 900 100 700 50 3 4 4 1 writeback 0 mq 0 rw
 thinpool: 0 2097152 thin-pool 7 12/128 1024/4096 - rw no_discard_passdown
 snap: 0 1048576 snapshot 32/1024
 "#;
