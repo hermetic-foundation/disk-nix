@@ -9,6 +9,16 @@ pub struct MdArrayReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct MdScanArray {
+    name: String,
+    metadata: Option<String>,
+    uuid: Option<String>,
+    name_property: Option<String>,
+    spares: Option<String>,
+    devices: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct MdArray {
     name: String,
     uuid: Option<String>,
@@ -55,6 +65,17 @@ pub fn arrays_from_scan(bytes: &[u8]) -> Result<Vec<String>, ProbeError> {
     Ok(text.lines().filter_map(array_name_from_scan_line).collect())
 }
 
+pub fn normalize_md_scan(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
+    let arrays = parse_scan(bytes)?;
+    let mut graph = StorageGraph::empty();
+
+    for array in arrays {
+        add_scan_array(&mut graph, array);
+    }
+
+    Ok(graph)
+}
+
 pub fn normalize_md_arrays(reports: &[MdArrayReport]) -> Result<StorageGraph, ProbeError> {
     let mut graph = StorageGraph::empty();
 
@@ -73,6 +94,70 @@ fn array_name_from_scan_line(line: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+fn parse_scan(bytes: &[u8]) -> Result<Vec<MdScanArray>, ProbeError> {
+    let text = std::str::from_utf8(bytes).map_err(|error| {
+        ProbeError::Adapter(format!("failed to read mdadm scan output: {error}"))
+    })?;
+    Ok(text.lines().filter_map(parse_scan_line).collect())
+}
+
+fn parse_scan_line(line: &str) -> Option<MdScanArray> {
+    let mut parts = line.split_whitespace();
+    (parts.next()? == "ARRAY").then_some(())?;
+    let name = parts.next()?.to_string();
+    let mut array = MdScanArray {
+        name,
+        metadata: None,
+        uuid: None,
+        name_property: None,
+        spares: None,
+        devices: None,
+    };
+
+    for part in parts {
+        let Some((key, value)) = part.split_once('=') else {
+            continue;
+        };
+        let value = value.trim_matches('"').to_string();
+        match key {
+            "metadata" => array.metadata = Some(value),
+            "UUID" | "uuid" => array.uuid = Some(value),
+            "name" => array.name_property = Some(value),
+            "spares" => array.spares = Some(value),
+            "devices" => array.devices = Some(value),
+            _ => {}
+        }
+    }
+
+    Some(array)
+}
+
+fn add_scan_array(graph: &mut StorageGraph, array: MdScanArray) {
+    let id = format!("md:{}", array.name);
+    let mut node =
+        Node::new(id, NodeKind::MdRaid, array.name.clone()).with_path(array.name.clone());
+
+    if let Some(uuid) = array.uuid {
+        node = node.with_identity(Identity {
+            uuid: Some(uuid),
+            ..Identity::default()
+        });
+    }
+
+    for (key, value) in [
+        ("md.scan-metadata", array.metadata),
+        ("md.scan-name", array.name_property),
+        ("md.scan-spares", array.spares),
+        ("md.scan-devices", array.devices),
+    ] {
+        if let Some(value) = value {
+            node = node.with_property(key, value);
+        }
+    }
+
+    graph.add_node(node);
 }
 
 fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
@@ -291,6 +376,8 @@ mod tests {
     use super::*;
 
     const SCAN: &[u8] = b"ARRAY /dev/md0 metadata=1.2 UUID=aaaa:bbbb:cccc:dddd name=host:0\n";
+    const EXAMINE_SCAN: &[u8] =
+        b"ARRAY /dev/md/root metadata=1.2 UUID=eeee:ffff:1111:2222 name=host:root spares=1 devices=/dev/sdc1,/dev/sdd1\n";
     const DETAIL: &[u8] = b"/dev/md0:\n\
            Version : 1.2\n\
      Creation Time : Tue Jun 23 10:15:00 2026\n\
@@ -325,6 +412,32 @@ mod tests {
             arrays_from_scan(SCAN).expect("scan should parse"),
             vec!["/dev/md0"]
         );
+    }
+
+    #[test]
+    fn normalizes_md_scan_inventory() {
+        let graph = normalize_md_scan(EXAMINE_SCAN).expect("scan should parse");
+
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::MdRaid
+                && node.name == "/dev/md/root"
+                && node.identity.uuid.as_deref() == Some("eeee:ffff:1111:2222")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.scan-metadata" && property.value == "1.2")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.scan-name" && property.value == "host:root")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.scan-spares" && property.value == "1")
+                && node.properties.iter().any(|property| {
+                    property.key == "md.scan-devices" && property.value == "/dev/sdc1,/dev/sdd1"
+                })
+        }));
     }
 
     #[test]

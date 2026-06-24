@@ -2953,6 +2953,10 @@ fn usage_details(node: &Node) -> String {
         ("md.intent-bitmap", "bitmap"),
         ("md.creation-time", "created"),
         ("md.update-time", "updated"),
+        ("md.scan-metadata", "scan-metadata"),
+        ("md.scan-name", "scan-name"),
+        ("md.scan-spares", "scan-spares"),
+        ("md.scan-devices", "scan-devices"),
         ("md.member-number", "member-number"),
         ("md.member-major", "member-major"),
         ("md.member-minor", "member-minor"),
@@ -5832,6 +5836,18 @@ mod tests {
                 .with_property("md.intent-bitmap", "Internal"),
         );
         graph.add_node(
+            Node::new("md:/dev/md/root", NodeKind::MdRaid, "/dev/md/root")
+                .with_path("/dev/md/root")
+                .with_identity(Identity {
+                    uuid: Some("eeee:ffff:1111:2222".to_string()),
+                    ..Identity::default()
+                })
+                .with_property("md.scan-metadata", "1.2")
+                .with_property("md.scan-name", "host:root")
+                .with_property("md.scan-spares", "1")
+                .with_property("md.scan-devices", "/dev/sdc1,/dev/sdd1"),
+        );
+        graph.add_node(
             Node::new("block:/dev/sda1", NodeKind::Partition, "/dev/sda1")
                 .with_path("/dev/sda1")
                 .with_property("md.member-number", "0")
@@ -5884,6 +5900,9 @@ mod tests {
         assert!(output.contains("chunk=512K layout=near=2"));
         assert!(output.contains("consistency=bitmap rebuild=42% complete"));
         assert!(output.contains("resync=delayed check=10% complete bitmap=Internal"));
+        assert!(output.contains("/dev/md/root"));
+        assert!(output.contains("scan-metadata=1.2 scan-name=host:root"));
+        assert!(output.contains("scan-spares=1 scan-devices=/dev/sdc1,/dev/sdd1"));
         assert!(output.contains("/dev/sda1"));
         assert!(output.contains("active sync"));
         assert!(

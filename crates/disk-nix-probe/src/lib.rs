@@ -1151,6 +1151,57 @@ fn collect_mdraid(result: &mut ProbeResult) {
         }
     };
 
+    match mdraid::normalize_md_scan(&scan) {
+        Ok(graph) if !graph.nodes.is_empty() => {
+            let node_count = graph.nodes.len();
+            merge_graph(&mut result.graph, graph);
+            result.reports.push(ProbeReport {
+                adapter: "mdadm-scan".to_string(),
+                status: ProbeStatus::Available,
+                message: Some(format!(
+                    "normalized {node_count} graph nodes from MD RAID detail scan"
+                )),
+            });
+        }
+        Ok(_) => {}
+        Err(error) => result.reports.push(ProbeReport {
+            adapter: "mdadm-scan".to_string(),
+            status: ProbeStatus::Failed,
+            message: Some(error.to_string()),
+        }),
+    }
+
+    match run_report("mdadm", &["--examine", "--scan"]) {
+        Ok(examine_scan) => match mdraid::normalize_md_scan(&examine_scan) {
+            Ok(graph) if !graph.nodes.is_empty() => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "mdadm-examine".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from MD RAID examine scan"
+                    )),
+                });
+            }
+            Ok(_) => {}
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "mdadm-examine".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "mdadm-examine".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
+    }
+
     let arrays = match mdraid::arrays_from_scan(&scan) {
         Ok(arrays) => arrays,
         Err(error) => {
