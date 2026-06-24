@@ -242,6 +242,8 @@ pub enum TopologyDiagnosticKind {
     IscsiLoginRequired,
     MountAlreadySatisfied,
     MountSourceConflict,
+    MountOptionsAlreadySatisfied,
+    MountOptionsDiffer,
     PropertyAlreadySatisfied,
     PropertyDiffers,
 }
@@ -726,6 +728,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
+                        | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                         | TopologyDiagnosticKind::PropertyAlreadySatisfied
                 )
             })
@@ -1285,6 +1288,7 @@ fn already_satisfied_action_ids(
                 | Operation::Shrink
                 | Operation::Login
                 | Operation::Mount
+                | Operation::Remount
                 | Operation::SetProperty
         ) {
             continue;
@@ -1300,6 +1304,7 @@ fn already_satisfied_action_ids(
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
+                    | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                     | TopologyDiagnosticKind::PropertyAlreadySatisfied
             );
             has_warning |= diagnostic.level == TopologyDiagnosticLevel::Warning;
@@ -1345,6 +1350,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
+    diagnostics.extend(mount_options_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics
 }
@@ -1499,6 +1505,64 @@ fn mount_diagnostic(
     })
 }
 
+fn mount_options_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Remount {
+        return None;
+    }
+    let desired_options = parse_mount_option_map(action.context.options.as_deref()?);
+    if desired_options.is_empty() {
+        return None;
+    }
+    let current_options = current_mount_option_map(node);
+    if current_options.is_empty() {
+        return None;
+    }
+
+    let missing_or_different = desired_options
+        .iter()
+        .filter_map(|(option, desired)| {
+            let current = current_options.get(option)?;
+            (current != desired).then(|| format!("{option}={desired}"))
+        })
+        .chain(
+            desired_options
+                .iter()
+                .filter(|(option, _)| !current_options.contains_key(*option))
+                .map(|(option, desired)| format!("{option}={desired}")),
+        )
+        .collect::<Vec<_>>();
+
+    let (level, kind, message) = if missing_or_different.is_empty() {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::MountOptionsAlreadySatisfied,
+            format!("mountpoint {query} already includes desired remount options"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::MountOptionsDiffer,
+            format!(
+                "mountpoint {query} is missing or differs on desired options: {}",
+                missing_or_different.join(",")
+            ),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
 fn iscsi_login_diagnostic(
     action: &PlannedAction,
     matches: &[&Node],
@@ -1564,6 +1628,70 @@ fn property_value_from_node<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
         .iter()
         .find(|property| property.key == key)
         .map(|property| property.value.as_str())
+}
+
+fn current_mount_option_map(node: &Node) -> BTreeMap<String, String> {
+    let mut options = property_value_from_node(node, "mount.options")
+        .map(parse_mount_option_map)
+        .unwrap_or_default();
+
+    for property in &node.properties {
+        if let Some(option) = property.key.strip_prefix("nfs.") {
+            options
+                .entry(normalize_mount_option_name(option))
+                .or_insert_with(|| property.value.clone());
+        }
+    }
+    if property_value_from_node(node, "mount.read-only") == Some("true") {
+        options
+            .entry("ro".to_string())
+            .or_insert("true".to_string());
+    }
+    if property_value_from_node(node, "mount.read-write") == Some("true") {
+        options
+            .entry("rw".to_string())
+            .or_insert("true".to_string());
+    }
+    if property_value_from_node(node, "mount.bind") == Some("true") {
+        options
+            .entry("bind".to_string())
+            .or_insert("true".to_string());
+    }
+
+    options
+}
+
+fn parse_mount_option_map(options: &str) -> BTreeMap<String, String> {
+    options
+        .split(',')
+        .filter_map(|option| {
+            let option = option.trim();
+            if option.is_empty() {
+                return None;
+            }
+            Some(option.split_once('=').map_or_else(
+                || (normalize_mount_option_name(option), "true".to_string()),
+                |(key, value)| (normalize_mount_option_name(key), value.trim().to_string()),
+            ))
+        })
+        .filter(|(key, _)| !key.is_empty())
+        .collect()
+}
+
+fn normalize_mount_option_name(option: &str) -> String {
+    option
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|character| match character {
+            'a'..='z' | '0'..='9' => character,
+            _ => '-',
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
 }
 
 fn parse_size_bytes(value: &str) -> Option<u64> {
@@ -12259,6 +12387,126 @@ mod tests {
             diagnostic.action_id == "filesystems:backup:mount"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::MountSourceConflict
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_remount_when_options_are_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "scratch": {
+                  "operation": "remount",
+                  "mountpoint": "/scratch",
+                  "options": ["rw", "noatime", "discard=async"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("mount:/scratch", NodeKind::Mountpoint, "/scratch")
+                .with_property("mount.options", "rw,relatime,noatime,discard=async"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "filesystems:scratch:remount")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:scratch:remount"
+                && diagnostic.kind == TopologyDiagnosticKind::MountOptionsAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_nfs_remount_from_nfs_option_properties() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "nfs": {
+                "mounts": {
+                  "/srv/shared": {
+                    "operation": "remount",
+                    "options": ["rw", "vers=4.2", "_netdev"]
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("mount:/srv/shared", NodeKind::NfsMount, "/srv/shared")
+                .with_property("nfs.rw", "true")
+                .with_property("nfs.vers", "4.2")
+                .with_property("nfs.netdev", "true"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "nfs.mounts:/srv/shared:remount"
+                && diagnostic.kind == TopologyDiagnosticKind::MountOptionsAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_remount_when_options_differ() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "scratch": {
+                  "operation": "remount",
+                  "mountpoint": "/scratch",
+                  "options": ["ro", "noatime"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("mount:/scratch", NodeKind::Mountpoint, "/scratch")
+                .with_property("mount.options", "rw,relatime"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "filesystems:scratch:remount")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystems:scratch:remount"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MountOptionsDiffer
         }));
     }
 

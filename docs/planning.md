@@ -445,11 +445,13 @@ use this context to build command plans without relying on action-id parsing.
 a `topologyComparison` section to the plan. The comparison matches action
 targets against the storage graph and reports missing targets, current size
 state versus `desiredSize`, filesystem type conflicts, and already-satisfied
-mount, iSCSI login, or property updates where the current graph has enough
-data. iSCSI login reconciliation checks all matching target and session nodes
-so an active session is not hidden by a configured but disconnected target.
-Already-satisfied grow, shrink, iSCSI login, mount, and set-property actions
-with no warning diagnostics are suppressed from the actionable plan and counted in
+mount, remount, iSCSI login, or property updates where the current graph has
+enough data. Remount reconciliation treats declared options as a required
+subset of the current mount options, allowing kernel-added defaults to remain.
+iSCSI login reconciliation checks all matching target and session nodes so an
+active session is not hidden by a configured but disconnected target.
+Already-satisfied grow, shrink, iSCSI login, mount, remount, and set-property
+actions with no warning diagnostics are suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy
