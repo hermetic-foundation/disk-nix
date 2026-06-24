@@ -144,6 +144,8 @@ fn should_keep_property(key: &str) -> bool {
             | "ID_FS_LABEL"
             | "ID_FS_LABEL_ENC"
             | "ID_FS_LABEL_SAFE"
+            | "ID_FS_BLOCK_SIZE"
+            | "ID_FS_LASTBLOCK"
             | "ID_FS_TYPE"
             | "ID_FS_USAGE"
             | "ID_FS_UUID"
@@ -232,6 +234,8 @@ E: ID_FS_UUID_SUB=CCCC-DDDD
 E: ID_FS_LABEL=BOOT
 E: ID_FS_LABEL_ENC=BOOT
 E: ID_FS_LABEL_SAFE=BOOT
+E: ID_FS_BLOCK_SIZE=512
+E: ID_FS_LASTBLOCK=1048575
 E: ID_FS_VERSION=FAT32
 E: ID_FS_USAGE=filesystem
 E: ID_PART_ENTRY_DISK=8:0
@@ -301,6 +305,12 @@ E: DM_SUBSYSTEM_UDEV_FLAG0=1
         );
         assert!(partition.properties.iter().any(|property| {
             property.key == "udev.id-fs-uuid-sub" && property.value == "CCCC-DDDD"
+        }));
+        assert!(partition.properties.iter().any(|property| {
+            property.key == "udev.id-fs-block-size" && property.value == "512"
+        }));
+        assert!(partition.properties.iter().any(|property| {
+            property.key == "udev.id-fs-lastblock" && property.value == "1048575"
         }));
         assert!(partition.properties.iter().any(|property| {
             property.key == "udev.id-part-entry-flags" && property.value == "0x1"

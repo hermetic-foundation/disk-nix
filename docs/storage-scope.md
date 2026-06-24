@@ -55,8 +55,8 @@ The current probe layer normalizes:
   start/end offsets, partition sizes, names, types, and flags
 - `udevadm info --export-db` for block-device udev identity, by-id/by-path
   symlinks, serials, WWNs, filesystem IDs, encoded/safe labels, UUID
-  sub-identifiers, partition geometry/table metadata, path tags, major/minor
-  numbers, and device-mapper udev flags/properties
+  sub-identifiers, filesystem block-size/last-block geometry, partition
+  geometry/table metadata, path tags, major/minor numbers, and mapper flags
 - `findmnt --json --bytes` for mounted filesystems, pseudo filesystems, NFS
   exports, tmpfs sizing and ownership options, bind source paths, overlayfs
   lower/upper/work directories, mount propagation, and read/write state

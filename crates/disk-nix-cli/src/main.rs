@@ -2616,6 +2616,8 @@ fn usage_details(node: &Node) -> String {
         ("udev.id-fs-label", "udev-label"),
         ("udev.id-fs-label-enc", "udev-label-enc"),
         ("udev.id-fs-label-safe", "udev-label-safe"),
+        ("udev.id-fs-block-size", "udev-fs-block-size"),
+        ("udev.id-fs-lastblock", "udev-fs-lastblock"),
         ("udev.id-bus", "udev-bus"),
         ("udev.id-type", "udev-type"),
         ("udev.id-model", "udev-model"),
@@ -3867,6 +3869,8 @@ mod tests {
             .with_property("udev.id-fs-label", "EFI")
             .with_property("udev.id-fs-label-enc", "EFI")
             .with_property("udev.id-fs-label-safe", "EFI")
+            .with_property("udev.id-fs-block-size", "512")
+            .with_property("udev.id-fs-lastblock", "1048575")
             .with_property("udev.id-part-entry-disk", "259:0")
             .with_property("udev.id-part-entry-number", "1")
             .with_property("udev.id-part-entry-offset", "2048")
@@ -3964,6 +3968,7 @@ mod tests {
         assert!(output.contains("udev-fs-uuid=AAAA-BBBB udev-fs-uuid-enc=AAAA-BBBB"));
         assert!(output.contains("udev-fs-uuid-sub=CCCC-DDDD"));
         assert!(output.contains("udev-label=EFI udev-label-enc=EFI udev-label-safe=EFI"));
+        assert!(output.contains("udev-fs-block-size=512 udev-fs-lastblock=1048575"));
         assert!(output.contains("udev-part-disk=259:0 udev-part-number=1"));
         assert!(output.contains("udev-part-offset=2048 udev-part-size=1048576"));
         assert!(output.contains("udev-part-scheme=gpt udev-part-type=uefi"));

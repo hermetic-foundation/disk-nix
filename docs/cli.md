@@ -209,7 +209,7 @@ Use these commands for:
   SCSI coordinates, split dm/checker/online state details, and extra path
   flags, MD RAID member number/major/minor/raid-device/state, active swap
   state/type/priority, and udev by-id/by-path links, encoded labels,
-  filesystem UUID sub-identifiers,
+  filesystem UUID sub-identifiers, filesystem block-size/last-block geometry,
   partition table metadata, major/minor numbers, and device-mapper flags when
   probes expose them
 - `partitions`: partition nodes with size, PARTUUID, path, filesystem type,
