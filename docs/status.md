@@ -61,6 +61,8 @@ behavior across real storage stacks.
   `/etc/disk-nix/steady-state.json` inventory of native NixOS mounts, swaps,
   zram, LUKS, supported filesystems, NFS exports, storage identities,
   network-storage identities, iSCSI settings, and storage service enablement.
+  Module-managed apply and validate services can emit review scripts, JSON
+  reports, and invocation-bound receipt files.
 - NixOS assertions for duplicate active identities across mountpoints, swaps,
   LUKS mapper names, LUKS keyslot/token selectors, disk and partition targets,
   backing files, Btrfs subvolumes and qgroups, device-mapper maps, MD RAID,

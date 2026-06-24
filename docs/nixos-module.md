@@ -537,6 +537,7 @@ Example lifecycle planning through NixOS options:
       probeCurrent = true;
       scriptOut = "/run/disk-nix/apply.sh";
       reportOut = "/run/disk-nix/apply-report.json";
+      receiptOut = "/run/disk-nix/apply-receipt.json";
     };
     partitions.root = {
       operation = "grow";
@@ -871,11 +872,12 @@ Example lifecycle planning through NixOS options:
   to include current topology comparison in that validation report. Set
   `scriptOut` to emit the allowed command and verification plan as a reviewable
   shell script during validation. Set `reportOut` to persist the JSON report
-  before blocked-policy failures are returned. Set `failOnBlocked = false` to
-  run `disk-nix validate` during activation so blocked policy is reported
-  without failing the unit. Set `execute = true` to run ready, policy-allowed
-  commands with `disk-nix apply --execute` during activation; this requires
-  `failOnBlocked = true`.
+  before blocked-policy failures are returned. Set `receiptOut` to persist the
+  same report with invocation metadata for apply journals and recovery handoff.
+  Set `failOnBlocked = false` to run `disk-nix validate` during activation so
+  blocked policy is reported without failing the unit. Set `execute = true` to
+  run ready, policy-allowed commands with `disk-nix apply --execute` during
+  activation; this requires `failOnBlocked = true`.
 - `boot`: run the same service-backed policy validation and optional execution
   path as install mode, ordered after local filesystems and udev settle and
   before `multi-user.target`. This is intended for boot-time refresh or repair
@@ -909,6 +911,7 @@ Mutation policy should remain explicit:
 - `execute`
 - `scriptOut`
 - `reportOut`
+- `receiptOut`
 
 `requireBackup` and `requireConfirmation` are additional safety gates for
 high-risk actions. `allowPotentialDataLoss` is the explicit opt-in for reviewed
@@ -927,3 +930,6 @@ pass. The module requires `failOnBlocked = true` for this mode because
 directory before asking the CLI to write the review script.
 `reportOut` must also be an absolute path. The apply service creates its parent
 directory before asking the CLI to write the JSON apply report.
+`receiptOut` must also be an absolute path. The apply service creates its
+parent directory before asking the CLI to write the receipt envelope containing
+the report and invocation metadata.

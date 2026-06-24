@@ -180,6 +180,7 @@ The flake exposes a NixOS module:
     apply.execute = false;
     apply.scriptOut = "/run/disk-nix/apply.sh";
     apply.reportOut = "/run/disk-nix/apply-report.json";
+    apply.receiptOut = "/run/disk-nix/apply-receipt.json";
   };
 }
 ```
@@ -209,9 +210,11 @@ contain active steady-state filesystem types.
 `apply.scriptOut` is set, activation validation asks the CLI to write the
 allowed command plan and post-apply verification plan to that reviewable shell
 script path. When `apply.reportOut` is set, activation also writes the JSON
-report before returning blocked-policy failures. Set
-`apply.failOnBlocked = false` to use report-only validation during activation;
-blocked actions are still reported, but the unit exits successfully. Set
+report before returning blocked-policy failures. When `apply.receiptOut` is
+set, activation writes the report plus invocation metadata as a receipt for
+journaling and recovery handoff. Set `apply.failOnBlocked = false` to use
+report-only validation during activation; blocked actions are still reported,
+but the unit exits successfully. Set
 `apply.execute = true` only when activation should run ready, policy-allowed
 commands through `disk-nix apply --execute`; this requires
 `apply.failOnBlocked = true` and still writes the requested review artifacts.

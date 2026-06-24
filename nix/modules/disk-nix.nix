@@ -15,6 +15,9 @@ let
   applyReportOutDir = lib.optionalString (cfg.apply.reportOut != null) (
     builtins.dirOf cfg.apply.reportOut
   );
+  applyReceiptOutDir = lib.optionalString (cfg.apply.receiptOut != null) (
+    builtins.dirOf cfg.apply.receiptOut
+  );
   applyCommand = if cfg.apply.failOnBlocked then "apply" else "validate";
   applyPolicy = builtins.removeAttrs cfg.apply [ "execute" ];
   applyRunsAsService =
@@ -58,6 +61,10 @@ let
   ++ lib.optionals (cfg.apply.reportOut != null) [
     "--report-out"
     cfg.apply.reportOut
+  ]
+  ++ lib.optionals (cfg.apply.receiptOut != null) [
+    "--receipt-out"
+    cfg.apply.receiptOut
   ];
   applyValidationScript = pkgs.writeShellScript "disk-nix-apply-validation" ''
     ${lib.optionalString (cfg.apply.scriptOut != null) ''
@@ -65,6 +72,9 @@ let
     ''}
     ${lib.optionalString (cfg.apply.reportOut != null) ''
       mkdir -p ${lib.escapeShellArg applyReportOutDir}
+    ''}
+    ${lib.optionalString (cfg.apply.receiptOut != null) ''
+      mkdir -p ${lib.escapeShellArg applyReceiptOutDir}
     ''}
     exec ${lib.escapeShellArgs ([ (lib.getExe cfg.package) ] ++ applyArgs)}
   '';
@@ -2447,6 +2457,13 @@ in
         example = "/run/disk-nix/apply-report.json";
         description = "Write the JSON apply-policy report to this path during validation, including blocked policy details before failures are returned.";
       };
+
+      receiptOut = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "/run/disk-nix/apply-receipt.json";
+        description = "Write a JSON apply-policy receipt to this path during validation, binding the report to the invoked command, spec path, probe-current choice, execute choice, and generation timestamp.";
+      };
     };
   };
 
@@ -2599,6 +2616,10 @@ in
       {
         assertion = cfg.apply.reportOut != null -> lib.hasPrefix "/" cfg.apply.reportOut;
         message = "services.disk-nix.apply.reportOut must be an absolute path.";
+      }
+      {
+        assertion = cfg.apply.receiptOut != null -> lib.hasPrefix "/" cfg.apply.receiptOut;
+        message = "services.disk-nix.apply.receiptOut must be an absolute path.";
       }
       {
         assertion = cfg.iscsi.boot.enable -> cfg.iscsi.initiatorName != null;

@@ -114,6 +114,7 @@
                 failOnBlocked = false;
                 scriptOut = "/run/disk-nix/apply.sh";
                 reportOut = "/run/disk-nix/apply-report.json";
+                receiptOut = "/run/disk-nix/apply-receipt.json";
               };
               luks.devices.cryptroot = {
                 device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
@@ -835,6 +836,7 @@
                 failOnBlocked = true;
                 scriptOut = "/run/disk-nix/execute.sh";
                 reportOut = "/run/disk-nix/execute-report.json";
+                receiptOut = "/run/disk-nix/execute-receipt.json";
               };
             };
           }
@@ -1601,6 +1603,7 @@
               and ."$defs".applyPolicy.properties.failOnBlocked.default == true
               and ."$defs".applyPolicy.properties.allowPotentialDataLoss.default == false
               and (."$defs".applyPolicy.properties.reportOut.type | index("string") != null)
+              and (."$defs".applyPolicy.properties.receiptOut.type | index("string") != null)
             ' "$schema"
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/simple-root.json} --json > "$simplePlan"
@@ -2141,6 +2144,7 @@
                     and .apply.failOnBlocked == false
                     and .apply.scriptOut == "/run/disk-nix/apply.sh"
                     and .apply.reportOut == "/run/disk-nix/apply-report.json"
+                    and .apply.receiptOut == "/run/disk-nix/apply-receipt.json"
                   ' "$spec"
                   applyScript='${nixosModuleTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'
                   grep -- 'validate' "$applyScript"
@@ -2149,6 +2153,8 @@
                   grep -- '/run/disk-nix/apply.sh' "$applyScript"
                   grep -- '--report-out' "$applyScript"
                   grep -- '/run/disk-nix/apply-report.json' "$applyScript"
+                  grep -- '--receipt-out' "$applyScript"
+                  grep -- '/run/disk-nix/apply-receipt.json' "$applyScript"
                   printf '%s\n' ${pkgs.lib.escapeShellArgs (map toString nixosModuleTest.config.systemd.services.disk-nix-plan.path)} > service-paths
                   grep -- 'bcachefs-tools-' service-paths
                   grep -- 'btrfs-progs-' service-paths
@@ -2418,6 +2424,8 @@
                 grep -- '/run/disk-nix/execute.sh' "$applyScript"
                 grep -- '--report-out' "$applyScript"
                 grep -- '/run/disk-nix/execute-report.json' "$applyScript"
+                grep -- '--receipt-out' "$applyScript"
+                grep -- '/run/disk-nix/execute-receipt.json' "$applyScript"
                 touch "$out"
               '';
           nixosModuleApplyModes =

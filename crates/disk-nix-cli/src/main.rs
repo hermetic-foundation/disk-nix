@@ -1418,6 +1418,10 @@ fn spec_schema() -> serde_json::Value {
                     "reportOut": {
                         "type": ["string", "null"],
                         "description": "NixOS module helper that controls activation --report-out."
+                    },
+                    "receiptOut": {
+                        "type": ["string", "null"],
+                        "description": "NixOS module helper that controls activation --receipt-out."
                     }
                 }
             }
