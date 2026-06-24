@@ -148,7 +148,7 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// List discovered NVMe namespaces and namespace metadata.
+    /// List discovered NVMe subsystems, controllers, namespaces, and path metadata.
     Nvme {
         /// Emit JSON for matching graph nodes.
         #[arg(long)]

@@ -204,8 +204,9 @@ endpoints are included in the filtered node set.
 Use these commands for:
 
 - `devices`: disks, partitions, dm devices, LVM objects, VDO, RAID, zvols,
-  cache devices, multipath devices, NVMe namespaces, loop devices, zram, and swap,
-  including model/vendor, transport, rotational, NVMe model/firmware/namespace
+  cache devices, multipath devices, NVMe subsystems/controllers/namespaces, loop
+  devices, zram, and swap, including model/vendor, transport, rotational, NVMe
+  model/firmware/namespace
   geometry, SCSI host/channel/target/LUN address, generic device, transport,
   LU/WWN identity, queue state, SMART health, temperature, power-on, capacity,
   sector, and ATA reallocation/pending-sector counters, `lsblk` sector/I/O
