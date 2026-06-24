@@ -1886,13 +1886,13 @@ fn print_swap(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
 fn print_iscsi(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<48} {:>12} {:<22} {:<14} {:>5} DETAILS",
-        "KIND", "NAME", "SIZE", "PORTAL", "STATE", "LUNS"
+        "{:<22} {:<48} {:>12} {:<22} {:<14} {:>5} {:<18} DETAILS",
+        "KIND", "NAME", "SIZE", "PORTAL", "STATE", "LUNS", "PATH"
     )?;
     for node in graph.nodes.iter().filter(|node| is_iscsi_node(node)) {
         writeln!(
             output,
-            "{:<22} {:<48} {:>12} {:<22} {:<14} {:>5} {}",
+            "{:<22} {:<48} {:>12} {:<22} {:<14} {:>5} {:<18} {}",
             node.kind,
             node.name,
             human_bytes(node.size_bytes),
@@ -1903,6 +1903,7 @@ fn print_iscsi(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> 
                 .unwrap_or("-"),
             property_value(node, "iscsi.connection-state").unwrap_or("-"),
             iscsi_lun_count(graph, node),
+            node.path.as_deref().unwrap_or("-"),
             usage_details(node)
         )?;
     }
@@ -6049,6 +6050,7 @@ mod tests {
                 NodeKind::Lun,
                 "0",
             )
+            .with_path("/dev/sdb")
             .with_size_bytes(1_073_741_824)
             .with_property("iscsi.attached-disk", "sdb")
             .with_property("scsi.address", "4:0:0:0")
@@ -6098,9 +6100,13 @@ mod tests {
         assert!(output.contains("PORTAL"));
         assert!(output.contains("STATE"));
         assert!(output.contains("LUNS"));
+        assert!(output.contains("PATH"));
         assert!(output.contains("iscsi-session:12"));
         assert!(output.contains("10.0.0.10:3260,1"));
         assert!(output.contains("LOGGED IN"));
+        assert!(output.lines().any(|line| {
+            line.contains("lun") && line.contains("0") && line.contains("/dev/sdb")
+        }));
         assert!(output.contains("target=iqn.2026-06.example:storage"));
         assert!(output.contains("portal-address=10.0.0.10 portal-port=3260 portal-tpgt=1"));
         assert!(

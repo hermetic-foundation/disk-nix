@@ -365,7 +365,8 @@ Use these commands for:
   address/port/TPGT fields, target portal group tag, connection/session state,
   connection CID/local/peer addresses, interface identity, negotiated transfer
   parameters, target IQNs, LUN sizes, SCSI host/channel/id coordinates,
-  generic devices, transport, LU/WWN identity, queue state, attached disk state,
+  generic devices, transport, LU/WWN identity, queue state, attached disk
+  path/state, table-level path identity for attached LUN block devices,
   session to target imports, target-contained LUN counts, and
   LUN-to-block-device backing relationships when `iscsiadm --mode node -P 1`,
   `iscsiadm --mode session -P 3`, or `lsscsi` exposes them
