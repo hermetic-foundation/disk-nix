@@ -445,14 +445,17 @@ use this context to build command plans without relying on action-id parsing.
 a `topologyComparison` section to the plan. The comparison matches action
 targets against the storage graph and reports missing targets, current size
 state versus `desiredSize`, filesystem type conflicts, and already-satisfied
-mount, remount, iSCSI login, or property updates where the current graph has
-enough data. Remount reconciliation treats declared options as a required
-subset of the current mount options, allowing kernel-added defaults to remain.
+mount, remount, NFS export, iSCSI login, or property updates where the current
+graph has enough data. Remount reconciliation treats declared options as a
+required subset of the current mount options, allowing kernel-added defaults to
+remain.
+NFS export reconciliation compares the declared client and options against
+`nfs.export-client` and `nfs.export-option-*` topology properties.
 iSCSI login reconciliation checks all matching target and session nodes so an
 active session is not hidden by a configured but disconnected target.
-Already-satisfied grow, shrink, iSCSI login, mount, remount, and set-property
-actions with no warning diagnostics are suppressed from the actionable plan and counted in
-`topologyComparison.summary.suppressedActionCount`.
+Already-satisfied grow, shrink, iSCSI login, mount, remount, NFS export, and
+set-property actions with no warning diagnostics are suppressed from the
+actionable plan and counted in `topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy
 
@@ -495,7 +498,9 @@ read-only `exportfs -v` plus graph inspection for `operation = "rescan"`, and
 `exportfs -u <client>:<path>` for reviewed `operation = "unexport"` operations,
 with unresolved-input markers when clients, options, or the local export path
 are missing. Logical export names can declare the local export path through
-`target` or `path`. Legacy export `create` and `destroy` map to the same
+`target` or `path`. Current-topology comparison suppresses export actions only
+when the probed export client and requested option subset already match. Legacy
+export `create` and `destroy` map to the same
 commands.
 NFS client mount command plans use
 `mount -t <nfs|nfs4> -o <options> <source> <mountpoint>` for reviewed

@@ -244,6 +244,8 @@ pub enum TopologyDiagnosticKind {
     MountSourceConflict,
     MountOptionsAlreadySatisfied,
     MountOptionsDiffer,
+    NfsExportAlreadySatisfied,
+    NfsExportDiffers,
     PropertyAlreadySatisfied,
     PropertyDiffers,
 }
@@ -729,6 +731,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
+                        | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                         | TopologyDiagnosticKind::PropertyAlreadySatisfied
                 )
             })
@@ -1289,6 +1292,7 @@ fn already_satisfied_action_ids(
                 | Operation::Login
                 | Operation::Mount
                 | Operation::Remount
+                | Operation::Export
                 | Operation::SetProperty
         ) {
             continue;
@@ -1305,6 +1309,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
+                    | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                     | TopologyDiagnosticKind::PropertyAlreadySatisfied
             );
             has_warning |= diagnostic.level == TopologyDiagnosticLevel::Warning;
@@ -1351,6 +1356,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
+    diagnostics.extend(nfs_export_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics
 }
@@ -1522,19 +1528,7 @@ fn mount_options_diagnostic(
         return None;
     }
 
-    let missing_or_different = desired_options
-        .iter()
-        .filter_map(|(option, desired)| {
-            let current = current_options.get(option)?;
-            (current != desired).then(|| format!("{option}={desired}"))
-        })
-        .chain(
-            desired_options
-                .iter()
-                .filter(|(option, _)| !current_options.contains_key(*option))
-                .map(|(option, desired)| format!("{option}={desired}")),
-        )
-        .collect::<Vec<_>>();
+    let missing_or_different = option_differences(&desired_options, &current_options);
 
     let (level, kind, message) = if missing_or_different.is_empty() {
         (
@@ -1549,6 +1543,60 @@ fn mount_options_diagnostic(
             format!(
                 "mountpoint {query} is missing or differs on desired options: {}",
                 missing_or_different.join(",")
+            ),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn nfs_export_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Export
+        || action.context.collection.as_deref() != Some("exports")
+    {
+        return None;
+    }
+    let desired_client = action.context.client.as_deref()?;
+    let desired_options = parse_mount_option_map(action.context.options.as_deref()?);
+    if desired_options.is_empty() {
+        return None;
+    }
+    let current_client = property_value_from_node(node, "nfs.export-client")?;
+    let current_options = current_nfs_export_option_map(node);
+    if current_options.is_empty() {
+        return None;
+    }
+
+    let mut differences = Vec::new();
+    if current_client != desired_client {
+        differences.push(format!("client={desired_client}"));
+    }
+    differences.extend(option_differences(&desired_options, &current_options));
+
+    let (level, kind, message) = if differences.is_empty() {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::NfsExportAlreadySatisfied,
+            format!("NFS export {query} already grants {desired_client} desired options"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::NfsExportDiffers,
+            format!(
+                "NFS export {query} differs from desired client/options: {}",
+                differences.join(",")
             ),
         )
     };
@@ -1659,6 +1707,32 @@ fn current_mount_option_map(node: &Node) -> BTreeMap<String, String> {
     }
 
     options
+}
+
+fn current_nfs_export_option_map(node: &Node) -> BTreeMap<String, String> {
+    node.properties
+        .iter()
+        .filter_map(|property| {
+            property
+                .key
+                .strip_prefix("nfs.export-option-")
+                .map(|option| (normalize_mount_option_name(option), property.value.clone()))
+        })
+        .filter(|(option, _)| !option.is_empty())
+        .collect()
+}
+
+fn option_differences(
+    desired_options: &BTreeMap<String, String>,
+    current_options: &BTreeMap<String, String>,
+) -> Vec<String> {
+    desired_options
+        .iter()
+        .filter_map(|(option, desired)| match current_options.get(option) {
+            Some(current) if current == desired => None,
+            _ => Some(format!("{option}={desired}")),
+        })
+        .collect()
 }
 
 fn parse_mount_option_map(options: &str) -> BTreeMap<String, String> {
@@ -12507,6 +12581,96 @@ mod tests {
             diagnostic.action_id == "filesystems:scratch:remount"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::MountOptionsDiffer
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_already_exported_nfs_path() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "exports": {
+                "/srv/share": {
+                  "operation": "export",
+                  "client": "192.0.2.0/24",
+                  "options": "rw,sync,no_subtree_check"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "nfs-export:/srv/share:192.0.2.0/24",
+                NodeKind::NfsExport,
+                "/srv/share",
+            )
+            .with_property("nfs.export", "/srv/share")
+            .with_property("nfs.export-client", "192.0.2.0/24")
+            .with_property("nfs.exportfs", "true")
+            .with_property("nfs.export-option-rw", "true")
+            .with_property("nfs.export-option-sync", "true")
+            .with_property("nfs.export-option-no-subtree-check", "true"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "exports:/srv/share:export"
+                && diagnostic.kind == TopologyDiagnosticKind::NfsExportAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_nfs_export_when_client_or_options_differ() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "exports": {
+                "/srv/share": {
+                  "operation": "export",
+                  "client": "192.0.2.0/24",
+                  "options": "rw,sync,no_subtree_check"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "nfs-export:/srv/share:198.51.100.10",
+                NodeKind::NfsExport,
+                "/srv/share",
+            )
+            .with_property("nfs.export", "/srv/share")
+            .with_property("nfs.export-client", "198.51.100.10")
+            .with_property("nfs.exportfs", "true")
+            .with_property("nfs.export-option-ro", "true")
+            .with_property("nfs.export-option-sync", "true"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "exports:/srv/share:export"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::NfsExportDiffers
         }));
     }
 

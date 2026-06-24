@@ -566,14 +566,16 @@ With `--probe-current`, the CLI also probes the current host and adds
 size diagnostics, filesystem type conflicts, and already-satisfied property,
 size, or remount option checks. Mount actions are also compared with
 `mount.source` when the current graph has mountpoint data, remount actions
-treat declared options as a required subset of current mount options, and iSCSI
-login actions are compared with current session state across all matching
-target/session nodes when metadata is available. Safe already-satisfied grow,
-shrink, iSCSI login, mount, remount, and property actions that have no warning
-diagnostics are suppressed from the actionable plan and counted as
+treat declared options as a required subset of current mount options, NFS export
+actions are compared with `nfs.export-client` and `nfs.export-option-*`
+properties, and iSCSI login actions are compared with current session state
+across all matching target/session nodes when metadata is available. Safe
+already-satisfied grow, shrink, iSCSI login, mount, remount, NFS export, and
+property actions that have no warning diagnostics are suppressed from the
+actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; mountpoints using a
-different source or known iSCSI targets without a logged-in session stay
-actionable with a warning diagnostic.
+different source, export client/option differences, or known iSCSI targets
+without a logged-in session stay actionable with a warning diagnostic.
 
 ## Apply Evaluation
 
@@ -807,7 +809,8 @@ to render reviewed `operation = "export"`, option update, and
 the same command plans. `operation = "rescan"` renders read-only export
 inventory and graph probes. They also require a path-shaped local export target
 such as `/srv/share`; logical export names can declare it through `target` or
-`path`.
+`path`. With current-topology probing, already published exports are suppressed
+only when the client and requested option subset already match the graph.
 NFS client mount command plans render reviewed `operation = "mount"` commands,
 `mount -o remount,<options>` option-update commands, read-only
 `operation = "rescan"` mount inventory/stat probes, and
