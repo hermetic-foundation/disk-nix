@@ -858,37 +858,69 @@ fn graph_dependency_edges_for_actions(
 ) -> DependencyEdges {
     let mut edges = dependency_edges_for_actions(actions);
     let matches = graph_action_matches(actions, graph);
-    for edge in &graph.edges {
-        let Some((lower_id, upper_id)) = normalized_storage_edge(edge) else {
-            continue;
-        };
-        for lower_action in actions_for_node(&matches, lower_id) {
-            for upper_action in actions_for_node(&matches, upper_id) {
-                if lower_action.id == upper_action.id {
-                    continue;
-                }
-                let lower_direction = dependency_direction(lower_action.operation);
-                let upper_direction = dependency_direction(upper_action.operation);
-                if lower_direction != upper_direction {
-                    continue;
-                }
-                let (depends_on, action_id) = match lower_direction {
-                    DependencyDirection::LowerLayersFirst => {
-                        (lower_action.id.as_str(), upper_action.id.as_str())
+    let reachability = graph_storage_reachability(graph);
+    for (lower_id, upper_ids) in reachability {
+        for upper_id in upper_ids {
+            for lower_action in actions_for_node(&matches, &lower_id) {
+                for upper_action in actions_for_node(&matches, &upper_id) {
+                    if lower_action.id == upper_action.id {
+                        continue;
                     }
-                    DependencyDirection::UpperLayersFirst => {
-                        (upper_action.id.as_str(), lower_action.id.as_str())
+                    let lower_direction = dependency_direction(lower_action.operation);
+                    let upper_direction = dependency_direction(upper_action.operation);
+                    if lower_direction != upper_direction {
+                        continue;
                     }
-                };
-                insert_unique_sorted(&mut edges.depends_on, action_id, depends_on);
-                insert_unique_sorted(&mut edges.unblocks, depends_on, action_id);
-                edges
-                    .graph_edges
-                    .insert((action_id.to_string(), depends_on.to_string()));
+                    let (depends_on, action_id) = match lower_direction {
+                        DependencyDirection::LowerLayersFirst => {
+                            (lower_action.id.as_str(), upper_action.id.as_str())
+                        }
+                        DependencyDirection::UpperLayersFirst => {
+                            (upper_action.id.as_str(), lower_action.id.as_str())
+                        }
+                    };
+                    insert_unique_sorted(&mut edges.depends_on, action_id, depends_on);
+                    insert_unique_sorted(&mut edges.unblocks, depends_on, action_id);
+                    edges
+                        .graph_edges
+                        .insert((action_id.to_string(), depends_on.to_string()));
+                }
             }
         }
     }
     edges
+}
+
+fn graph_storage_reachability(graph: &StorageGraph) -> BTreeMap<String, BTreeSet<String>> {
+    let mut adjacency: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for edge in &graph.edges {
+        if let Some((lower_id, upper_id)) = normalized_storage_edge(edge) {
+            adjacency
+                .entry(lower_id.to_string())
+                .or_default()
+                .insert(upper_id.to_string());
+        }
+    }
+
+    let mut reachability = BTreeMap::new();
+    for lower_id in adjacency.keys() {
+        let mut visited = BTreeSet::new();
+        let mut pending: Vec<String> = adjacency
+            .get(lower_id)
+            .into_iter()
+            .flat_map(|upper_ids| upper_ids.iter().cloned())
+            .collect();
+        while let Some(upper_id) = pending.pop() {
+            if !visited.insert(upper_id.clone()) {
+                continue;
+            }
+            if let Some(next_ids) = adjacency.get(&upper_id) {
+                pending.extend(next_ids.iter().cloned());
+            }
+        }
+        reachability.insert(lower_id.clone(), visited);
+    }
+    reachability
 }
 
 fn graph_action_matches<'a>(
@@ -1086,7 +1118,7 @@ fn dependency_order_notes(
             .collect();
         if !graph_depends_on.is_empty() {
             notes.push(format!(
-                "current topology graph edge requires {} before this action",
+                "current topology graph path requires {} before this action",
                 graph_depends_on.join(", ")
             ));
         }
@@ -1107,7 +1139,7 @@ fn dependency_order_notes(
             .collect();
         if !graph_unblocks.is_empty() {
             notes.push(format!(
-                "current topology graph edge shows this action unblocks {}",
+                "current topology graph path shows this action unblocks {}",
                 graph_unblocks.join(", ")
             ));
         }
@@ -12132,7 +12164,7 @@ mod tests {
             .as_ref()
             .expect("comparison should be present");
 
-        assert_eq!(comparison.summary.graph_dependency_edge_count, 5);
+        assert_eq!(comparison.summary.graph_dependency_edge_count, 15);
         let filesystem = plan
             .dependency_order
             .iter()
@@ -12143,17 +12175,37 @@ mod tests {
                 .depends_on
                 .contains(&"volumes:vg0/root:grow".to_string())
         );
+        assert!(
+            filesystem
+                .depends_on
+                .contains(&"luns:/dev/disk/by-path/ip-192.0.2.10-lun-0:grow".to_string())
+        );
+        assert!(
+            filesystem
+                .depends_on
+                .contains(&"multipathmaps:mpatha:grow".to_string())
+        );
         assert!(filesystem.notes.iter().any(|note| {
-            note.contains("current topology graph edge requires volumes:vg0/root:grow")
+            note.contains("current topology graph path requires")
+                && note.contains("volumes:vg0/root:grow")
         }));
         let lun = plan
             .dependency_order
             .iter()
             .find(|order| order.action_id == "luns:/dev/disk/by-path/ip-192.0.2.10-lun-0:grow")
             .expect("lun dependency order exists");
-        assert_eq!(lun.unblocks, vec!["multipathmaps:mpatha:grow".to_string()]);
+        assert_eq!(
+            lun.unblocks,
+            vec![
+                "filesystem:root:grow".to_string(),
+                "luks.devices:cryptroot:grow".to_string(),
+                "multipathmaps:mpatha:grow".to_string(),
+                "partitions:root:grow".to_string(),
+                "volumes:vg0/root:grow".to_string(),
+            ]
+        );
         assert!(lun.notes.iter().any(|note| {
-            note.contains("current topology graph edge shows this action unblocks")
+            note.contains("current topology graph path shows this action unblocks")
         }));
     }
 
@@ -12213,7 +12265,7 @@ mod tests {
             vec!["filesystems:root:unmount".to_string()]
         );
         assert!(luks.notes.iter().any(|note| {
-            note.contains("current topology graph edge requires filesystems:root:unmount")
+            note.contains("current topology graph path requires filesystems:root:unmount")
         }));
     }
 

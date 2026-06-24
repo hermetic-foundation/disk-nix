@@ -54,14 +54,13 @@ build/mutate/teardown phase, lower-first or upper-first direction, collection
 layer rank, inferred `dependsOn` and `unblocks` edges where declared identities
 tie adjacent layers together, and explanatory notes. This documents the current
 ordering rationale and gives automation explicit preflight edges for common
-layered changes. When current topology probing is enabled, directly connected
-matched graph nodes also add dependency edges. Lower-to-upper relationships such
-as LUN to multipath, partition to mapper, volume to filesystem, or filesystem
-to mount are emitted in build/grow order, while teardown actions reverse the
-edge so consumers are handled before backing layers. This is still conservative:
-only direct graph relationships between matched planned actions are emitted, so
-multi-hop sequencing and ambiguous current-state recovery remain hardening
-work.
+layered changes. When current topology probing is enabled, matched graph paths
+also add dependency edges across direct and multi-hop storage relationships.
+Lower-to-upper paths such as LUN to multipath to partition to mapper to volume
+to filesystem are emitted in build/grow order, while teardown actions reverse
+the path so consumers are handled before backing layers. This is still
+conservative: ambiguous current-state recovery, conflict handling, and choosing
+between competing graph paths remain hardening work.
 
 Examples:
 

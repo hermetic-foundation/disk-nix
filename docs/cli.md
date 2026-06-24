@@ -556,10 +556,10 @@ including build/mutate/teardown phase, lower-first or upper-first direction,
 collection layer rank, inferred `dependsOn` and `unblocks` edges, and ordering
 notes. It reflects the current coarse layer ordering plus conservative edges
 derived from declared action identities. When `--probe-current` is set, direct
-relationships in the probed storage graph also add dependency edges between
-matched planned actions, including lower-to-upper growth edges and reversed
-upper-to-lower teardown edges. The topology comparison summary reports the
-number of graph-derived dependency edges as `graphDependencyEdgeCount`.
+and multi-hop relationships in the probed storage graph also add dependency
+edges between matched planned actions, including lower-to-upper growth paths and
+reversed upper-to-lower teardown paths. The topology comparison summary reports
+the number of graph-derived dependency edges as `graphDependencyEdgeCount`.
 
 With `--probe-current`, the CLI also probes the current host and adds
 `topologyComparison`, including matched target counts, missing target counts,
