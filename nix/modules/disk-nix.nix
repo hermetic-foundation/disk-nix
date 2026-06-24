@@ -1763,13 +1763,13 @@ in
     datasets = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed dataset lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed dataset lifecycle declarations emitted into the disk-nix planner spec. A logical attribute name can set target or path to the concrete ZFS pool/name dataset.";
     };
 
     zvols = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed ZFS zvol lifecycle declarations emitted into the disk-nix planner spec.";
+      description = "Typed ZFS zvol lifecycle declarations emitted into the disk-nix planner spec. A logical attribute name can set target or path to the concrete ZFS pool/name zvol.";
     };
 
     luns = lib.mkOption {

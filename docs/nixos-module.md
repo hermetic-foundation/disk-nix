@@ -145,11 +145,13 @@ is excluded from active NixOS auto-login derivation.
 
 Lifecycle declaration attribute names are usable object names only for domains
 whose native tools address objects by name, such as ZFS datasets, ZFS pools,
-VDO volumes, and iSCSI target IQNs. Domains addressed by kernel paths or
-compound LVM names need concrete targets before `apply --execute` can run:
-swap and NFS exports need local paths, loop devices need `/dev/loop*`, MD RAID
-arrays need `/dev/md*`, multipath maps need `mpath*` or `/dev/mapper/*`, bcache
-operations need `/dev/bcache*`, and LVM logical volumes and thin pools need
+VDO volumes, and iSCSI target IQNs. ZFS dataset and zvol declarations may also
+use logical attribute names when `target` or `path` supplies the concrete
+`pool/name` object. Domains addressed by kernel paths or compound LVM names need
+concrete targets before `apply --execute` can run: swap and NFS exports need
+local paths, loop devices need `/dev/loop*`, MD RAID arrays need `/dev/md*`,
+multipath maps need `mpath*` or `/dev/mapper/*`, bcache operations need
+`/dev/bcache*`, and LVM logical volumes and thin pools need
 canonical `vg/lv` or `vg/pool` targets. Declarations that omit these concrete
 addresses still produce reviewable plans, but their command plans stay
 non-ready instead of guessing from logical keys.
@@ -582,15 +584,21 @@ Example lifecycle planning through NixOS options:
       removeDevices = [ "/dev/disk/by-id/old-disk" ];
       properties.autotrim = "on";
     };
-    datasets."tank/home".operation = "create";
-    datasets."tank/legacy" = {
+    datasets.home.operation = "create";
+    datasets.home.target = "tank/home";
+    datasets.legacy = {
+      target = "tank/legacy";
       operation = "rename";
       renameTo = "tank/legacy-staged";
     };
-    datasets."tank/home-review".operation = "promote";
+    datasets.homeReview = {
+      target = "tank/home-review";
+      operation = "promote";
+    };
     datasets."tank/inventory".operation = "rescan";
     datasets."tank/archive".destroy = true;
-    zvols."tank/vm/root" = {
+    zvols.vmRoot = {
+      target = "tank/vm/root";
       operation = "grow";
       desiredSize = "80GiB";
     };

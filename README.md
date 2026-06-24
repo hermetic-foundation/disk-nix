@@ -410,7 +410,9 @@ newer snapshots in the dataset lineage may be discarded. The capability
 inventory includes recursive rollback review advice.
 ZFS dataset apply plans render reviewed `zfs create` commands with declared
 properties as create-time `-o key=value` options, plus policy-gated
-`zfs destroy` commands.
+`zfs destroy` commands. Dataset and zvol declarations can use a logical
+attribute name and set `target` or `path` to the concrete `pool/name` ZFS
+object used by command rendering.
 LVM logical volume apply plans render reviewed `lvcreate` and gated
 `lvremove` steps for volume lifecycle declarations, with unresolved markers for
 missing `vg/lv` targets or sizes. Grow and remove commands also require that

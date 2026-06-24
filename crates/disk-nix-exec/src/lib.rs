@@ -16614,6 +16614,208 @@ mod tests {
     }
 
     #[test]
+    fn zfs_lifecycle_accepts_targets_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "datasets": {
+                  "homeCreate": {
+                    "target": "tank/home",
+                    "operation": "create",
+                    "properties": {
+                      "compression": "zstd",
+                      "mountpoint": "/home"
+                    }
+                  },
+                  "homeInventory": {
+                    "target": "tank/home",
+                    "operation": "rescan"
+                  },
+                  "homeRename": {
+                    "target": "tank/home-old",
+                    "operation": "rename",
+                    "renameTo": "tank/home-staged"
+                  },
+                  "homeReview": {
+                    "target": "tank/home-review",
+                    "operation": "promote"
+                  },
+                  "oldDataset": {
+                    "target": "tank/old",
+                    "operation": "destroy"
+                  }
+                },
+                "zvols": {
+                  "rootCreate": {
+                    "target": "tank/vm/root",
+                    "operation": "create",
+                    "desiredSize": "32GiB",
+                    "properties": {
+                      "compression": "zstd"
+                    }
+                  },
+                  "rootGrow": {
+                    "target": "tank/vm/root",
+                    "operation": "grow",
+                    "desiredSize": "64GiB",
+                    "properties": {
+                      "volblocksize": "16K"
+                    }
+                  },
+                  "rootInventory": {
+                    "target": "tank/vm/root",
+                    "operation": "rescan"
+                  },
+                  "rootPromote": {
+                    "target": "tank/vm/root-review",
+                    "operation": "promote"
+                  },
+                  "oldRoot": {
+                    "target": "tank/vm/old",
+                    "operation": "destroy"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true,
+                "allowDestructive": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "datasets:homecreate:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "zfs",
+                            "create",
+                            "-o",
+                            "compression=zstd",
+                            "-o",
+                            "mountpoint=/home",
+                            "tank/home",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "datasets:homeinventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "list", "-H", "-p", "-t", "filesystem", "tank/home"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "zfs",
+                            "get",
+                            "-H",
+                            "-p",
+                            "-o",
+                            "property,value,source",
+                            "all",
+                            "tank/home",
+                        ]
+                        && !command.mutates
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "datasets:homerename:rename"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "rename", "tank/home-old", "tank/home-staged"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "datasets:homereview:promote"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "promote", "tank/home-review"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "datasets:olddataset:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "destroy", "tank/old"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "zvols:rootcreate:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "zfs",
+                            "create",
+                            "-o",
+                            "compression=zstd",
+                            "-V",
+                            "32GiB",
+                            "tank/vm/root",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "zvols:rootgrow:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "set", "volsize=64GiB", "tank/vm/root"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "zvols:rootGrow:set-property:volblocksize"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "set", "volblocksize=16K", "tank/vm/root"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "zvols:rootinventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["zfs", "list", "-H", "-p", "-t", "volume", "tank/vm/root"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "tank/vm/root"] && !command.mutates
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "zvols:rootpromote:promote"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "promote", "tank/vm/root-review"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "zvols:oldroot:destroy"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "destroy", "tank/vm/old"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "datasets:homereview:promote"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "tank/home-review", "--json"]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "zvols:rootGrow:set-property:volblocksize"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["zfs", "get", "all", "tank/vm/root"])
+        }));
+    }
+
+    #[test]
     fn md_raid_lifecycle_reports_mdadm_commands() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

@@ -172,10 +172,13 @@ Examples:
   explicit property reconciliation actions. Advice still calls out inherited
   mountpoint, quota, reservation, and encryption policy; dataset destruction
   remains destructive and recommends snapshots or rename-first validation.
+  Logical declaration names can set `target` or `path` to the concrete
+  `pool/name` dataset used by ZFS commands.
 - zvol creation, growth, and property updates are online operations, with
   advice to verify pool capacity, reservation policy, and downstream block
   consumers. zvol `properties = { ... }` render create-time `-o key=value`
-  options and `zfs set key=value <zvol>` reconciliation actions.
+  options and `zfs set key=value <zvol>` reconciliation actions. Logical zvol
+  names can likewise set `target` or `path` to the concrete `pool/name` zvol.
 - MD RAID creation and destruction are destructive because they write array
   metadata or remove array identity. Assemble and stop are offline-required but
   non-destructive: they activate or deactivate existing array metadata while
@@ -331,8 +334,9 @@ refreshes. Dataset rescan renders `zfs list -t filesystem`, `zfs get`, and
 graph inspection for mountpoint, quota, reservation, snapshot, clone, mount,
 and export relationships. Zvol rescan renders the equivalent
 `zfs list -t volume`, `zfs get`, and graph inspection for volsize,
-reservation, and block consumers. Use property updates or grow only when state
-must actually change.
+reservation, and block consumers. Logical declaration keys can use `target` or
+`path` for the concrete dataset or zvol name. Use property updates or grow only
+when state must actually change.
 
 Lifecycle objects may use:
 

@@ -795,7 +795,9 @@ inspection commands. Dataset and zvol rename declarations render reviewed
 `zfs rename <old> <new>` commands from `operation = "rename"` plus `renameTo`.
 ZFS clone promotion declarations render reviewed `zfs get origin <clone>`
 preflight checks and `zfs promote <clone>` commands from
-`operation = "promote"`.
+`operation = "promote"`. Dataset and zvol declarations may use logical
+attribute names when `target` or `path` supplies the concrete `pool/name` ZFS
+object.
 Zvol command plans render `zfs create -o key=value -V` for declared create-time
 properties, `zfs set volsize=...`, policy-gated `zfs destroy`, and
 read-only `operation = "rescan"` inventory/property probes plus
