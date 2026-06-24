@@ -2803,6 +2803,22 @@ fn usage_details(node: &Node) -> String {
         ("nvme.id-ctrl.mdts", "mdts"),
         ("nvme.id-ctrl.version", "version"),
         ("nvme.id-ctrl.controller-type", "controller-type"),
+        (
+            "nvme.id-ctrl.warning-composite-temp",
+            "warning-composite-temp",
+        ),
+        (
+            "nvme.id-ctrl.critical-composite-temp",
+            "critical-composite-temp",
+        ),
+        (
+            "nvme.id-ctrl.minimum-thermal-management-temp",
+            "min-thermal-management-temp",
+        ),
+        (
+            "nvme.id-ctrl.maximum-thermal-management-temp",
+            "max-thermal-management-temp",
+        ),
         ("nvme.id-ctrl.total-nvm-capacity", "total-nvm-capacity"),
         (
             "nvme.id-ctrl.unallocated-nvm-capacity",
@@ -2844,6 +2860,28 @@ fn usage_details(node: &Node) -> String {
         ),
         ("nvme.smart.temperature-sensor-1-kelvin", "temp-sensor-1-k"),
         ("nvme.smart.temperature-sensor-2-kelvin", "temp-sensor-2-k"),
+        ("nvme.smart.temperature-sensor-3-kelvin", "temp-sensor-3-k"),
+        ("nvme.smart.temperature-sensor-4-kelvin", "temp-sensor-4-k"),
+        ("nvme.smart.temperature-sensor-5-kelvin", "temp-sensor-5-k"),
+        ("nvme.smart.temperature-sensor-6-kelvin", "temp-sensor-6-k"),
+        ("nvme.smart.temperature-sensor-7-kelvin", "temp-sensor-7-k"),
+        ("nvme.smart.temperature-sensor-8-kelvin", "temp-sensor-8-k"),
+        (
+            "nvme.smart.thermal-temp1-transition-count",
+            "thermal-temp1-transitions",
+        ),
+        (
+            "nvme.smart.thermal-temp2-transition-count",
+            "thermal-temp2-transitions",
+        ),
+        (
+            "nvme.smart.thermal-temp1-total-time",
+            "thermal-temp1-total-time",
+        ),
+        (
+            "nvme.smart.thermal-temp2-total-time",
+            "thermal-temp2-total-time",
+        ),
         ("lsblk.type", "lsblk-type"),
         ("lsblk.logical-sector-size", "logical-sector"),
         ("lsblk.physical-sector-size", "physical-sector"),
@@ -6603,6 +6641,10 @@ mod tests {
                 .with_property("nvme.id-ctrl.ssvid", "5197")
                 .with_property("nvme.id-ctrl.mdts", "9")
                 .with_property("nvme.id-ctrl.controller-type", "1")
+                .with_property("nvme.id-ctrl.warning-composite-temp", "343")
+                .with_property("nvme.id-ctrl.critical-composite-temp", "353")
+                .with_property("nvme.id-ctrl.minimum-thermal-management-temp", "273")
+                .with_property("nvme.id-ctrl.maximum-thermal-management-temp", "358")
                 .with_property("nvme.id-ctrl.total-nvm-capacity", "1000000000")
                 .with_property("nvme.id-ctrl.unallocated-nvm-capacity", "500000000")
                 .with_property("nvme.id-ctrl.namespace-count", "16")
@@ -6621,7 +6663,13 @@ mod tests {
                 .with_property("nvme.smart.media-errors", "0")
                 .with_property("nvme.smart.error-log-entries", "4")
                 .with_property("nvme.smart.temperature-sensor-1-kelvin", "300")
-                .with_property("nvme.smart.temperature-sensor-2-kelvin", "302"),
+                .with_property("nvme.smart.temperature-sensor-2-kelvin", "302")
+                .with_property("nvme.smart.temperature-sensor-3-kelvin", "303")
+                .with_property("nvme.smart.temperature-sensor-4-kelvin", "304")
+                .with_property("nvme.smart.thermal-temp1-transition-count", "5")
+                .with_property("nvme.smart.thermal-temp2-transition-count", "6")
+                .with_property("nvme.smart.thermal-temp1-total-time", "70")
+                .with_property("nvme.smart.thermal-temp2-total-time", "80"),
         );
         graph.add_node(
             Node::new(
@@ -6688,6 +6736,9 @@ mod tests {
         assert!(output.contains("nvme0"));
         assert!(output.contains("nqn.2014-08.org.nvmexpress:uuid:12345678"));
         assert!(output.contains("vid=5197 ssvid=5197 mdts=9 controller-type=1"));
+        assert!(output.contains(
+            "warning-composite-temp=343 critical-composite-temp=353 min-thermal-management-temp=273 max-thermal-management-temp=358"
+        ));
         assert!(
             output.contains("total-nvm-capacity=1000000000 unallocated-nvm-capacity=500000000")
         );
@@ -6700,6 +6751,10 @@ mod tests {
         assert!(output.contains("data-units-written=654321"));
         assert!(output.contains("power-on-hours=1200 unsafe-shutdowns=3 media-errors=0"));
         assert!(output.contains("error-log-entries=4 temp-sensor-1-k=300 temp-sensor-2-k=302"));
+        assert!(output.contains("temp-sensor-3-k=303 temp-sensor-4-k=304"));
+        assert!(output.contains(
+            "thermal-temp1-transitions=5 thermal-temp2-transitions=6 thermal-temp1-total-time=70 thermal-temp2-total-time=80"
+        ));
         assert!(output.contains("/dev/nvme0n1"));
         assert!(output.contains("SERIAL123"));
         assert!(output.contains("nvme0"));
