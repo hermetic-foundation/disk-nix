@@ -436,6 +436,16 @@ concrete dataset and zvol destroy actions only when the declared `pool/name`
 target is already absent; present targets stay actionable with ZFS metadata
 warnings.
 
+Btrfs qgroup `operation = "rescan"` actions are online read-only refreshes for
+quota hierarchy, referenced/exclusive usage, and limits. Qgroup create,
+destroy, limit, and rescan declarations use the qgroup id as the graph identity
+and the mounted filesystem path as executor context. Current-topology
+comparison suppresses concrete numeric qgroup destroy actions such as `0/257`
+only when that qgroup is already absent; present qgroups stay actionable with
+warnings that include usage, limit, parent, or child metadata when available.
+Logical qgroup names remain actionable unless a graph node actually matches
+them.
+
 Lifecycle objects may use:
 
 - `operation` or `action`: `create`, `format`, `grow`, `shrink`, `check`,
@@ -486,11 +496,12 @@ use this context to build command plans without relying on action-id parsing.
 a `topologyComparison` section to the plan. The comparison matches action
 targets against the storage graph and reports missing targets, current size
 state versus `desiredSize`, filesystem type conflicts, and already-satisfied
-mount, remount, NFS export, iSCSI login, or property updates where the current
-graph has enough data. Remount reconciliation treats declared options as a
-required subset of the current mount options, allowing kernel-added defaults to
-remain. Filesystem and NFS unmount reconciliation treats an absent mountpoint as
-already satisfied and keeps currently mounted targets actionable with a warning.
+mount, remount, NFS export, iSCSI login, Btrfs subvolume or qgroup destroy, or
+property updates where the current graph has enough data. Remount
+reconciliation treats declared options as a required subset of the current
+mount options, allowing kernel-added defaults to remain. Filesystem and NFS
+unmount reconciliation treats an absent mountpoint as already satisfied and
+keeps currently mounted targets actionable with a warning.
 LVM activation/deactivation reconciliation uses `lvm.active` topology metadata
 to suppress already-active `volumes`, `thinPools`, and `lvmSnapshots`
 activation actions and already-inactive deactivation actions, and to warn when

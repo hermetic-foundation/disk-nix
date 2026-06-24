@@ -240,6 +240,8 @@ pub enum TopologyDiagnosticKind {
     FilesystemTypeConflict,
     BtrfsSubvolumeDestroyAlreadySatisfied,
     BtrfsSubvolumeDestroyRequired,
+    BtrfsQgroupDestroyAlreadySatisfied,
+    BtrfsQgroupDestroyRequired,
     BcacheDetachAlreadySatisfied,
     BcacheDetachRequired,
     IscsiLoginAlreadySatisfied,
@@ -780,6 +782,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
+                        | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
                         | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
@@ -1399,6 +1402,7 @@ fn already_satisfied_action_ids(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
+                    | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
                     | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
@@ -1452,6 +1456,9 @@ fn topology_diagnostics_for_action(
             return vec![diagnostic];
         }
         if let Some(diagnostic) = btrfs_subvolume_destroy_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
+        if let Some(diagnostic) = btrfs_qgroup_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
         if let Some(diagnostic) = vdo_destroy_absent_diagnostic(action, &query) {
@@ -1517,6 +1524,9 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(btrfs_subvolume_destroy_present_diagnostic(
         action, node, &query,
     ));
+    diagnostics.extend(btrfs_qgroup_destroy_present_diagnostic(
+        action, node, &query,
+    ));
     diagnostics.extend(dm_map_present_diagnostic(action, node, &query));
     diagnostics.extend(multipath_present_diagnostic(action, node, &query));
     diagnostics.extend(loop_present_diagnostic(action, node, &query));
@@ -1546,6 +1556,15 @@ fn topology_query(action: &PlannedAction) -> Option<String> {
             .clone()
             .or_else(|| action.context.target.clone())
             .or_else(|| action.context.name.clone());
+    }
+
+    if action.context.collection.as_deref() == Some("btrfsQgroups") {
+        return action
+            .context
+            .name
+            .clone()
+            .or_else(|| action.context.target.clone())
+            .or_else(|| action.context.device.clone());
     }
 
     action
@@ -2049,6 +2068,94 @@ fn btrfs_subvolume_destroy_details(node: &Node) -> Vec<String> {
 
 fn is_concrete_btrfs_subvolume_target(query: &str) -> bool {
     query.starts_with('/')
+}
+
+fn btrfs_qgroup_destroy_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("btrfsQgroups")
+        || action.operation != Operation::Destroy
+        || !is_concrete_btrfs_qgroup_target(query)
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("Btrfs qgroup {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn btrfs_qgroup_destroy_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("btrfsQgroups")
+        || action.operation != Operation::Destroy
+        || node.kind != NodeKind::BtrfsQgroup
+    {
+        return None;
+    }
+
+    let details = btrfs_qgroup_destroy_details(node);
+    let message = if details.is_empty() {
+        format!("Btrfs qgroup {query} is still present")
+    } else {
+        format!(
+            "Btrfs qgroup {query} is still present with {}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::BtrfsQgroupDestroyRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn btrfs_qgroup_destroy_details(node: &Node) -> Vec<String> {
+    let mut details = [
+        ("btrfs.qgroup-id", "qgroup id"),
+        ("btrfs.max-referenced", "max referenced"),
+        ("btrfs.max-exclusive", "max exclusive"),
+        ("btrfs.qgroup-parents", "parents"),
+        ("btrfs.qgroup-children", "children"),
+    ]
+    .into_iter()
+    .filter_map(|(property, label)| {
+        property_value_from_node(node, property).map(|value| format!("{label} {value}"))
+    })
+    .collect::<Vec<_>>();
+
+    if let Some(used_bytes) = node.usage.as_ref().and_then(|usage| usage.used_bytes) {
+        details.push(format!("referenced {used_bytes} bytes"));
+    }
+    if let Some(allocated_bytes) = node.usage.as_ref().and_then(|usage| usage.allocated_bytes) {
+        details.push(format!("exclusive {allocated_bytes} bytes"));
+    }
+
+    details
+}
+
+fn is_concrete_btrfs_qgroup_target(query: &str) -> bool {
+    let Some((level, id)) = query.split_once('/') else {
+        return false;
+    };
+
+    !level.is_empty()
+        && !id.is_empty()
+        && level.chars().all(|character| character.is_ascii_digit())
+        && id.chars().all(|character| character.is_ascii_digit())
 }
 
 fn dm_map_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
@@ -15685,6 +15792,119 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "btrfssubvolumes:old-home:destroy"
                 && diagnostic.kind == TopologyDiagnosticKind::Missing
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_btrfs_qgroup_destroy_when_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsQgroups": {
+                "0/257": {
+                  "destroy": true,
+                  "target": "/mnt/persist"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfsqgroups:0/257:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
+                && diagnostic.query == "0/257"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_btrfs_qgroup_destroy_when_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsQgroups": {
+                "0/257": {
+                  "destroy": true,
+                  "target": "/mnt/persist"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("btrfs-qgroup:fs-uuid:0/257", NodeKind::BtrfsQgroup, "0/257")
+                .with_property("btrfs.qgroup-id", "0/257")
+                .with_property("btrfs.max-referenced", "21474836480")
+                .with_property("btrfs.max-exclusive", "none")
+                .with_property("btrfs.qgroup-parents", "1/0")
+                .with_usage(disk_nix_model::Usage {
+                    used_bytes: Some(10_737_418_240),
+                    free_bytes: None,
+                    allocated_bytes: Some(2_147_483_648),
+                }),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfsqgroups:0/257:destroy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::BtrfsQgroupDestroyRequired
+                && diagnostic.query == "0/257"
+                && diagnostic.message.contains("qgroup id 0/257")
+                && diagnostic.message.contains("max referenced 21474836480")
+                && diagnostic.message.contains("parents 1/0")
+                && diagnostic.message.contains("referenced 10737418240 bytes")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_logical_btrfs_qgroup_destroy_missing() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsQgroups": {
+                "old-qgroup": {
+                  "destroy": true,
+                  "target": "/mnt/persist"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfsqgroups:old-qgroup:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::Missing
+                && diagnostic.query == "old-qgroup"
         }));
     }
 

@@ -1029,9 +1029,13 @@ Btrfs qgroup command plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` for referenced and exclusive
 limit declarations in `btrfsQgroups`. Qgroup `operation = "rescan"` renders
 read-only quota hierarchy, referenced/exclusive usage, limits, and graph
-inspection. Qgroup create, destroy, limit, and rescan plans remain non-ready
-until the mounted filesystem path is declared through `target`, `path`, or
-`mountpoint`.
+inspection. With current-topology probing, concrete numeric qgroup destroy
+actions such as `0/257` are suppressed only when the qgroup is already absent;
+present qgroups stay actionable with warnings that include referenced and
+exclusive usage, limits, parent, or child metadata when available. Logical
+qgroup names remain actionable unless a graph node actually matches them.
+Qgroup create, destroy, limit, and rescan plans remain non-ready until the
+mounted filesystem path is declared through `target`, `path`, or `mountpoint`.
 The capability inventory advertises qgroup create, limit-property updates,
 rescan, and destroy risks so quota lifecycle changes show up in machine-readable
 `capabilities --json` output.
