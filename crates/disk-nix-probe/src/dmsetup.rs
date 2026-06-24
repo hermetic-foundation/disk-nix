@@ -212,6 +212,9 @@ fn add_target_lines(graph: &mut StorageGraph, lines: Vec<DmTargetLine>, namespac
                         node = node.with_property(format!("{prefix}.crypt.{key}"), value);
                     }
                 } else {
+                    for (key, value) in target_payload_properties(&line.target, payload) {
+                        node = node.with_property(format!("{prefix}.{key}"), value);
+                    }
                     node = node.with_property(format!("{prefix}.payload"), payload.clone());
                 }
             }
@@ -238,6 +241,80 @@ fn crypt_table_properties(payload: &str) -> Vec<(String, String)> {
     }
     if fields.len() > 5 {
         properties.push(("options".to_string(), fields[5..].join(" ")));
+    }
+    properties
+}
+
+fn target_payload_properties(target: &str, payload: &str) -> Vec<(String, String)> {
+    let fields = payload.split_whitespace().collect::<Vec<_>>();
+    match target {
+        "linear" => properties_from_fields(&fields, &[("device", 0), ("offset", 1)]),
+        "striped" => striped_properties(&fields),
+        "thin-pool" => properties_from_fields(
+            &fields,
+            &[
+                ("metadata-device", 0),
+                ("data-device", 1),
+                ("data-block-size", 2),
+                ("low-water-mark", 3),
+            ],
+        ),
+        "thin" => properties_from_fields(
+            &fields,
+            &[
+                ("pool-device", 0),
+                ("thin-device-id", 1),
+                ("external-origin-device", 2),
+            ],
+        ),
+        "cache" => properties_from_fields(
+            &fields,
+            &[
+                ("metadata-device", 0),
+                ("cache-device", 1),
+                ("origin-device", 2),
+                ("block-size", 3),
+            ],
+        ),
+        "snapshot" => properties_from_fields(
+            &fields,
+            &[
+                ("origin-device", 0),
+                ("cow-device", 1),
+                ("persistence", 2),
+                ("chunk-size", 3),
+            ],
+        ),
+        "snapshot-origin" | "snapshot-merge" => {
+            properties_from_fields(&fields, &[("origin-device", 0)])
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn properties_from_fields(
+    fields: &[&str],
+    mappings: &[(&'static str, usize)],
+) -> Vec<(String, String)> {
+    mappings
+        .iter()
+        .filter_map(|(key, index)| {
+            fields
+                .get(*index)
+                .map(|value| ((*key).to_string(), (*value).to_string()))
+        })
+        .collect()
+}
+
+fn striped_properties(fields: &[&str]) -> Vec<(String, String)> {
+    let mut properties = properties_from_fields(fields, &[("stripe-count", 0), ("chunk-size", 1)]);
+    for (stripe, pair) in fields.get(2..).unwrap_or_default().chunks(2).enumerate() {
+        if let Some(device) = pair.first() {
+            properties.push((format!("stripe.{stripe}.device"), (*device).to_string()));
+        }
+        if let Some(offset) = pair.get(1) {
+            properties.push((format!("stripe.{stripe}.offset"), (*offset).to_string()));
+        }
     }
     properties
 }
@@ -341,7 +418,49 @@ vg-root: 1 dependencies  : (253, 0) (dm-0)
             .find(|node| node.id.0 == "block:/dev/mapper/vg-root")
             .expect("vg-root should exist");
         assert!(root.properties.iter().any(|property| {
+            property.key == "dm.table.segment.0.device" && property.value == "253:0"
+        }));
+        assert!(root.properties.iter().any(|property| {
+            property.key == "dm.table.segment.0.offset" && property.value == "2048"
+        }));
+        assert!(root.properties.iter().any(|property| {
             property.key == "dm.status.segment.0.payload" && property.value == "A"
+        }));
+
+        let cache = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/mapper/cachevol")
+            .expect("cachevol should exist");
+        assert!(cache.properties.iter().any(|property| {
+            property.key == "dm.table.segment.0.origin-device" && property.value == "253:12"
+        }));
+
+        let thinpool = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/mapper/thinpool")
+            .expect("thinpool should exist");
+        assert!(thinpool.properties.iter().any(|property| {
+            property.key == "dm.table.segment.0.metadata-device" && property.value == "253:5"
+        }));
+
+        let snapshot = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/mapper/snap")
+            .expect("snap should exist");
+        assert!(snapshot.properties.iter().any(|property| {
+            property.key == "dm.table.segment.0.cow-device" && property.value == "253:8"
+        }));
+
+        let striped = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/mapper/striped")
+            .expect("striped should exist");
+        assert!(striped.properties.iter().any(|property| {
+            property.key == "dm.table.segment.0.stripe.1.device" && property.value == "8:2"
         }));
     }
 
@@ -357,6 +476,11 @@ vg-root: 1 dependencies  : (253, 0) (dm-0)
 cryptroot: 0 2097152 crypt aes-xts-plain64 0123456789abcdef 0 259:2 4096
 vg-root: 0 1048576 linear 253:0 2048
 vg-root: 1048576 1048576 linear 259:3 4096
+cachevol: 0 2097152 cache 253:10 253:11 253:12 128 1 writeback
+thinpool: 0 2097152 thin-pool 253:5 253:6 128 1024 1 skip_block_zeroing
+thinvol: 0 1048576 thin 253:20 42
+snap: 0 1048576 snapshot 253:7 253:8 P 8
+striped: 0 2097152 striped 2 128 8:1 0 8:2 0
 "#;
 
     const STATUS: &[u8] = br#"
