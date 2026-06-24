@@ -2056,9 +2056,9 @@ fn property_diagnostic(
 }
 
 fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -> Option<String> {
-    if action.context.collection.as_deref() == Some("vdoVolumes") {
-        let normalized = normalize_storage_property_name(property);
-        let aliases: &[&str] = match normalized.as_str() {
+    let normalized = normalize_storage_property_name(property);
+    let aliases: Option<&[&str]> = match action.context.collection.as_deref() {
+        Some("vdoVolumes") => Some(match normalized.as_str() {
             "writepolicy" | "write-policy" | "vdo-write-policy" => {
                 &["vdo.write-policy", "lvm.vdo-write-policy", property]
             }
@@ -2073,7 +2073,29 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
                 property,
             ],
             _ => &[property],
-        };
+        }),
+        Some("lvmCaches") => Some(match normalized.as_str() {
+            "cachemode" | "cache-mode" | "lvm-cache-mode" => {
+                &["lvm.cache-mode", "lvm.cacheMode", property]
+            }
+            "cachepolicy" | "cache-policy" | "lvm-cache-policy" => {
+                &["lvm.cache-policy", "lvm.cachePolicy", property]
+            }
+            _ => &[property],
+        }),
+        Some("caches") => Some(match normalized.as_str() {
+            "cachemode" | "cache-mode" | "bcache-cache-mode" => {
+                &["bcache.cache-mode", "bcache.cacheMode", property]
+            }
+            "cachepolicy" | "cache-policy" | "bcache-cache-policy" => {
+                &["bcache.cache-policy", "bcache.cachePolicy", property]
+            }
+            _ => &[property],
+        }),
+        _ => None,
+    };
+
+    if let Some(aliases) = aliases {
         return aliases
             .iter()
             .find_map(|alias| property_value_from_node(node, alias).map(str::to_string));
@@ -2083,18 +2105,41 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
 }
 
 fn comparable_property_value(action: &PlannedAction, property: &str, value: &str) -> String {
-    if action.context.collection.as_deref() != Some("vdoVolumes") {
-        return value.to_string();
-    }
-
     let normalized_property = normalize_storage_property_name(property);
     let normalized_value = normalize_storage_property_name(value);
-    match normalized_property.as_str() {
-        "compression" | "vdo-compression" | "deduplication" | "dedupe" | "vdo-deduplication"
-        | "vdo-dedupe" => normalize_vdo_boolean_property_value(&normalized_value)
-            .map(str::to_string)
-            .unwrap_or(normalized_value),
-        "writepolicy" | "write-policy" | "vdo-write-policy" => normalized_value,
+    match action.context.collection.as_deref() {
+        Some("vdoVolumes") => match normalized_property.as_str() {
+            "compression" | "vdo-compression" | "deduplication" | "dedupe"
+            | "vdo-deduplication" | "vdo-dedupe" => {
+                normalize_vdo_boolean_property_value(&normalized_value)
+                    .map(str::to_string)
+                    .unwrap_or(normalized_value)
+            }
+            "writepolicy" | "write-policy" | "vdo-write-policy" => normalized_value,
+            _ => value.to_string(),
+        },
+        Some("lvmCaches" | "caches") => match normalized_property.as_str() {
+            "cachemode"
+            | "cache-mode"
+            | "lvm-cache-mode"
+            | "bcache-cache-mode"
+            | "cachepolicy"
+            | "cache-policy"
+            | "lvm-cache-policy"
+            | "bcache-cache-policy" => {
+                normalize_cache_property_value(&normalized_property, &normalized_value)
+            }
+            _ => value.to_string(),
+        },
+        _ => value.to_string(),
+    }
+}
+
+fn normalize_cache_property_value(property: &str, value: &str) -> String {
+    match property {
+        "cachemode" | "cache-mode" | "lvm-cache-mode" | "bcache-cache-mode" => {
+            value.replace('-', "")
+        }
         _ => value.to_string(),
     }
 }
@@ -18568,6 +18613,49 @@ mod tests {
     }
 
     #[test]
+    fn topology_comparison_reconciles_lvm_cache_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "lvmCaches": {
+                "vg0/root": {
+                  "properties": {
+                    "cacheMode": "write-through",
+                    "cachePolicy": "smq"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lvm-lv:vg0/root", NodeKind::LvmCache, "vg0/root")
+                .with_property("lvm.cache-mode", "writethrough")
+                .with_property("lvm.cache-policy", "smq"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.matched_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lvmCaches:vg0/root:set-property:cacheMode"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lvmCaches:vg0/root:set-property:cachePolicy"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+    }
+
+    #[test]
     fn topology_comparison_keeps_lvm_cache_detach_missing_without_origin() {
         let plan = plan_from_json_bytes(
             br#"{
@@ -20389,6 +20477,44 @@ mod tests {
                 && diagnostic.kind == TopologyDiagnosticKind::BcacheDetachRequired
                 && diagnostic.message.contains("dirty data 64.0M")
                 && diagnostic.message.contains("cache mode writeback")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_bcache_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "caches": {
+                "/dev/bcache0": {
+                  "properties": {
+                    "cacheMode": "write-back"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
+                .with_path("/dev/bcache0")
+                .with_property("bcache.cache-mode", "writeback"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.matched_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "caches:/dev/bcache0:set-property:cacheMode"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
         }));
     }
 
