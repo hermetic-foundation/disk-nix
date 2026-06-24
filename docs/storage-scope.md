@@ -189,8 +189,9 @@ The current probe layer normalizes:
   CHAP method/user hints, session ids, current and persistent session portals,
   target portal group tag, interface identity, connection/session state,
   connection CID/local/peer addresses, negotiated transfer parameters, host
-  state, LUN SCSI coordinates, and attached disk state, enriched with `lsscsi`
-  LUN identity and queue metadata when available
+  state, LUN SCSI coordinates, attached disk path/state, and first-class path
+  identity for attached LUN block devices, enriched with `lsscsi` LUN identity
+  and queue metadata when available
 - NFS server exports through `exportfs -v` and mount metadata through
   `nfsstat -m` for exported paths, clients, exportfs option state, server,
   export, bracketed IPv6 NFS sources, alternate `target from source` records,

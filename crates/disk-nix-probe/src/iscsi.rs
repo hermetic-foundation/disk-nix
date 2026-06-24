@@ -432,6 +432,7 @@ fn add_session(graph: &mut StorageGraph, session: IscsiSession) {
         let mut lun_node = Node::new(lun_id.clone(), NodeKind::Lun, lun.lun.clone());
         if let Some(device) = &lun.attached_device {
             lun_node = lun_node.with_property("iscsi.attached-disk", device.clone());
+            lun_node = lun_node.with_path(device_path(device));
         }
         if let Some(state) = &lun.attached_device_state {
             lun_node = lun_node.with_property("iscsi.attached-disk-state", state.clone());
@@ -462,20 +463,29 @@ fn add_session(graph: &mut StorageGraph, session: IscsiSession) {
         }
 
         if let Some(device) = lun.attached_device {
+            let path = device_path(&device);
             graph.add_node(
                 Node::new(
-                    format!("block:/dev/{device}"),
+                    format!("block:{path}"),
                     NodeKind::PhysicalDisk,
-                    format!("/dev/{device}"),
+                    path.clone(),
                 )
-                .with_path(format!("/dev/{device}")),
+                .with_path(path.clone()),
             );
             graph.add_edge(Edge::new(
                 lun_id,
-                format!("block:/dev/{device}"),
+                format!("block:{path}"),
                 Relationship::Backs,
             ));
         }
+    }
+}
+
+fn device_path(device: &str) -> String {
+    if device.starts_with("/dev/") {
+        device.to_string()
+    } else {
+        format!("/dev/{device}")
     }
 }
 
@@ -765,6 +775,7 @@ Target: iqn.2026-06.example:storage.disk1
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::Lun
                 && node.name == "0"
+                && node.path.as_deref() == Some("/dev/sdb")
                 && node
                     .properties
                     .iter()
@@ -777,12 +788,10 @@ Target: iqn.2026-06.example:storage.disk1
                     property.key == "iscsi.attached-disk-state" && property.value == "running"
                 })
         }));
-        assert!(
-            graph
-                .edges
-                .iter()
-                .any(|edge| edge.relationship == Relationship::Backs)
-        );
+        assert!(graph.edges.iter().any(|edge| edge.from.0
+            == "iscsi-lun:iqn.2026-06.example:storage.disk1:0"
+            && edge.to.0 == "block:/dev/sdb"
+            && edge.relationship == Relationship::Backs));
     }
 
     #[test]
