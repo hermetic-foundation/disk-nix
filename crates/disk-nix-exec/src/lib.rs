@@ -123,6 +123,8 @@ pub struct ToolRequirement {
     pub phases: Vec<ExecutionPhase>,
     pub availability: ToolAvailability,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remediation: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -697,9 +699,109 @@ fn summarize_tool_requirements(
             } else {
                 format!("{} is missing from PATH", requirement.tool)
             };
+            requirement.remediation = tool_remediation(&requirement.tool, available);
             requirement
         })
         .collect()
+}
+
+fn tool_remediation(tool: &str, available: bool) -> Vec<String> {
+    if tool == "disk-nix" {
+        return if available {
+            vec![
+                "disk-nix was found on PATH; keep the configured disk-nix package available to verification commands".to_string(),
+            ]
+        } else {
+            vec![
+                "make the configured disk-nix package available on PATH for verification commands".to_string(),
+                "when using the NixOS module, keep services.disk-nix.package installed in the apply service environment".to_string(),
+            ]
+        };
+    }
+
+    let Some(package) = nix_package_for_tool(tool) else {
+        return vec![format!(
+            "install a package that provides {tool}, then rerun disk-nix apply"
+        )];
+    };
+
+    let package_hint =
+        format!("install a package that provides {tool}; on NixOS this is pkgs.{package}");
+    if available {
+        vec![format!(
+            "{tool} was found on PATH; keep pkgs.{package} available to the disk-nix apply environment"
+        )]
+    } else if disk_nix_default_tool_package(package) {
+        vec![
+            package_hint,
+            format!(
+                "when using the NixOS module, keep pkgs.{package} in services.disk-nix.toolPackages or environment.systemPackages"
+            ),
+        ]
+    } else {
+        vec![package_hint]
+    }
+}
+
+fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
+    match tool {
+        "bcache" | "make-bcache" => Some("bcache-tools"),
+        "bcachefs" | "mkfs.bcachefs" => Some("bcachefs-tools"),
+        "blkid" | "blockdev" | "findmnt" | "losetup" | "mount" | "partprobe" | "swaplabel"
+        | "swapoff" | "swapon" | "umount" | "wipefs" | "zramctl" => Some("util-linux"),
+        "btrfs" | "mkfs.btrfs" => Some("btrfs-progs"),
+        "cryptsetup" => Some("cryptsetup"),
+        "dmsetup" | "fsadm" | "lvchange" | "lvconvert" | "lvcreate" | "lvextend" | "lvreduce"
+        | "lvremove" | "lvrename" | "lvs" | "pvcreate" | "pvremove" | "pvresize" | "pvscan"
+        | "pvs" | "vgcreate" | "vgextend" | "vgremove" | "vgs" => Some("lvm2"),
+        "dumpe2fs" | "e2fsck" | "e2label" | "mkfs.ext2" | "mkfs.ext3" | "mkfs.ext4"
+        | "resize2fs" | "tune2fs" => Some("e2fsprogs"),
+        "exfatlabel" | "fsck.exfat" | "mkfs.exfat" => Some("exfatprogs"),
+        "f2fslabel" | "fsck.f2fs" | "mkfs.f2fs" | "resize.f2fs" => Some("f2fs-tools"),
+        "fatlabel" | "fsck.fat" | "mkfs.fat" | "mkfs.vfat" => Some("dosfstools"),
+        "exportfs" | "mount.nfs" | "mount.nfs4" | "nfsstat" | "showmount" => Some("nfs-utils"),
+        "iscsiadm" => Some("openiscsi"),
+        "lsscsi" => Some("lsscsi"),
+        "mdadm" => Some("mdadm"),
+        "multipath" => Some("multipath-tools"),
+        "mkfs.ntfs" | "ntfsfix" | "ntfsinfo" | "ntfslabel" => Some("ntfs3g"),
+        "nvme" => Some("nvme-cli"),
+        "parted" => Some("parted"),
+        "smartctl" => Some("smartmontools"),
+        "truncate" => Some("coreutils"),
+        "vdo" | "vdostats" => Some("vdo"),
+        "mkfs.xfs" | "xfs_admin" | "xfs_growfs" | "xfs_info" | "xfs_repair" => Some("xfsprogs"),
+        "zfs" | "zpool" => Some("zfs"),
+        _ => None,
+    }
+}
+
+fn disk_nix_default_tool_package(package: &str) -> bool {
+    matches!(
+        package,
+        "bcache-tools"
+            | "bcachefs-tools"
+            | "btrfs-progs"
+            | "cryptsetup"
+            | "dosfstools"
+            | "e2fsprogs"
+            | "exfatprogs"
+            | "f2fs-tools"
+            | "lvm2"
+            | "lsscsi"
+            | "mdadm"
+            | "multipath-tools"
+            | "nfs-utils"
+            | "ntfs3g"
+            | "nvme-cli"
+            | "openiscsi"
+            | "parted"
+            | "smartmontools"
+            | "util-linux"
+            | "vdo"
+            | "xfsprogs"
+            | "zfs"
+    )
 }
 
 fn register_tool_requirement(
@@ -720,6 +822,7 @@ fn register_tool_requirement(
             phases: Vec::new(),
             availability: ToolAvailability::Missing,
             message: String::new(),
+            remediation: Vec::new(),
         });
     requirement.command_count += 1;
     if command.mutates {
@@ -21169,6 +21272,12 @@ mod tests {
             ToolAvailability::Available
         );
         assert!(exportfs_requirement.message.contains("available"));
+        assert!(
+            exportfs_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.nfs-utils"))
+        );
         assert!(seen.iter().any(|argv| {
             argv == &[
                 "exportfs".to_string(),
@@ -21228,6 +21337,18 @@ mod tests {
             .expect("exportfs tool requirement is reported");
         assert_eq!(exportfs_requirement.availability, ToolAvailability::Missing);
         assert!(exportfs_requirement.message.contains("missing"));
+        assert!(
+            exportfs_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.nfs-utils"))
+        );
+        assert!(
+            exportfs_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("services.disk-nix.toolPackages"))
+        );
         assert!(
             report
                 .recovery_actions

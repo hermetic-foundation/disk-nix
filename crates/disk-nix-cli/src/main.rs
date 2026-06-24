@@ -2571,6 +2571,9 @@ fn print_execution_report(
                         requirement.availability
                     )?;
                     writeln!(output, "  {}", requirement.message)?;
+                    for remediation in &requirement.remediation {
+                        writeln!(output, "  - {remediation}")?;
+                    }
                 }
             }
             for step in &report.command_plan {
