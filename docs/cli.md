@@ -579,8 +579,10 @@ dirty-data, cache-mode, and cache-set metadata, LUN attach/detach and NVMe
 namespace attach/detach actions are compared with concrete host-visible path
 matches, NFS export actions are compared with
 `nfs.export-client` and `nfs.export-option-*` properties, NFS unexport actions
-are suppressed when the export is absent, VDO start actions are compared with
-`vdo.operating-mode`, VDO stop actions are compared with
+are suppressed when the export is absent, VDO destroy actions are compared
+with current VDO presence plus operating-mode, size, backing-device,
+write-policy, and LVM VDO utilization metadata, VDO start actions are compared
+with `vdo.operating-mode`, VDO stop actions are compared with
 explicitly stopped, not-running, or inactive `vdo.operating-mode` values, MD
 assemble actions are compared with `md.state`, `md.degraded-devices`, and
 `md.failed-devices`, ZFS pool import actions are compared with `zfs.state` and
@@ -591,7 +593,7 @@ available. Safe already-satisfied grow, shrink, device-mapper destroy,
 multipath destroy, bcache detach, iSCSI login/logout, LVM
 activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
 loop create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
-unmount, remount, NFS export/unexport, VDO start, VDO stop, MD assemble, ZFS
+unmount, remount, NFS export/unexport, VDO destroy, VDO start, VDO stop, MD assemble, ZFS
 pool import, and property actions that have no warning diagnostics are
 suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
@@ -600,8 +602,9 @@ inactive LUKS open targets, active LUKS close targets, loop devices mapped to
 different backing files, still-mapped loop detach targets, present
 device-mapper removal targets, present multipath flush targets, absent LUN
 attach paths, visible LUN detach paths, present bcache detach targets, absent
-NVMe namespace attach paths, visible NVMe namespace detach paths, non-normal VDO start
-modes, running VDO stop targets, degraded or failed MD arrays, degraded ZFS
+NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
+destroy targets, non-normal VDO start modes, running VDO stop targets,
+degraded or failed MD arrays, degraded ZFS
 pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
 targets without a logged-in session and logout targets that still have a
@@ -837,7 +840,10 @@ online `vdo growLogical` for `desiredSize`, explicit `vdo growPhysical` for
 existing volumes. With current-topology probing, `vdo start` actions are
 suppressed only when the current operating mode is already `normal`; `vdo stop`
 actions are suppressed only when the current operating mode explicitly reports
-stopped, not-running, or inactive.
+stopped, not-running, or inactive; `vdo remove`/destroy actions are suppressed
+only when the VDO volume is already absent and otherwise warn with available
+operating-mode, logical/physical size, backing-device, write-policy, or LVM VDO
+utilization metadata.
 VDO `operation = "rescan"` renders read-only `vdo status`, `vdostats`, and
 graph inspection commands to refresh status and utilization without changing
 activation state or capacity.

@@ -185,6 +185,10 @@ Examples:
   updates require `auto`, `sync`, or `async`; unsupported properties and
   invalid values are classified as unsupported before execution. Logical VDO
   volume names can declare the concrete VDO name with `target`.
+  Current-topology comparison suppresses VDO destroy actions only when the
+  volume is already absent; present targets remain actionable with warnings
+  that include operating mode, size, backing-device, write-policy, or LVM VDO
+  utilization metadata when available.
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV growth is also online when the volume group has free
   extents; LV removal is destructive because it deletes the volume contents.
@@ -488,10 +492,14 @@ NVMe namespace attach/detach reconciliation suppresses attach actions only
 when the declared namespace path is already visible and suppresses detach
 actions only when the declared namespace path is already absent; opposite
 states stay actionable with a warning.
-VDO start/stop reconciliation uses `vdo.operating-mode` topology metadata to
-suppress start actions only when the volume is already in `normal` mode and
-stop actions only when the mode explicitly reports stopped, not-running, or
-inactive; opposite states stay actionable with a warning.
+VDO destroy reconciliation suppresses removal only when the VDO volume is
+already absent. Present VDO removal targets stay actionable with warnings that
+include available operating-mode, size, backing-device, write-policy, and LVM
+VDO utilization metadata. VDO start/stop reconciliation uses
+`vdo.operating-mode` topology metadata to suppress start actions only when the
+volume is already in `normal` mode and stop actions only when the mode
+explicitly reports stopped, not-running, or inactive; opposite states stay
+actionable with a warning.
 NFS export reconciliation compares the declared client and options against
 `nfs.export-client` and `nfs.export-option-*` topology properties.
 iSCSI session reconciliation checks all matching target and session nodes so an
@@ -502,7 +510,7 @@ present.
 Already-satisfied grow, shrink, device-mapper destroy, multipath destroy,
 bcache detach, iSCSI login/logout, LVM activation/deactivation, LUKS open, loop
 create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
-unmount, remount, NFS export/unexport, VDO start, VDO stop, MD assemble, ZFS
+unmount, remount, NFS export/unexport, VDO destroy, VDO start, VDO stop, MD assemble, ZFS
 pool import, LVM volume-group import/export, and set-property actions with no
 warning diagnostics are
 suppressed from the actionable plan and counted in

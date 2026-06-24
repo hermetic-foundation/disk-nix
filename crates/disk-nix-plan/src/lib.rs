@@ -287,6 +287,8 @@ pub enum TopologyDiagnosticKind {
     NfsUnexportRequired,
     PropertyAlreadySatisfied,
     PropertyDiffers,
+    VdoDestroyAlreadySatisfied,
+    VdoDestroyRequired,
     VdoStartAlreadySatisfied,
     VdoStartRequired,
     VdoStopAlreadySatisfied,
@@ -797,6 +799,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                         | TopologyDiagnosticKind::NfsUnexportAlreadySatisfied
                         | TopologyDiagnosticKind::PropertyAlreadySatisfied
+                        | TopologyDiagnosticKind::VdoDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStartAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStopAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
@@ -1413,6 +1416,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                     | TopologyDiagnosticKind::NfsUnexportAlreadySatisfied
                     | TopologyDiagnosticKind::PropertyAlreadySatisfied
+                    | TopologyDiagnosticKind::VdoDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStartAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStopAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
@@ -1437,6 +1441,9 @@ fn topology_diagnostics_for_action(
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
         if let Some(diagnostic) = bcache_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
+        if let Some(diagnostic) = vdo_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
         if let Some(diagnostic) = dm_map_absent_diagnostic(action, &query) {
@@ -1503,6 +1510,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(nfs_export_diagnostic(action, node, &query));
     diagnostics.extend(nfs_unexport_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
+    diagnostics.extend(vdo_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(vdo_start_diagnostic(action, node, &query));
     diagnostics.extend(vdo_stop_diagnostic(action, node, &query));
     diagnostics.extend(zfs_pool_import_diagnostic(action, node, &query));
@@ -2350,6 +2358,78 @@ fn nfs_unexport_diagnostic(
         message: format!("NFS export {query} is currently published"),
         current: Some(current_node_summary(node)),
     })
+}
+
+fn vdo_destroy_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Destroy
+        || action.context.collection.as_deref() != Some("vdoVolumes")
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::VdoDestroyAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("VDO volume {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn vdo_destroy_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Destroy
+        || action.context.collection.as_deref() != Some("vdoVolumes")
+    {
+        return None;
+    }
+
+    let details = vdo_destroy_details(node);
+    let message = if details.is_empty() {
+        format!("VDO volume {query} is still present")
+    } else {
+        format!(
+            "VDO volume {query} is still present with {}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::VdoDestroyRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn vdo_destroy_details(node: &Node) -> Vec<String> {
+    [
+        ("vdo.operating-mode", "operating mode"),
+        ("vdo.logical-size", "logical size"),
+        ("vdo.physical-size", "physical size"),
+        ("vdo.backing-device", "backing device"),
+        ("vdo.write-policy", "write policy"),
+        ("lvm.vdo-operating-mode", "operating mode"),
+        ("lvm.vdo-logical-size", "logical size"),
+        ("lvm.vdo-physical-size", "physical size"),
+        ("lvm.vdo-used", "used"),
+        ("lvm.vdo-saving-percent", "saving"),
+        ("lvm.vdo-write-policy", "write policy"),
+    ]
+    .into_iter()
+    .filter_map(|(property, label)| {
+        property_value_from_node(node, property).map(|value| format!("{label} {value}"))
+    })
+    .collect()
 }
 
 fn vdo_start_diagnostic(
@@ -14559,6 +14639,115 @@ mod tests {
             diagnostic.action_id == "vdovolumes:archive:stop"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::VdoStopRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_vdo_destroy_when_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:archive:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::VdoDestroyAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_vdo_destroy_when_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_path("/dev/mapper/archive")
+                .with_property("vdo.operating-mode", "normal")
+                .with_property("vdo.logical-size", "4TiB")
+                .with_property("vdo.physical-size", "1TiB")
+                .with_property("vdo.write-policy", "sync"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:archive:destroy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::VdoDestroyRequired
+                && diagnostic.message.contains("operating mode normal")
+                && diagnostic.message.contains("logical size 4TiB")
+                && diagnostic.message.contains("write policy sync")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reports_lvm_vdo_destroy_metadata() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "vg0/archive": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lvm:vg0/archive", NodeKind::VdoVolume, "vg0/archive")
+                .with_property("lvm.vdo-operating-mode", "normal")
+                .with_property("lvm.vdo-used", "128.00m")
+                .with_property("lvm.vdo-saving-percent", "72.50"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:vg0/archive:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::VdoDestroyRequired
+                && diagnostic.message.contains("used 128.00m")
+                && diagnostic.message.contains("saving 72.50")
         }));
     }
 
