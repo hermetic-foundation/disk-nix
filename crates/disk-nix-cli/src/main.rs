@@ -2614,7 +2614,7 @@ fn is_loop_node(node: &Node) -> bool {
 fn is_swap_node(node: &Node) -> bool {
     node.kind == NodeKind::Swap
         || node.kind == NodeKind::ZramDevice
-        || property_value(node, "zram.swap").as_deref() == Some("true")
+        || property_value(node, "zram.swap") == Some("true")
         || node
             .properties
             .iter()

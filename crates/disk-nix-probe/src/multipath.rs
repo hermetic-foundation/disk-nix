@@ -26,6 +26,14 @@ struct MultipathPath {
     state: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MultipathHeader {
+    name: String,
+    wwid: Option<String>,
+    dm_name: Option<String>,
+    vendor_product: Option<String>,
+}
+
 pub fn normalize_multipath_output(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
     let maps = parse_maps(bytes)?;
     let mut graph = StorageGraph::empty();
@@ -51,15 +59,15 @@ fn parse_maps(bytes: &[u8]) -> Result<Vec<MultipathMap>, ProbeError> {
             continue;
         }
 
-        if let Some((name, wwid, dm_name, vendor_product)) = parse_header(trimmed) {
+        if let Some(header) = parse_header(trimmed) {
             if let Some(map) = current.take() {
                 maps.push(map);
             }
             current = Some(MultipathMap {
-                name,
-                wwid,
-                dm_name,
-                vendor_product,
+                name: header.name,
+                wwid: header.wwid,
+                dm_name: header.dm_name,
+                vendor_product: header.vendor_product,
                 size: None,
                 features: None,
                 hwhandler: None,
@@ -158,7 +166,7 @@ fn add_map(graph: &mut StorageGraph, map: MultipathMap) {
     }
 }
 
-fn parse_header(line: &str) -> Option<(String, Option<String>, Option<String>, Option<String>)> {
+fn parse_header(line: &str) -> Option<MultipathHeader> {
     let first = line.split_whitespace().next()?;
     if !line.contains("dm-") || first.contains('=') {
         return None;
@@ -179,7 +187,12 @@ fn parse_header(line: &str) -> Option<(String, Option<String>, Option<String>, O
         .map(|(_, rest)| rest.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    Some((name, wwid, dm_name, vendor_product))
+    Some(MultipathHeader {
+        name,
+        wwid,
+        dm_name,
+        vendor_product,
+    })
 }
 
 fn parse_properties(map: &mut MultipathMap, line: &str) {
