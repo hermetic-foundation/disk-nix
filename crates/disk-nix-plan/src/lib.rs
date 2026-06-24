@@ -4219,6 +4219,7 @@ fn vdo_destroy_details(node: &Node) -> Vec<String> {
         ("vdo.operating-mode", "operating mode"),
         ("vdo.logical-size", "logical size"),
         ("vdo.physical-size", "physical size"),
+        ("vdo.storage-device", "backing device"),
         ("vdo.backing-device", "backing device"),
         ("vdo.write-policy", "write policy"),
         ("lvm.vdo-operating-mode", "operating mode"),
@@ -17791,6 +17792,7 @@ mod tests {
             Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
                 .with_path("/dev/mapper/archive")
                 .with_property("vdo.operating-mode", "normal")
+                .with_property("vdo.storage-device", "/dev/sdb")
                 .with_property("vdo.logical-size", "4TiB")
                 .with_property("vdo.physical-size", "1TiB")
                 .with_property("vdo.write-policy", "sync"),
@@ -17811,6 +17813,7 @@ mod tests {
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::VdoDestroyRequired
                 && diagnostic.message.contains("operating mode normal")
+                && diagnostic.message.contains("backing device /dev/sdb")
                 && diagnostic.message.contains("logical size 4TiB")
                 && diagnostic.message.contains("write policy sync")
         }));
