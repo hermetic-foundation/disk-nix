@@ -210,8 +210,11 @@ Use these commands for:
   devices, zram, and swap, including model/vendor, transport, rotational, NVMe
   model/firmware/namespace
   geometry, SCSI host/channel/target/LUN address, generic device, transport,
-  LU/WWN identity, queue state, SMART health, temperature, power-on, capacity,
-  sector, and ATA reallocation/pending-sector counters, `lsblk` sector/I/O
+  LU/WWN identity, queue state, SMART health, smartctl provenance,
+  self-test/offline collection state, temperature, power-on, capacity,
+  sector, SCSI grown-defect counts, and ATA reallocation/pending-sector/
+  offline-uncorrectable raw, normalized, worst, threshold, and failure fields,
+  `lsblk` sector/I/O
   alignment, discard, scheduler, zoned-device, DAX, and hotplug metadata,
   partition table/number,
   filesystem type, zram compression/memory accounting, loop
