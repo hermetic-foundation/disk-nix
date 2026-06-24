@@ -1918,13 +1918,14 @@ fn print_lvm(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
 fn print_vdo(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
-        "{:<22} {:<38} {:>12} {:>12} {:<12} {:<12} DETAILS",
-        "KIND", "NAME", "LOGICAL", "PHYSICAL", "MODE", "WRITE"
+        "{:<22} {:<38} {:>12} {:>12} {:>12} {:>12} {:>7} {:<12} {:<12} DETAILS",
+        "KIND", "NAME", "LOGICAL", "PHYSICAL", "USED", "FREE", "USE%", "MODE", "WRITE"
     )?;
     for node in graph.nodes.iter().filter(|node| is_vdo_node(node)) {
+        let usage = node.usage.as_ref();
         writeln!(
             output,
-            "{:<22} {:<38} {:>12} {:>12} {:<12} {:<12} {}",
+            "{:<22} {:<38} {:>12} {:>12} {:>12} {:>12} {:>7} {:<12} {:<12} {}",
             node.kind,
             node.name,
             property_value(node, "vdo.logical-size")
@@ -1933,6 +1934,9 @@ fn print_vdo(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
             property_value(node, "vdo.physical-size")
                 .or_else(|| property_value(node, "lvm.vdo-physical-size"))
                 .unwrap_or("-"),
+            human_bytes(usage.and_then(|usage| usage.used_bytes)),
+            human_bytes(usage.and_then(|usage| usage.free_bytes)),
+            usage_percent(node),
             property_value(node, "vdo.operating-mode")
                 .or_else(|| property_value(node, "lvm.vdo-operating-mode"))
                 .unwrap_or("-"),
@@ -7221,6 +7225,12 @@ mod tests {
         let mut graph = StorageGraph::empty();
         graph.add_node(
             Node::new("vdo:archive", NodeKind::VdoVolume, "archive")
+                .with_size_bytes(1_099_511_627_776)
+                .with_usage(Usage {
+                    used_bytes: Some(268_435_456_000),
+                    free_bytes: Some(805_306_368_000),
+                    allocated_bytes: Some(1_073_741_824_000),
+                })
                 .with_property("vdo.storage-device", "/dev/sdb")
                 .with_property("vdo.logical-size", "1T")
                 .with_property("vdo.physical-size", "250G")
@@ -7269,10 +7279,16 @@ mod tests {
 
         assert!(output.contains("LOGICAL"));
         assert!(output.contains("PHYSICAL"));
+        assert!(output.contains("USED"));
+        assert!(output.contains("FREE"));
+        assert!(output.contains("USE%"));
         assert!(output.contains("WRITE"));
         assert!(output.contains("archive"));
         assert!(output.contains("          1T"));
         assert!(output.contains("        250G"));
+        assert!(output.contains("   250.0 GiB"));
+        assert!(output.contains("   750.0 GiB"));
+        assert!(output.contains("  24.4%"));
         assert!(output.contains("normal"));
         assert!(output.contains("sync"));
         assert!(output.contains("backing=/dev/sdb logical=1T physical=250G"));
