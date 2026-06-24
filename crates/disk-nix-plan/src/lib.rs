@@ -1,4 +1,4 @@
-use disk_nix_model::{Node, NodeKind, StorageGraph};
+use disk_nix_model::{Node, NodeKind, Relationship, StorageGraph};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::{
@@ -206,6 +206,8 @@ pub struct TopologyComparisonSummary {
     pub type_conflict_count: usize,
     pub already_satisfied_count: usize,
     pub suppressed_action_count: usize,
+    #[serde(default)]
+    pub graph_dependency_edge_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -668,6 +670,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
 
 #[must_use]
 pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan {
+    let original_action_count = plan.actions.len();
     let diagnostics: Vec<TopologyDiagnostic> = plan
         .actions
         .iter()
@@ -677,8 +680,17 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
     let suppressed_action_ids = already_satisfied_action_ids(&plan.actions, &diagnostics);
     let suppressed_action_count = suppressed_action_ids.len();
 
+    if suppressed_action_count > 0 {
+        plan.actions
+            .retain(|action| !suppressed_action_ids.contains(&action.id));
+        plan.summary = plan_summary(&plan.actions);
+    }
+    let graph_edges = graph_dependency_edges_for_actions(&plan.actions, graph);
+    let graph_dependency_edge_count = graph_edges.graph_edges.len();
+    plan.dependency_order = dependency_order_for_actions_with_edges(&plan.actions, graph_edges);
+
     let summary = TopologyComparisonSummary {
-        action_count: plan.actions.len(),
+        action_count: original_action_count,
         matched_count: diagnostics
             .iter()
             .filter(|diagnostic| diagnostic.kind == TopologyDiagnosticKind::Matched)
@@ -713,14 +725,8 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
             })
             .count(),
         suppressed_action_count,
+        graph_dependency_edge_count,
     };
-
-    if suppressed_action_count > 0 {
-        plan.actions
-            .retain(|action| !suppressed_action_ids.contains(&action.id));
-        plan.summary = plan_summary(&plan.actions);
-    }
-    plan.dependency_order = dependency_order_for_actions(&plan.actions);
 
     plan.topology_comparison = Some(TopologyComparison {
         summary,
@@ -746,6 +752,13 @@ fn action_order_key(action: &PlannedAction) -> (u16, u16) {
 
 fn dependency_order_for_actions(actions: &[PlannedAction]) -> Vec<ActionDependencyOrder> {
     let edges = dependency_edges_for_actions(actions);
+    dependency_order_for_actions_with_edges(actions, edges)
+}
+
+fn dependency_order_for_actions_with_edges(
+    actions: &[PlannedAction],
+    edges: DependencyEdges,
+) -> Vec<ActionDependencyOrder> {
     actions
         .iter()
         .map(|action| {
@@ -778,6 +791,7 @@ fn dependency_order_for_actions(actions: &[PlannedAction]) -> Vec<ActionDependen
 struct DependencyEdges {
     depends_on: BTreeMap<String, Vec<String>>,
     unblocks: BTreeMap<String, Vec<String>>,
+    graph_edges: BTreeSet<(String, String)>,
 }
 
 fn dependency_edges_for_actions(actions: &[PlannedAction]) -> DependencyEdges {
@@ -836,6 +850,92 @@ fn dependency_edges_for_actions(actions: &[PlannedAction]) -> DependencyEdges {
         }
     }
     edges
+}
+
+fn graph_dependency_edges_for_actions(
+    actions: &[PlannedAction],
+    graph: &StorageGraph,
+) -> DependencyEdges {
+    let mut edges = dependency_edges_for_actions(actions);
+    let matches = graph_action_matches(actions, graph);
+    for edge in &graph.edges {
+        let Some((lower_id, upper_id)) = normalized_storage_edge(edge) else {
+            continue;
+        };
+        for lower_action in actions_for_node(&matches, lower_id) {
+            for upper_action in actions_for_node(&matches, upper_id) {
+                if lower_action.id == upper_action.id {
+                    continue;
+                }
+                let lower_direction = dependency_direction(lower_action.operation);
+                let upper_direction = dependency_direction(upper_action.operation);
+                if lower_direction != upper_direction {
+                    continue;
+                }
+                let (depends_on, action_id) = match lower_direction {
+                    DependencyDirection::LowerLayersFirst => {
+                        (lower_action.id.as_str(), upper_action.id.as_str())
+                    }
+                    DependencyDirection::UpperLayersFirst => {
+                        (upper_action.id.as_str(), lower_action.id.as_str())
+                    }
+                };
+                insert_unique_sorted(&mut edges.depends_on, action_id, depends_on);
+                insert_unique_sorted(&mut edges.unblocks, depends_on, action_id);
+                edges
+                    .graph_edges
+                    .insert((action_id.to_string(), depends_on.to_string()));
+            }
+        }
+    }
+    edges
+}
+
+fn graph_action_matches<'a>(
+    actions: &'a [PlannedAction],
+    graph: &StorageGraph,
+) -> BTreeMap<String, Vec<&'a PlannedAction>> {
+    let mut matches: BTreeMap<String, Vec<&PlannedAction>> = BTreeMap::new();
+    for action in actions {
+        let Some(query) = topology_query(action) else {
+            continue;
+        };
+        for node in graph.find_nodes(&query) {
+            matches.entry(node.id.0.clone()).or_default().push(action);
+        }
+    }
+    matches
+}
+
+fn actions_for_node<'a>(
+    matches: &'a BTreeMap<String, Vec<&'a PlannedAction>>,
+    node_id: &str,
+) -> &'a [&'a PlannedAction] {
+    matches.get(node_id).map(Vec::as_slice).unwrap_or(&[])
+}
+
+fn normalized_storage_edge(edge: &disk_nix_model::Edge) -> Option<(&str, &str)> {
+    match edge.relationship {
+        Relationship::Contains
+        | Relationship::Backs
+        | Relationship::MapsTo
+        | Relationship::MemberOf
+        | Relationship::MountedAt
+        | Relationship::CacheFor
+        | Relationship::ImportedFrom
+        | Relationship::Exports => Some((edge.from.0.as_str(), edge.to.0.as_str())),
+        Relationship::SnapshotOf | Relationship::DependsOn => {
+            Some((edge.to.0.as_str(), edge.from.0.as_str()))
+        }
+    }
+}
+
+fn dependency_direction(operation: Operation) -> DependencyDirection {
+    if operation_runs_upper_layers_first(operation) {
+        DependencyDirection::UpperLayersFirst
+    } else {
+        DependencyDirection::LowerLayersFirst
+    }
 }
 
 fn action_dependency_inputs(action: &PlannedAction) -> BTreeSet<String> {
@@ -975,12 +1075,42 @@ fn dependency_order_notes(
             "explicit dependency edge requires {} before this action",
             depends_on.join(", ")
         ));
+        let graph_depends_on: Vec<&str> = depends_on
+            .iter()
+            .filter(|depends_on| {
+                edges
+                    .graph_edges
+                    .contains(&(action.id.clone(), (*depends_on).clone()))
+            })
+            .map(String::as_str)
+            .collect();
+        if !graph_depends_on.is_empty() {
+            notes.push(format!(
+                "current topology graph edge requires {} before this action",
+                graph_depends_on.join(", ")
+            ));
+        }
     }
     if let Some(unblocks) = edges.unblocks.get(&action.id) {
         notes.push(format!(
             "this action unblocks explicit dependent action(s): {}",
             unblocks.join(", ")
         ));
+        let graph_unblocks: Vec<&str> = unblocks
+            .iter()
+            .filter(|unblocks| {
+                edges
+                    .graph_edges
+                    .contains(&((*unblocks).clone(), action.id.clone()))
+            })
+            .map(String::as_str)
+            .collect();
+        if !graph_unblocks.is_empty() {
+            notes.push(format!(
+                "current topology graph edge shows this action unblocks {}",
+                graph_unblocks.join(", ")
+            ));
+        }
     }
     notes
 }
@@ -11885,6 +12015,260 @@ mod tests {
             diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
                 && diagnostic.action_id == "datasets:tank/home:set-property:compression"
         }));
+    }
+
+    #[test]
+    fn topology_comparison_adds_graph_dependency_edges_for_layered_growth() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luns": {
+                "/dev/disk/by-path/ip-192.0.2.10-lun-0": {
+                  "operation": "grow",
+                  "desiredSize": "200GiB"
+                }
+              },
+              "multipathMaps": {
+                "mpatha": {
+                  "operation": "grow",
+                  "target": "/dev/mapper/mpatha",
+                  "desiredSize": "200GiB"
+                }
+              },
+              "partitions": {
+                "root": {
+                  "operation": "grow",
+                  "target": "/dev/mapper/mpatha-part1",
+                  "desiredSize": "200GiB"
+                }
+              },
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "operation": "grow",
+                    "device": "/dev/mapper/mpatha-part1",
+                    "target": "cryptroot",
+                    "desiredSize": "200GiB"
+                  }
+                }
+              },
+              "volumes": {
+                "vg0/root": {
+                  "operation": "grow",
+                  "desiredSize": "200GiB"
+                }
+              },
+              "filesystems": {
+                "root": {
+                  "operation": "grow",
+                  "device": "vg0/root",
+                  "resizePolicy": "grow-only",
+                  "desiredSize": "200GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "lun:0",
+                NodeKind::Lun,
+                "/dev/disk/by-path/ip-192.0.2.10-lun-0",
+            )
+            .with_path("/dev/disk/by-path/ip-192.0.2.10-lun-0"),
+        );
+        graph.add_node(
+            Node::new("multipath:mpatha", NodeKind::MultipathDevice, "mpatha")
+                .with_path("/dev/mapper/mpatha"),
+        );
+        graph.add_node(
+            Node::new(
+                "partition:/dev/mapper/mpatha-part1",
+                NodeKind::Partition,
+                "/dev/mapper/mpatha-part1",
+            )
+            .with_path("/dev/mapper/mpatha-part1"),
+        );
+        graph.add_node(Node::new(
+            "luks:cryptroot",
+            NodeKind::LuksContainer,
+            "cryptroot",
+        ));
+        graph.add_node(Node::new(
+            "lvm:lv:vg0/root",
+            NodeKind::LvmLogicalVolume,
+            "vg0/root",
+        ));
+        graph.add_node(Node::new("filesystem:root", NodeKind::Filesystem, "root"));
+        graph.add_edge(disk_nix_model::Edge::new(
+            "lun:0",
+            "multipath:mpatha",
+            Relationship::Backs,
+        ));
+        graph.add_edge(disk_nix_model::Edge::new(
+            "multipath:mpatha",
+            "partition:/dev/mapper/mpatha-part1",
+            Relationship::Contains,
+        ));
+        graph.add_edge(disk_nix_model::Edge::new(
+            "partition:/dev/mapper/mpatha-part1",
+            "luks:cryptroot",
+            Relationship::Backs,
+        ));
+        graph.add_edge(disk_nix_model::Edge::new(
+            "luks:cryptroot",
+            "lvm:lv:vg0/root",
+            Relationship::Backs,
+        ));
+        graph.add_edge(disk_nix_model::Edge::new(
+            "lvm:lv:vg0/root",
+            "filesystem:root",
+            Relationship::Backs,
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.graph_dependency_edge_count, 5);
+        let filesystem = plan
+            .dependency_order
+            .iter()
+            .find(|order| order.action_id == "filesystem:root:grow")
+            .expect("filesystem dependency order exists");
+        assert!(
+            filesystem
+                .depends_on
+                .contains(&"volumes:vg0/root:grow".to_string())
+        );
+        assert!(filesystem.notes.iter().any(|note| {
+            note.contains("current topology graph edge requires volumes:vg0/root:grow")
+        }));
+        let lun = plan
+            .dependency_order
+            .iter()
+            .find(|order| order.action_id == "luns:/dev/disk/by-path/ip-192.0.2.10-lun-0:grow")
+            .expect("lun dependency order exists");
+        assert_eq!(lun.unblocks, vec!["multipathmaps:mpatha:grow".to_string()]);
+        assert!(lun.notes.iter().any(|note| {
+            note.contains("current topology graph edge shows this action unblocks")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reverses_graph_dependency_edges_for_teardown() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "root": {
+                  "operation": "unmount",
+                  "device": "/dev/mapper/cryptroot",
+                  "mountpoint": "/"
+                }
+              },
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "operation": "close",
+                    "device": "/dev/disk/by-partuuid/root",
+                    "target": "cryptroot"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("luks:cryptroot", NodeKind::LuksContainer, "cryptroot")
+                .with_path("/dev/mapper/cryptroot"),
+        );
+        graph.add_node(
+            Node::new("filesystem:/", NodeKind::Filesystem, "root")
+                .with_path("/")
+                .with_property("filesystem.type", "xfs"),
+        );
+        graph.add_edge(disk_nix_model::Edge::new(
+            "luks:cryptroot",
+            "filesystem:/",
+            Relationship::Backs,
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+        assert_eq!(comparison.summary.graph_dependency_edge_count, 1);
+
+        let luks = plan
+            .dependency_order
+            .iter()
+            .find(|order| order.action_id == "luks.devices:cryptroot:close")
+            .expect("luks close dependency order exists");
+        assert_eq!(
+            luks.depends_on,
+            vec!["filesystems:root:unmount".to_string()]
+        );
+        assert!(luks.notes.iter().any(|note| {
+            note.contains("current topology graph edge requires filesystems:root:unmount")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_ignores_suppressed_actions_for_graph_edges() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg0/root": {
+                  "operation": "grow",
+                  "desiredSize": "100GiB"
+                }
+              },
+              "filesystems": {
+                "root": {
+                  "operation": "grow",
+                  "device": "vg0/root",
+                  "desiredSize": "100GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lvm:lv:vg0/root", NodeKind::LvmLogicalVolume, "vg0/root")
+                .with_size_bytes(200 * 1024 * 1024 * 1024),
+        );
+        graph.add_node(
+            Node::new("filesystem:root", NodeKind::Filesystem, "root")
+                .with_size_bytes(50 * 1024 * 1024 * 1024),
+        );
+        graph.add_edge(disk_nix_model::Edge::new(
+            "lvm:lv:vg0/root",
+            "filesystem:root",
+            Relationship::Backs,
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.graph_dependency_edge_count, 0);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "volumes:vg0/root:grow")
+        );
+        assert!(
+            plan.dependency_order
+                .iter()
+                .all(|order| order.depends_on.is_empty() && order.unblocks.is_empty())
+        );
     }
 
     #[test]
