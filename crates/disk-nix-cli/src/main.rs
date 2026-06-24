@@ -3203,6 +3203,41 @@ fn usage_details(node: &Node) -> String {
         ("dm.status.segment.0.length", "dm-status-length"),
         ("dm.status.segment.0.target", "dm-status-target"),
         ("dm.status.segment.0.payload", "dm-status-payload"),
+        (
+            "dm.status.segment.0.metadata-used-blocks",
+            "dm-status-metadata-used",
+        ),
+        (
+            "dm.status.segment.0.metadata-total-blocks",
+            "dm-status-metadata-total",
+        ),
+        (
+            "dm.status.segment.0.cache-used-blocks",
+            "dm-status-cache-used",
+        ),
+        (
+            "dm.status.segment.0.cache-total-blocks",
+            "dm-status-cache-total",
+        ),
+        (
+            "dm.status.segment.0.data-used-blocks",
+            "dm-status-data-used",
+        ),
+        (
+            "dm.status.segment.0.data-total-blocks",
+            "dm-status-data-total",
+        ),
+        ("dm.status.segment.0.read-hits", "dm-status-read-hits"),
+        ("dm.status.segment.0.read-misses", "dm-status-read-misses"),
+        ("dm.status.segment.0.write-hits", "dm-status-write-hits"),
+        ("dm.status.segment.0.write-misses", "dm-status-write-misses"),
+        ("dm.status.segment.0.dirty-blocks", "dm-status-dirty"),
+        ("dm.status.segment.0.mode", "dm-status-mode"),
+        ("dm.status.segment.0.used-sectors", "dm-status-used-sectors"),
+        (
+            "dm.status.segment.0.total-sectors",
+            "dm-status-total-sectors",
+        ),
         ("cryptsetup.active", "active"),
         ("cryptsetup.in-use", "in-use"),
         ("cryptsetup.cipher", "cipher"),
@@ -6987,6 +7022,28 @@ mod tests {
             Relationship::Backs,
         ));
         graph.add_node(
+            Node::new(
+                "block:/dev/mapper/cachevol",
+                NodeKind::DeviceMapper,
+                "cachevol",
+            )
+            .with_path("/dev/mapper/cachevol")
+            .with_property("dm.name", "cachevol")
+            .with_property("dm.table.targets", "cache")
+            .with_property("dm.status.targets", "cache")
+            .with_property("dm.status.segment-count", "1")
+            .with_property("dm.status.segment.0.target", "cache")
+            .with_property("dm.status.segment.0.metadata-used-blocks", "64")
+            .with_property("dm.status.segment.0.metadata-total-blocks", "256")
+            .with_property("dm.status.segment.0.cache-used-blocks", "32")
+            .with_property("dm.status.segment.0.cache-total-blocks", "1024")
+            .with_property("dm.status.segment.0.read-hits", "900")
+            .with_property("dm.status.segment.0.read-misses", "100")
+            .with_property("dm.status.segment.0.write-hits", "700")
+            .with_property("dm.status.segment.0.write-misses", "50")
+            .with_property("dm.status.segment.0.dirty-blocks", "4"),
+        );
+        graph.add_node(
             Node::new("multipath:mpatha", NodeKind::MultipathDevice, "mpatha")
                 .with_path("/dev/mapper/mpatha")
                 .with_property("multipath.dm", "dm-2")
@@ -7081,6 +7138,16 @@ mod tests {
         ));
         assert!(output.contains(
             "dm-status-targets=crypt dm-status-segments=1 dm-status-target=crypt dm-status-payload=0 2097152"
+        ));
+        assert!(output.contains("cachevol"));
+        assert!(output.contains(
+            "dm-name=cachevol dm-table-targets=cache dm-status-targets=cache dm-status-segments=1 dm-status-target=cache"
+        ));
+        assert!(output.contains(
+            "dm-status-metadata-used=64 dm-status-metadata-total=256 dm-status-cache-used=32 dm-status-cache-total=1024"
+        ));
+        assert!(output.contains(
+            "dm-status-read-hits=900 dm-status-read-misses=100 dm-status-write-hits=700 dm-status-write-misses=50 dm-status-dirty=4"
         ));
         assert!(
             output.contains(
