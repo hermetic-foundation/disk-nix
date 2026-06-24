@@ -890,6 +890,41 @@
             };
           }
         ];
+        nixosModuleDiskCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              disks."/dev/disk/by-id/nvme-root".operation = "rescan";
+              disks.rootAlias = {
+                path = "/dev/disk/by-id/nvme-root";
+                operation = "grow";
+              };
+            };
+          }
+        ];
+        nixosModulePartitionCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              partitions.root = {
+                device = "/dev/disk/by-id/nvme-root";
+                number = "2";
+                operation = "grow";
+              };
+              partitions.rootAlias = {
+                device = "/dev/disk/by-id/nvme-root";
+                partitionNumber = "2";
+                operation = "rescan";
+              };
+            };
+          }
+        ];
         nixosModuleBackingFileCollisionTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -1042,6 +1077,42 @@
               multipathMaps.primaryPath = {
                 target = "mpatha";
                 operation = "grow";
+              };
+            };
+          }
+        ];
+        nixosModuleNvmeNamespaceCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              nvmeNamespaces.root = {
+                path = "/dev/nvme0";
+                namespaceId = "4";
+                operation = "rescan";
+              };
+              nvmeNamespaces.rootAlias = {
+                target = "/dev/nvme0";
+                nsid = "4";
+                operation = "grow";
+              };
+            };
+          }
+        ];
+        nixosModuleCacheCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              caches."/dev/bcache0".operation = "rescan";
+              caches.writeback = {
+                target = "/dev/bcache0";
+                operation = "add-device";
+                addDevices = [ "cache-set-uuid" ];
               };
             };
           }
@@ -2223,6 +2294,8 @@
               '';
           nixosModuleAssertions = pkgs.runCommand "disk-nix-nixos-module-assertions-check" { } ''
             collisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleCollisionTest.config.system.build.toplevel).success))}
+            diskCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDiskCollisionTest.config.system.build.toplevel).success))}
+            partitionCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModulePartitionCollisionTest.config.system.build.toplevel).success))}
             backingFileCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBackingFileCollisionTest.config.system.build.toplevel).success))}
             btrfsSubvolumeCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBtrfsSubvolumeCollisionTest.config.system.build.toplevel).success))}
             btrfsQgroupCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBtrfsQgroupCollisionTest.config.system.build.toplevel).success))}
@@ -2232,6 +2305,8 @@
             loopDeviceCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLoopDeviceCollisionTest.config.system.build.toplevel).success))}
             mdRaidCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleMdRaidCollisionTest.config.system.build.toplevel).success))}
             multipathMapCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleMultipathMapCollisionTest.config.system.build.toplevel).success))}
+            nvmeNamespaceCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleNvmeNamespaceCollisionTest.config.system.build.toplevel).success))}
+            cacheCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleCacheCollisionTest.config.system.build.toplevel).success))}
             poolCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModulePoolCollisionTest.config.system.build.toplevel).success))}
             datasetCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDatasetCollisionTest.config.system.build.toplevel).success))}
             zvolCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleZvolCollisionTest.config.system.build.toplevel).success))}
@@ -2243,6 +2318,8 @@
             iscsiSessionCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleIscsiSessionCollisionTest.config.system.build.toplevel).success))}
             lunPathCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLunPathCollisionTest.config.system.build.toplevel).success))}
             test "$collisionSuccess" = false
+            test "$diskCollisionSuccess" = false
+            test "$partitionCollisionSuccess" = false
             test "$backingFileCollisionSuccess" = false
             test "$btrfsSubvolumeCollisionSuccess" = false
             test "$btrfsQgroupCollisionSuccess" = false
@@ -2252,6 +2329,8 @@
             test "$loopDeviceCollisionSuccess" = false
             test "$mdRaidCollisionSuccess" = false
             test "$multipathMapCollisionSuccess" = false
+            test "$nvmeNamespaceCollisionSuccess" = false
+            test "$cacheCollisionSuccess" = false
             test "$poolCollisionSuccess" = false
             test "$datasetCollisionSuccess" = false
             test "$zvolCollisionSuccess" = false

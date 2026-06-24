@@ -369,14 +369,15 @@ Typed lifecycle declarations are available for:
 
 Active path-addressed declarations must resolve to unique concrete targets.
 The module rejects duplicate filesystem mountpoints, swap paths, LUKS mapper
-names, backing-file paths, device-mapper `/dev/mapper/*` or `/dev/dm-*`
-targets, `/dev/md*` array targets, Btrfs subvolume paths, Btrfs qgroup/
-filesystem selectors, VDO identities, physical-volume device paths,
-loop-device targets, multipath map identities, concrete snapshot identities,
-LVM volume group identities, LVM logical volume identities, LVM thin pool
-identities, LVM cache identities, pool identities, dataset identities, zvol
-identities, iSCSI target identities, LUN host paths, and NFS export path/client
-pairs before generating an apply plan.
+names, disk device paths, partition selectors, backing-file paths,
+device-mapper `/dev/mapper/*` or `/dev/dm-*` targets, `/dev/md*` array
+targets, Btrfs subvolume paths, Btrfs qgroup/filesystem selectors, VDO
+identities, physical-volume device paths, loop-device targets, multipath map
+identities, concrete snapshot identities, LVM volume group identities, LVM
+logical volume identities, LVM thin pool identities, LVM cache identities,
+cache identities, pool identities, dataset identities, zvol identities, iSCSI
+target identities, NVMe controller/namespace selectors, LUN host paths, and
+NFS export path/client pairs before generating an apply plan.
 
 `volumeGroups.<name>.operation = "import"` and `"export"` render reviewed
 `vgimport <name>` and `vgexport <name>` plans for moving existing VGs without

@@ -1049,6 +1049,9 @@ let
     (map (filesystem: filesystem.mountpoint) (lib.attrValues activeFilesystems))
     ++ (map (mount: mount.mountpoint) (lib.attrValues activeNfsMounts));
   activeSwapDevicePaths = map swapDevicePath (lib.attrValues activeSwaps);
+  activeDisks = activeLifecycleAttrs cfg.disks;
+  activePartitions = activeLifecycleAttrs cfg.partitions;
+  activeNvmeNamespaces = activeLifecycleAttrs cfg.nvmeNamespaces;
   lifecyclePathTarget =
     name: object:
     if object.target != null then
@@ -1062,6 +1065,52 @@ let
     else
       null;
   pathLike = path: lib.hasPrefix "/dev/" path;
+  partitionNumber =
+    partition:
+    if partition.partitionNumber != null then partition.partitionNumber else partition.number;
+  partitionIdentity =
+    name: partition:
+    let
+      path = lifecyclePathTarget name partition;
+      number = partitionNumber partition;
+    in
+    if path != null && pathLike path && path != partition.device then
+      path
+    else if partition.device != null && number != null then
+      "${partition.device}#${number}"
+    else
+      null;
+  nvmeNamespaceController =
+    name: namespace:
+    if namespace.target != null then
+      namespace.target
+    else if namespace.path != null then
+      namespace.path
+    else if namespace.device != null then
+      namespace.device
+    else if lib.hasPrefix "/dev/nvme" name then
+      name
+    else
+      null;
+  nvmeNamespaceId =
+    namespace: if namespace.namespaceId != null then namespace.namespaceId else namespace.nsid;
+  nvmeNamespaceIdentity =
+    name: namespace:
+    let
+      controller = nvmeNamespaceController name namespace;
+      nsid = nvmeNamespaceId namespace;
+    in
+    if controller != null && nsid != null then "${controller} nsid ${nsid}" else null;
+  activeDiskPaths = lib.filter (path: path != null && pathLike path) (
+    lib.mapAttrsToList lifecyclePathTarget activeDisks
+  );
+  activePartitionIdentities = lib.filter (identity: identity != null) (
+    lib.mapAttrsToList partitionIdentity activePartitions
+  );
+  activeNvmeNamespaceIdentities = lib.filter (identity: identity != null) (
+    lib.mapAttrsToList nvmeNamespaceIdentity activeNvmeNamespaces
+  );
+  activeCacheIdentities = lib.mapAttrsToList lifecycleIdentity activeCaches;
   activeBackingFilePaths = lib.filter (path: path != null) (
     lib.mapAttrsToList lifecyclePathTarget activeBackingFiles
   );
@@ -2438,6 +2487,15 @@ in
         message = "services.disk-nix.swaps entries must resolve to unique active swap device paths.";
       }
       {
+        assertion = lib.length activeDiskPaths == lib.length (lib.unique activeDiskPaths);
+        message = "services.disk-nix.disks entries must resolve to unique active concrete device paths.";
+      }
+      {
+        assertion =
+          lib.length activePartitionIdentities == lib.length (lib.unique activePartitionIdentities);
+        message = "services.disk-nix.partitions entries must resolve to unique active concrete partition selectors.";
+      }
+      {
         assertion =
           lib.length activeBtrfsSubvolumePaths == lib.length (lib.unique activeBtrfsSubvolumePaths);
         message = "services.disk-nix.btrfsSubvolumes entries must resolve to unique active concrete subvolume paths.";
@@ -2494,6 +2552,10 @@ in
         message = "services.disk-nix.lvmCaches entries must resolve to unique active concrete cache identities.";
       }
       {
+        assertion = lib.length activeCacheIdentities == lib.length (lib.unique activeCacheIdentities);
+        message = "services.disk-nix.caches entries must resolve to unique active concrete cache identities.";
+      }
+      {
         assertion =
           lib.length activeVdoVolumeIdentities == lib.length (lib.unique activeVdoVolumeIdentities);
         message = "services.disk-nix.vdoVolumes entries must resolve to unique active concrete VDO identities.";
@@ -2515,6 +2577,11 @@ in
         assertion =
           lib.length activeIscsiSessionIdentities == lib.length (lib.unique activeIscsiSessionIdentities);
         message = "services.disk-nix.iscsi.sessions entries must resolve to unique active concrete target identities.";
+      }
+      {
+        assertion =
+          lib.length activeNvmeNamespaceIdentities == lib.length (lib.unique activeNvmeNamespaceIdentities);
+        message = "services.disk-nix.nvmeNamespaces entries must resolve to unique active concrete controller/namespace selectors.";
       }
       {
         assertion = lib.length activeLunHostPaths == lib.length (lib.unique activeLunHostPaths);
