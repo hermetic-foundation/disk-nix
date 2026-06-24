@@ -242,6 +242,8 @@ pub enum TopologyDiagnosticKind {
     IscsiLoginRequired,
     LvmActivateAlreadySatisfied,
     LvmActivateRequired,
+    LvmVgExportAlreadySatisfied,
+    LvmVgExportRequired,
     LvmVgImportAlreadySatisfied,
     LvmVgImportRequired,
     LuksOpenAlreadySatisfied,
@@ -742,6 +744,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                         | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
+                        | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
                         | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
                         | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
@@ -1331,6 +1334,7 @@ fn already_satisfied_action_ids(
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                     | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
+                    | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
                     | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
                     | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
@@ -1384,6 +1388,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
     diagnostics.extend(lvm_activate_diagnostic(action, node, &query));
+    diagnostics.extend(lvm_vg_export_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
     diagnostics.extend(md_assemble_diagnostic(action, node, &query));
@@ -1602,6 +1607,42 @@ fn lvm_vg_import_diagnostic(
             TopologyDiagnosticLevel::Info,
             TopologyDiagnosticKind::LvmVgImportAlreadySatisfied,
             format!("LVM volume group {query} is already imported"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn lvm_vg_export_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Export
+        || action.context.collection.as_deref() != Some("volumeGroups")
+        || node.kind != NodeKind::LvmVolumeGroup
+    {
+        return None;
+    }
+    let exported = lvm_vg_is_exported(node);
+    let (level, kind, message) = if exported {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LvmVgExportAlreadySatisfied,
+            format!("LVM volume group {query} is already exported"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LvmVgExportRequired,
+            format!("LVM volume group {query} is visible but not exported"),
         )
     };
 
@@ -13194,6 +13235,72 @@ mod tests {
             diagnostic.action_id == "volumegroups:vg0:import"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::LvmVgImportRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_exported_lvm_volume_group() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumeGroups": {
+                "vg0": {
+                  "operation": "export"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lvm-vg:vg0", NodeKind::LvmVolumeGroup, "vg0")
+                .with_property("lvm.vg-exported", "exported"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumegroups:vg0:export"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_lvm_volume_group_export_when_imported() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumeGroups": {
+                "vg0": {
+                  "operation": "export"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new("lvm-vg:vg0", NodeKind::LvmVolumeGroup, "vg0"));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumegroups:vg0:export"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmVgExportRequired
         }));
     }
 

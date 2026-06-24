@@ -572,9 +572,10 @@ LVM logical volume and thin-pool command plans require canonical `vg/lv` or
 `vg/pool` targets. Logical declaration names can provide those targets through
 `target` or `path` so command planning stays executable without encoding the
 native LVM name in the Nix attribute key.
-LVM volume group import comparison uses `lvm.vg-exported`: already visible
-volume groups without an exported marker suppress import actions, while
-still-exported volume groups remain planned with a warning.
+LVM volume group import/export comparison uses `lvm.vg-exported`: already
+visible volume groups without an exported marker suppress import actions,
+already-exported volume groups suppress export actions, and opposite-state
+volume groups remain planned with a warning.
 LUKS keyslot and token command plans use explicit `add-key`, `remove-key`,
 `import-token`, and `remove-token` lifecycle declarations for
 `cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and
