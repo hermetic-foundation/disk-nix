@@ -2197,12 +2197,8 @@ fn print_vdo(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
             "{:<22} {:<38} {:>12} {:>12} {:>12} {:>12} {:>7} {:<12} {:<12} {}",
             node.kind,
             node.name,
-            property_value(node, "vdo.logical-size")
-                .or_else(|| property_value(node, "lvm.vdo-logical-size"))
-                .unwrap_or("-"),
-            property_value(node, "vdo.physical-size")
-                .or_else(|| property_value(node, "lvm.vdo-physical-size"))
-                .unwrap_or("-"),
+            vdo_logical_display(node),
+            vdo_physical_display(node),
             human_bytes(usage.and_then(|usage| usage.used_bytes)),
             human_bytes(usage.and_then(|usage| usage.free_bytes)),
             usage_percent(node),
@@ -4697,6 +4693,20 @@ fn property_value<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
         .iter()
         .find(|property| property.key == key)
         .map(|property| property.value.as_str())
+}
+
+fn vdo_logical_display(node: &Node) -> String {
+    property_value(node, "vdo.logical-size")
+        .or_else(|| property_value(node, "lvm.vdo-logical-size"))
+        .map(str::to_string)
+        .unwrap_or_else(|| human_bytes(node.size_bytes))
+}
+
+fn vdo_physical_display(node: &Node) -> String {
+    property_value(node, "vdo.physical-size")
+        .or_else(|| property_value(node, "lvm.vdo-physical-size"))
+        .map(str::to_string)
+        .unwrap_or_else(|| human_bytes(node.usage.as_ref().and_then(|usage| usage.used_bytes)))
 }
 
 fn usage_percent(node: &Node) -> String {
@@ -7778,6 +7788,12 @@ mod tests {
                 NodeKind::LvmSegment,
                 "vg0/archive:0",
             )
+            .with_size_bytes(10 * 1024 * 1024 * 1024)
+            .with_usage(Usage {
+                used_bytes: Some(8 * 1024 * 1024 * 1024),
+                free_bytes: None,
+                allocated_bytes: None,
+            })
             .with_property("lvm.segment-type", "vdo")
             .with_property("lvm.vdo-operating-mode", "normal")
             .with_property("lvm.vdo-compression", "enabled")
@@ -7818,6 +7834,7 @@ mod tests {
         assert!(output.contains("overhead-blocks=4096 overhead-bytes=16777216"));
         assert!(output.contains("logical-blocks=262144 logical-bytes=1073741824"));
         assert!(output.contains("vg0/archive:0"));
+        assert!(output.contains("    10.0 GiB      8.0 GiB      8.0 GiB"));
         assert!(output.contains("vdo-mode=normal"));
         assert!(output.contains("vdo-compression-state=online"));
         assert!(output.contains("vdo-index-state=online"));
