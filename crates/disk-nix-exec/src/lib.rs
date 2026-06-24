@@ -17461,6 +17461,10 @@ mod tests {
                     "operation": "rescan",
                     "path": "/mnt/persist/@inventory"
                   },
+                  "/mnt/persist/@old-name": {
+                    "operation": "rename",
+                    "renameTo": "/mnt/persist/@new-name"
+                  },
                   "/mnt/persist/@old": {
                     "destroy": true,
                     "preserveData": false
@@ -17468,6 +17472,7 @@ mod tests {
                 }
               },
               "apply": {
+                "allowOffline": true,
                 "allowDestructive": true
               }
             }"#,
@@ -17523,6 +17528,20 @@ mod tests {
             step.action_id == "btrfssubvolumes:/mnt/persist/@inventory:rescan"
                 && step.commands.iter().any(|command| {
                     command.argv == ["disk-nix", "inspect", "/mnt/persist/@inventory", "--json"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "btrfssubvolumes:/mnt/persist/@old-name:rename"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mv",
+                            "--",
+                            "/mnt/persist/@old-name",
+                            "/mnt/persist/@new-name",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {

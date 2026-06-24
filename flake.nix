@@ -523,6 +523,10 @@
                 operation = "rescan";
                 path = "/mnt/persist/@inventory";
               };
+              btrfsSubvolumes."/mnt/persist/@old-name" = {
+                operation = "rename";
+                renameTo = "/mnt/persist/@new-name";
+              };
               btrfsQgroups."0/257" = {
                 target = "/mnt/persist";
                 properties.limit = "25GiB";
@@ -1179,8 +1183,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 97
-              and .summary.offlineRequiredCount == 29
+              .summary.actionCount == 98
+              and .summary.offlineRequiredCount == 30
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
               and .summary.unsupportedCount == 0
@@ -1190,6 +1194,7 @@
               and (.actions | any(.id == "filesystems:scratch-remount:remount" and .risk == "online"))
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@home:create" and .risk == "online"))
               and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@inventory:rescan" and .risk == "online"))
+              and (.actions | any(.id == "btrfssubvolumes:/mnt/persist/@old-name:rename" and .risk == "offline-required"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:limit" and .risk == "safe"))
               and (.actions | any(.id == "btrfsQgroups:0/257:set-property:maxExclusive" and .risk == "safe"))
               and (.actions | any(.id == "btrfsqgroups:0/258:rescan" and .risk == "online"))
@@ -1295,14 +1300,15 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 36
-              and .apply.blockedSummary.offlineRequiredCount == 29
+              and .apply.blockedCount == 37
+              and .apply.blockedSummary.offlineRequiredCount == 30
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 4
               and .apply.blockedSummary.unsupportedCount == 0
               and (.apply.blocked | any(.id == "datasets:tank/legacy:rename"))
               and (.apply.blocked | any(.id == "datasets:tank/home-review:promote"))
               and (.apply.blocked | any(.id == "pools:vault:import"))
+              and (.apply.blocked | any(.id == "btrfssubvolumes:/mnt/persist/@old-name:rename"))
               and (.apply.blocked | any(.id == "pools:moveme:export"))
               and (.apply.blocked | any(.id == "volumegroups:importvg:import"))
               and (.apply.blocked | any(.id == "volumegroups:exportvg:export"))
@@ -1325,14 +1331,14 @@
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 36
+              and .apply.blockedCount == 37
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 36
-              and .messages[0] == "apply policy blocked 36 action(s)"
+              and .apply.blockedCount == 37
+              and .messages[0] == "apply policy blocked 37 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -1526,6 +1532,8 @@
                     and .spec.btrfsSubvolumes."/mnt/persist/@home".path == "/mnt/persist/@home"
                     and .spec.btrfsSubvolumes."/mnt/persist/@inventory".operation == "rescan"
                     and .spec.btrfsSubvolumes."/mnt/persist/@inventory".path == "/mnt/persist/@inventory"
+                    and .spec.btrfsSubvolumes."/mnt/persist/@old-name".operation == "rename"
+                    and .spec.btrfsSubvolumes."/mnt/persist/@old-name".renameTo == "/mnt/persist/@new-name"
                     and .spec.btrfsQgroups."0/257".target == "/mnt/persist"
                     and .spec.btrfsQgroups."0/257".properties.limit == "25GiB"
                     and .spec.btrfsQgroups."0/258".operation == "rescan"

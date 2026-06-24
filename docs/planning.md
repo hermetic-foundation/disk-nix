@@ -569,6 +569,9 @@ Btrfs filesystem device topology plans support add, replace, and remove
 operations. Removal stays potential-data-loss, while rebalance plans render
 `btrfs balance start` with optional declared data, metadata, and system filters
 from lifecycle properties.
+Btrfs subvolume rename plans render reviewed `mv -- <old> <new>` commands and
+stay offline-required so mounts, qgroups, snapshots, and send/receive jobs can
+move together without deleting the original subvolume.
 bcachefs filesystem topology plans support add, replace, remove, grow,
 rebalance, and scrub operations. Device growth uses `bcachefs device resize`
 against a declared member device and desired size. Device add/remove uses

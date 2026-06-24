@@ -10141,6 +10141,10 @@ mod tests {
                   "operation": "rescan",
                   "path": "/mnt/persist/@inventory"
                 },
+                "/mnt/persist/@old-name": {
+                  "operation": "rename",
+                  "renameTo": "/mnt/persist/@new-name"
+                },
                 "/mnt/persist/@old": {
                   "destroy": true,
                   "preserveData": false
@@ -10150,7 +10154,8 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 1);
         let create = plan
             .actions
             .iter()
@@ -10173,6 +10178,19 @@ mod tests {
         assert_eq!(
             rescan.context.target.as_deref(),
             Some("/mnt/persist/@inventory")
+        );
+        let rename = plan
+            .actions
+            .iter()
+            .find(|action| {
+                action.id == "btrfsSubvolumes:/mnt/persist/@old-name:rename".to_ascii_lowercase()
+            })
+            .expect("rename action exists");
+        assert_eq!(rename.operation, Operation::Rename);
+        assert_eq!(rename.risk, RiskClass::OfflineRequired);
+        assert_eq!(
+            rename.context.rename_to.as_deref(),
+            Some("/mnt/persist/@new-name")
         );
         let destroy = plan
             .actions

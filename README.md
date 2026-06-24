@@ -320,6 +320,9 @@ selected.
 Btrfs subvolume property updates render read-only toggles with
 `btrfs property set -ts <path> ro true|false`; unsupported Btrfs subvolume
 properties are classified as unsupported with manual-review alternatives.
+Btrfs subvolume renames render reviewed `mv -- <old> <new>` commands and stay
+offline-required so mounts, qgroups, snapshots, and send/receive jobs can move
+together.
 Btrfs subvolume `operation = "rescan"` renders read-only subvolume metadata,
 read-only property, and graph inspection commands for the declared `path`.
 Btrfs qgroup lifecycle plans render `btrfs qgroup create`, policy-gated

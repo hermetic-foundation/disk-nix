@@ -260,6 +260,10 @@
     "/mnt/persist/@inventory": {
       "operation": "rescan",
       "path": "/mnt/persist/@inventory"
+    },
+    "/mnt/persist/@old-name": {
+      "operation": "rename",
+      "renameTo": "/mnt/persist/@new-name"
     }
   },
   "btrfsQgroups": {

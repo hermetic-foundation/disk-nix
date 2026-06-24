@@ -593,6 +593,10 @@ Example lifecycle planning through NixOS options:
       operation = "rescan";
       path = "/mnt/persist/@inventory";
     };
+    btrfsSubvolumes."/mnt/persist/@old-name" = {
+      operation = "rename";
+      renameTo = "/mnt/persist/@new-name";
+    };
     btrfsQgroups."0/257" = {
       path = "/mnt/persist";
       properties.limit = "25GiB";
