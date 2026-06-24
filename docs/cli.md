@@ -973,7 +973,10 @@ LVM physical volume command plans render `pvcreate`, `pvresize`, explicit
 `pvremove` for `physicalVolumes` lifecycle declarations. Create, grow, and
 remove plans require a concrete block-device path such as `/dev/disk/by-id/*`
 from the declaration key, `target`, `path`, or `device`; rescan can refresh all
-visible PV metadata when no path-shaped target is declared.
+visible PV metadata when no path-shaped target is declared. Current-topology
+probing suppresses `operation = "create"` only when the matched target already
+has LVM PV metadata; a matched non-PV device, duplicate PV, or missing PV stays
+actionable with a warning before any destructive `pvcreate` review.
 LUKS keyslot and token command plans render explicit `operation = "add-key"`,
 `operation = "remove-key"`, `operation = "import-token"`, and
 `operation = "remove-token"` declarations as `cryptsetup luksAddKey`,

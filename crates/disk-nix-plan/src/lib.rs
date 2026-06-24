@@ -246,6 +246,8 @@ pub enum TopologyDiagnosticKind {
     BcacheDetachRequired,
     BackingFileCreateAlreadySatisfied,
     BackingFileCreateRequired,
+    LvmPvCreateAlreadySatisfied,
+    LvmPvCreateRequired,
     IscsiLoginAlreadySatisfied,
     IscsiLoginRequired,
     IscsiLogoutAlreadySatisfied,
@@ -802,6 +804,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
+                        | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
@@ -1431,6 +1434,7 @@ fn already_satisfied_action_ids(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
+                    | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
@@ -1567,6 +1571,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(lun_present_diagnostic(action, node, &query));
     diagnostics.extend(lvm_activate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_deactivate_diagnostic(action, node, &query));
+    diagnostics.extend(lvm_pv_create_diagnostic(action, &matches, &query));
     diagnostics.extend(lvm_vg_export_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
     diagnostics.extend(lvm_cache_detach_diagnostic(action, node, &query));
@@ -1865,6 +1870,64 @@ fn lvm_deactivate_diagnostic(
         kind,
         query: query.to_string(),
         message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn lvm_pv_create_diagnostic(
+    action: &PlannedAction,
+    matches: &[&Node],
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Create
+        || action.context.collection.as_deref() != Some("physicalVolumes")
+    {
+        return None;
+    }
+
+    if let Some(pv_node) = matches
+        .iter()
+        .copied()
+        .find(|node| node.kind == NodeKind::LvmPhysicalVolume)
+    {
+        let review_reasons = lvm_pv_review_reasons(pv_node);
+        let (level, kind, message) = if review_reasons.is_empty() {
+            (
+                TopologyDiagnosticLevel::Info,
+                TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied,
+                format!("physical volume {query} already has LVM PV metadata"),
+            )
+        } else {
+            (
+                TopologyDiagnosticLevel::Warning,
+                TopologyDiagnosticKind::LvmPvCreateRequired,
+                format!(
+                    "physical volume {query} already exists, but metadata needs review: {}",
+                    review_reasons.join(", ")
+                ),
+            )
+        };
+
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level,
+            kind,
+            query: query.to_string(),
+            message,
+            current: Some(current_node_summary(pv_node)),
+        });
+    }
+
+    let node = matches[0];
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::LvmPvCreateRequired,
+        query: query.to_string(),
+        message: format!(
+            "matched current {} node {}, but it is not an LVM physical volume; pvcreate would write PV metadata",
+            node.kind, node.name
+        ),
         current: Some(current_node_summary(node)),
     })
 }
@@ -3824,6 +3887,31 @@ fn lvm_vg_is_exported(node: &Node) -> bool {
             || normalized.eq_ignore_ascii_case("yes")
             || normalized == "1"
     })
+}
+
+fn lvm_pv_review_reasons(node: &Node) -> Vec<String> {
+    [
+        ("lvm.pv-missing", "PV is marked missing"),
+        ("lvm.pv-duplicate", "PV is marked duplicate"),
+    ]
+    .iter()
+    .filter_map(|(property, reason)| {
+        property_value_from_node(node, property)
+            .filter(|value| lvm_truthy_or_named_state(value, reason))
+            .map(|value| format!("{reason} ({property}={value})"))
+    })
+    .collect()
+}
+
+fn lvm_truthy_or_named_state(value: &str, reason: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized == "1"
+        || normalized == "true"
+        || normalized == "yes"
+        || normalized
+            == reason
+                .trim_start_matches("PV is marked ")
+                .to_ascii_lowercase()
 }
 
 fn md_state_indicates_active(value: &str) -> bool {
@@ -14658,6 +14746,92 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "backingfiles:/var/lib/images/root.img:grow"
                 && diagnostic.kind == TopologyDiagnosticKind::SizeAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_lvm_physical_volume_create() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "physicalVolumes": {
+                "/dev/disk/by-id/pv-present": {
+                  "operation": "create"
+                },
+                "/dev/disk/by-id/plain-device": {
+                  "operation": "create"
+                },
+                "/dev/disk/by-id/duplicate-pv": {
+                  "operation": "create"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/pv-present",
+                NodeKind::PhysicalDisk,
+                "/dev/disk/by-id/pv-present",
+            )
+            .with_path("/dev/disk/by-id/pv-present"),
+        );
+        graph.add_node(
+            Node::new(
+                "lvm-pv:/dev/disk/by-id/pv-present",
+                NodeKind::LvmPhysicalVolume,
+                "/dev/disk/by-id/pv-present",
+            )
+            .with_path("/dev/disk/by-id/pv-present"),
+        );
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/plain-device",
+                NodeKind::PhysicalDisk,
+                "/dev/disk/by-id/plain-device",
+            )
+            .with_path("/dev/disk/by-id/plain-device"),
+        );
+        graph.add_node(
+            Node::new(
+                "lvm-pv:/dev/disk/by-id/duplicate-pv",
+                NodeKind::LvmPhysicalVolume,
+                "/dev/disk/by-id/duplicate-pv",
+            )
+            .with_path("/dev/disk/by-id/duplicate-pv")
+            .with_property("lvm.pv-duplicate", "duplicate"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.summary.action_count, 2);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| { action.id != "physicalvolumes:/dev/disk/by-id/pv-present:create" })
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "physicalvolumes:/dev/disk/by-id/pv-present:create"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "physicalvolumes:/dev/disk/by-id/plain-device:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmPvCreateRequired
+                && diagnostic.message.contains("not an LVM physical volume")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "physicalvolumes:/dev/disk/by-id/duplicate-pv:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmPvCreateRequired
+                && diagnostic.message.contains("lvm.pv-duplicate=duplicate")
         }));
     }
 

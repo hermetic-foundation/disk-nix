@@ -709,8 +709,11 @@ LVM physical volume command plans use `pvcreate`, `pvresize`,
 `pvscan --cache`, and `pvremove` for `physicalVolumes` lifecycle declarations.
 Create, grow, and remove plans require a concrete path-shaped declaration key,
 `target`, `path`, or `device`; rescan can refresh all visible PV metadata when
-no path-shaped target is declared. PV removal advice recommends `pvmove` plus
-`vgreduce` before `pvremove`.
+no path-shaped target is declared. Current-topology comparison suppresses
+`operation = "create"` only when the matched target already has LVM PV metadata;
+matched non-PV devices, duplicate PVs, and missing PVs remain planned with
+warnings so destructive `pvcreate` is reviewed explicitly. PV removal advice
+recommends `pvmove` plus `vgreduce` before `pvremove`.
 LVM logical volume and thin-pool command plans require canonical `vg/lv` or
 `vg/pool` targets. Logical declaration names can provide those targets through
 `target` or `path` so command planning stays executable without encoding the
