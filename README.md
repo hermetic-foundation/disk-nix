@@ -88,7 +88,9 @@ disk-nix usage
 disk-nix usage --json
 disk-nix inspect /dev/nvme0n1
 disk-nix inspect /
+disk-nix inspect / --depth 3
 disk-nix inspect / --json
+disk-nix inspect / --depth 3 --json
 disk-nix plan --spec ./examples/simple-root.json
 disk-nix plan --spec ./examples/lifecycle-update.json
 disk-nix plan --spec ./examples/simple-root.json --json
@@ -118,11 +120,12 @@ summarizes size, used, free, allocated, utilization, and selected metadata
 details across graph nodes that expose capacity data.
 exFAT probing uses `tune.exfat` and `dump.exfat` to add label, GUID, serial,
 sector, cluster, size, and free-space metadata when exfatprogs is available.
-`inspect` prints matched-node identity, properties, direct relationships, and
+`inspect` prints matched-node identity, properties, relationship context, and
 capacity details including used, free, allocated, and use percentage when
-available. `inspect --json` returns matched nodes plus their direct neighbors
-and relationship edges. `capabilities --json` returns the modeled
-operation/risk matrix.
+available. `inspect --depth N` walks deeper storage relationships for stacked
+devices and filesystems; `inspect --json` returns matched nodes plus neighbors
+within the requested depth and relationship edges. `capabilities --json`
+returns the modeled operation/risk matrix.
 The Nix package installs generated bash, zsh, and fish completions plus a
 `disk-nix(1)` manpage. The `completions` and `manpage` commands can also emit
 those artifacts directly.

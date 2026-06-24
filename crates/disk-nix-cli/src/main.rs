@@ -1,7 +1,7 @@
 #![recursion_limit = "512"]
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, VecDeque},
     fmt,
     io::{self, Write},
     os::unix::fs::PermissionsExt,
@@ -212,7 +212,10 @@ enum Command {
     Inspect {
         /// Query value to inspect.
         query: String,
-        /// Emit JSON for matched nodes and direct relationships.
+        /// Relationship depth to include around matched nodes.
+        #[arg(long, default_value_t = 1)]
+        depth: usize,
+        /// Emit JSON for matched nodes and relationship context.
         #[arg(long)]
         json: bool,
     },
@@ -573,12 +576,12 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             }
             Ok(())
         }
-        Command::Inspect { query, json } => {
+        Command::Inspect { query, depth, json } => {
             let graph = collect_graph()?;
             if json {
-                print_inspect_json(output, &graph, &query)?;
+                print_inspect_json(output, &graph, &query, depth)?;
             } else {
-                print_inspect(output, &graph, &query)?;
+                print_inspect(output, &graph, &query, depth)?;
             }
             Ok(())
         }
@@ -1340,6 +1343,7 @@ fn print_inspect_json(
     output: &mut impl Write,
     graph: &StorageGraph,
     query: &str,
+    depth: usize,
 ) -> Result<(), AppError> {
     let matched_ids: BTreeSet<String> = graph
         .find_nodes(query)
@@ -1347,27 +1351,7 @@ fn print_inspect_json(
         .map(|node| node.id.0.clone())
         .collect();
 
-    let mut node_ids = matched_ids.clone();
-    let edges = graph
-        .edges
-        .iter()
-        .filter(|edge| {
-            matched_ids.contains(edge.from.0.as_str()) || matched_ids.contains(edge.to.0.as_str())
-        })
-        .inspect(|edge| {
-            node_ids.insert(edge.from.0.clone());
-            node_ids.insert(edge.to.0.clone());
-        })
-        .cloned()
-        .collect();
-    let nodes = graph
-        .nodes
-        .iter()
-        .filter(|node| node_ids.contains(node.id.0.as_str()))
-        .cloned()
-        .collect();
-
-    let subgraph = StorageGraph { nodes, edges };
+    let subgraph = relationship_subgraph(graph, &matched_ids, depth);
     writeln!(
         output,
         "{}",
@@ -1376,6 +1360,60 @@ fn print_inspect_json(
             .map_err(|error| AppError::Message(error.to_string()))?
     )?;
     Ok(())
+}
+
+fn relationship_subgraph(
+    graph: &StorageGraph,
+    initial_ids: &BTreeSet<String>,
+    depth: usize,
+) -> StorageGraph {
+    let mut node_ids = initial_ids.clone();
+    let mut edge_indexes = BTreeSet::new();
+    let mut queue = initial_ids
+        .iter()
+        .map(|id| (id.clone(), 0_usize))
+        .collect::<VecDeque<_>>();
+
+    while let Some((node_id, distance)) = queue.pop_front() {
+        if distance >= depth {
+            continue;
+        }
+
+        for (index, edge) in graph.edges.iter().enumerate() {
+            let neighbor = if edge.from.0 == node_id {
+                Some(edge.to.0.as_str())
+            } else if edge.to.0 == node_id {
+                Some(edge.from.0.as_str())
+            } else {
+                None
+            };
+
+            let Some(neighbor) = neighbor else {
+                continue;
+            };
+
+            edge_indexes.insert(index);
+            if node_ids.insert(neighbor.to_string()) {
+                queue.push_back((neighbor.to_string(), distance + 1));
+            }
+        }
+    }
+
+    let nodes = graph
+        .nodes
+        .iter()
+        .filter(|node| node_ids.contains(node.id.0.as_str()))
+        .cloned()
+        .collect();
+    let edges = graph
+        .edges
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| edge_indexes.contains(index))
+        .map(|(_, edge)| edge.clone())
+        .collect();
+
+    StorageGraph { nodes, edges }
 }
 
 fn print_topology_summary(
@@ -1997,7 +2035,12 @@ fn has_identity(node: &Node) -> bool {
     !node.identity.is_empty()
 }
 
-fn print_inspect(output: &mut impl Write, graph: &StorageGraph, query: &str) -> io::Result<()> {
+fn print_inspect(
+    output: &mut impl Write,
+    graph: &StorageGraph,
+    query: &str,
+    depth: usize,
+) -> io::Result<()> {
     let matches = graph.find_nodes(query);
 
     if matches.is_empty() {
@@ -2036,7 +2079,7 @@ fn print_inspect(output: &mut impl Write, graph: &StorageGraph, query: &str) -> 
 
         print_identity(output, node)?;
         print_properties(output, node)?;
-        print_relationships(output, graph, node)?;
+        print_relationships(output, graph, node, depth)?;
     }
 
     Ok(())
@@ -2078,32 +2121,57 @@ fn print_relationships(
     output: &mut impl Write,
     graph: &StorageGraph,
     node: &Node,
+    depth: usize,
 ) -> io::Result<()> {
-    let edges = graph.related_edges(&node.id);
+    let mut initial_ids = BTreeSet::new();
+    initial_ids.insert(node.id.0.clone());
+    let subgraph = relationship_subgraph(graph, &initial_ids, depth);
+    let edges = subgraph.edges.iter().collect::<Vec<_>>();
     if edges.is_empty() {
         return Ok(());
     }
 
     writeln!(output, "  relationships:")?;
     for edge in edges {
-        let direction = if edge.from == node.id { "out" } else { "in" };
-        let other_id = if edge.from == node.id {
-            &edge.to
-        } else {
-            &edge.from
-        };
-        let other_name = graph
-            .nodes
-            .iter()
-            .find(|candidate| &candidate.id == other_id)
-            .map(|candidate| candidate.name.as_str())
-            .unwrap_or(other_id.0.as_str());
+        if depth <= 1 {
+            let direction = if edge.from == node.id { "out" } else { "in" };
+            let other_id = if edge.from == node.id {
+                &edge.to
+            } else {
+                &edge.from
+            };
+            let other_name = graph
+                .nodes
+                .iter()
+                .find(|candidate| &candidate.id == other_id)
+                .map(|candidate| candidate.name.as_str())
+                .unwrap_or(other_id.0.as_str());
 
-        writeln!(
-            output,
-            "    {direction} {} {} ({})",
-            edge.relationship, other_id.0, other_name
-        )?;
+            writeln!(
+                output,
+                "    {direction} {} {} ({})",
+                edge.relationship, other_id.0, other_name
+            )?;
+        } else {
+            let from_name = graph
+                .nodes
+                .iter()
+                .find(|candidate| candidate.id == edge.from)
+                .map(|candidate| candidate.name.as_str())
+                .unwrap_or(edge.from.0.as_str());
+            let to_name = graph
+                .nodes
+                .iter()
+                .find(|candidate| candidate.id == edge.to)
+                .map(|candidate| candidate.name.as_str())
+                .unwrap_or(edge.to.0.as_str());
+
+            writeln!(
+                output,
+                "    {} ({}) {} {} ({})",
+                edge.from.0, from_name, edge.relationship, edge.to.0, to_name
+            )?;
+        }
     }
 
     Ok(())
@@ -3846,11 +3914,11 @@ mod tests {
         is_partition_node, is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node,
         is_volume_node, is_zfs_node, iscsi_lun_count, mount_details, nfs_mount_count, print_cache,
         print_complex_filesystems, print_devices, print_encryption, print_filesystems,
-        print_filtered_json, print_inspect, print_iscsi, print_loop, print_lvm, print_mappings,
-        print_mounts, print_multipath, print_network_storage, print_nfs, print_nvme,
-        print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
-        print_vdo, print_volumes, print_zfs, snapshot_source, usage_details, usage_percent,
-        zfs_child_count,
+        print_filtered_json, print_inspect, print_inspect_json, print_iscsi, print_loop, print_lvm,
+        print_mappings, print_mounts, print_multipath, print_network_storage, print_nfs,
+        print_nvme, print_partitions, print_pools, print_raid, print_snapshots, print_swap,
+        print_usage, print_vdo, print_volumes, print_zfs, snapshot_source, usage_details,
+        usage_percent, zfs_child_count,
     };
 
     #[test]
@@ -4924,7 +4992,7 @@ mod tests {
         ));
 
         let mut output = Vec::new();
-        print_inspect(&mut output, &graph, "archive").expect("inspect renders");
+        print_inspect(&mut output, &graph, "archive", 1).expect("inspect renders");
         let output = String::from_utf8(output).expect("inspect output is utf8");
 
         assert!(output.contains("filesystem /srv/archive"));
@@ -4936,6 +5004,64 @@ mod tests {
         assert!(output.contains("    filesystem.type: xfs"));
         assert!(output.contains("    mount.source: /dev/mapper/archive"));
         assert!(output.contains("    in backs block:/dev/mapper/archive (/dev/mapper/archive)"));
+    }
+
+    #[test]
+    fn inspect_json_depth_walks_layered_relationships() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "block:/dev/nvme0n1p2",
+            NodeKind::Partition,
+            "/dev/nvme0n1p2",
+        ));
+        graph.add_node(Node::new(
+            "block:/dev/mapper/cryptroot",
+            NodeKind::LuksContainer,
+            "cryptroot",
+        ));
+        graph.add_node(Node::new(
+            "lvm-lv:vg/root",
+            NodeKind::LvmLogicalVolume,
+            "vg/root",
+        ));
+        graph.add_node(Node::new("filesystem:/", NodeKind::Filesystem, "/"));
+        graph.add_edge(Edge::new(
+            "block:/dev/nvme0n1p2",
+            "block:/dev/mapper/cryptroot",
+            Relationship::Backs,
+        ));
+        graph.add_edge(Edge::new(
+            "block:/dev/mapper/cryptroot",
+            "lvm-lv:vg/root",
+            Relationship::Backs,
+        ));
+        graph.add_edge(Edge::new(
+            "lvm-lv:vg/root",
+            "filesystem:/",
+            Relationship::Backs,
+        ));
+
+        let mut output = Vec::new();
+        print_inspect_json(&mut output, &graph, "/", 2).expect("inspect json renders");
+        let output = String::from_utf8(output).expect("json is utf8");
+        let graph: StorageGraph = serde_json::from_str(&output).expect("valid storage graph json");
+
+        assert_eq!(graph.nodes.len(), 3);
+        assert!(graph.nodes.iter().any(|node| node.id.0 == "filesystem:/"));
+        assert!(graph.nodes.iter().any(|node| node.id.0 == "lvm-lv:vg/root"));
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.id.0 == "block:/dev/mapper/cryptroot")
+        );
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .all(|node| node.id.0 != "block:/dev/nvme0n1p2")
+        );
+        assert_eq!(graph.edges.len(), 2);
     }
 
     #[test]

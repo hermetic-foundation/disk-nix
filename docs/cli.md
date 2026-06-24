@@ -410,16 +410,21 @@ disk-nix inspect /dev/nvme0n1
 disk-nix inspect /
 disk-nix inspect tank/home
 disk-nix inspect 7420d5e2-2f0f-4709-a1d1-61a9116412f8
+disk-nix inspect / --depth 3
 ```
 
-The text form prints identity fields, capacity details, properties, and direct
-relationships for matched nodes. Capacity output includes size plus used, free,
-allocated, and utilization percentage when the node exposes those fields. The
-JSON form returns a subgraph containing matched nodes, direct neighbor nodes,
-and the relationship edges between them:
+The text form prints identity fields, capacity details, properties, and
+relationship context for matched nodes. `--depth` controls how far relationship
+expansion walks from the matched node: `0` includes only the matched node, `1`
+is the default direct-neighbor view, and larger values include deeper stacked
+storage context. Capacity output includes size plus used, free, allocated, and
+utilization percentage when the node exposes those fields. The JSON form
+returns a subgraph containing matched nodes, neighbor nodes within the requested
+depth, and the relationship edges between them:
 
 ```sh
 disk-nix inspect / --json
+disk-nix inspect / --depth 3 --json
 ```
 
 This is the preferred machine-readable query surface for drilling into one
