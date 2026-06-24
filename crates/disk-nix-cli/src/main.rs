@@ -5842,6 +5842,7 @@ mod tests {
             .with_property("lvm.pv-format", "lvm2")
             .with_property("lvm.dev-size", "500.00g")
             .with_property("lvm.pe-start", "1.00m")
+            .with_property("lvm.pv-missing", "missing")
             .with_property("lvm.pv-pe-count", "128000")
             .with_property("lvm.pv-pe-allocated", "102400")
             .with_property("lvm.pv-mda-free", "1020.00k")
@@ -5861,6 +5862,7 @@ mod tests {
                 .with_property("lvm.extent-count", "262144")
                 .with_property("lvm.free-count", "5120")
                 .with_property("lvm.pv-count", "2")
+                .with_property("lvm.missing-pv-count", "1")
                 .with_property("lvm.lv-count", "5")
                 .with_property("lvm.snapshot-count", "1")
                 .with_property("lvm.vg-seqno", "17")
@@ -5959,7 +5961,7 @@ mod tests {
         assert!(output.contains("active"));
         assert!(output.contains("tags=ssd,system"));
         assert!(output.contains("pv-format=lvm2 dev-size=500.00g"));
-        assert!(output.contains("pe-start=1.00m pv-extents=128000"));
+        assert!(output.contains("pe-start=1.00m pv-missing=missing pv-extents=128000"));
         assert!(output.contains("pv-extents-used=102400 pv-mda-free=1020.00k"));
         assert!(output.contains("pv-device-id=wwn-0x1234"));
         assert!(output.contains("vg-format=lvm2"));
@@ -5967,7 +5969,7 @@ mod tests {
         assert!(output.contains("vg-autoactivation=enabled allocation=normal"));
         assert!(output.contains("system-id=host-a lock-type=none"));
         assert!(output.contains("extent=4.00m extents=262144 free-extents=5120"));
-        assert!(output.contains("pvs=2 lvs=5 snapshots=1 seqno=17"));
+        assert!(output.contains("pvs=2 missing-pvs=1 lvs=5 snapshots=1 seqno=17"));
         assert!(output.contains("vg-mda-free=1020.00k vg-mda-copies=unmanaged"));
         assert!(output.contains("42.00"));
         assert!(output.contains("7.50"));
