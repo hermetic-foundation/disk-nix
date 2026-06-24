@@ -35,9 +35,9 @@ behavior across real storage stacks.
   renderer tool requirement inventories with PATH availability and per-tool
   package remediation hints, optional current-topology probing, missing-tool
   refusal before execution, and sequential execution of ready commands.
-- Probe-status reports include structured issue categories and remediation
-  hints for missing tools, permission barriers, parse failures, inaccessible
-  kernel/service data, and generic command failures.
+- Probe-status reports include structured issue categories and adapter-specific
+  remediation hints for missing tools/packages, permission barriers, parse
+  failures, inaccessible kernel/service data, and generic command failures.
 - Current-topology reconciliation suppresses safe no-op grow, shrink, iSCSI
   login/logout, LVM logical-volume activation/deactivation, LUKS open, LUKS
   close, loop create/destroy, LUN attach/detach, NVMe namespace attach/detach,
@@ -120,9 +120,10 @@ manual-review guidance, or non-ready command plans instead of guessing.
   recovery proofs exist.
 - Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output
-  formats. Probe reports now expose structured degradation categories, but
-  adapter-specific privilege checks and distribution-specific tool output
-  checks still need expansion.
+  formats. Probe reports now expose structured degradation categories plus
+  adapter-specific tool/package, privilege-surface, inaccessible-data, and
+  parse-fixture hints, but live preflight checks against every distribution and
+  tool-output variant still need expansion.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
 - Implemented migration tooling and tests for future spec versions. The parser

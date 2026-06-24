@@ -2177,27 +2177,194 @@ fn probe_category_for_status(status: &ProbeStatus, message: &str) -> ProbeIssueC
 fn remediation_for_category(adapter: &str, category: ProbeIssueCategory) -> Vec<String> {
     match category {
         ProbeIssueCategory::None => Vec::new(),
-        ProbeIssueCategory::MissingTool => vec![
-            format!("install or expose the command-line tools required by the {adapter} adapter"),
-            "on NixOS, include the matching storage tool package in services.disk-nix.toolPackages"
-                .to_string(),
-        ],
+        ProbeIssueCategory::MissingTool => {
+            let tools = adapter_tools(adapter);
+            let packages = adapter_nix_packages(adapter);
+            let mut remediation = vec![if tools.is_empty() {
+                format!("install or expose the command-line tools required by the {adapter} adapter")
+            } else {
+                format!(
+                    "install or expose required {adapter} tool(s): {}",
+                    tools.join(", ")
+                )
+            }];
+            if packages.is_empty() {
+                remediation.push(
+                    "on NixOS, include the matching storage tool package in services.disk-nix.toolPackages"
+                        .to_string(),
+                );
+            } else {
+                remediation.push(format!(
+                    "on NixOS, include {} in services.disk-nix.toolPackages",
+                    packages.join(", ")
+                ));
+            }
+            remediation
+        }
         ProbeIssueCategory::PermissionDenied => vec![
             format!("rerun {adapter} probing with privileges that can read the relevant storage metadata"),
+            adapter_privilege_hint(adapter),
             "check device node permissions, udev rules, container sandboxing, and LSM policy before treating the topology as complete".to_string(),
         ],
         ProbeIssueCategory::ParseFailed => vec![
             format!("capture the raw {adapter} command output for fixture coverage"),
+            adapter_parse_hint(adapter),
             "check whether the installed tool version changed its output format".to_string(),
         ],
         ProbeIssueCategory::InaccessibleData => vec![
             format!("verify the kernel surface, service, mountpoint, or device required by the {adapter} adapter is present"),
+            adapter_data_hint(adapter),
             "load the relevant kernel module or start the relevant storage service before probing again".to_string(),
         ],
         ProbeIssueCategory::CommandFailed => vec![
             format!("rerun the failing {adapter} command manually and inspect its exit status and stderr"),
+            adapter_command_hint(adapter),
             "treat this storage domain as degraded until the command failure is understood".to_string(),
         ],
+    }
+}
+
+fn adapter_tools(adapter: &str) -> Vec<&'static str> {
+    match adapter {
+        "bcache" => vec!["bcache"],
+        "bcachefs" => vec!["bcachefs"],
+        "blkid" => vec!["blkid"],
+        "btrfs" => vec!["btrfs"],
+        "cryptsetup" => vec!["cryptsetup"],
+        "dmsetup" => vec!["dmsetup"],
+        "exfat" => vec!["exfatlabel", "dump.exfat"],
+        "ext" => vec!["tune2fs", "dumpe2fs"],
+        "f2fs" => vec!["dump.f2fs"],
+        "findmnt" => vec!["findmnt"],
+        "iscsi" | "iscsi-nodes" => vec!["iscsiadm"],
+        "loop" | "loopdev" => vec!["losetup"],
+        "lsblk" => vec!["lsblk"],
+        "lsscsi" => vec!["lsscsi"],
+        "lvm" => vec!["pvs", "vgs", "lvs"],
+        "mdraid" => vec!["mdadm"],
+        "multipath" => vec!["multipath"],
+        "nfs" | "nfs-exports" => vec!["findmnt", "exportfs", "nfsstat"],
+        "ntfs" => vec!["ntfsinfo"],
+        "nvme" => vec!["nvme"],
+        "parted" => vec!["parted"],
+        "smartctl" => vec!["smartctl"],
+        "swaps" => vec!["swapon"],
+        "udev" => vec!["udevadm"],
+        "vdo" => vec!["vdo"],
+        "vdostats" | "vdostats-verbose" => vec!["vdostats"],
+        "xfs" => vec!["xfs_info"],
+        "zfs" => vec!["zpool", "zfs"],
+        "zram" => vec!["zramctl"],
+        _ => Vec::new(),
+    }
+}
+
+fn adapter_nix_packages(adapter: &str) -> Vec<&'static str> {
+    match adapter {
+        "bcache" => vec!["pkgs.bcache-tools"],
+        "bcachefs" => vec!["pkgs.bcachefs-tools"],
+        "blkid" | "findmnt" | "loop" | "loopdev" | "lsblk" | "swaps" | "zram" => {
+            vec!["pkgs.util-linux"]
+        }
+        "btrfs" => vec!["pkgs.btrfs-progs"],
+        "cryptsetup" => vec!["pkgs.cryptsetup"],
+        "dmsetup" | "lvm" => vec!["pkgs.lvm2"],
+        "exfat" => vec!["pkgs.exfatprogs"],
+        "ext" => vec!["pkgs.e2fsprogs"],
+        "f2fs" => vec!["pkgs.f2fs-tools"],
+        "iscsi" | "iscsi-nodes" => vec!["pkgs.openiscsi"],
+        "lsscsi" => vec!["pkgs.lsscsi"],
+        "mdraid" => vec!["pkgs.mdadm"],
+        "multipath" => vec!["pkgs.multipath-tools"],
+        "nfs" | "nfs-exports" => vec!["pkgs.nfs-utils", "pkgs.util-linux"],
+        "ntfs" => vec!["pkgs.ntfs3g"],
+        "nvme" => vec!["pkgs.nvme-cli"],
+        "parted" => vec!["pkgs.parted"],
+        "smartctl" => vec!["pkgs.smartmontools"],
+        "udev" => vec!["pkgs.systemd"],
+        "vdo" | "vdostats" | "vdostats-verbose" => vec!["pkgs.vdo"],
+        "xfs" => vec!["pkgs.xfsprogs"],
+        "zfs" => vec!["pkgs.zfs"],
+        _ => Vec::new(),
+    }
+}
+
+fn adapter_privilege_hint(adapter: &str) -> String {
+    match adapter {
+        "dmsetup" => "device-mapper probing needs access to /dev/mapper, /sys/block/dm-*, and dmsetup table/status metadata".to_string(),
+        "lvm" => "LVM probing needs access to device-mapper state, LVM metadata devices, and any configured lvmetad/lvmdevices state".to_string(),
+        "cryptsetup" => "LUKS probing needs permission to read block devices and cryptsetup status/header metadata".to_string(),
+        "zfs" => "ZFS probing needs permission to run zpool and zfs list/status commands and read imported pool metadata".to_string(),
+        "btrfs" => "Btrfs probing needs permission to inspect mounted Btrfs filesystems and query subvolume, qgroup, and device state".to_string(),
+        "iscsi" | "iscsi-nodes" => "iSCSI probing needs access to open-iscsi node and session state, usually under /etc/iscsi and /sys/class/iscsi_session".to_string(),
+        "nvme" => "NVMe probing needs access to controller character devices and /sys/class/nvme metadata".to_string(),
+        "multipath" => "multipath probing needs access to multipathd/device-mapper state and path devices".to_string(),
+        "mdraid" => "MD RAID probing needs access to /proc/mdstat, mdadm detail output, and member block devices".to_string(),
+        "vdo" | "vdostats" | "vdostats-verbose" => "VDO probing needs access to VDO management state and device-mapper-backed VDO volumes".to_string(),
+        "smartctl" => "SMART probing often needs root or device-specific capabilities to read health and controller metadata".to_string(),
+        "udev" => "udev probing needs permission to read udev database records for block devices".to_string(),
+        _ => format!("{adapter} probing needs privileges for its command output and related kernel metadata"),
+    }
+}
+
+fn adapter_parse_hint(adapter: &str) -> String {
+    match adapter {
+        "lvm" => "include the failing pvs/vgs/lvs JSON payload and LVM version in the fixture"
+            .to_string(),
+        "zfs" => {
+            "include zpool/zfs command output, pool feature flags, and ZFS version in the fixture"
+                .to_string()
+        }
+        "btrfs" => {
+            "include btrfs filesystem, subvolume, qgroup, and device command output in the fixture"
+                .to_string()
+        }
+        "vdo" | "vdostats" | "vdostats-verbose" => {
+            "include vdo status or vdostats output from the installed VDO version in the fixture"
+                .to_string()
+        }
+        "nvme" => "include nvme-cli JSON output and nvme-cli version in the fixture".to_string(),
+        "iscsi" | "iscsi-nodes" => {
+            "include iscsiadm node/session output and open-iscsi version in the fixture".to_string()
+        }
+        "nfs" | "nfs-exports" => {
+            "include findmnt, exportfs, and nfsstat output for the failing host in the fixture"
+                .to_string()
+        }
+        _ => {
+            format!("include raw {adapter} command output and tool version in a regression fixture")
+        }
+    }
+}
+
+fn adapter_data_hint(adapter: &str) -> String {
+    match adapter {
+        "bcache" => "verify bcache devices are registered under /sys/fs/bcache or /sys/block before probing".to_string(),
+        "bcachefs" => "verify bcachefs filesystems are mounted or member devices are visible before probing".to_string(),
+        "btrfs" => "verify Btrfs filesystems are mounted and qgroup/subvolume metadata is accessible".to_string(),
+        "dmsetup" => "verify device-mapper is loaded and expected /dev/mapper nodes exist".to_string(),
+        "iscsi" | "iscsi-nodes" => "verify iscsid/open-iscsi state exists and expected sessions or configured nodes are present".to_string(),
+        "lvm" => "verify LVM devices are visible, filters permit scanning, and volume groups are not hidden by system-id or devices-file policy".to_string(),
+        "multipath" => "verify multipathd is running when required and path devices are visible to the host".to_string(),
+        "nfs" | "nfs-exports" => "verify NFS mounts, exports, rpc services, and /proc/fs/nfsd state are available where expected".to_string(),
+        "nvme" => "verify NVMe controllers, namespaces, and fabrics sessions are visible under /sys/class/nvme".to_string(),
+        "vdo" | "vdostats" | "vdostats-verbose" => "verify VDO services, management metadata, and mapped VDO devices are present".to_string(),
+        "zfs" => "verify ZFS kernel support is loaded and expected pools are imported or visible to zpool import".to_string(),
+        "zram" => "verify zram devices are configured before expecting zram inventory".to_string(),
+        _ => format!("verify the storage resources expected by the {adapter} adapter exist on this host"),
+    }
+}
+
+fn adapter_command_hint(adapter: &str) -> String {
+    match adapter {
+        "lvm" => "rerun pvs, vgs, and lvs with --reportformat json to identify which LVM query failed".to_string(),
+        "zfs" => "rerun zpool status/list and zfs list/get commands to identify pool import or dataset failures".to_string(),
+        "btrfs" => "rerun btrfs filesystem, subvolume, qgroup, and device commands against the mounted filesystem".to_string(),
+        "iscsi" | "iscsi-nodes" => "rerun iscsiadm node and session queries and verify iscsid service health".to_string(),
+        "multipath" => "rerun multipath -ll and verify multipathd plus device-mapper state".to_string(),
+        "nvme" => "rerun nvme list/subsystem/id/smart-log commands for the affected controller or namespace".to_string(),
+        "vdo" | "vdostats" | "vdostats-verbose" => "rerun vdo status and vdostats to distinguish service failure from missing VDO volumes".to_string(),
+        _ => format!("rerun the {adapter} adapter command set manually with stderr captured"),
     }
 }
 
@@ -2315,6 +2482,16 @@ mod tests {
                 status: ProbeStatus::Available,
                 message: Some("normalized 3 graph nodes".to_string()),
             },
+            ProbeReport {
+                adapter: "iscsi".to_string(),
+                status: ProbeStatus::Partial,
+                message: Some("configured node database is inaccessible".to_string()),
+            },
+            ProbeReport {
+                adapter: "nvme".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some("invalid JSON from nvme list".to_string()),
+            },
         ];
 
         assert_eq!(reports[0].category(), ProbeIssueCategory::MissingTool);
@@ -2322,17 +2499,19 @@ mod tests {
         assert_eq!(reports[2].category(), ProbeIssueCategory::ParseFailed);
         assert_eq!(reports[3].category(), ProbeIssueCategory::CommandFailed);
         assert_eq!(reports[4].category(), ProbeIssueCategory::None);
+        assert_eq!(reports[5].category(), ProbeIssueCategory::InaccessibleData);
+        assert_eq!(reports[6].category(), ProbeIssueCategory::ParseFailed);
         assert!(
             reports[0]
                 .remediation()
                 .iter()
-                .any(|item| { item.contains("services.disk-nix.toolPackages") })
+                .any(|item| { item.contains("pkgs.zfs") })
         );
         assert!(
             reports[1]
                 .remediation()
                 .iter()
-                .any(|item| { item.contains("privileges") })
+                .any(|item| { item.contains("device-mapper state") })
         );
         assert!(
             reports[2]
@@ -2347,14 +2526,30 @@ mod tests {
                 .any(|item| { item.contains("exit status") })
         );
         assert!(reports[4].remediation().is_empty());
+        assert!(
+            reports[5]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("iscsid") || item.contains("open-iscsi") })
+        );
+        assert!(
+            reports[6]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("nvme-cli") })
+        );
 
         let json = serde_json::to_string(&reports).expect("reports should serialize");
         assert!(json.contains(r#""category":"missing-tool""#));
         assert!(json.contains(r#""category":"permission-denied""#));
         assert!(json.contains(r#""category":"parse-failed""#));
         assert!(json.contains(r#""category":"command-failed""#));
+        assert!(json.contains(r#""category":"inaccessible-data""#));
         assert!(json.contains(r#""category":"none""#));
         assert!(json.contains(r#""remediation":["#));
-        assert!(json.contains("services.disk-nix.toolPackages"));
+        assert!(json.contains("pkgs.zfs"));
+        assert!(json.contains("device-mapper state"));
+        assert!(json.contains("open-iscsi"));
+        assert!(json.contains("nvme-cli"));
     }
 }

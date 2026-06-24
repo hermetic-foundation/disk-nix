@@ -88,11 +88,12 @@ Each report also includes a structured `category` in JSON and human output:
 whether installing tooling, changing privileges, or treating the topology as
 degraded is the right response.
 Reports also include `remediation` hints. Missing-tool reports point to tool
-installation and `services.disk-nix.toolPackages`; permission reports call out
-privileged metadata reads, device permissions, udev rules, container
-sandboxing, and LSM policy; parse failures ask for raw command-output fixtures;
-inaccessible-data reports point to missing kernel surfaces, services, or
-mountpoints.
+installation, concrete adapter tools, and likely Nix packages for
+`services.disk-nix.toolPackages`; permission reports call out privileged
+metadata reads plus adapter-specific surfaces such as device-mapper, LVM, ZFS,
+iSCSI, NVMe, multipath, MD RAID, and VDO state; parse failures ask for raw
+command-output fixtures and tool versions; inaccessible-data reports point to
+missing kernel surfaces, services, imports, sessions, or mountpoints.
 
 Unavailable or partial adapters are not fatal. They mean the graph is degraded
 for that storage domain. For example, a host without `zpool` can still report

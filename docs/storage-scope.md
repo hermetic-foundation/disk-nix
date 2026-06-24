@@ -223,8 +223,13 @@ The current probe layer normalizes:
   thermal, and capacity metadata, and `nvme smart-log -o json` adds controller
   health, error, temperature, lifetime usage, and power telemetry
 
-LVM probing may report `partial` when the process lacks permission to talk to
-device-mapper. That should not prevent the rest of discovery from succeeding.
+Probe-status remediation is adapter-aware. Missing-tool reports include the
+likely tool names and Nix packages; permission and inaccessible-data reports
+call out concrete surfaces such as device-mapper/LVM metadata, ZFS imports,
+iSCSI state, NVMe sysfs/controller access, multipathd state, MD RAID metadata,
+VDO management state, and mounted Btrfs/NFS surfaces. LVM probing may report
+`partial` when the process lacks permission to talk to device-mapper. That
+should not prevent the rest of discovery from succeeding.
 
 ## Advice examples
 
