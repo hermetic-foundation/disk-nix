@@ -69,6 +69,9 @@ The current probe layer normalizes:
   geometry, and realtime extent/block counters
 - `ntfsinfo -m` for NTFS volume identity, serial, state, version, sector and
   cluster sizing, index block size, MFT record size, and allocated size
+- `dump.exfat`, `exfatlabel`, and `tune.exfat` for exFAT GUID/serial,
+  volume length, FAT offset/length, cluster heap offset, cluster/free-cluster
+  counts, root cluster, sector sizing, and cluster sizing
 - `dump.f2fs` for F2FS volume identity, UUID, block counts, valid block usage,
   segment counts, section/zone geometry, and overprovisioning metadata
 - `bcachefs show-super`, `bcachefs fs usage`, `blkid`, and `findmnt` for

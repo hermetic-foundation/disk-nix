@@ -2846,10 +2846,19 @@ fn usage_details(node: &Node) -> String {
         ("exfat.guid", "guid"),
         ("exfat.volume-serial", "serial"),
         ("exfat.volume-length-sectors", "sectors"),
+        ("exfat.fat-offset-sector-offset", "fat-offset"),
+        ("exfat.fat-length-sectors", "fat-length"),
+        (
+            "exfat.cluster-heap-offset-sector-offset",
+            "cluster-heap-offset",
+        ),
         ("exfat.cluster-count", "clusters"),
         ("exfat.free-clusters", "free-clusters"),
+        ("exfat.root-cluster-cluster-offset", "root-cluster"),
         ("exfat.bytes-per-sector", "sector-bytes"),
         ("exfat.sectors-per-cluster", "sectors-per-cluster"),
+        ("exfat.sector-size-bits", "sector-bits"),
+        ("exfat.sector-per-cluster-bits", "cluster-bits"),
         ("ntfs.volume-name", "ntfs-name"),
         ("ntfs.volume-state", "ntfs-state"),
         ("ntfs.volume-serial", "ntfs-serial"),
@@ -3796,13 +3805,18 @@ mod tests {
         let exfat = Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
             .with_property("exfat.guid", "01234567-89ab-cdef-0123-456789abcdef")
             .with_property("exfat.volume-serial", "0x6eef953b")
+            .with_property("exfat.volume-length-sectors", "3203072")
+            .with_property("exfat.fat-offset-sector-offset", "2048")
+            .with_property("exfat.fat-length-sectors", "448")
+            .with_property("exfat.cluster-heap-offset-sector-offset", "4096")
             .with_property("exfat.cluster-count", "49984")
             .with_property("exfat.free-clusters", "1024")
+            .with_property("exfat.root-cluster-cluster-offset", "4")
             .with_property("exfat.bytes-per-sector", "512")
             .with_property("exfat.sectors-per-cluster", "64");
         assert_eq!(
             usage_details(&exfat),
-            "guid=01234567-89ab-cdef-0123-456789abcdef serial=0x6eef953b clusters=49984 free-clusters=1024 sector-bytes=512 sectors-per-cluster=64"
+            "guid=01234567-89ab-cdef-0123-456789abcdef serial=0x6eef953b sectors=3203072 fat-offset=2048 fat-length=448 cluster-heap-offset=4096 clusters=49984 free-clusters=1024 root-cluster=4 sector-bytes=512 sectors-per-cluster=64"
         );
 
         let ntfs = Node::new("fs:/dev/sda1", NodeKind::Filesystem, "ntfs")
@@ -4002,6 +4016,20 @@ mod tests {
                 .with_property("xfs.realtime.blocks", "0"),
         );
         graph.add_node(
+            Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
+                .with_property("exfat.guid", "01234567-89ab-cdef-0123-456789abcdef")
+                .with_property("exfat.volume-serial", "0x6eef953b")
+                .with_property("exfat.volume-length-sectors", "3203072")
+                .with_property("exfat.fat-offset-sector-offset", "2048")
+                .with_property("exfat.fat-length-sectors", "448")
+                .with_property("exfat.cluster-heap-offset-sector-offset", "4096")
+                .with_property("exfat.cluster-count", "49984")
+                .with_property("exfat.free-clusters", "1024")
+                .with_property("exfat.root-cluster-cluster-offset", "4")
+                .with_property("exfat.bytes-per-sector", "512")
+                .with_property("exfat.sectors-per-cluster", "64"),
+        );
+        graph.add_node(
             Node::new("btrfs:fs-uuid", NodeKind::BtrfsFilesystem, "data")
                 .with_property("btrfs.mount-target", "/data")
                 .with_property("btrfs.data-profile", "single")
@@ -4054,6 +4082,12 @@ mod tests {
         assert!(output.contains("xfs-crc=1 xfs-blocks=262144 xfs-bsize=4096"));
         assert!(output.contains("xfs-imaxpct=25 reflink=1 bigtime=1"));
         assert!(output.contains("xfs-ftype=1 log-blocks=2560 xfs-realtime-blocks=0"));
+        assert!(output.contains(
+            "guid=01234567-89ab-cdef-0123-456789abcdef serial=0x6eef953b sectors=3203072"
+        ));
+        assert!(output.contains("fat-offset=2048 fat-length=448 cluster-heap-offset=4096"));
+        assert!(output.contains("clusters=49984 free-clusters=1024 root-cluster=4"));
+        assert!(output.contains("sector-bytes=512 sectors-per-cluster=64"));
         assert!(output.contains(
             "mount-target=/data data-profile=single data-size=512 data-used=400 metadata-profile=DUP"
         ));

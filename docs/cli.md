@@ -209,8 +209,9 @@ Use these commands for:
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
   bcachefs filesystems, ZFS datasets/snapshots, and NFS exports, with selected
   filesystem metadata details such as `blkid` version/block-size/usage, exFAT
-  GUID/serial/cluster geometry, NTFS volume identity, version, cluster sizing,
-  and MFT record sizing, F2FS block/segment/overprovisioning metadata,
+  GUID/serial, volume length, FAT and cluster-heap layout, root cluster, and
+  cluster geometry, NTFS volume identity, version, cluster sizing, and MFT
+  record sizing, F2FS block/segment/overprovisioning metadata,
   XFS source, allocation-group, inode, data, naming, log, realtime, and
   metadata feature details,
   bcachefs external/internal UUID, member-device, mounted usage, and data-type
