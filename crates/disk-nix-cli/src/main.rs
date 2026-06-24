@@ -2690,6 +2690,10 @@ fn usage_details(node: &Node) -> String {
         ("scsi.queue-type", "scsi-queue-type"),
         ("scsi.scsi-level", "scsi-level"),
         ("scsi.timeout", "scsi-timeout"),
+        ("smartctl.svn-revision", "smart-svn"),
+        ("smartctl.platform", "smart-platform"),
+        ("smartctl.exit-status", "smart-exit-status"),
+        ("smartctl.device-name", "smart-device-name"),
         ("smartctl.health.passed", "smart-health-passed"),
         ("smartctl.device-type", "smart-device-type"),
         ("smartctl.protocol", "smart-protocol"),
@@ -2697,6 +2701,7 @@ fn usage_details(node: &Node) -> String {
         ("smartctl.model-family", "smart-family"),
         ("smartctl.vendor", "smart-vendor"),
         ("smartctl.product", "smart-product"),
+        ("smartctl.revision", "smart-revision"),
         ("smartctl.firmware-version", "smart-firmware"),
         ("smartctl.serial", "smart-serial"),
         ("smartctl.wwn-naa", "smart-wwn-naa"),
@@ -2728,16 +2733,76 @@ fn usage_details(node: &Node) -> String {
             "smart-temperature-lowest-c",
         ),
         (
+            "smartctl.offline-data-collection-status",
+            "smart-offline-status",
+        ),
+        ("smartctl.self-test-status", "smart-self-test"),
+        ("smartctl.error-logging-supported", "smart-error-logging"),
+        ("smartctl.gp-logging-supported", "smart-gp-logging"),
+        ("smartctl.sct-capabilities", "smart-sct-capabilities"),
+        (
+            "smartctl.scsi-grown-defect-list",
+            "smart-scsi-grown-defects",
+        ),
+        (
             "smartctl.attribute.reallocated-sector-ct.raw",
             "reallocated-sectors",
+        ),
+        (
+            "smartctl.attribute.reallocated-sector-ct.value",
+            "reallocated-value",
+        ),
+        (
+            "smartctl.attribute.reallocated-sector-ct.worst",
+            "reallocated-worst",
+        ),
+        (
+            "smartctl.attribute.reallocated-sector-ct.threshold",
+            "reallocated-threshold",
+        ),
+        (
+            "smartctl.attribute.reallocated-sector-ct.when-failed",
+            "reallocated-failed",
         ),
         (
             "smartctl.attribute.current-pending-sector.raw",
             "pending-sectors",
         ),
         (
+            "smartctl.attribute.current-pending-sector.value",
+            "pending-value",
+        ),
+        (
+            "smartctl.attribute.current-pending-sector.worst",
+            "pending-worst",
+        ),
+        (
+            "smartctl.attribute.current-pending-sector.threshold",
+            "pending-threshold",
+        ),
+        (
+            "smartctl.attribute.current-pending-sector.when-failed",
+            "pending-failed",
+        ),
+        (
             "smartctl.attribute.offline-uncorrectable.raw",
             "offline-uncorrectable",
+        ),
+        (
+            "smartctl.attribute.offline-uncorrectable.value",
+            "offline-uncorrectable-value",
+        ),
+        (
+            "smartctl.attribute.offline-uncorrectable.worst",
+            "offline-uncorrectable-worst",
+        ),
+        (
+            "smartctl.attribute.offline-uncorrectable.threshold",
+            "offline-uncorrectable-threshold",
+        ),
+        (
+            "smartctl.attribute.offline-uncorrectable.when-failed",
+            "offline-uncorrectable-failed",
         ),
         ("nvme.generic-path", "generic"),
         ("nvme.model", "nvme-model"),
@@ -4511,19 +4576,67 @@ mod tests {
         graph.add_node(
             Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
                 .with_path("/dev/sdb")
+                .with_property("smartctl.svn-revision", "5530")
+                .with_property("smartctl.platform", "x86_64-linux")
+                .with_property("smartctl.exit-status", "0")
+                .with_property("smartctl.device-name", "/dev/sdb")
                 .with_property("smartctl.health.passed", "true")
                 .with_property("smartctl.device-type", "sat")
                 .with_property("smartctl.protocol", "ATA")
                 .with_property("smartctl.model", "Example SSD")
+                .with_property("smartctl.model-family", "Example SSDs")
                 .with_property("smartctl.serial", "SATA123")
+                .with_property("smartctl.revision", "A1")
+                .with_property("smartctl.firmware-version", "1.2.3")
+                .with_property("smartctl.wwn-naa", "5")
+                .with_property("smartctl.wwn-oui", "12345")
+                .with_property("smartctl.wwn-id", "67890")
                 .with_property("smartctl.user-capacity-bytes", "1000204886016")
                 .with_property("smartctl.logical-block-size", "512")
                 .with_property("smartctl.physical-block-size", "4096")
                 .with_property("smartctl.rotation-rate-rpm", "0")
+                .with_property("smartctl.form-factor", "2.5 inches")
+                .with_property("smartctl.sata-version", "SATA 3.3")
+                .with_property("smartctl.interface-speed-current", "6.0")
+                .with_property("smartctl.interface-speed-max", "6.0")
                 .with_property("smartctl.power-on-hours", "4242")
                 .with_property("smartctl.power-cycle-count", "12")
                 .with_property("smartctl.temperature-current-celsius", "31")
+                .with_property("smartctl.temperature-highest-celsius", "44")
+                .with_property("smartctl.temperature-lowest-celsius", "20")
+                .with_property(
+                    "smartctl.offline-data-collection-status",
+                    "was completed without error",
+                )
+                .with_property("smartctl.self-test-status", "completed without error")
+                .with_property("smartctl.error-logging-supported", "true")
+                .with_property("smartctl.gp-logging-supported", "true")
+                .with_property("smartctl.sct-capabilities", "61")
+                .with_property("smartctl.scsi-grown-defect-list", "0")
                 .with_property("smartctl.attribute.reallocated-sector-ct.raw", "0")
+                .with_property("smartctl.attribute.reallocated-sector-ct.value", "100")
+                .with_property("smartctl.attribute.reallocated-sector-ct.worst", "100")
+                .with_property("smartctl.attribute.reallocated-sector-ct.threshold", "10")
+                .with_property(
+                    "smartctl.attribute.reallocated-sector-ct.when-failed",
+                    "never",
+                )
+                .with_property("smartctl.attribute.current-pending-sector.raw", "1")
+                .with_property("smartctl.attribute.current-pending-sector.value", "99")
+                .with_property("smartctl.attribute.current-pending-sector.worst", "98")
+                .with_property("smartctl.attribute.current-pending-sector.threshold", "0")
+                .with_property(
+                    "smartctl.attribute.current-pending-sector.when-failed",
+                    "past",
+                )
+                .with_property("smartctl.attribute.offline-uncorrectable.raw", "2")
+                .with_property("smartctl.attribute.offline-uncorrectable.value", "97")
+                .with_property("smartctl.attribute.offline-uncorrectable.worst", "96")
+                .with_property("smartctl.attribute.offline-uncorrectable.threshold", "0")
+                .with_property(
+                    "smartctl.attribute.offline-uncorrectable.when-failed",
+                    "past",
+                )
                 .with_property("scsi.address", "1:0:0:0")
                 .with_property("scsi.generic-device", "/dev/sg1")
                 .with_property("scsi.transport", "sata:5000c500a5a461dc")
@@ -4595,16 +4708,43 @@ mod tests {
         assert!(output.contains("swap-active=true swap-type=partition swap-priority=100"));
         assert!(output.contains("member-state=active sync"));
         assert!(output.contains(
+            "smart-svn=5530 smart-platform=x86_64-linux smart-exit-status=0 smart-device-name=/dev/sdb"
+        ));
+        assert!(output.contains(
             "smart-health-passed=true smart-device-type=sat smart-protocol=ATA smart-model=Example SSD"
+        ));
+        assert!(output.contains("smart-family=Example SSDs"));
+        assert!(output.contains("smart-revision=A1 smart-firmware=1.2.3"));
+        assert!(output.contains(
+            "smart-serial=SATA123 smart-wwn-naa=5 smart-wwn-oui=12345 smart-wwn-id=67890"
+        ));
+        assert!(output.contains("smart-capacity=1000204886016 smart-logical-block=512"));
+        assert!(output.contains(
+            "smart-physical-block=4096 smart-rpm=0 smart-form-factor=2.5 inches sata-version=SATA 3.3"
+        ));
+        assert!(output.contains("interface-speed-current=6.0 interface-speed-max=6.0"));
+        assert!(output.contains("smart-power-on-hours=4242"));
+        assert!(
+            output.contains(
+                "smart-power-cycles=12 smart-temperature-c=31 smart-temperature-highest-c=44 smart-temperature-lowest-c=20"
+            )
+        );
+        assert!(output.contains(
+            "smart-offline-status=was completed without error smart-self-test=completed without error"
+        ));
+        assert!(output.contains(
+            "smart-error-logging=true smart-gp-logging=true smart-sct-capabilities=61 smart-scsi-grown-defects=0"
+        ));
+        assert!(output.contains(
+            "reallocated-sectors=0 reallocated-value=100 reallocated-worst=100 reallocated-threshold=10 reallocated-failed=never"
+        ));
+        assert!(output.contains(
+            "pending-sectors=1 pending-value=99 pending-worst=98 pending-threshold=0 pending-failed=past"
         ));
         assert!(
             output.contains(
-                "smart-serial=SATA123 smart-capacity=1000204886016 smart-logical-block=512"
+                "offline-uncorrectable=2 offline-uncorrectable-value=97 offline-uncorrectable-worst=96 offline-uncorrectable-threshold=0 offline-uncorrectable-failed=past"
             )
-        );
-        assert!(output.contains("smart-physical-block=4096 smart-rpm=0 smart-power-on-hours=4242"));
-        assert!(
-            output.contains("smart-power-cycles=12 smart-temperature-c=31 reallocated-sectors=0")
         );
         assert!(output.contains(
             "scsi-address=1:0:0:0 scsi-generic=/dev/sg1 scsi-transport=sata:5000c500a5a461dc"
