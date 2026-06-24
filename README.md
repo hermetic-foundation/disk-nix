@@ -418,7 +418,8 @@ ZFS snapshot hold plans render safe `zfs hold <tag> <snapshot>` and
 declarations so retention can be changed without deleting recovery points.
 ZFS snapshot clone plans render reviewed `zfs clone <snapshot> <dataset>`
 commands from `cloneTo` so snapshots can be inspected or migrated without
-rolling back the source dataset.
+rolling back the source dataset. Clone and rollback plans remain non-ready
+until the declaration resolves to a concrete ZFS snapshot name.
 Snapshot `operation = "rescan"` plans render read-only ZFS metadata, hold, and
 reference probes or Btrfs subvolume/read-only property probes, followed by graph
 inspection for snapshot/source relationships.

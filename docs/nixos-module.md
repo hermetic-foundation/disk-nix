@@ -471,7 +471,9 @@ Address fields have domain-specific meaning:
   use the typed `mountpoint` field instead.
 
 - `name`, `snapshotName`, `snapshot-name`: concrete snapshot identity for ZFS
-  snapshot lifecycle actions when the declaration key is a friendly name
+  snapshot lifecycle actions when the declaration key is a friendly name.
+  Snapshot clone and rollback remain non-ready until this resolves to a
+  concrete ZFS snapshot name.
 
 - `snapshotPath`: explicit snapshot identity alias for `path`, useful for
   Btrfs snapshot rescans and renames with non-path attribute names. Snapshot

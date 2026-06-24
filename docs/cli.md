@@ -852,6 +852,8 @@ commands for the same unambiguous domains.
 ZFS snapshot retention declarations render safe `zfs hold <tag> <snapshot>`
 and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
 ZFS snapshot clone declarations render reviewed `zfs clone <snapshot> <dataset>` commands from `cloneTo`, `cloneTarget`, or `clone`.
+Clone and rollback plans remain non-ready until the declaration resolves to a
+concrete ZFS snapshot name.
 Snapshot rename declarations render reviewed `zfs rename <snapshot> <new>` for
 ZFS names and `mv -- <old> <new>` for absolute Btrfs snapshot paths. Friendly
 snapshot keys remain non-ready for rename until `name`, `snapshotName`, `path`,

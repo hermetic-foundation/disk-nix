@@ -6191,7 +6191,13 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 )
             } else {
                 (
-                    Vec::new(),
+                    vec![command_with_readiness(
+                        ["<snapshot-rollback-tool>", snapshot],
+                        true,
+                        CommandReadiness::NeedsDomainImplementation,
+                        ["ZFS snapshot name"],
+                        "roll back the snapshot after selecting a concrete ZFS snapshot name",
+                    )],
                     vec![
                         "snapshot rollback command is only rendered for unambiguous ZFS snapshot names"
                             .to_string(),
@@ -6227,7 +6233,13 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 )
             } else {
                 (
-                    Vec::new(),
+                    vec![command_with_readiness(
+                        ["<snapshot-clone-tool>", snapshot, target],
+                        true,
+                        CommandReadiness::NeedsDomainImplementation,
+                        ["ZFS snapshot name"],
+                        "clone the snapshot after selecting a concrete ZFS snapshot name",
+                    )],
                     vec![
                         "snapshot clone command is only rendered for unambiguous ZFS snapshot names"
                             .to_string(),
@@ -16646,6 +16658,55 @@ mod tests {
                 })
         }));
         assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
+        assert!(!report.command_summary.all_commands_ready());
+    }
+
+    #[test]
+    fn ambiguous_snapshot_clone_and_rollback_report_unresolved_domain() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "snapshots": {
+                  "before-clone": {
+                    "target": "tank/home",
+                    "cloneTo": "tank/home-review"
+                  },
+                  "before-rollback": {
+                    "target": "tank/home",
+                    "rollback": true
+                  }
+                }
+              },
+              "apply": {
+                "allowPotentialDataLoss": true,
+                "confirmed": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:before-clone:clone:tank/home-review"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["<snapshot-clone-tool>", "before-clone", "tank/home-review"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["ZFS snapshot name"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:before-rollback:rollback"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["<snapshot-rollback-tool>", "before-rollback"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["ZFS snapshot name"]
+                })
+        }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 2);
         assert!(!report.command_summary.all_commands_ready());
     }
 
