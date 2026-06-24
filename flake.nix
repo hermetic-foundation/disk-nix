@@ -327,6 +327,16 @@
                 device = "/dev/disk/by-label/destroyed-swap";
                 destroy = true;
               };
+              zram = {
+                enable = true;
+                operation = "rescan";
+                swapDevices = 2;
+                memoryPercent = 40;
+                memoryMax = 8589934592;
+                priority = 20;
+                algorithm = "zstd";
+                properties."zram.compression-ratio-target" = "2.0";
+              };
               luks.devices.cryptaction = {
                 device = "/dev/disk/by-id/action-luks";
                 action = "open";
@@ -1245,6 +1255,14 @@
                     and .spec.swaps.actionOld.action == "destroy"
                     and .spec.swaps.destroyed.destroy == true
                     and .spec.swaps.destroyed.device == "/dev/disk/by-label/destroyed-swap"
+                    and .spec.zram.enable == true
+                    and .spec.zram.operation == "rescan"
+                    and .spec.zram.swapDevices == 2
+                    and .spec.zram.memoryPercent == 40
+                    and .spec.zram.memoryMax == 8589934592
+                    and .spec.zram.priority == 20
+                    and .spec.zram.algorithm == "zstd"
+                    and .spec.zram.properties."zram.compression-ratio-target" == "2.0"
                     and .spec.luks.devices.cryptaction.action == "open"
                     and .spec.swaps.old.device == "/dev/disk/by-label/old-swap"
                     and .spec.luks.devices.cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
@@ -1594,6 +1612,12 @@
                         zfsForceImportRoot = nixosModuleTest.config.boot.zfs.forceImportRoot;
                         bcache = nixosModuleTest.config.boot.bcache.enable;
                         bcacheInitrd = nixosModuleTest.config.boot.initrd.services.bcache.enable;
+                        zram = nixosModuleTest.config.zramSwap.enable;
+                        zramSwapDevices = nixosModuleTest.config.zramSwap.swapDevices;
+                        zramMemoryPercent = nixosModuleTest.config.zramSwap.memoryPercent;
+                        zramMemoryMax = nixosModuleTest.config.zramSwap.memoryMax;
+                        zramPriority = nixosModuleTest.config.zramSwap.priority;
+                        zramAlgorithm = nixosModuleTest.config.zramSwap.algorithm;
                         openIscsiDiscoverPortal = nixosModuleTest.config.services.openiscsi.discoverPortal;
                         bootIscsiDiscoverPortal = nixosModuleTest.config.boot.iscsi-initiator.discoverPortal;
                       }
@@ -1613,6 +1637,12 @@
                     and .zfsForceImportRoot == false
                     and .bcache == true
                     and .bcacheInitrd == true
+                    and .zram == true
+                    and .zramSwapDevices == 2
+                    and .zramMemoryPercent == 40
+                    and .zramMemoryMax == 8589934592
+                    and .zramPriority == 20
+                    and .zramAlgorithm == "zstd"
                     and .openIscsiDiscoverPortal == "192.0.2.10:3260"
                     and .bootIscsiDiscoverPortal == "192.0.2.10:3260"
                   ' native-storage

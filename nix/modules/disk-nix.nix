@@ -824,6 +824,28 @@ let
       properties
       ;
   }) cfg.swaps;
+  hasDeclaredZram =
+    cfg.zram.enable
+    || cfg.zram.operation != null
+    || cfg.zram.action != null
+    || cfg.zram.memoryMax != null
+    || cfg.zram.writebackDevice != null
+    || cfg.zram.properties != { };
+  typedZramSpec = lib.optionalAttrs hasDeclaredZram (cleanSpecAttrs {
+    inherit (cfg.zram)
+      enable
+      operation
+      action
+      swapDevices
+      memoryPercent
+      memoryMax
+      priority
+      algorithm
+      writebackDevice
+      preserveData
+      properties
+      ;
+  });
   typedLuksSpec = lib.mapAttrs (_: luks: {
     inherit (luks)
       device
@@ -1267,6 +1289,82 @@ in
       );
       default = { };
       description = "Typed swap declarations used to generate both disk-nix spec and NixOS swapDevices.";
+    };
+
+    zram = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Enable NixOS zramSwap from the disk-nix storage declaration.";
+      };
+
+      operation = lib.mkOption {
+        type = operationType;
+        default = null;
+        description = "Requested zram lifecycle operation for disk-nix planning, such as rescan.";
+        example = "rescan";
+      };
+
+      action = lib.mkOption {
+        type = operationType;
+        default = null;
+        description = "Alias for operation accepted by the planner.";
+        example = "rescan";
+      };
+
+      swapDevices = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 1;
+        description = "Number of zram devices to use as swap.";
+      };
+
+      memoryPercent = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 50;
+        description = "Maximum zram swap size as a percentage of system memory.";
+      };
+
+      memoryMax = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Maximum total zram swap size in bytes.";
+        example = 8589934592;
+      };
+
+      priority = lib.mkOption {
+        type = lib.types.int;
+        default = 5;
+        description = "Swap priority for generated zram swap devices.";
+      };
+
+      algorithm = lib.mkOption {
+        type = lib.types.str;
+        default = "zstd";
+        description = "Compression algorithm for generated zram swap devices.";
+        example = "lz4";
+      };
+
+      writebackDevice = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional writeback device for incompressible zram pages. NixOS allows only one zram swap device when this is set.";
+        example = "/dev/zvol/tank/swap-writeback";
+      };
+
+      preserveData = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether disk-nix should treat zram changes as requiring preservation of active swap state.";
+      };
+
+      properties = lib.mkOption {
+        type = lib.types.attrsOf json.type;
+        default = { };
+        description = "Zram properties copied into the disk-nix planner spec for future reconciliation.";
+        example = {
+          "zram.algorithm" = "zstd";
+        };
+      };
     };
 
     luks.devices = lib.mkOption {
@@ -1827,6 +1925,7 @@ in
       spec = cfg.spec // {
         filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec // typedNfsFilesystemSpec;
         swaps = (cfg.spec.swaps or { }) // typedSwapSpec;
+        zram = (cfg.spec.zram or { }) // typedZramSpec;
         luks = (cfg.spec.luks or { }) // {
           devices = ((cfg.spec.luks or { }).devices or { }) // typedLuksSpec;
         };
@@ -1892,6 +1991,24 @@ in
         randomEncryption.enable = true;
       }
     ) activeSwaps;
+
+    zramSwap = lib.mkIf cfg.zram.enable (
+      {
+        enable = true;
+        inherit (cfg.zram)
+          swapDevices
+          memoryPercent
+          priority
+          algorithm
+          ;
+      }
+      // lib.optionalAttrs (cfg.zram.memoryMax != null) {
+        inherit (cfg.zram) memoryMax;
+      }
+      // lib.optionalAttrs (cfg.zram.writebackDevice != null) {
+        inherit (cfg.zram) writebackDevice;
+      }
+    );
 
     boot.initrd.luks.devices = lib.mapAttrs (_: luks: {
       inherit (luks)
@@ -2000,6 +2117,10 @@ in
       {
         assertion = cfg.iscsi.boot.enable -> (cfg.iscsi.boot.loginAll || cfg.iscsi.boot.target != null);
         message = "services.disk-nix.iscsi.boot.enable requires a boot target unless loginAll is true.";
+      }
+      {
+        assertion = cfg.zram.writebackDevice == null || cfg.zram.swapDevices <= 1;
+        message = "services.disk-nix.zram.writebackDevice cannot be shared by multiple zram swap devices.";
       }
     ];
   };

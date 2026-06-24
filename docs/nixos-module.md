@@ -7,8 +7,8 @@ The NixOS module is the primary declarative interface.
 - define storage once
 - emit a normalized JSON planner spec
 - derive regular NixOS options such as `fileSystems`, `swapDevices`, initrd
-  LUKS devices, ZFS support, Btrfs support, iSCSI/NFS dependencies, and systemd
-  units
+  LUKS devices, `zramSwap`, ZFS support, Btrfs support, iSCSI/NFS
+  dependencies, and systemd units
 - keep imperative mutation behind explicit policy
 
 ## Initial usage
@@ -45,14 +45,22 @@ The NixOS module is the primary declarative interface.
       device = "/dev/disk/by-label/swap";
       priority = 5;
     };
+    zram = {
+      enable = true;
+      operation = "rescan";
+      swapDevices = 1;
+      memoryPercent = 50;
+      priority = 20;
+      algorithm = "zstd";
+    };
   };
 }
 ```
 
 The module writes `/etc/disk-nix/spec.json`, installs the CLI and default
 storage tooling, and derives the matching NixOS `fileSystems`, `swapDevices`,
-`boot.initrd.luks.devices`, `boot.supportedFilesystems`, `services.lvm`,
-`boot.initrd.services.lvm`, `boot.swraid`, `services.multipath`,
+`zramSwap`, `boot.initrd.luks.devices`, `boot.supportedFilesystems`,
+`services.lvm`, `boot.initrd.services.lvm`, `boot.swraid`, `services.multipath`,
 `boot.zfs.extraPools`, `boot.bcache`, `boot.initrd.services.bcache`,
 `services.lvm.boot.vdo.enable`, `services.openiscsi`, `boot.iscsi-initiator`,
 and selected `services.nfs.server.exports` entries.
@@ -77,6 +85,10 @@ or `destroy = true` stays in the generated disk-nix spec, but is not re-added
 to NixOS `swapDevices` or `boot.initrd.luks.devices`. LUKS `operation = "close"`
 is treated the same way: it remains a reviewed disk-nix mapper teardown without
 re-declaring the mapper for initrd unlock.
+Typed zram declarations are modeled separately from persistent swap devices.
+`services.disk-nix.zram.enable = true` emits `spec.zram` for inventory and
+lifecycle context, and derives NixOS `zramSwap` so `/dev/zram*` devices are
+created by the upstream generator instead of being added to `swapDevices`.
 Typed NFS client mounts also keep `unmount` and legacy destroy operations in
 the generated disk-nix spec while filtering them out of the derived NixOS
 `fileSystems` entries. `operation = "mount"` and `operation = "remount"` stay
@@ -226,6 +238,23 @@ Typed swap declarations include:
 
 `targetSize` and `size` are serialized as aliases accepted by the planner for
 the desired swap size.
+
+Typed zram declarations include:
+
+- `enable`
+- `operation`
+- `action`
+- `swapDevices`
+- `memoryPercent`
+- `memoryMax`
+- `priority`
+- `algorithm`
+- `writebackDevice`
+- `preserveData`
+- `properties`
+
+When enabled, these options derive NixOS `zramSwap`. `writebackDevice` is only
+valid with a single zram swap device, matching the upstream NixOS assertion.
 
 Typed LUKS declarations include:
 
@@ -447,6 +476,15 @@ Example lifecycle planning through NixOS options:
     swaps.inventory = {
       device = "/dev/disk/by-label/swap-inventory";
       operation = "rescan";
+    };
+    zram = {
+      enable = true;
+      operation = "rescan";
+      swapDevices = 2;
+      memoryPercent = 40;
+      memoryMax = 8589934592;
+      priority = 20;
+      algorithm = "zstd";
     };
     luks.devices.cryptroot = {
       device = "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7";
