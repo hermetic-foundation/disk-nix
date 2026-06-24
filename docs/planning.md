@@ -95,8 +95,11 @@ Examples:
   because every dependent LUKS, LVM, VDO, multipath, filesystem, mount, or
   service consumer must move to the new mapper name together. Destroy plans are
   destructive and render `dmsetup remove` only after identity, dependency, and
-  status inspection; prefer LUKS, LVM, VDO, multipath, or cache-specific
-  teardown when another domain owns the mapper.
+  status inspection. Current-topology comparison suppresses destroy actions
+  when the mapper is already absent and keeps present maps actionable with a
+  warning that includes `dm.open-count` when probe data reports it. Prefer
+  LUKS, LVM, VDO, multipath, or cache-specific teardown when another domain
+  owns the mapper.
 - LUKS keyslot and token add/change operations are offline-required header
   updates. Keyslot or token removal is potential-data-loss because deleting the
   last usable unlock path can make encrypted data inaccessible.
@@ -490,7 +493,7 @@ active session is not hidden by a configured but disconnected target. Login
 actions are suppressed only when a logged-in session is present; logout actions
 are suppressed only when the target is known and no logged-in session is
 present.
-Already-satisfied grow, shrink, iSCSI login/logout, LVM
+Already-satisfied grow, shrink, device-mapper destroy, iSCSI login/logout, LVM
 activation/deactivation, LUKS open, loop create/destroy, LUN attach/detach,
 NVMe namespace attach/detach, mount, unmount, remount, NFS export/unexport,
 VDO start, VDO stop, MD assemble, ZFS pool import, LVM volume-group

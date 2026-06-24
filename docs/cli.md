@@ -571,9 +571,10 @@ options as a required subset of current mount options, LVM
 activation and deactivation actions are compared with `lvm.active` where that
 metadata is available, LUKS open and close actions are compared with
 `cryptsetup.active`, loop-device create/destroy actions are compared with
-`loop.back-file` mapping metadata, LUN attach/detach and NVMe namespace
-attach/detach actions are compared with concrete host-visible path matches,
-NFS export actions are compared with
+`loop.back-file` mapping metadata, device-mapper destroy actions are compared
+with current mapper presence and `dm.open-count` metadata, LUN attach/detach
+and NVMe namespace attach/detach actions are compared with concrete
+host-visible path matches, NFS export actions are compared with
 `nfs.export-client` and `nfs.export-option-*` properties, NFS unexport actions
 are suppressed when the export is absent, VDO start actions are compared with
 `vdo.operating-mode`, VDO stop actions are compared with
@@ -583,18 +584,20 @@ assemble actions are compared with `md.state`, `md.degraded-devices`, and
 `zfs.health`, LVM volume-group import/export actions are compared with
 `lvm.vg-exported`, and iSCSI login/logout actions are compared with current
 session state across all matching target/session nodes when metadata is
-available. Safe already-satisfied grow, shrink, iSCSI login/logout, LVM
-activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
-loop create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
-unmount, remount, NFS export/unexport, VDO start, VDO stop, MD assemble, ZFS
-pool import, and property actions that have no warning diagnostics are
+available. Safe already-satisfied grow, shrink, device-mapper destroy, iSCSI
+login/logout, LVM activation/deactivation, LVM volume-group import/export,
+LUKS open, LUKS close, loop create/destroy, LUN attach/detach, NVMe namespace
+attach/detach, mount, unmount, remount, NFS export/unexport, VDO start, VDO
+stop, MD assemble, ZFS pool import, and property actions that have no warning
+diagnostics are
 suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
 inactive LUKS open targets, active LUKS close targets, loop devices mapped to
-different backing files, still-mapped loop detach targets, absent LUN attach
-paths, visible LUN detach paths, absent NVMe namespace attach paths, visible
-NVMe namespace detach paths, non-normal VDO start
+different backing files, still-mapped loop detach targets, present
+device-mapper removal targets, absent LUN attach paths, visible LUN detach
+paths, absent NVMe namespace attach paths, visible NVMe namespace detach paths,
+non-normal VDO start
 modes, running VDO stop targets, degraded or failed MD arrays, degraded ZFS
 pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
@@ -707,9 +710,11 @@ inspection commands when a concrete `/dev/mapper/*` or `/dev/dm-*` target is
 declared. `operation = "rename"` renders `dmsetup rename` with an
 offline-required policy gate because dependent consumers must move to the new
 mapper name. `operation = "destroy"` or `destroy = true` renders destructive
-`dmsetup remove` after identity, dependency, and status inspection; use
-domain-specific LUKS, LVM, VDO, multipath, or cache teardown when those layers
-own the mapper.
+`dmsetup remove` after identity, dependency, and status inspection. With
+current-topology probing, absent mapper removals are suppressed as already
+satisfied and present maps remain actionable with a warning, including the
+current `dm.open-count` when available. Use domain-specific LUKS, LVM, VDO,
+multipath, or cache teardown when those layers own the mapper.
 Btrfs filesystem device-removal plans use Btrfs allocation inspection and
 domain-specific `btrfs device remove` rendering, but the mutating command is
 blocked by default until `allowPotentialDataLoss=true` is set.

@@ -246,6 +246,8 @@ pub enum TopologyDiagnosticKind {
     LunAttachRequired,
     LunDetachAlreadySatisfied,
     LunDetachRequired,
+    DmMapDestroyAlreadySatisfied,
+    DmMapDestroyRequired,
     NvmeNamespaceAttachAlreadySatisfied,
     NvmeNamespaceAttachRequired,
     NvmeNamespaceDetachAlreadySatisfied,
@@ -767,6 +769,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                 matches!(
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
                         | TopologyDiagnosticKind::LunAttachAlreadySatisfied
@@ -1379,6 +1382,7 @@ fn already_satisfied_action_ids(
             already_satisfied |= matches!(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
+                    | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
                     | TopologyDiagnosticKind::LunAttachAlreadySatisfied
@@ -1423,6 +1427,9 @@ fn topology_diagnostics_for_action(
 
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
+        if let Some(diagnostic) = dm_map_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = loop_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1470,6 +1477,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
     diagnostics.extend(luks_close_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
+    diagnostics.extend(dm_map_present_diagnostic(action, node, &query));
     diagnostics.extend(loop_present_diagnostic(action, node, &query));
     diagnostics.extend(md_assemble_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
@@ -1848,6 +1856,51 @@ fn luks_close_diagnostic(
         action_id: action.id.clone(),
         level,
         kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn dm_map_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("dmMaps")
+        || action.operation != Operation::Destroy
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("device-mapper map {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn dm_map_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("dmMaps")
+        || action.operation != Operation::Destroy
+    {
+        return None;
+    }
+
+    let message = match property_value_from_node(node, "dm.open-count") {
+        Some(open_count) => {
+            format!("device-mapper map {query} is still present with open count {open_count}")
+        }
+        None => format!("device-mapper map {query} is still present"),
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::DmMapDestroyRequired,
         query: query.to_string(),
         message,
         current: Some(current_node_summary(node)),
@@ -14775,6 +14828,79 @@ mod tests {
             diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.old:logout"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::IscsiLogoutRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_dm_map_destroy_when_map_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "dmMaps": {
+                "oldmap": {
+                  "operation": "destroy",
+                  "target": "/dev/mapper/oldmap"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "dmmaps:oldmap:destroy"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_dm_map_destroy_when_map_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "dmMaps": {
+                "oldmap": {
+                  "operation": "destroy",
+                  "target": "/dev/mapper/oldmap"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("dm:oldmap", NodeKind::DeviceMapper, "oldmap")
+                .with_path("/dev/mapper/oldmap")
+                .with_property("dm.open-count", "2"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "dmmaps:oldmap:destroy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::DmMapDestroyRequired
+                && diagnostic
+                    .message
+                    .contains("still present with open count 2")
         }));
     }
 
