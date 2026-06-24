@@ -411,6 +411,8 @@ the declaration key is a friendly name instead of the concrete snapshot
 identity. Snapshot rescan plans also accept `path`, `snapshotPath`, or
 `snapshot-path` when a Btrfs snapshot uses a friendly map key instead of the
 absolute snapshot path.
+Snapshot rename plans remain non-ready until the declaration resolves to a
+concrete ZFS snapshot name or absolute Btrfs snapshot path.
 ZFS snapshot hold plans render safe `zfs hold <tag> <snapshot>` and
 `zfs release <tag> <snapshot>` updates from `hold` and `releaseHold`
 declarations so retention can be changed without deleting recovery points.

@@ -853,7 +853,9 @@ ZFS snapshot retention declarations render safe `zfs hold <tag> <snapshot>`
 and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
 ZFS snapshot clone declarations render reviewed `zfs clone <snapshot> <dataset>` commands from `cloneTo`, `cloneTarget`, or `clone`.
 Snapshot rename declarations render reviewed `zfs rename <snapshot> <new>` for
-ZFS names and `mv -- <old> <new>` for absolute Btrfs snapshot paths.
+ZFS names and `mv -- <old> <new>` for absolute Btrfs snapshot paths. Friendly
+snapshot keys remain non-ready for rename until `name`, `snapshotName`, `path`,
+or `snapshotPath` supplies the concrete snapshot identity.
 Snapshot `operation = "rescan"` declarations render read-only ZFS
 `zfs list`, `zfs get`, and `zfs holds` probes or Btrfs `subvolume show` and
 read-only property probes, plus graph inspection for snapshot/source

@@ -474,7 +474,9 @@ Address fields have domain-specific meaning:
   snapshot lifecycle actions when the declaration key is a friendly name
 
 - `snapshotPath`: explicit snapshot identity alias for `path`, useful for
-  Btrfs snapshot rescans with non-path attribute names
+  Btrfs snapshot rescans and renames with non-path attribute names. Snapshot
+  rename remains non-ready until the declaration resolves to a concrete ZFS
+  snapshot name or absolute Btrfs snapshot path.
 
 - `device`: backing block device or image path used by formats, LUKS, swap,
   filesystems, partitions, and loop-device setup

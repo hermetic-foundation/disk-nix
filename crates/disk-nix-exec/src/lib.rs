@@ -5707,7 +5707,13 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 )
             } else {
                 (
-                    Vec::new(),
+                    vec![command_with_readiness(
+                        ["<snapshot-rename-tool>", snapshot, rename_to],
+                        true,
+                        CommandReadiness::NeedsDomainImplementation,
+                        ["ZFS snapshot name or Btrfs snapshot path"],
+                        "rename the snapshot after selecting the target-specific snapshot tool",
+                    )],
                     vec![
                         "snapshot rename command is only rendered for unambiguous ZFS snapshot names or Btrfs absolute paths"
                             .to_string(),
@@ -16601,6 +16607,46 @@ mod tests {
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
+    }
+
+    #[test]
+    fn ambiguous_snapshot_rename_reports_unresolved_domain() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "snapshots": {
+                  "before-upgrade": {
+                    "target": "tank/home",
+                    "renameTo": "retained-before-upgrade"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:before-upgrade:rename:retained-before-upgrade"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "<snapshot-rename-tool>",
+                            "before-upgrade",
+                            "retained-before-upgrade",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["ZFS snapshot name or Btrfs snapshot path"]
+                })
+        }));
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
+        assert!(!report.command_summary.all_commands_ready());
     }
 
     #[test]

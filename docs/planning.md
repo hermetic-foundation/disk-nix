@@ -298,6 +298,8 @@ Examples:
   `zfs.rollbackRecursive` render explicit `zfs rollback -r` details for
   recursive rollback review. Apply blocks rollback by default and requires
   explicit `allowPotentialDataLoss=true` policy before execution.
+  Snapshot rename remains non-ready when a friendly declaration key does not
+  resolve to a concrete ZFS snapshot name or absolute Btrfs snapshot path.
 
 The checked-in specs under `examples/` are part of `nix flake check`. The
 flake validates stable plan summaries, selected action ids, allowed simple
