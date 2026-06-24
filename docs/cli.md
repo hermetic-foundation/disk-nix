@@ -577,8 +577,9 @@ the matched container. Loop-device create/destroy actions are compared with
 with current mapper presence and `dm.open-count` metadata, multipath destroy
 actions are compared with current map presence plus WWID or dm map metadata,
 bcache detach actions are compared with current bcache target presence,
-dirty-data, cache-mode, and cache-set metadata, Btrfs subvolume destroy actions
-are compared with concrete absolute-path presence plus subvolume id,
+dirty-data, cache-mode, and cache-set metadata, LVM cache detach actions are
+compared with origin LV cache/writecache metadata, Btrfs subvolume destroy
+actions are compared with concrete absolute-path presence plus subvolume id,
 generation, parent, top-level, and UUID metadata, LUN attach/detach and NVMe
 namespace attach/detach actions are compared with concrete host-visible path
 matches, NFS export actions are compared with
@@ -600,17 +601,17 @@ activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
 LUKS keyslot/token removal, loop create/destroy, LUN attach/detach, NVMe
 namespace attach/detach, mount, unmount, remount, NFS export/unexport, VDO
 destroy, VDO start, VDO stop, MD assemble, Btrfs subvolume destroy, ZFS
-dataset/zvol destroy, ZFS pool import, and property actions that have no warning diagnostics are suppressed from the actionable plan and counted as
+dataset/zvol destroy, ZFS pool import, LVM cache detach, and property actions that have no warning diagnostics are suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
 inactive LUKS open targets, active LUKS close targets, still-present LUKS
 keyslots/tokens selected for removal, loop devices mapped to different backing
 files, still-mapped loop detach targets, present device-mapper removal targets,
 present multipath flush targets, absent LUN attach paths, visible LUN detach
-paths, present bcache detach targets, absent NVMe namespace attach paths,
-visible NVMe namespace detach paths, present VDO destroy targets, non-normal
-VDO start modes, running VDO stop targets, present Btrfs subvolume destroy
-targets, present ZFS dataset/zvol destroy targets, degraded or failed MD arrays,
+paths, present bcache detach targets, still-attached LVM cache origins, absent
+NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
+destroy targets, non-normal VDO start modes, running VDO stop targets, present
+Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, degraded or failed MD arrays,
 degraded ZFS pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
 targets without a logged-in session and logout targets that still have a
@@ -956,7 +957,11 @@ LVM cache command plans render `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` commands for `lvmCaches`
 lifecycle declarations. Executable attach plans require both an origin `vg/lv`
 target and a cache-pool LV. `operation = "rescan"` renders read-only `lvs`
-cache mode, policy, utilization, and graph inspection commands.
+cache mode, policy, utilization, and graph inspection commands. With
+current-topology probing, detach actions are suppressed only when the matched
+origin LV no longer reports cache or writecache metadata; still-attached
+origins remain actionable with warnings that include cache pool, mode, policy,
+dirty blocks, and utilization when available.
 LVM volume group command plans render policy-gated `vgcreate` and `vgremove`
 commands for `volumeGroups` lifecycle declarations, reviewed `vgextend`
 commands for grow or add-device operations with an explicit physical volume,

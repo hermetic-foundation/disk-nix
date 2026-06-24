@@ -266,6 +266,8 @@ pub enum TopologyDiagnosticKind {
     LvmVgExportRequired,
     LvmVgImportAlreadySatisfied,
     LvmVgImportRequired,
+    LvmCacheDetachAlreadySatisfied,
+    LvmCacheDetachRequired,
     LuksCloseAlreadySatisfied,
     LuksCloseRequired,
     LuksOpenAlreadySatisfied,
@@ -799,6 +801,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
+                        | TopologyDiagnosticKind::LvmCacheDetachAlreadySatisfied
                         | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
                         | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
                         | TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
@@ -1423,6 +1426,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
+                    | TopologyDiagnosticKind::LvmCacheDetachAlreadySatisfied
                     | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
                     | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
                     | TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
@@ -1528,6 +1532,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(lvm_deactivate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_export_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
+    diagnostics.extend(lvm_cache_detach_diagnostic(action, node, &query));
     diagnostics.extend(luks_close_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
     diagnostics.extend(luks_keyslot_remove_diagnostic(action, node, &query));
@@ -1876,6 +1881,93 @@ fn lvm_vg_export_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn lvm_cache_detach_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("lvmCaches")
+        || !matches!(
+            action.operation,
+            Operation::Destroy | Operation::RemoveDevice
+        )
+        || !matches!(node.kind, NodeKind::LvmCache | NodeKind::LvmLogicalVolume)
+    {
+        return None;
+    }
+
+    let attached = lvm_cache_is_attached(node);
+    let (level, kind, message) = if attached {
+        let details = lvm_cache_detach_details(node);
+        let message = if details.is_empty() {
+            format!("LVM cache remains attached to origin {query}")
+        } else {
+            format!(
+                "LVM cache remains attached to origin {query} with {}",
+                details.join(", ")
+            )
+        };
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LvmCacheDetachRequired,
+            message,
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LvmCacheDetachAlreadySatisfied,
+            format!("LVM cache is already detached from origin {query}"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn lvm_cache_is_attached(node: &Node) -> bool {
+    node.kind == NodeKind::LvmCache
+        || [
+            "lvm.pool",
+            "lvm.cache-mode",
+            "lvm.cache-policy",
+            "lvm.cache-dirty-blocks",
+            "lvm.cache-total-blocks",
+            "lvm.writecache-writeback-blocks",
+            "lvm.writecache-total-blocks",
+        ]
+        .iter()
+        .any(|property| property_value_from_node(node, property).is_some())
+}
+
+fn lvm_cache_detach_details(node: &Node) -> Vec<String> {
+    [
+        ("lvm.pool", "cache pool"),
+        ("lvm.cache-mode", "cache mode"),
+        ("lvm.cache-policy", "cache policy"),
+        ("lvm.cache-dirty-blocks", "dirty blocks"),
+        ("lvm.cache-total-blocks", "cache blocks"),
+        ("lvm.cache-used-blocks", "used cache blocks"),
+        ("lvm.writecache-writeback-blocks", "writeback blocks"),
+        ("lvm.writecache-total-blocks", "writecache blocks"),
+        ("lvm.writecache-free-blocks", "free writecache blocks"),
+        ("lvm.data-percent", "data percent"),
+        ("lvm.metadata-percent", "metadata percent"),
+        ("lvm.health", "health"),
+        ("lvm.attr", "LV attributes"),
+    ]
+    .into_iter()
+    .filter_map(|(property, label)| {
+        property_value_from_node(node, property).map(|value| format!("{label} {value}"))
+    })
+    .collect()
 }
 
 fn luks_open_diagnostic(
@@ -15180,6 +15272,115 @@ mod tests {
             diagnostic.action_id == "volumegroups:vg0:export"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::LvmVgExportRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_lvm_cache_detach_when_origin_uncached() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "lvmCaches": {
+                "vg0/root": {
+                  "removeDevices": ["vg0/root-cache"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "lvm-lv:vg0/root",
+            NodeKind::LvmLogicalVolume,
+            "vg0/root",
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lvmCaches:vg0/root:remove-device:vg0/root-cache"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmCacheDetachAlreadySatisfied
+                && diagnostic.query == "vg0/root"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_lvm_cache_detach_when_origin_cached() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "lvmCaches": {
+                "vg0/root": {
+                  "removeDevices": ["vg0/root-cache"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lvm-lv:vg0/root", NodeKind::LvmCache, "vg0/root")
+                .with_property("lvm.pool", "root-cache")
+                .with_property("lvm.cache-mode", "writeback")
+                .with_property("lvm.cache-policy", "smq")
+                .with_property("lvm.cache-dirty-blocks", "64")
+                .with_property("lvm.data-percent", "12.00"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lvmCaches:vg0/root:remove-device:vg0/root-cache"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmCacheDetachRequired
+                && diagnostic.message.contains("cache pool root-cache")
+                && diagnostic.message.contains("cache mode writeback")
+                && diagnostic.message.contains("dirty blocks 64")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_lvm_cache_detach_missing_without_origin() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "lvmCaches": {
+                "vg0/root": {
+                  "removeDevices": ["vg0/root-cache"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lvmCaches:vg0/root:remove-device:vg0/root-cache"
+                && diagnostic.kind == TopologyDiagnosticKind::Missing
+                && diagnostic.query == "vg0/root"
         }));
     }
 

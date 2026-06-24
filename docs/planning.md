@@ -515,6 +515,10 @@ device to the LUKS container and uses `cryptsetup.luks-keyslots` or
 whose slot or token id is already absent. Present slots and tokens remain
 actionable with warnings that include keyslot priority, cipher, PBKDF, token
 type, or token keyslot binding metadata when available.
+LVM cache detach reconciliation matches the origin LV and suppresses detach
+only when the current LV no longer reports cache or writecache metadata.
+Still-attached cache origins remain actionable with warnings that include cache
+pool, mode, policy, dirty blocks, and utilization when available.
 Loop-device create/destroy reconciliation uses `loop.back-file` topology
 metadata to suppress create actions only when the loop device already maps the
 declared backing file and suppress destroy/detach actions only when the loop
@@ -679,7 +683,9 @@ entries stay actionable.
 LVM cache command plans use `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` for `lvmCaches` lifecycle
 declarations. Executable attach plans require an origin `vg/lv` target and a
-cache-pool LV through `device` or `addDevices`.
+cache-pool LV through `device` or `addDevices`. With current-topology probing,
+detach actions are suppressed only after the origin LV is matched and no
+cache/writecache metadata remains; still-cached origins remain planned.
 NVMe namespace command plans use `nvme create-ns`, `nvme attach-ns`,
 explicit `operation = "rescan"` plans through `nvme ns-rescan`,
 `nvme detach-ns`, and `nvme delete-ns`. Create and delete are destructive
