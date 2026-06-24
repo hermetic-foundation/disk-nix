@@ -18,10 +18,12 @@ struct MdArray {
     size_bytes: Option<u64>,
     used_devices: Option<String>,
     total_devices: Option<String>,
+    array_devices: Option<String>,
     active_devices: Option<String>,
     working_devices: Option<String>,
     failed_devices: Option<String>,
     spare_devices: Option<String>,
+    degraded_devices: Option<String>,
     name_property: Option<String>,
     creation_time: Option<String>,
     update_time: Option<String>,
@@ -86,10 +88,12 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
         size_bytes: None,
         used_devices: None,
         total_devices: None,
+        array_devices: None,
         active_devices: None,
         working_devices: None,
         failed_devices: None,
         spare_devices: None,
+        degraded_devices: None,
         name_property: None,
         creation_time: None,
         update_time: None,
@@ -133,6 +137,8 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
             array.used_devices = value_after_colon(trimmed);
         } else if trimmed.starts_with("Total Devices :") {
             array.total_devices = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Array Devices :") {
+            array.array_devices = value_after_colon(trimmed);
         } else if trimmed.starts_with("Active Devices :") {
             array.active_devices = value_after_colon(trimmed);
         } else if trimmed.starts_with("Working Devices :") {
@@ -141,6 +147,8 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
             array.failed_devices = value_after_colon(trimmed);
         } else if trimmed.starts_with("Spare Devices :") {
             array.spare_devices = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Degraded Devices :") {
+            array.degraded_devices = value_after_colon(trimmed);
         } else if trimmed.starts_with("Consistency Policy :") {
             array.consistency_policy = value_after_colon(trimmed);
         } else if trimmed.starts_with("Rebuild Status :") {
@@ -197,10 +205,12 @@ fn add_array(graph: &mut StorageGraph, array: MdArray) {
         ("md.state", array.state),
         ("md.raid-devices", array.used_devices),
         ("md.total-devices", array.total_devices),
+        ("md.array-devices", array.array_devices),
         ("md.active-devices", array.active_devices),
         ("md.working-devices", array.working_devices),
         ("md.failed-devices", array.failed_devices),
         ("md.spare-devices", array.spare_devices),
+        ("md.degraded-devices", array.degraded_devices),
         ("md.name", array.name_property),
         ("md.creation-time", array.creation_time),
         ("md.update-time", array.update_time),
@@ -288,10 +298,12 @@ mod tests {
         Array Size : 1046528 (1022.00 MiB 1071.64 MB)\n\
        Raid Devices : 2\n\
       Total Devices : 2\n\
+      Array Devices : 2\n\
      Active Devices : 2\n\
     Working Devices : 2\n\
      Failed Devices : 0\n\
       Spare Devices : 1\n\
+   Degraded Devices : 0\n\
               State : clean\n\
  Consistency Policy : bitmap\n\
     Rebuild Status : 42% complete\n\
@@ -351,7 +363,15 @@ mod tests {
                 && node
                     .properties
                     .iter()
+                    .any(|property| property.key == "md.array-devices" && property.value == "2")
+                && node
+                    .properties
+                    .iter()
                     .any(|property| property.key == "md.spare-devices" && property.value == "1")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.degraded-devices" && property.value == "0")
                 && node.properties.iter().any(|property| {
                     property.key == "md.consistency-policy" && property.value == "bitmap"
                 })

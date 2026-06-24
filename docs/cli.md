@@ -295,11 +295,11 @@ Use these commands for:
   transport, address, namespace capacity, LBA format, maximum LBA, sector size,
   physical size, used bytes, free bytes, and utilization when `nvme list -o json` exposes them
 - `raid`: MD RAID arrays and member devices, including array UUID, metadata
-  version, level, state, size, raid, total, active, working, failed, and spare
-  device counts, event counters, chunk/layout details, consistency policy,
-  rebuild, resync, and check progress, intent bitmap, timestamps, and
-  per-member number, major/minor, raid-device, and state when `mdadm --detail`
-  exposes them
+  version, level, state, size, raid, total, array, active, working, failed,
+  spare, and degraded device counts, event counters, chunk/layout details,
+  consistency policy, rebuild, resync, and check progress, intent bitmap,
+  timestamps, and per-member number, major/minor, raid-device, and state when
+  `mdadm --detail` exposes them
 - `loop`: loop devices and backing files/devices, including backing path,
   offset, size limit, logical sector size, major/minor, autoclear,
   read-only, and direct-I/O settings when `losetup --json` exposes them

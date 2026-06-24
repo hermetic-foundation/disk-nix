@@ -139,8 +139,9 @@ The current probe layer normalizes:
   multipliers, directory transfer/block sizing, RPC security flavor
   identifiers, age, and mount options
 - MD RAID arrays through `mdadm --detail --scan` and `mdadm --detail <array>`
-  for array UUID, level, state, size, device counts, and member number,
-  major/minor, raid-device, and state
+  for array UUID, level, state, size, raid/total/array/active/working/failed/
+  spare/degraded device counts, and member number, major/minor, raid-device,
+  and state
 - Multipath maps through `multipath -ll` for map name, WWID, dm device,
   vendor/product, map features, hardware handler, write-protect state,
   path-group policy/priority/status, and backing path device state

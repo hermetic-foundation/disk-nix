@@ -2805,10 +2805,12 @@ fn usage_details(node: &Node) -> String {
         ("md.state", "state"),
         ("md.raid-devices", "raid-devices"),
         ("md.total-devices", "total-devices"),
+        ("md.array-devices", "array-devices"),
         ("md.active-devices", "active-devices"),
         ("md.working-devices", "working-devices"),
         ("md.failed-devices", "failed-devices"),
         ("md.spare-devices", "spare-devices"),
+        ("md.degraded-devices", "degraded-devices"),
         ("md.name", "md-name"),
         ("md.events", "events"),
         ("md.chunk-size", "chunk"),
@@ -5424,10 +5426,12 @@ mod tests {
                 .with_property("md.state", "clean")
                 .with_property("md.raid-devices", "2")
                 .with_property("md.total-devices", "2")
+                .with_property("md.array-devices", "2")
                 .with_property("md.active-devices", "1")
                 .with_property("md.working-devices", "2")
                 .with_property("md.failed-devices", "1")
                 .with_property("md.spare-devices", "1")
+                .with_property("md.degraded-devices", "1")
                 .with_property("md.name", "host:0")
                 .with_property("md.creation-time", "Tue Jun 23 10:15:00 2026")
                 .with_property("md.update-time", "Tue Jun 23 10:16:00 2026")
@@ -5483,8 +5487,9 @@ mod tests {
         assert!(output.contains("raid1"));
         assert!(output.contains("clean"));
         assert!(output.contains("md-version=1.2 level=raid1 state=clean"));
-        assert!(output.contains("raid-devices=2 total-devices=2 active-devices=1"));
-        assert!(output.contains("working-devices=2 failed-devices=1 spare-devices=1"));
+        assert!(output.contains("raid-devices=2 total-devices=2 array-devices=2"));
+        assert!(output.contains("active-devices=1 working-devices=2 failed-devices=1"));
+        assert!(output.contains("spare-devices=1 degraded-devices=1"));
         assert!(output.contains("md-name=host:0"));
         assert!(output.contains("created=Tue Jun 23 10:15:00 2026"));
         assert!(output.contains("updated=Tue Jun 23 10:16:00 2026"));
