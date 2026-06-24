@@ -1761,7 +1761,7 @@ fn topology_query(action: &PlannedAction) -> Option<String> {
     }
 
     if action.context.collection.as_deref() == Some("luks.devices")
-        && action.operation == Operation::Format
+        && matches!(action.operation, Operation::Format | Operation::SetProperty)
     {
         return action
             .context
@@ -2127,6 +2127,11 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
             .or_else(|| property_value_from_node(node, property).map(str::to_string));
     }
 
+    if action.context.collection.as_deref() == Some("luks.devices") {
+        return current_luks_property_value(property, node)
+            .or_else(|| property_value_from_node(node, property).map(str::to_string));
+    }
+
     if let Some(aliases) = aliases {
         return aliases
             .iter()
@@ -2172,7 +2177,52 @@ fn comparable_property_value(action: &PlannedAction, property: &str, value: &str
         }
         Some("swaps") => normalize_swap_property_value(&normalized_property, value)
             .unwrap_or_else(|| value.to_string()),
+        Some("luks.devices") => normalize_luks_property_value(&normalized_property, value)
+            .unwrap_or_else(|| value.to_string()),
         _ => value.to_string(),
+    }
+}
+
+fn current_luks_property_value(property: &str, node: &Node) -> Option<String> {
+    match luks_property_kind(property)? {
+        LuksPropertyKind::Label => node.identity.label.clone().or_else(|| {
+            property_value_from_node(node, "cryptsetup.label")
+                .or_else(|| property_value_from_node(node, "cryptsetup.luks-label"))
+                .map(str::to_string)
+        }),
+        LuksPropertyKind::Subsystem => property_value_from_node(node, "cryptsetup.luks-subsystem")
+            .or_else(|| property_value_from_node(node, "cryptsetup.subsystem"))
+            .map(str::to_string),
+        LuksPropertyKind::Uuid => node.identity.uuid.clone().or_else(|| {
+            property_value_from_node(node, "cryptsetup.uuid")
+                .or_else(|| property_value_from_node(node, "cryptsetup.luks-uuid"))
+                .map(str::to_string)
+        }),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LuksPropertyKind {
+    Label,
+    Subsystem,
+    Uuid,
+}
+
+fn luks_property_kind(property: &str) -> Option<LuksPropertyKind> {
+    match normalize_storage_property_name(property).as_str() {
+        "label" | "luks-label" | "cryptsetup-label" => Some(LuksPropertyKind::Label),
+        "subsystem" | "luks-subsystem" | "cryptsetup-subsystem" => {
+            Some(LuksPropertyKind::Subsystem)
+        }
+        "uuid" | "luks-uuid" | "cryptsetup-uuid" => Some(LuksPropertyKind::Uuid),
+        _ => None,
+    }
+}
+
+fn normalize_luks_property_value(property: &str, value: &str) -> Option<String> {
+    match luks_property_kind(property)? {
+        LuksPropertyKind::Label | LuksPropertyKind::Subsystem => Some(value.to_string()),
+        LuksPropertyKind::Uuid => Some(value.trim().to_ascii_lowercase()),
     }
 }
 
@@ -17933,6 +17983,96 @@ mod tests {
                 && diagnostic
                     .message
                     .contains("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_luks_identity_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "name": "cryptroot",
+                    "device": "/dev/disk/by-id/root-luks",
+                    "properties": {
+                      "label": "root",
+                      "luks.subsystem": "nixos",
+                      "luks.uuid": "01234567-89AB-CDEF-0123-456789ABCDEF"
+                    }
+                  },
+                  "cryptdata": {
+                    "name": "cryptdata",
+                    "device": "/dev/disk/by-id/data-luks",
+                    "properties": {
+                      "cryptsetup.label": "data-new"
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/root-luks",
+                NodeKind::LuksContainer,
+                "root-luks",
+            )
+            .with_path("/dev/disk/by-id/root-luks")
+            .with_identity(Identity {
+                uuid: Some("01234567-89ab-cdef-0123-456789abcdef".to_string()),
+                partuuid: None,
+                label: Some("root".to_string()),
+                serial: None,
+                wwn: None,
+            })
+            .with_property("cryptsetup.luks-subsystem", "nixos"),
+        );
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/data-luks",
+                NodeKind::LuksContainer,
+                "data-luks",
+            )
+            .with_path("/dev/disk/by-id/data-luks")
+            .with_property("cryptsetup.label", "data-old"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 4);
+        assert_eq!(comparison.summary.matched_count, 4);
+        assert_eq!(comparison.summary.already_satisfied_count, 3);
+        assert_eq!(comparison.summary.suppressed_action_count, 3);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "luks.devices:cryptdata:set-property:cryptsetup.label"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptroot:set-property:label"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptroot:set-property:luks.subsystem"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptroot:set-property:luks.uuid"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptdata:set-property:cryptsetup.label"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic.message.contains("data-old")
+                && diagnostic.message.contains("data-new")
         }));
     }
 
