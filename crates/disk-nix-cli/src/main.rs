@@ -3048,6 +3048,22 @@ fn usage_details(node: &Node) -> String {
         ("dm.open-count", "open"),
         ("dm.segments", "segments"),
         ("dm.events", "events"),
+        ("dm.table.targets", "dm-table-targets"),
+        ("dm.table.segment-count", "dm-table-segments"),
+        ("dm.table.segment.0.start", "dm-table-start"),
+        ("dm.table.segment.0.length", "dm-table-length"),
+        ("dm.table.segment.0.target", "dm-table-target"),
+        ("dm.table.segment.0.payload", "dm-table-payload"),
+        ("dm.table.segment.0.crypt.cipher", "dm-crypt-cipher"),
+        ("dm.table.segment.0.crypt.iv-offset", "dm-crypt-iv-offset"),
+        ("dm.table.segment.0.crypt.device", "dm-crypt-device"),
+        ("dm.table.segment.0.crypt.offset", "dm-crypt-offset"),
+        ("dm.status.targets", "dm-status-targets"),
+        ("dm.status.segment-count", "dm-status-segments"),
+        ("dm.status.segment.0.start", "dm-status-start"),
+        ("dm.status.segment.0.length", "dm-status-length"),
+        ("dm.status.segment.0.target", "dm-status-target"),
+        ("dm.status.segment.0.payload", "dm-status-payload"),
         ("cryptsetup.active", "active"),
         ("cryptsetup.in-use", "in-use"),
         ("cryptsetup.cipher", "cipher"),
@@ -6593,6 +6609,18 @@ mod tests {
             .with_property("dm.open-count", "1")
             .with_property("dm.segments", "1")
             .with_property("dm.events", "0")
+            .with_property("dm.table.targets", "crypt")
+            .with_property("dm.table.segment-count", "1")
+            .with_property("dm.table.segment.0.start", "0")
+            .with_property("dm.table.segment.0.length", "2097152")
+            .with_property("dm.table.segment.0.target", "crypt")
+            .with_property("dm.table.segment.0.crypt.cipher", "aes-xts-plain64")
+            .with_property("dm.table.segment.0.crypt.device", "259:2")
+            .with_property("dm.table.segment.0.crypt.offset", "4096")
+            .with_property("dm.status.targets", "crypt")
+            .with_property("dm.status.segment-count", "1")
+            .with_property("dm.status.segment.0.target", "crypt")
+            .with_property("dm.status.segment.0.payload", "0 2097152")
             .with_property("cryptsetup.active", "true")
             .with_property("cryptsetup.in-use", "true")
             .with_property("cryptsetup.cipher", "aes-xts-plain64")
@@ -6714,6 +6742,15 @@ mod tests {
         ));
         assert!(output.contains(
             "keyslot-1=luks2 keyslot-1-priority=ignored token-0=systemd-tpm2 token-0-keyslot=0 data-cipher=aes-xts-plain64"
+        ));
+        assert!(output.contains(
+            "dm-table-targets=crypt dm-table-segments=1 dm-table-start=0 dm-table-length=2097152 dm-table-target=crypt"
+        ));
+        assert!(output.contains(
+            "dm-crypt-cipher=aes-xts-plain64 dm-crypt-device=259:2 dm-crypt-offset=4096"
+        ));
+        assert!(output.contains(
+            "dm-status-targets=crypt dm-status-segments=1 dm-status-target=crypt dm-status-payload=0 2097152"
         ));
         assert!(
             output.contains(

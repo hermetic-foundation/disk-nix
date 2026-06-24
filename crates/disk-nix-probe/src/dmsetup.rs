@@ -19,9 +19,25 @@ struct DmDependency {
     devices: Vec<String>,
 }
 
-pub fn normalize_dmsetup(info: &[u8], deps: &[u8]) -> Result<StorageGraph, ProbeError> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DmTargetLine {
+    name: String,
+    start: String,
+    length: String,
+    target: String,
+    payload: Option<String>,
+}
+
+pub fn normalize_dmsetup(
+    info: &[u8],
+    deps: &[u8],
+    table: Option<&[u8]>,
+    status: Option<&[u8]>,
+) -> Result<StorageGraph, ProbeError> {
     let devices = parse_info(info)?;
     let dependencies = parse_deps(deps)?;
+    let table = table.map(parse_target_lines).transpose()?;
+    let status = status.map(parse_target_lines).transpose()?;
     let mut graph = StorageGraph::empty();
 
     for device in devices {
@@ -29,6 +45,12 @@ pub fn normalize_dmsetup(info: &[u8], deps: &[u8]) -> Result<StorageGraph, Probe
     }
     for dependency in dependencies {
         add_dependency(&mut graph, dependency);
+    }
+    if let Some(table) = table {
+        add_target_lines(&mut graph, table, "table");
+    }
+    if let Some(status) = status {
+        add_target_lines(&mut graph, status, "status");
     }
 
     Ok(graph)
@@ -81,6 +103,39 @@ fn parse_deps(bytes: &[u8]) -> Result<Vec<DmDependency>, ProbeError> {
     Ok(dependencies)
 }
 
+fn parse_target_lines(bytes: &[u8]) -> Result<Vec<DmTargetLine>, ProbeError> {
+    let text = std::str::from_utf8(bytes).map_err(|error| {
+        ProbeError::Adapter(format!("failed to read dmsetup target output: {error}"))
+    })?;
+    let mut targets = Vec::new();
+
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let Some((name, rest)) = line.split_once(':') else {
+            continue;
+        };
+        let mut fields = rest.split_whitespace();
+        let Some(start) = fields.next() else {
+            continue;
+        };
+        let Some(length) = fields.next() else {
+            continue;
+        };
+        let Some(target) = fields.next() else {
+            continue;
+        };
+        let payload = fields.collect::<Vec<_>>().join(" ");
+        targets.push(DmTargetLine {
+            name: name.trim().to_string(),
+            start: start.to_string(),
+            length: length.to_string(),
+            target: target.to_string(),
+            payload: (!payload.is_empty()).then_some(payload),
+        });
+    }
+
+    Ok(targets)
+}
+
 fn add_device(graph: &mut StorageGraph, device: DmDevice) {
     let id = dm_id(&device.name);
     let mut node = Node::new(
@@ -126,6 +181,65 @@ fn add_dependency(graph: &mut StorageGraph, dependency: DmDependency) {
         );
         graph.add_edge(Edge::new(backing_id, dm_id.clone(), Relationship::Backs));
     }
+}
+
+fn add_target_lines(graph: &mut StorageGraph, lines: Vec<DmTargetLine>, namespace: &str) {
+    let mut grouped = std::collections::BTreeMap::<String, Vec<DmTargetLine>>::new();
+    for line in lines {
+        grouped.entry(line.name.clone()).or_default().push(line);
+    }
+
+    for (name, lines) in grouped {
+        let mut node = Node::new(dm_id(&name), NodeKind::DeviceMapper, name.clone())
+            .with_path(format!("/dev/mapper/{name}"))
+            .with_property(
+                format!("dm.{namespace}.segment-count"),
+                lines.len().to_string(),
+            );
+        let mut targets = Vec::new();
+        for (index, line) in lines.iter().enumerate() {
+            if !targets.contains(&line.target) {
+                targets.push(line.target.clone());
+            }
+            let prefix = format!("dm.{namespace}.segment.{index}");
+            node = node
+                .with_property(format!("{prefix}.start"), line.start.clone())
+                .with_property(format!("{prefix}.length"), line.length.clone())
+                .with_property(format!("{prefix}.target"), line.target.clone());
+            if let Some(payload) = &line.payload {
+                if line.target == "crypt" && namespace == "table" {
+                    for (key, value) in crypt_table_properties(payload) {
+                        node = node.with_property(format!("{prefix}.crypt.{key}"), value);
+                    }
+                } else {
+                    node = node.with_property(format!("{prefix}.payload"), payload.clone());
+                }
+            }
+        }
+        node = node.with_property(format!("dm.{namespace}.targets"), targets.join(","));
+        graph.add_node(node);
+    }
+}
+
+fn crypt_table_properties(payload: &str) -> Vec<(String, String)> {
+    let fields = payload.split_whitespace().collect::<Vec<_>>();
+    let mut properties = Vec::new();
+    if let Some(cipher) = fields.first() {
+        properties.push(("cipher".to_string(), (*cipher).to_string()));
+    }
+    if let Some(iv_offset) = fields.get(2) {
+        properties.push(("iv-offset".to_string(), (*iv_offset).to_string()));
+    }
+    if let Some(device) = fields.get(3) {
+        properties.push(("device".to_string(), (*device).to_string()));
+    }
+    if let Some(offset) = fields.get(4) {
+        properties.push(("offset".to_string(), (*offset).to_string()));
+    }
+    if fields.len() > 5 {
+        properties.push(("options".to_string(), fields[5..].join(" ")));
+    }
+    properties
 }
 
 fn parse_dependency_devices(value: &str) -> Vec<String> {
@@ -184,7 +298,8 @@ vg-root: 1 dependencies  : (253, 0) (dm-0)
 
     #[test]
     fn normalizes_dmsetup_info_and_dependencies() {
-        let graph = normalize_dmsetup(INFO, DEPS).expect("fixtures should parse");
+        let graph = normalize_dmsetup(INFO, DEPS, Some(TABLE), Some(STATUS))
+            .expect("fixtures should parse");
         let cryptroot = graph
             .nodes
             .iter()
@@ -204,6 +319,30 @@ vg-root: 1 dependencies  : (253, 0) (dm-0)
                 && edge.to.0 == "block:/dev/mapper/cryptroot"
                 && edge.relationship == Relationship::Backs
         }));
+        assert!(
+            cryptroot
+                .properties
+                .iter()
+                .any(|property| property.key == "dm.table.targets" && property.value == "crypt")
+        );
+        assert!(cryptroot.properties.iter().any(|property| {
+            property.key == "dm.table.segment.0.crypt.cipher" && property.value == "aes-xts-plain64"
+        }));
+        assert!(
+            !cryptroot
+                .properties
+                .iter()
+                .any(|property| property.value.contains("0123456789abcdef"))
+        );
+
+        let root = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/mapper/vg-root")
+            .expect("vg-root should exist");
+        assert!(root.properties.iter().any(|property| {
+            property.key == "dm.status.segment.0.payload" && property.value == "A"
+        }));
     }
 
     #[test]
@@ -213,4 +352,15 @@ vg-root: 1 dependencies  : (253, 0) (dm-0)
             vec!["sda2"]
         );
     }
+
+    const TABLE: &[u8] = br#"
+cryptroot: 0 2097152 crypt aes-xts-plain64 0123456789abcdef 0 259:2 4096
+vg-root: 0 1048576 linear 253:0 2048
+vg-root: 1048576 1048576 linear 259:3 4096
+"#;
+
+    const STATUS: &[u8] = br#"
+cryptroot: 0 2097152 crypt 0 2097152
+vg-root: 0 2097152 linear A
+"#;
 }

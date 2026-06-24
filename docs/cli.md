@@ -277,7 +277,8 @@ Use these commands for:
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
   counts, keyslot priorities/ciphers/PBKDF cost metadata, token-to-keyslot
   bindings, header area/epoch/flag details, data-segment cipher/offset/length
-  details, dm name/UUID, major/minor numbers, open/segment counters, LVM
+  details, dm name/UUID, major/minor numbers, open/segment counters, mapper
+  table targets, live target status, sanitized dm-crypt table details, LVM
   segment data/metadata device mappings,
   thin-pool discard/zeroing/transaction details, cache segment policy/settings,
   VDO segment compression/dedup/write-policy details, multipath WWID/size,

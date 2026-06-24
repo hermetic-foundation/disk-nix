@@ -120,9 +120,10 @@ The current probe layer normalizes:
   access mode; LUKS header metadata through `cryptsetup luksDump` for version,
   UUID, label, data segment, keyslot priority/cipher/PBKDF cost, and token
   type/keyslot binding metadata
-- Device-mapper metadata through `dmsetup info` and `dmsetup deps` for mapper
-  names, UUIDs, major/minor numbers, open counts, segment/event counts, and
-  backing dependency edges
+- Device-mapper metadata through `dmsetup info`, `dmsetup deps`,
+  `dmsetup table`, and `dmsetup status` for mapper names, UUIDs, major/minor
+  numbers, open counts, segment/event counts, backing dependency edges, table
+  target ranges, live target status, and sanitized dm-crypt table details
 - LVM `pvs`, `vgs`, and `lvs` JSON reports for PV/VG/LV topology, snapshots,
   thin pools, cache-like logical volumes, PV format/device sizing, PV extent
   allocation, PV metadata-area and device-id state, VG permissions/allocation

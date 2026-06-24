@@ -9,7 +9,7 @@ storage stacks:
 
 - block devices, partitions, filesystems, mounts, swap, loop devices, and
   SMART health telemetry
-- LUKS headers, keyslots, tokens, and device-mapper mappings
+- LUKS headers, keyslots, tokens, and device-mapper mapping tables/status
 - LVM PVs, VGs, LVs, thin pools, snapshots, cache, and VDO
 - Btrfs filesystems, devices, subvolumes, snapshots, qgroups, and usage
 - bcachefs filesystems, member devices, usage, and topology updates

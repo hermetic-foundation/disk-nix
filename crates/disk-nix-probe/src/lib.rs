@@ -1047,6 +1047,8 @@ fn collect_dmsetup(result: &mut ProbeResult) {
         ],
     );
     let deps = run_report("dmsetup", &["deps", "-o", "devname"]);
+    let table = run_report("dmsetup", &["table"]);
+    let status = run_report("dmsetup", &["status"]);
 
     match (info, deps) {
         (Ok(info), Ok(deps)) if info.is_empty() && deps.is_empty() => {
@@ -1056,14 +1058,26 @@ fn collect_dmsetup(result: &mut ProbeResult) {
                 message: Some("no device-mapper devices discovered".to_string()),
             });
         }
-        (Ok(info), Ok(deps)) => match dmsetup::normalize_dmsetup(&info, &deps) {
+        (Ok(info), Ok(deps)) => match dmsetup::normalize_dmsetup(
+            &info,
+            &deps,
+            table.as_deref().ok(),
+            status.as_deref().ok(),
+        ) {
             Ok(graph) => {
                 let node_count = graph.nodes.len();
                 merge_graph(&mut result.graph, graph);
                 result.reports.push(ProbeReport {
                     adapter: "dmsetup".to_string(),
-                    status: ProbeStatus::Available,
-                    message: Some(format!("normalized {node_count} graph nodes from dmsetup")),
+                    status: if table.is_ok() && status.is_ok() {
+                        ProbeStatus::Available
+                    } else {
+                        ProbeStatus::Partial
+                    },
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from dmsetup{}",
+                        dmsetup_partial_message(&table, &status)
+                    )),
                 });
             }
             Err(error) => result.reports.push(ProbeReport {
@@ -1081,6 +1095,24 @@ fn collect_dmsetup(result: &mut ProbeResult) {
             },
             message: Some(message),
         }),
+    }
+}
+
+fn dmsetup_partial_message(
+    table: &Result<Vec<u8>, String>,
+    status: &Result<Vec<u8>, String>,
+) -> String {
+    let mut failures = Vec::new();
+    if let Err(message) = table {
+        failures.push(format!("table: {message}"));
+    }
+    if let Err(message) = status {
+        failures.push(format!("status: {message}"));
+    }
+    if failures.is_empty() {
+        String::new()
+    } else {
+        format!("; partial errors: {}", failures.join("; "))
     }
 }
 
