@@ -1430,6 +1430,11 @@ let
     luksDevices = activeLuksDeviceConfig;
     supportedFilesystems = supportedFilesystemTypes;
     nfsExports = nfsExportLines;
+    networkStorage = {
+      iscsiSessionTargets = activeIscsiSessionIdentities;
+      lunHostPaths = activeLunHostPaths;
+      nfsExportSelectors = activeNfsExportSelectors;
+    };
     iscsi = {
       openiscsi = nativeOpenIscsi;
       bootInitiator = nativeBootIscsi;

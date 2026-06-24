@@ -2331,6 +2331,13 @@
                     and (.supportedFilesystems | index("zfs") != null)
                     and (.nfsExports | index("/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)") != null)
                     and (.nfsExports | all(. | contains("/srv/old-share") | not))
+                    and (.networkStorage.iscsiSessionTargets | index("iqn.2026-06.example:storage.root") != null)
+                    and (.networkStorage.iscsiSessionTargets | index("iqn.2026-06.example:storage.logout") == null)
+                    and (.networkStorage.lunHostPaths | index("/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0") != null)
+                    and (.networkStorage.lunHostPaths | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0") != null)
+                    and (.networkStorage.lunHostPaths | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3") == null)
+                    and (.networkStorage.nfsExportSelectors | index("/srv/share 192.0.2.0/24") != null)
+                    and (.networkStorage.nfsExportSelectors | index("/srv/old-share 192.0.2.55") == null)
                     and .iscsi.openiscsi.enable == true
                     and .iscsi.openiscsi.discoverPortal == "192.0.2.10:3260"
                     and .iscsi.bootInitiator.enable == true
