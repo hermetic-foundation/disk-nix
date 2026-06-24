@@ -242,6 +242,9 @@ offline-gated by apply policy, and are kept out of generated `fileSystems`.
 For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, `operation = "trim"`, device add/remove/replace operations, and filesystem property
 updates such as labels or balance filters while still deriving the regular
 NixOS `fileSystems` entry from the same declaration.
+For bcachefs filesystems, typed declarations can request `operation = "scrub"`
+to render reviewed `bcachefs scrub` plans for mounted filesystems while still
+deriving the regular NixOS `fileSystems` entry from the same declaration.
 Typed Btrfs subvolume declarations can request `operation = "rename"` with
 `renameTo` to stage a path move before final cleanup.
 For ZFS pools, typed declarations can request `operation = "scrub"` to render

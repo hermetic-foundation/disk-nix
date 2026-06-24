@@ -121,6 +121,7 @@ Examples:
   `properties.balance.system` values become `-d`, `-m`, and `-s` balance
   filters so operators can prefer scoped balances over a full balance.
 - Btrfs filesystem `operation = "scrub"` renders `btrfs scrub start -B`.
+  bcachefs filesystem `operation = "scrub"` renders `bcachefs scrub`.
   ZFS pool `operation = "scrub"` renders `zpool scrub`.
 - Filesystem `operation = "trim"` renders `fstrim -v <mountpoint>` and
   recommends validating discard passthrough through lower storage layers.
@@ -948,7 +949,8 @@ uses `ntfsfix`; repair variants remain offline-required and should be reviewed
 after a read-only check. NTFS repair is limited Linux-side remediation and not a
 replacement for Windows `chkdsk`.
 Btrfs scrub actions use the mounted path and render `btrfs scrub start -B`;
-ZFS pool scrub actions render `zpool scrub`.
+bcachefs scrub actions render `bcachefs scrub`; ZFS pool scrub actions render
+`zpool scrub`.
 Filesystem trim actions render `fstrim -v` against the mounted target and remain
 online maintenance operations.
 `disk-nix apply --script-out <path>` writes those allowed command and

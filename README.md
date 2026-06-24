@@ -319,8 +319,8 @@ modeled as add replacement capacity, rereplicate, then remove the old member so
 each data-preserving step stays reviewable.
 Btrfs filesystem rebalance plans render `btrfs balance start` and use declared
 data, metadata, and system balance filters from lifecycle properties when set.
-Btrfs scrub plans render `btrfs scrub start -B`; ZFS pool scrub plans render
-`zpool scrub`.
+Btrfs scrub plans render `btrfs scrub start -B`; bcachefs scrub plans render
+`bcachefs scrub`; ZFS pool scrub plans render `zpool scrub`.
 Filesystem trim plans render reviewed `fstrim -v <mountpoint>` commands for
 mounted filesystems.
 Disk and partition rescan plans render reviewed `partprobe` and

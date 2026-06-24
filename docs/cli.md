@@ -871,7 +871,8 @@ Btrfs filesystem rebalance plans render `btrfs balance start`; declared
 `properties.balance.system` values render as `-d`, `-m`, and `-s` filters for
 scoped balances.
 Btrfs filesystem scrub plans render `btrfs scrub start -B <path>` and wait for
-completion. ZFS pool scrub plans render `zpool scrub <pool>`.
+completion. bcachefs filesystem scrub plans render `bcachefs scrub <path>`.
+ZFS pool scrub plans render `zpool scrub <pool>`.
 Filesystem trim plans render `fstrim -v <mountpoint>` after inspecting discard
 support and lower storage layers.
 Btrfs filesystem label property updates render
