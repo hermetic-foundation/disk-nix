@@ -49,8 +49,9 @@ GUID, serial, sector, cluster, size, and free-space metadata beyond generic
 `blkid` fields. NTFS probing uses `ntfsinfo -m` when available to add volume
 name/state/version, serial, sector/cluster sizing, index block size, MFT record
 size, and allocated size. F2FS probing uses `dump.f2fs` when available to add
-volume name, UUID, block counts, segment counts, overprovisioning, and computed
-usage. bcachefs probing uses `bcachefs show-super` and `bcachefs fs usage`
+volume name, UUID, user/valid block counts, checkpoint/SIT/NAT/SSA segment
+layout, section/zone geometry, log sizing, version metadata,
+overprovisioning, and computed usage. bcachefs probing uses `bcachefs show-super` and `bcachefs fs usage`
 when available to add external/internal UUIDs, labels, member-device indexes,
 mounted capacity, data-type byte accounting, and per-device free/capacity
 metadata.
@@ -211,7 +212,8 @@ Use these commands for:
   filesystem metadata details such as `blkid` version/block-size/usage, exFAT
   GUID/serial, volume length, FAT and cluster-heap layout, root cluster, and
   cluster geometry, NTFS volume identity, version, cluster sizing, and MFT
-  record sizing, F2FS block/segment/overprovisioning metadata,
+  record sizing, F2FS block usage, valid inode/node counts, segment layout,
+  section/zone geometry, log sizing, version, and overprovisioning metadata,
   XFS source, allocation-group, inode, data, naming, log, realtime, and
   metadata feature details,
   bcachefs external/internal UUID, member-device, mounted usage, and data-type
@@ -317,7 +319,8 @@ Use these commands for:
   replacement policy, available cache percentage, dirty data, I/O errors,
   writeback percentage, `blkid` signature
   details, ext superblock details, LVM layout, health, thin/cache/writecache
-  status, NTFS volume geometry and MFT record sizing, F2FS block/segment usage,
+  status, NTFS volume geometry and MFT record sizing, F2FS block usage,
+  valid inode/node counts, segment layout, section/zone geometry, log sizing,
   bcachefs filesystem and member-device capacity accounting, Btrfs allocation
   class profiles and byte counts, VDO backing and logical/physical size
   details, NVMe namespace details, loop mapping details, and active swap

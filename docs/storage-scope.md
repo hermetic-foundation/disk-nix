@@ -72,8 +72,10 @@ The current probe layer normalizes:
 - `dump.exfat`, `exfatlabel`, and `tune.exfat` for exFAT GUID/serial,
   volume length, FAT offset/length, cluster heap offset, cluster/free-cluster
   counts, root cluster, sector sizing, and cluster sizing
-- `dump.f2fs` for F2FS volume identity, UUID, block counts, valid block usage,
-  segment counts, section/zone geometry, and overprovisioning metadata
+- `dump.f2fs` for F2FS volume identity, UUID, user/valid block counts,
+  valid node/inode counts, checkpoint/SIT/NAT/SSA segment layout,
+  section/zone geometry, log sizing, version metadata, and overprovisioning
+  metadata
 - `bcachefs show-super`, `bcachefs fs usage`, `blkid`, and `findmnt` for
   first-class bcachefs filesystem and member-device nodes with
   external/internal UUIDs, labels, member-device indexes, mounted capacity,

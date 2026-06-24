@@ -2875,11 +2875,28 @@ fn usage_details(node: &Node) -> String {
         ("f2fs.block-count", "f2fs-blocks"),
         ("f2fs.user-block-count", "f2fs-user-blocks"),
         ("f2fs.valid-block-count", "f2fs-valid-blocks"),
+        ("f2fs.total-valid-block-count", "f2fs-total-valid-blocks"),
+        ("f2fs.valid-node-count", "f2fs-valid-nodes"),
+        ("f2fs.valid-inode-count", "f2fs-valid-inodes"),
         ("f2fs.segment-count", "f2fs-segments"),
         ("f2fs.segment-count-main", "f2fs-main-segments"),
+        ("f2fs.segment-count-ckpt", "f2fs-ckpt-segments"),
+        ("f2fs.segment-count-sit", "f2fs-sit-segments"),
+        ("f2fs.segment-count-nat", "f2fs-nat-segments"),
+        ("f2fs.segment-count-ssa", "f2fs-ssa-segments"),
         ("f2fs.overprov-segment-count", "f2fs-overprov"),
+        ("f2fs.section-count", "f2fs-sections"),
         ("f2fs.segs-per-sec", "f2fs-segs-per-sec"),
         ("f2fs.secs-per-zone", "f2fs-secs-per-zone"),
+        ("f2fs.log-sectorsize", "f2fs-log-sector"),
+        ("f2fs.log-sectors-per-block", "f2fs-log-sectors-block"),
+        ("f2fs.log-blocksize", "f2fs-log-block"),
+        ("f2fs.log-blocks-per-seg", "f2fs-log-blocks-seg"),
+        ("f2fs.cp-payload", "f2fs-cp-payload"),
+        ("f2fs.version", "f2fs-version"),
+        ("f2fs.init-version", "f2fs-init-version"),
+        ("f2fs.extension-count", "f2fs-extensions"),
+        ("f2fs.hot-ext-count", "f2fs-hot-extensions"),
         ("bcachefs.external-uuid", "bcachefs-uuid"),
         ("bcachefs.internal-uuid", "bcachefs-internal"),
         ("bcachefs.member-device", "bcachefs-member"),
@@ -3840,12 +3857,33 @@ mod tests {
             )
             .with_property("f2fs.block-size", "4096")
             .with_property("f2fs.block-count", "262144")
+            .with_property("f2fs.user-block-count", "245760")
             .with_property("f2fs.valid-block-count", "65536")
+            .with_property("f2fs.total-valid-block-count", "65540")
+            .with_property("f2fs.valid-node-count", "4096")
+            .with_property("f2fs.valid-inode-count", "2048")
             .with_property("f2fs.segment-count", "2048")
-            .with_property("f2fs.overprov-segment-count", "64");
+            .with_property("f2fs.segment-count-main", "1984")
+            .with_property("f2fs.segment-count-ckpt", "2")
+            .with_property("f2fs.segment-count-sit", "2")
+            .with_property("f2fs.segment-count-nat", "4")
+            .with_property("f2fs.segment-count-ssa", "1")
+            .with_property("f2fs.overprov-segment-count", "64")
+            .with_property("f2fs.section-count", "1984")
+            .with_property("f2fs.segs-per-sec", "1")
+            .with_property("f2fs.secs-per-zone", "1")
+            .with_property("f2fs.log-sectorsize", "9")
+            .with_property("f2fs.log-sectors-per-block", "3")
+            .with_property("f2fs.log-blocksize", "12")
+            .with_property("f2fs.log-blocks-per-seg", "9")
+            .with_property("f2fs.cp-payload", "0")
+            .with_property("f2fs.version", "Linux version 6.12")
+            .with_property("f2fs.init-version", "Linux version 6.1")
+            .with_property("f2fs.extension-count", "29")
+            .with_property("f2fs.hot-ext-count", "5");
         assert_eq!(
             usage_details(&f2fs),
-            "f2fs-uuid=01234567-89ab-cdef-0123-456789abcdef f2fs-name=mobile f2fs-block-size=4096 f2fs-blocks=262144 f2fs-valid-blocks=65536 f2fs-segments=2048 f2fs-overprov=64"
+            "f2fs-uuid=01234567-89ab-cdef-0123-456789abcdef f2fs-name=mobile f2fs-block-size=4096 f2fs-blocks=262144 f2fs-user-blocks=245760 f2fs-valid-blocks=65536 f2fs-total-valid-blocks=65540 f2fs-valid-nodes=4096 f2fs-valid-inodes=2048 f2fs-segments=2048 f2fs-main-segments=1984 f2fs-ckpt-segments=2 f2fs-sit-segments=2 f2fs-nat-segments=4 f2fs-ssa-segments=1 f2fs-overprov=64 f2fs-sections=1984 f2fs-segs-per-sec=1 f2fs-secs-per-zone=1 f2fs-log-sector=9 f2fs-log-sectors-block=3 f2fs-log-block=12 f2fs-log-blocks-seg=9 f2fs-cp-payload=0 f2fs-version=Linux version 6.12 f2fs-init-version=Linux version 6.1 f2fs-extensions=29 f2fs-hot-extensions=5"
         );
 
         let bcachefs = Node::new(
@@ -4055,7 +4093,19 @@ mod tests {
                 .with_property("f2fs.filesystem-volume-name", "mobile")
                 .with_property("f2fs.block-size", "4096")
                 .with_property("f2fs.block-count", "262144")
-                .with_property("f2fs.segment-count", "2048"),
+                .with_property("f2fs.user-block-count", "245760")
+                .with_property("f2fs.valid-block-count", "65536")
+                .with_property("f2fs.segment-count", "2048")
+                .with_property("f2fs.segment-count-main", "1984")
+                .with_property("f2fs.segment-count-ckpt", "2")
+                .with_property("f2fs.segment-count-sit", "2")
+                .with_property("f2fs.segment-count-nat", "4")
+                .with_property("f2fs.segment-count-ssa", "1")
+                .with_property("f2fs.overprov-segment-count", "64")
+                .with_property("f2fs.section-count", "1984")
+                .with_property("f2fs.segs-per-sec", "1")
+                .with_property("f2fs.secs-per-zone", "1")
+                .with_property("f2fs.version", "Linux version 6.12"),
         );
         graph.add_node(
             Node::new(
@@ -4100,7 +4150,13 @@ mod tests {
             )
         );
         assert!(output.contains(
-            "f2fs-name=mobile f2fs-block-size=4096 f2fs-blocks=262144 f2fs-segments=2048"
+            "f2fs-name=mobile f2fs-block-size=4096 f2fs-blocks=262144 f2fs-user-blocks=245760 f2fs-valid-blocks=65536"
+        ));
+        assert!(output.contains(
+            "f2fs-segments=2048 f2fs-main-segments=1984 f2fs-ckpt-segments=2 f2fs-sit-segments=2 f2fs-nat-segments=4 f2fs-ssa-segments=1"
+        ));
+        assert!(output.contains(
+            "f2fs-overprov=64 f2fs-sections=1984 f2fs-segs-per-sec=1 f2fs-secs-per-zone=1 f2fs-version=Linux version 6.12"
         ));
         assert!(output.contains(
             "bcachefs-uuid=a2d6fc04-efd0-4e36-aece-2475941d09a3 bcachefs-member=/dev/sdc bcachefs-mount=/mnt/archive bcachefs-device=6 bcachefs-user=2147483648"
