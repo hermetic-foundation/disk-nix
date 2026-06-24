@@ -71,6 +71,7 @@ disk-nix volumes
 disk-nix pools
 disk-nix snapshots
 disk-nix mappings
+disk-nix dm
 disk-nix encryption
 disk-nix cache
 disk-nix lvm
@@ -114,7 +115,7 @@ The canonical interface is intended to be stable JSON. Human tables and tree
 views are presentation layers over the same model. Focused JSON commands such
 as `devices --json`, `partitions --json`, `complex-filesystems --json`,
 `btrfs --json`, `bcachefs --json`, `zfs --json`, `pools --json`, `snapshots --json`, `mappings --json`,
-`encryption --json`, `cache --json`, `lvm --json`, `vdo --json`,
+`dm --json`, `encryption --json`, `cache --json`, `lvm --json`, `vdo --json`,
 `multipath --json`, `nvme --json`, `raid --json`, `loop --json`,
 `swap --json`, `zram --json`, `iscsi --json`, `luns --json`, `nfs --json`,
 `network-storage --json`, `ids --json`, and `usage --json` return focused

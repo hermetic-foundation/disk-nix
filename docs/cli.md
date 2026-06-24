@@ -155,6 +155,7 @@ disk-nix volumes
 disk-nix pools
 disk-nix snapshots
 disk-nix mappings
+disk-nix dm
 disk-nix encryption
 disk-nix cache
 disk-nix lvm
@@ -188,6 +189,7 @@ disk-nix volumes --json
 disk-nix pools --json
 disk-nix snapshots --json
 disk-nix mappings --json
+disk-nix dm --json
 disk-nix encryption --json
 disk-nix cache --json
 disk-nix lvm --json
@@ -314,6 +316,10 @@ Use these commands for:
   cache percentage, cache mode, discard, I/O errors, written/metadata-written
   accounting, readahead, sequential cutoff, priority stats, writeback delay,
   and writeback rate when probes expose them
+- `dm`: device-mapper maps, including dm name/UUID, major/minor numbers,
+  open and segment counters, table target payloads, live status target
+  payloads, sanitized dm-crypt table fields, cache/thin/snapshot status
+  counters, and one-hop backing relationships
 - `encryption`: LUKS/dm-crypt mappings and header metadata, including cipher,
   active/in-use state, keyslot/token counts and ids, LUKS version, epoch,
   metadata/keyslot area sizes, flags, subsystem, keyslot priority/cipher/PBKDF

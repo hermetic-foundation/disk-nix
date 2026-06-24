@@ -130,6 +130,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List device-mapper maps and dmsetup table/status metadata.
+    Dm {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered disk encryption mappings and header metadata.
     Encryption {
         /// Emit JSON for matching graph nodes.
@@ -480,6 +486,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_mapping_node)?;
             } else {
                 print_mappings(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Dm { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_dm_node)?;
+            } else {
+                print_dm(output, &graph)?;
             }
             Ok(())
         }
@@ -1776,6 +1791,32 @@ fn print_mappings(output: &mut impl Write, graph: &StorageGraph) -> io::Result<(
     Ok(())
 }
 
+fn print_dm(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<38} {:>8} {:<16} {:<16} {:<11} DETAILS",
+        "KIND", "NAME", "BACKING", "TARGETS", "STATUS", "MAJOR:MINOR"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_dm_node(node)) {
+        let major_minor = property_value(node, "dm.major")
+            .zip(property_value(node, "dm.minor"))
+            .map(|(major, minor)| format!("{major}:{minor}"))
+            .unwrap_or_else(|| "-".to_string());
+        writeln!(
+            output,
+            "{:<22} {:<38} {:>8} {:<16} {:<16} {:<11} {}",
+            node.kind,
+            node.name,
+            backing_count(graph, node),
+            property_value(node, "dm.table.targets").unwrap_or("-"),
+            property_value(node, "dm.status.targets").unwrap_or("-"),
+            major_minor,
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_encryption(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2719,6 +2760,14 @@ fn is_mapping_node(node: &Node) -> bool {
             | NodeKind::CacheDevice
             | NodeKind::BcachefsDevice
     )
+}
+
+fn is_dm_node(node: &Node) -> bool {
+    node.kind == NodeKind::DeviceMapper
+        || node
+            .properties
+            .iter()
+            .any(|property| property.key.starts_with("dm."))
 }
 
 fn is_encryption_node(node: &Node) -> bool {
@@ -4323,13 +4372,13 @@ mod tests {
 
     use super::{
         confirmation_file_accepts, is_bcachefs_node, is_btrfs_node, is_cache_node,
-        is_complex_filesystem_node, is_device_node, is_encryption_node, is_filesystem_node,
-        is_iscsi_node, is_loop_node, is_lun_node, is_lvm_node, is_mapping_node, is_multipath_node,
-        is_network_storage_node, is_nfs_node, is_nvme_node, is_partition_node, is_pool_node,
-        is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node, is_volume_node, is_zfs_node,
-        is_zram_node, iscsi_lun_count, member_count, mount_details, nfs_mount_count,
+        is_complex_filesystem_node, is_device_node, is_dm_node, is_encryption_node,
+        is_filesystem_node, is_iscsi_node, is_loop_node, is_lun_node, is_lvm_node, is_mapping_node,
+        is_multipath_node, is_network_storage_node, is_nfs_node, is_nvme_node, is_partition_node,
+        is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node, is_volume_node,
+        is_zfs_node, is_zram_node, iscsi_lun_count, member_count, mount_details, nfs_mount_count,
         print_bcachefs, print_btrfs, print_cache, print_complex_filesystems, print_devices,
-        print_encryption, print_filesystems, print_filtered_json, print_inspect,
+        print_dm, print_encryption, print_filesystems, print_filtered_json, print_inspect,
         print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm, print_mappings,
         print_mounts, print_multipath, print_network_storage, print_nfs, print_nvme,
         print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
@@ -4381,6 +4430,14 @@ mod tests {
                 "vg-root"
             )
             .with_property("lvm.active", "active")
+        ));
+        assert!(is_dm_node(
+            &Node::new(
+                "block:/dev/mapper/cryptroot",
+                NodeKind::DeviceMapper,
+                "cryptroot"
+            )
+            .with_property("dm.name", "cryptroot")
         ));
         let bcachefs = Node::new(
             "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3",
@@ -8000,6 +8057,114 @@ mod tests {
         assert!(output.contains(
             "role=backing kind=cache-set label=fast-cache state=clean running=1 available-percent=78 cache-mode=writeback discard=true io-errors=0 readahead=0 sequential-cutoff=4.0M written=512.0M writeback-rate=1.0M/sec"
         ));
+    }
+
+    #[test]
+    fn dm_table_includes_table_status_and_json_neighbors() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "block:/dev/nvme0n1p2",
+            NodeKind::Partition,
+            "/dev/nvme0n1p2",
+        ));
+        graph.add_node(
+            Node::new(
+                "block:/dev/mapper/cryptroot",
+                NodeKind::DeviceMapper,
+                "cryptroot",
+            )
+            .with_path("/dev/mapper/cryptroot")
+            .with_property("dm.name", "cryptroot")
+            .with_property("dm.uuid", "CRYPT-LUKS2-crypt-uuid-cryptroot")
+            .with_property("dm.major", "253")
+            .with_property("dm.minor", "0")
+            .with_property("dm.open-count", "1")
+            .with_property("dm.segments", "1")
+            .with_property("dm.events", "0")
+            .with_property("dm.table.targets", "crypt")
+            .with_property("dm.table.segment-count", "1")
+            .with_property("dm.table.segment.0.start", "0")
+            .with_property("dm.table.segment.0.length", "2097152")
+            .with_property("dm.table.segment.0.target", "crypt")
+            .with_property("dm.table.segment.0.crypt.cipher", "aes-xts-plain64")
+            .with_property("dm.table.segment.0.crypt.device", "259:2")
+            .with_property("dm.table.segment.0.crypt.offset", "4096")
+            .with_property("dm.status.targets", "crypt")
+            .with_property("dm.status.segment-count", "1")
+            .with_property("dm.status.segment.0.target", "crypt")
+            .with_property("dm.status.segment.0.payload", "0 2097152"),
+        );
+        graph.add_edge(Edge::new(
+            "block:/dev/nvme0n1p2",
+            "block:/dev/mapper/cryptroot",
+            Relationship::Backs,
+        ));
+        graph.add_node(
+            Node::new(
+                "block:/dev/mapper/cachevol",
+                NodeKind::DeviceMapper,
+                "cachevol",
+            )
+            .with_path("/dev/mapper/cachevol")
+            .with_property("dm.name", "cachevol")
+            .with_property("dm.table.targets", "cache")
+            .with_property("dm.table.segment-count", "1")
+            .with_property("dm.table.segment.0.target", "cache")
+            .with_property("dm.table.segment.0.metadata-device", "253:10")
+            .with_property("dm.table.segment.0.cache-device", "253:11")
+            .with_property("dm.table.segment.0.origin-device", "253:12")
+            .with_property("dm.table.segment.0.block-size", "128")
+            .with_property("dm.status.targets", "cache")
+            .with_property("dm.status.segment-count", "1")
+            .with_property("dm.status.segment.0.target", "cache")
+            .with_property("dm.status.segment.0.metadata-used-blocks", "64")
+            .with_property("dm.status.segment.0.metadata-total-blocks", "256")
+            .with_property("dm.status.segment.0.cache-used-blocks", "32")
+            .with_property("dm.status.segment.0.cache-total-blocks", "1024")
+            .with_property("dm.status.segment.0.read-hits", "900")
+            .with_property("dm.status.segment.0.read-misses", "100")
+            .with_property("dm.status.segment.0.write-hits", "700")
+            .with_property("dm.status.segment.0.write-misses", "50")
+            .with_property("dm.status.segment.0.dirty-blocks", "4"),
+        );
+
+        let mut output = Vec::new();
+        print_dm(&mut output, &graph).expect("dm table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("TARGETS"));
+        assert!(output.contains("STATUS"));
+        assert!(output.contains("MAJOR:MINOR"));
+        assert!(output.contains("cryptroot"));
+        assert!(output.contains("crypt"));
+        assert!(output.contains("253:0"));
+        assert!(output.contains(
+            "dm-name=cryptroot dm-uuid=CRYPT-LUKS2-crypt-uuid-cryptroot dm-major=253 dm-minor=0 open=1 segments=1 events=0"
+        ));
+        assert!(output.contains(
+            "dm-table-targets=crypt dm-table-segments=1 dm-table-start=0 dm-table-length=2097152 dm-table-target=crypt"
+        ));
+        assert!(output.contains(
+            "dm-crypt-cipher=aes-xts-plain64 dm-crypt-device=259:2 dm-crypt-offset=4096"
+        ));
+        assert!(output.contains(
+            "dm-status-targets=crypt dm-status-segments=1 dm-status-target=crypt dm-status-payload=0 2097152"
+        ));
+        assert!(output.contains("cachevol"));
+        assert!(output.contains("cache"));
+        assert!(output.contains(
+            "dm-table-metadata-device=253:10 dm-table-cache-device=253:11 dm-table-origin-device=253:12 dm-table-block-size=128"
+        ));
+        assert!(output.contains(
+            "dm-status-read-hits=900 dm-status-read-misses=100 dm-status-write-hits=700 dm-status-write-misses=50 dm-status-dirty=4"
+        ));
+
+        let mut json = Vec::new();
+        print_filtered_json(&mut json, &graph, is_dm_node).expect("dm json renders");
+        let json = String::from_utf8(json).expect("json is utf8");
+        assert!(json.contains("block:/dev/mapper/cryptroot"));
+        assert!(json.contains("block:/dev/nvme0n1p2"));
+        assert!(json.contains("\"relationship\":\"backs\""));
     }
 
     #[test]
