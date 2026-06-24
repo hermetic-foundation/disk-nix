@@ -56,6 +56,8 @@ struct AllocationGroup {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Subvolume {
     id: String,
+    generation: Option<String>,
+    top_level: Option<String>,
     parent_uuid: Option<String>,
     uuid: Option<String>,
     path: String,
@@ -192,6 +194,12 @@ fn add_subvolume(graph: &mut StorageGraph, filesystem_id: &str, subvolume: Subvo
     let id = format!("btrfs-subvolume:{}:{}", filesystem_id, subvolume.path);
     let mut node =
         Node::new(id.clone(), kind, subvolume.path).with_property("btrfs.id", subvolume.id);
+    if let Some(generation) = subvolume.generation {
+        node = node.with_property("btrfs.generation", generation);
+    }
+    if let Some(top_level) = subvolume.top_level {
+        node = node.with_property("btrfs.top-level", top_level);
+    }
 
     if let Some(uuid) = subvolume.uuid {
         node.identity.uuid = Some(uuid);
@@ -364,6 +372,8 @@ fn parse_subvolumes(bytes: &[u8]) -> Result<Vec<Subvolume>, ProbeError> {
 fn parse_subvolume_line(line: &str) -> Option<Subvolume> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     let id = value_after(&parts, "ID")?.to_string();
+    let generation = value_after(&parts, "gen").map(str::to_string);
+    let top_level = value_after(&parts, "level").map(str::to_string);
     let uuid = value_after(&parts, "uuid").map(str::to_string);
     let parent_uuid = value_after(&parts, "parent_uuid")
         .filter(|value| *value != "-")
@@ -373,6 +383,8 @@ fn parse_subvolume_line(line: &str) -> Option<Subvolume> {
 
     Some(Subvolume {
         id,
+        generation,
+        top_level,
         parent_uuid,
         uuid,
         path,
@@ -501,6 +513,18 @@ ID 257 gen 11 top level 5 uuid snap-1 parent_uuid subvol-root path @/.snapshots/
                 .iter()
                 .any(|node| node.kind == NodeKind::BtrfsSnapshot)
         );
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::BtrfsSnapshot
+                && node.name == "@/.snapshots/1/snapshot"
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "btrfs.generation" && property.value == "11")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "btrfs.top-level" && property.value == "5")
+        }));
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::BtrfsQgroup
                 && node.name == "0/257"

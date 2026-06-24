@@ -119,8 +119,9 @@ The current probe layer normalizes:
   zvol policy properties include compression, quota, reservation, encryption,
   key status, and volsize
 - Btrfs mounted filesystems through `btrfs filesystem show`, `btrfs filesystem usage -b`, `btrfs subvolume list -u`, and `btrfs qgroup show --raw -reF` for
-  filesystem identity, member devices, usage, subvolumes, snapshot-like
-  subvolume relationships, and qgroup referenced/exclusive usage and limits
+  filesystem identity, member devices, usage, subvolumes, subvolume generation
+  and top-level metadata, snapshot-like subvolume relationships, and qgroup
+  referenced/exclusive usage and limits
 - bcache sysfs metadata through `/sys/block/*/bcache` for backing devices,
   cache devices, cache sets, mode, running/state, dirty data, available cache
   percentage, discard, I/O error counters, written/metadata-written accounting,

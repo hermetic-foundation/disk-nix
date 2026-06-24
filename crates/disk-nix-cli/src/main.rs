@@ -2695,6 +2695,8 @@ fn usage_details(node: &Node) -> String {
         ("btrfs.mount-target", "mount-target"),
         ("btrfs.device-id", "device-id"),
         ("btrfs.id", "subvol-id"),
+        ("btrfs.generation", "generation"),
+        ("btrfs.top-level", "top-level"),
         ("btrfs.parent-uuid", "parent-uuid"),
         ("btrfs.data-profile", "data-profile"),
         ("btrfs.data-size", "data-size"),
@@ -4974,6 +4976,8 @@ mod tests {
                 "@/.snapshots/1/snapshot",
             )
             .with_property("btrfs.id", "257")
+            .with_property("btrfs.generation", "11")
+            .with_property("btrfs.top-level", "5")
             .with_property("btrfs.parent-uuid", "subvol-root"),
         );
 
@@ -4988,7 +4992,7 @@ mod tests {
                 .contains("userrefs=2 compression=zstd encryption=aes-256-gcm keystatus=available")
         );
         assert!(output.contains("data=12.50 origin=root pool=thinpool"));
-        assert!(output.contains("subvol-id=257 parent-uuid=subvol-root"));
+        assert!(output.contains("subvol-id=257 generation=11 top-level=5 parent-uuid=subvol-root"));
     }
 
     #[test]

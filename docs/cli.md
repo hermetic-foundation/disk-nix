@@ -247,8 +247,9 @@ Use these commands for:
   counts, Btrfs qgroup limits, and MD RAID metadata version, name, level,
   state, device counts, and event counters where probes expose them
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
-  source relationships, LVM origin/pool/data metadata, Btrfs subvolume IDs and
-  parent UUIDs, and ZFS user-reference, compression, and encryption details
+  source relationships, LVM origin/pool/data metadata, Btrfs subvolume IDs,
+  generation, top-level, and parent UUIDs, and ZFS user-reference, compression,
+  and encryption details
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
   counts, keyslot priorities/ciphers/PBKDF cost metadata, token-to-keyslot
