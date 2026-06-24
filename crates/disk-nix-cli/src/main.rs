@@ -172,6 +172,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered zram compressed swap devices.
+    Zram {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered iSCSI sessions, targets, and LUNs.
     Iscsi {
         /// Emit JSON for matching graph nodes.
@@ -519,6 +525,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_swap_node)?;
             } else {
                 print_swap(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Zram { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_zram_node)?;
+            } else {
+                print_zram(output, &graph)?;
             }
             Ok(())
         }
@@ -1889,6 +1904,33 @@ fn print_swap(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     Ok(())
 }
 
+fn print_zram(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<32} {:>12} {:>12} {:>12} {:>12} {:<10} {:<8} {:>12} {:<12} DETAILS",
+        "KIND", "NAME", "SIZE", "USED", "FREE", "ALLOC", "ALGO", "RATIO", "MEM-USED", "MOUNT"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_zram_node(node)) {
+        let usage = node.usage.as_ref();
+        writeln!(
+            output,
+            "{:<22} {:<32} {:>12} {:>12} {:>12} {:>12} {:<10} {:<8} {:>12} {:<12} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            human_bytes(usage.and_then(|usage| usage.used_bytes)),
+            human_bytes(usage.and_then(|usage| usage.free_bytes)),
+            human_bytes(usage.and_then(|usage| usage.allocated_bytes)),
+            property_value(node, "zram.algorithm").unwrap_or("-"),
+            property_value(node, "zram.compression-ratio").unwrap_or("-"),
+            property_value(node, "zram.memory-used").unwrap_or("-"),
+            property_value(node, "zram.mountpoint").unwrap_or("-"),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_iscsi(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2626,6 +2668,14 @@ fn is_swap_node(node: &Node) -> bool {
             .properties
             .iter()
             .any(|property| property.key.starts_with("swap."))
+}
+
+fn is_zram_node(node: &Node) -> bool {
+    node.kind == NodeKind::ZramDevice
+        || node
+            .properties
+            .iter()
+            .any(|property| property.key.starts_with("zram."))
 }
 
 fn is_iscsi_node(node: &Node) -> bool {
@@ -4126,13 +4176,13 @@ mod tests {
         is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node, is_lvm_node,
         is_mapping_node, is_multipath_node, is_network_storage_node, is_nfs_node, is_nvme_node,
         is_partition_node, is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node,
-        is_volume_node, is_zfs_node, iscsi_lun_count, mount_details, nfs_mount_count, print_cache,
-        print_complex_filesystems, print_devices, print_encryption, print_filesystems,
+        is_volume_node, is_zfs_node, is_zram_node, iscsi_lun_count, mount_details, nfs_mount_count,
+        print_cache, print_complex_filesystems, print_devices, print_encryption, print_filesystems,
         print_filtered_json, print_inspect, print_inspect_json, print_iscsi, print_loop, print_lvm,
         print_mappings, print_mounts, print_multipath, print_network_storage, print_nfs,
         print_nvme, print_partitions, print_pools, print_raid, print_snapshots, print_swap,
-        print_usage, print_vdo, print_volumes, print_zfs, snapshot_source, usage_details,
-        usage_percent, zfs_child_count,
+        print_usage, print_vdo, print_volumes, print_zfs, print_zram, snapshot_source,
+        usage_details, usage_percent, zfs_child_count,
     };
 
     #[test]
@@ -7264,6 +7314,61 @@ mod tests {
         assert!(output.contains("zram-total=805306368 zram-memory-used=900000000"));
         assert!(output.contains("zram-ratio=2.67 zram-mountpoint=[SWAP] zram-swap=true"));
         assert!(output.contains("0.0%"));
+    }
+
+    #[test]
+    fn zram_table_includes_compressed_swap_memory_accounting() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/zram0", NodeKind::ZramDevice, "/dev/zram0")
+                .with_path("/dev/zram0")
+                .with_size_bytes(8_589_934_592)
+                .with_usage(Usage {
+                    used_bytes: Some(2_147_483_648),
+                    free_bytes: Some(6_442_450_944),
+                    allocated_bytes: Some(805_306_368),
+                })
+                .with_property("zram.algorithm", "zstd")
+                .with_property("zram.streams", "8")
+                .with_property("zram.compressed", "715827882")
+                .with_property("zram.data", "2147483648")
+                .with_property("zram.total", "805306368")
+                .with_property("zram.memory-limit", "0")
+                .with_property("zram.memory-used", "900000000")
+                .with_property("zram.compression-ratio", "2.67")
+                .with_property("zram.mountpoint", "[SWAP]")
+                .with_property("zram.swap", "true"),
+        );
+        graph.add_node(
+            Node::new("swap:/dev/sda3", NodeKind::Swap, "/dev/sda3")
+                .with_path("/dev/sda3")
+                .with_property("swap.type", "partition"),
+        );
+
+        let mut output = Vec::new();
+        print_zram(&mut output, &graph).expect("zram table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("ALGO"));
+        assert!(output.contains("RATIO"));
+        assert!(output.contains("MEM-USED"));
+        assert!(output.contains("/dev/zram0"));
+        assert!(output.contains("8.0 GiB"));
+        assert!(output.contains("2.0 GiB"));
+        assert!(output.contains("768.0 MiB"));
+        assert!(output.contains("zstd"));
+        assert!(output.contains("2.67"));
+        assert!(output.contains("900000000"));
+        assert!(output.contains("[SWAP]"));
+        assert!(output.contains("zram-compressed=715827882"));
+        assert!(output.contains("zram-memory-limit=0"));
+        assert!(!output.contains("/dev/sda3"));
+
+        let mut json = Vec::new();
+        print_filtered_json(&mut json, &graph, is_zram_node).expect("zram json renders");
+        let json = String::from_utf8(json).expect("json is utf8");
+        assert!(json.contains("block:/dev/zram0"));
+        assert!(!json.contains("swap:/dev/sda3"));
     }
 
     #[test]

@@ -41,8 +41,9 @@ Edges include:
 - `relationship`
 
 The graph can represent block devices, partitions, filesystems, mountpoints,
-swap, LUKS, device-mapper, LVM, VDO, MD RAID, Btrfs, ZFS, exFAT, NTFS, iSCSI,
-LUNs, NFS, bcache, multipath, NVMe controllers/namespaces, and loop devices.
+swap, zram, LUKS, device-mapper, LVM, VDO, MD RAID, Btrfs, ZFS, exFAT, NTFS,
+iSCSI, LUNs, NFS, bcache, multipath, NVMe controllers/namespaces, and loop
+devices.
 Nodes are merged by id when multiple probe adapters report complementary
 information. NVMe probing keeps controller, subsystem, transport, namespace id,
 namespace UUID, NGUID, EUI-64, ANA state, LBA format, formatted LBA descriptor,
@@ -161,6 +162,7 @@ disk-nix nvme
 disk-nix raid
 disk-nix loop
 disk-nix swap
+disk-nix zram
 disk-nix iscsi
 disk-nix nfs
 disk-nix mounts
@@ -190,6 +192,7 @@ disk-nix nvme --json
 disk-nix raid --json
 disk-nix loop --json
 disk-nix swap --json
+disk-nix zram --json
 disk-nix iscsi --json
 disk-nix nfs --json
 disk-nix mounts --json
@@ -359,6 +362,10 @@ Use these commands for:
   compression algorithm, compressed/data/total memory accounting, memory limit
   and high-water use, compression ratio, and backing relationship when
   `/proc/swaps` exposes them
+- `zram`: generated compressed swap devices, including logical disk size,
+  active data bytes, compressed bytes, total memory, memory limit, memory used,
+  compression algorithm, stream count, compression ratio, mountpoint, and swap
+  activation marker when `zramctl` exposes them
 - `iscsi`: configured iSCSI nodes, sessions, targets, and LUNs, including node
   portals, node startup policy, interface, leading-login, CHAP method/user
   hints, current and persistent session portals plus parsed portal
