@@ -1461,7 +1461,7 @@ fn collect_lvm(result: &mut ProbeResult) {
             "--reportformat",
             "json",
             "-o",
-            "pv_name,vg_name,pv_uuid,pv_size,pv_free,pv_used",
+            "pv_name,vg_name,pv_fmt,pv_uuid,dev_size,pv_major,pv_minor,pv_size,pv_free,pv_used,pe_start,pv_attr,pv_allocatable,pv_exported,pv_missing,pv_pe_count,pv_pe_alloc_count,pv_tags,pv_mda_count,pv_mda_used_count,pv_mda_free,pv_mda_size,pv_ba_start,pv_ba_size,pv_in_use,pv_duplicate,pv_device_id,pv_device_id_type",
         ],
     );
     let vgs = run_report(
@@ -1470,7 +1470,7 @@ fn collect_lvm(result: &mut ProbeResult) {
             "--reportformat",
             "json",
             "-o",
-            "vg_name,vg_uuid,vg_size,vg_free,vg_extent_size,pv_count,lv_count",
+            "vg_name,vg_fmt,vg_uuid,vg_attr,vg_permissions,vg_extendable,vg_exported,vg_autoactivation,vg_partial,vg_allocation_policy,vg_clustered,vg_shared,vg_size,vg_free,vg_sysid,vg_lock_type,vg_lock_args,vg_extent_size,vg_extent_count,vg_free_count,max_lv,max_pv,pv_count,vg_missing_pv_count,lv_count,snap_count,vg_seqno,vg_tags,vg_profile,vg_mda_count,vg_mda_used_count,vg_mda_free,vg_mda_size,vg_mda_copies",
         ],
     );
     let lvs = run_report(

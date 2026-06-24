@@ -24,21 +24,70 @@ struct LvmReport {
 struct PhysicalVolume {
     pv_name: String,
     vg_name: Option<String>,
+    pv_fmt: Option<String>,
     pv_uuid: Option<String>,
+    dev_size: Option<String>,
+    pv_major: Option<String>,
+    pv_minor: Option<String>,
     pv_size: Option<String>,
     pv_free: Option<String>,
     pv_used: Option<String>,
+    pe_start: Option<String>,
+    pv_attr: Option<String>,
+    pv_allocatable: Option<String>,
+    pv_exported: Option<String>,
+    pv_missing: Option<String>,
+    pv_pe_count: Option<String>,
+    pv_pe_alloc_count: Option<String>,
+    pv_tags: Option<String>,
+    pv_mda_count: Option<String>,
+    pv_mda_used_count: Option<String>,
+    pv_mda_free: Option<String>,
+    pv_mda_size: Option<String>,
+    pv_ba_start: Option<String>,
+    pv_ba_size: Option<String>,
+    pv_in_use: Option<String>,
+    pv_duplicate: Option<String>,
+    pv_device_id: Option<String>,
+    pv_device_id_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct VolumeGroup {
     vg_name: String,
+    vg_fmt: Option<String>,
     vg_uuid: Option<String>,
+    vg_attr: Option<String>,
+    vg_permissions: Option<String>,
+    vg_extendable: Option<String>,
+    vg_exported: Option<String>,
+    vg_autoactivation: Option<String>,
+    vg_partial: Option<String>,
+    vg_allocation_policy: Option<String>,
+    vg_clustered: Option<String>,
+    vg_shared: Option<String>,
     vg_size: Option<String>,
     vg_free: Option<String>,
+    vg_sysid: Option<String>,
+    vg_lock_type: Option<String>,
+    vg_lock_args: Option<String>,
     vg_extent_size: Option<String>,
+    vg_extent_count: Option<String>,
+    vg_free_count: Option<String>,
+    max_lv: Option<String>,
+    max_pv: Option<String>,
     pv_count: Option<String>,
+    vg_missing_pv_count: Option<String>,
     lv_count: Option<String>,
+    snap_count: Option<String>,
+    vg_seqno: Option<String>,
+    vg_tags: Option<String>,
+    vg_profile: Option<String>,
+    vg_mda_count: Option<String>,
+    vg_mda_used_count: Option<String>,
+    vg_mda_free: Option<String>,
+    vg_mda_size: Option<String>,
+    vg_mda_copies: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -238,6 +287,35 @@ fn add_physical_volume(graph: &mut StorageGraph, pv: PhysicalVolume) {
         });
     }
 
+    for (key, value) in [
+        ("lvm.pv-format", pv.pv_fmt),
+        ("lvm.dev-size", pv.dev_size),
+        ("lvm.pv-major", pv.pv_major),
+        ("lvm.pv-minor", pv.pv_minor),
+        ("lvm.pe-start", pv.pe_start),
+        ("lvm.pv-attr", pv.pv_attr),
+        ("lvm.pv-allocatable", pv.pv_allocatable),
+        ("lvm.pv-exported", pv.pv_exported),
+        ("lvm.pv-missing", pv.pv_missing),
+        ("lvm.pv-pe-count", pv.pv_pe_count),
+        ("lvm.pv-pe-allocated", pv.pv_pe_alloc_count),
+        ("lvm.pv-tags", pv.pv_tags),
+        ("lvm.pv-mda-count", pv.pv_mda_count),
+        ("lvm.pv-mda-used-count", pv.pv_mda_used_count),
+        ("lvm.pv-mda-free", pv.pv_mda_free),
+        ("lvm.pv-mda-size", pv.pv_mda_size),
+        ("lvm.pv-bootloader-area-start", pv.pv_ba_start),
+        ("lvm.pv-bootloader-area-size", pv.pv_ba_size),
+        ("lvm.pv-in-use", pv.pv_in_use),
+        ("lvm.pv-duplicate", pv.pv_duplicate),
+        ("lvm.pv-device-id", pv.pv_device_id),
+        ("lvm.pv-device-id-type", pv.pv_device_id_type),
+    ] {
+        if let Some(value) = value.filter(|value| !value.is_empty()) {
+            node = node.with_property(key, value);
+        }
+    }
+
     if let Some(vg_name) = pv.vg_name.filter(|name| !name.is_empty()) {
         graph.add_edge(Edge::new(
             id.clone(),
@@ -275,9 +353,36 @@ fn add_volume_group(graph: &mut StorageGraph, vg: VolumeGroup) {
     }
 
     for (key, value) in [
+        ("lvm.vg-format", vg.vg_fmt),
+        ("lvm.vg-attr", vg.vg_attr),
+        ("lvm.permissions", vg.vg_permissions),
+        ("lvm.vg-extendable", vg.vg_extendable),
+        ("lvm.vg-exported", vg.vg_exported),
+        ("lvm.vg-autoactivation", vg.vg_autoactivation),
+        ("lvm.vg-partial", vg.vg_partial),
+        ("lvm.allocation-policy", vg.vg_allocation_policy),
+        ("lvm.vg-clustered", vg.vg_clustered),
+        ("lvm.vg-shared", vg.vg_shared),
+        ("lvm.vg-system-id", vg.vg_sysid),
+        ("lvm.vg-lock-type", vg.vg_lock_type),
+        ("lvm.vg-lock-args", vg.vg_lock_args),
         ("lvm.extent-size", vg.vg_extent_size),
+        ("lvm.extent-count", vg.vg_extent_count),
+        ("lvm.free-count", vg.vg_free_count),
+        ("lvm.max-lvs", vg.max_lv),
+        ("lvm.max-pvs", vg.max_pv),
         ("lvm.pv-count", vg.pv_count),
+        ("lvm.missing-pv-count", vg.vg_missing_pv_count),
         ("lvm.lv-count", vg.lv_count),
+        ("lvm.snapshot-count", vg.snap_count),
+        ("lvm.vg-seqno", vg.vg_seqno),
+        ("lvm.tags", vg.vg_tags),
+        ("lvm.vg-profile", vg.vg_profile),
+        ("lvm.vg-mda-count", vg.vg_mda_count),
+        ("lvm.vg-mda-used-count", vg.vg_mda_used_count),
+        ("lvm.vg-mda-free", vg.vg_mda_free),
+        ("lvm.vg-mda-size", vg.vg_mda_size),
+        ("lvm.vg-mda-copies", vg.vg_mda_copies),
     ] {
         if let Some(value) = value.filter(|value| !value.is_empty()) {
             node = node.with_property(key, value);
@@ -600,10 +705,32 @@ mod tests {
         "pv": [{
           "pv_name": "/dev/mapper/cryptroot",
           "vg_name": "vg0",
+          "pv_fmt": "lvm2",
           "pv_uuid": "pv-uuid",
+          "dev_size": "120.00g",
+          "pv_major": "253",
+          "pv_minor": "5",
           "pv_size": "100.00g",
           "pv_free": "20.00g",
-          "pv_used": "80.00g"
+          "pv_used": "80.00g",
+          "pe_start": "1.00m",
+          "pv_attr": "a--",
+          "pv_allocatable": "allocatable",
+          "pv_exported": "",
+          "pv_missing": "",
+          "pv_pe_count": "25600",
+          "pv_pe_alloc_count": "20480",
+          "pv_tags": "ssd",
+          "pv_mda_count": "1",
+          "pv_mda_used_count": "1",
+          "pv_mda_free": "1020.00k",
+          "pv_mda_size": "1024.00k",
+          "pv_ba_start": "0",
+          "pv_ba_size": "0",
+          "pv_in_use": "used",
+          "pv_duplicate": "",
+          "pv_device_id": "wwn-0x1234",
+          "pv_device_id_type": "wwid"
         }]
       }]
     }"#;
@@ -612,12 +739,39 @@ mod tests {
       "report": [{
         "vg": [{
           "vg_name": "vg0",
+          "vg_fmt": "lvm2",
           "vg_uuid": "vg-uuid",
+          "vg_attr": "wz--n-",
+          "vg_permissions": "writeable",
+          "vg_extendable": "extendable",
+          "vg_exported": "",
+          "vg_autoactivation": "enabled",
+          "vg_partial": "",
+          "vg_allocation_policy": "normal",
+          "vg_clustered": "",
+          "vg_shared": "",
           "vg_size": "100.00g",
           "vg_free": "20.00g",
+          "vg_sysid": "host-a",
+          "vg_lock_type": "none",
+          "vg_lock_args": "",
           "vg_extent_size": "4.00m",
+          "vg_extent_count": "25600",
+          "vg_free_count": "5120",
+          "max_lv": "0",
+          "max_pv": "0",
           "pv_count": "1",
-          "lv_count": "3"
+          "vg_missing_pv_count": "0",
+          "lv_count": "3",
+          "snap_count": "1",
+          "vg_seqno": "17",
+          "vg_tags": "system",
+          "vg_profile": "",
+          "vg_mda_count": "1",
+          "vg_mda_used_count": "1",
+          "vg_mda_free": "1020.00k",
+          "vg_mda_size": "1024.00k",
+          "vg_mda_copies": "unmanaged"
         }]
       }]
     }"#;
@@ -845,12 +999,58 @@ mod tests {
                 .iter()
                 .any(|node| node.kind == NodeKind::LvmPhysicalVolume)
         );
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::LvmPhysicalVolume
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.pv-format" && property.value == "lvm2")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.dev-size" && property.value == "120.00g")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.pv-pe-count" && property.value == "25600")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.pv-mda-free" && property.value == "1020.00k"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.pv-device-id" && property.value == "wwn-0x1234"
+                })
+        }));
         assert!(
             graph
                 .nodes
                 .iter()
                 .any(|node| node.kind == NodeKind::LvmVolumeGroup && node.name == "vg0")
         );
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::LvmVolumeGroup
+                && node.name == "vg0"
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.vg-format" && property.value == "lvm2")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.permissions" && property.value == "writeable"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.allocation-policy" && property.value == "normal"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.extent-count" && property.value == "25600")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.snapshot-count" && property.value == "1")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.vg-mda-copies" && property.value == "unmanaged"
+                })
+        }));
         assert!(
             graph
                 .nodes

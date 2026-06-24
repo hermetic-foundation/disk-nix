@@ -249,9 +249,11 @@ Use these commands for:
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
   pools, Btrfs filesystems/qgroups, bcachefs filesystems, ZFS pools/vdevs, and
   MD RAID arrays,
-  including ZFS health/vdev role/state/error counters, LVM extent and PV/LV
-  counts, Btrfs qgroup limits, and MD RAID metadata version, name, level,
-  state, device counts, and event counters where probes expose them
+  including ZFS health/vdev role/state/error counters, LVM extent/free extent
+  counts, PV/LV/snapshot counts, permissions, allocation policy, lock/system-id,
+  and metadata-area counters, Btrfs qgroup limits, and MD RAID metadata version,
+  name, level, state, device counts, and event counters where probes expose
+  them
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
   source relationships, LVM origin/pool/data metadata, Btrfs subvolume IDs,
   generation, top-level, and parent UUIDs, and ZFS user-reference, compression,
@@ -287,10 +289,12 @@ Use these commands for:
   pools, snapshots, and cache/writecache layers, including data and metadata
   percentages, active state and locality/exclusivity, device-mapper paths,
   parent links, read-ahead, table suspension/live/inactive state, host and
-  historical flags, extent/PV/LV counts, origin/pool relationships, thin-pool
-  fullness behavior, segment device mappings, cache policy, LVM RAID
-  sync/recovery/integrity status, health, tags, and backing/member counts when
-  `pvs`, `vgs`, `lvs`, or `dmsetup` expose them
+  historical flags, PV format/device-id/extent/metadata-area state, VG
+  permissions/allocation/lock/system-id and extent/PV/LV/snapshot counts,
+  origin/pool relationships, thin-pool fullness behavior, segment device
+  mappings, cache policy, LVM RAID sync/recovery/integrity status, health,
+  tags, and backing/member counts when `pvs`, `vgs`, `lvs`, or `dmsetup` expose
+  them
 - `vdo`: native VDO volumes and LVM VDO segment metadata, including backing
   device, logical and physical size, status/stat counters, operating mode,
   recovery progress, configured and active write policy, LVM VDO compression

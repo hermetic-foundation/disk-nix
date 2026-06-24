@@ -2678,9 +2678,56 @@ fn usage_details(node: &Node) -> String {
         ("lvm.vdo-saving-percent", "vdo-saving"),
         ("lvm.origin", "origin"),
         ("lvm.pool", "pool"),
+        ("lvm.pv-format", "pv-format"),
+        ("lvm.dev-size", "dev-size"),
+        ("lvm.pv-major", "pv-major"),
+        ("lvm.pv-minor", "pv-minor"),
+        ("lvm.pe-start", "pe-start"),
+        ("lvm.pv-attr", "pv-attr"),
+        ("lvm.pv-allocatable", "pv-allocatable"),
+        ("lvm.pv-exported", "pv-exported"),
+        ("lvm.pv-missing", "pv-missing"),
+        ("lvm.pv-pe-count", "pv-extents"),
+        ("lvm.pv-pe-allocated", "pv-extents-used"),
+        ("lvm.pv-tags", "pv-tags"),
+        ("lvm.pv-mda-count", "pv-mda-count"),
+        ("lvm.pv-mda-used-count", "pv-mda-used"),
+        ("lvm.pv-mda-free", "pv-mda-free"),
+        ("lvm.pv-mda-size", "pv-mda-size"),
+        ("lvm.pv-bootloader-area-start", "pv-ba-start"),
+        ("lvm.pv-bootloader-area-size", "pv-ba-size"),
+        ("lvm.pv-in-use", "pv-in-use"),
+        ("lvm.pv-duplicate", "pv-duplicate"),
+        ("lvm.pv-device-id", "pv-device-id"),
+        ("lvm.pv-device-id-type", "pv-device-id-type"),
+        ("lvm.vg-format", "vg-format"),
+        ("lvm.vg-attr", "vg-attr"),
+        ("lvm.vg-extendable", "vg-extendable"),
+        ("lvm.vg-exported", "vg-exported"),
+        ("lvm.vg-autoactivation", "vg-autoactivation"),
+        ("lvm.vg-partial", "vg-partial"),
+        ("lvm.allocation-policy", "allocation"),
+        ("lvm.vg-clustered", "vg-clustered"),
+        ("lvm.vg-shared", "vg-shared"),
+        ("lvm.vg-system-id", "system-id"),
+        ("lvm.vg-lock-type", "lock-type"),
+        ("lvm.vg-lock-args", "lock-args"),
         ("lvm.extent-size", "extent"),
+        ("lvm.extent-count", "extents"),
+        ("lvm.free-count", "free-extents"),
+        ("lvm.max-lvs", "max-lvs"),
+        ("lvm.max-pvs", "max-pvs"),
         ("lvm.pv-count", "pvs"),
+        ("lvm.missing-pv-count", "missing-pvs"),
         ("lvm.lv-count", "lvs"),
+        ("lvm.snapshot-count", "snapshots"),
+        ("lvm.vg-seqno", "seqno"),
+        ("lvm.vg-profile", "vg-profile"),
+        ("lvm.vg-mda-count", "vg-mda-count"),
+        ("lvm.vg-mda-used-count", "vg-mda-used"),
+        ("lvm.vg-mda-free", "vg-mda-free"),
+        ("lvm.vg-mda-size", "vg-mda-size"),
+        ("lvm.vg-mda-copies", "vg-mda-copies"),
         ("lvm.active", "active"),
         ("lvm.active-locally", "active-local"),
         ("lvm.active-remotely", "active-remote"),
@@ -4730,14 +4777,33 @@ mod tests {
             .with_path("/dev/nvme0n1p3")
             .with_size_bytes(536_870_912_000)
             .with_property("lvm.active", "active")
+            .with_property("lvm.pv-format", "lvm2")
+            .with_property("lvm.dev-size", "500.00g")
+            .with_property("lvm.pe-start", "1.00m")
+            .with_property("lvm.pv-pe-count", "128000")
+            .with_property("lvm.pv-pe-allocated", "102400")
+            .with_property("lvm.pv-mda-free", "1020.00k")
+            .with_property("lvm.pv-device-id", "wwn-0x1234")
             .with_property("lvm.tags", "ssd,system"),
         );
         graph.add_node(
             Node::new("lvm-vg:vg0", NodeKind::LvmVolumeGroup, "vg0")
                 .with_size_bytes(1_099_511_627_776)
+                .with_property("lvm.vg-format", "lvm2")
+                .with_property("lvm.permissions", "writeable")
+                .with_property("lvm.vg-autoactivation", "enabled")
+                .with_property("lvm.allocation-policy", "normal")
+                .with_property("lvm.vg-system-id", "host-a")
+                .with_property("lvm.vg-lock-type", "none")
                 .with_property("lvm.extent-size", "4.00m")
+                .with_property("lvm.extent-count", "262144")
+                .with_property("lvm.free-count", "5120")
                 .with_property("lvm.pv-count", "2")
-                .with_property("lvm.lv-count", "5"),
+                .with_property("lvm.lv-count", "5")
+                .with_property("lvm.snapshot-count", "1")
+                .with_property("lvm.vg-seqno", "17")
+                .with_property("lvm.vg-mda-free", "1020.00k")
+                .with_property("lvm.vg-mda-copies", "unmanaged"),
         );
         graph.add_node(
             Node::new("lvm-thin-pool:vg0/pool", NodeKind::LvmThinPool, "vg0/pool")
@@ -4817,7 +4883,17 @@ mod tests {
         assert!(output.contains("/dev/nvme0n1p3"));
         assert!(output.contains("active"));
         assert!(output.contains("tags=ssd,system"));
-        assert!(output.contains("extent=4.00m pvs=2 lvs=5"));
+        assert!(output.contains("pv-format=lvm2 dev-size=500.00g"));
+        assert!(output.contains("pe-start=1.00m pv-extents=128000"));
+        assert!(output.contains("pv-extents-used=102400 pv-mda-free=1020.00k"));
+        assert!(output.contains("pv-device-id=wwn-0x1234"));
+        assert!(output.contains("vg-format=lvm2"));
+        assert!(output.contains("permissions=writeable"));
+        assert!(output.contains("vg-autoactivation=enabled allocation=normal"));
+        assert!(output.contains("system-id=host-a lock-type=none"));
+        assert!(output.contains("extent=4.00m extents=262144 free-extents=5120"));
+        assert!(output.contains("pvs=2 lvs=5 snapshots=1 seqno=17"));
+        assert!(output.contains("vg-mda-free=1020.00k vg-mda-copies=unmanaged"));
         assert!(output.contains("42.00"));
         assert!(output.contains("7.50"));
         assert!(output.contains("when-full=queue metadata-size=8.00g"));
