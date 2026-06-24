@@ -235,9 +235,9 @@ Use these commands for:
 - `complex-filesystems`: Btrfs, bcachefs, and ZFS pools, vdevs, datasets,
   zvols, subvolumes, snapshots, qgroups, and member devices, including size,
   used/free capacity, utilization, backing/member counts, allocation profiles,
-  qgroup limits, bcachefs superblock and member accounting, ZFS health/vdev
-  state, and ZFS compression/quota/reservation/encryption properties when
-  probes expose them
+  qgroup hierarchy and limits, bcachefs superblock and member accounting, ZFS
+  health/vdev state, and ZFS compression/quota/reservation/encryption
+  properties when probes expose them
 - `zfs`: ZFS pools, vdevs, datasets, snapshots, and zvols, including pool
   health/state, status/action advisories, scan/error summaries, vdev roles and
   error counters, dataset compression, quota, reservation, encryption, key
@@ -256,9 +256,9 @@ Use these commands for:
   MD RAID arrays,
   including ZFS health/vdev role/state/error counters, LVM extent/free extent
   counts, PV/LV/snapshot counts, permissions, allocation policy, lock/system-id,
-  and metadata-area counters, Btrfs qgroup limits, and MD RAID metadata version,
-  name, level, state, device counts, and event counters where probes expose
-  them
+  and metadata-area counters, Btrfs qgroup hierarchy and limits, and MD RAID
+  metadata version, name, level, state, device counts, and event counters where
+  probes expose them
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
   source relationships, LVM origin/pool/data metadata, Btrfs subvolume IDs,
   generation, creation generation, parent IDs, top-level, parent UUIDs, and

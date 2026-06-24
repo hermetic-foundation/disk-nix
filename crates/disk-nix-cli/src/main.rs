@@ -2829,6 +2829,8 @@ fn usage_details(node: &Node) -> String {
         ("lvm.writecache-block-size", "writecache-block-size"),
         ("lvm.writecache-error", "writecache-error"),
         ("btrfs.qgroup-id", "qgroup"),
+        ("btrfs.qgroup-parents", "qgroup-parents"),
+        ("btrfs.qgroup-children", "qgroup-children"),
         ("btrfs.mount-target", "mount-target"),
         ("btrfs.device-id", "device-id"),
         ("btrfs.id", "subvol-id"),
@@ -5531,6 +5533,8 @@ mod tests {
         graph.add_node(
             Node::new("btrfs-qgroup:0/257", NodeKind::BtrfsQgroup, "0/257")
                 .with_property("btrfs.qgroup-id", "0/257")
+                .with_property("btrfs.qgroup-parents", "0/5")
+                .with_property("btrfs.qgroup-children", "1/257")
                 .with_property("btrfs.max-referenced", "25GiB"),
         );
         graph.add_node(
@@ -5554,7 +5558,8 @@ mod tests {
             "vdev-role=cache vdev-state=ONLINE read-errors=0 write-errors=1 checksum-errors=2"
         ));
         assert!(output.contains("extent=4.00m pvs=2 lvs=8"));
-        assert!(output.contains("qgroup=0/257 max-rfer=25GiB"));
+        assert!(output.contains("qgroup=0/257 qgroup-parents=0/5 qgroup-children=1/257"));
+        assert!(output.contains("max-rfer=25GiB"));
         assert!(output.contains(
             "md-version=1.2 level=raid1 state=clean raid-devices=2 total-devices=2 md-name=host:root events=17"
         ));

@@ -73,6 +73,8 @@ struct Qgroup {
     exclusive: Option<u64>,
     max_referenced: Option<String>,
     max_exclusive: Option<String>,
+    parents: Vec<String>,
+    children: Vec<String>,
 }
 
 fn add_report(graph: &mut StorageGraph, report: &BtrfsReport) -> Result<(), ProbeError> {
@@ -255,6 +257,27 @@ fn add_qgroup(graph: &mut StorageGraph, filesystem_id: &str, qgroup: Qgroup) {
             node = node.with_property(key, value);
         }
     }
+    if !qgroup.parents.is_empty() {
+        node = node.with_property("btrfs.qgroup-parents", qgroup.parents.join(","));
+    }
+    if !qgroup.children.is_empty() {
+        node = node.with_property("btrfs.qgroup-children", qgroup.children.join(","));
+    }
+
+    for parent in &qgroup.parents {
+        graph.add_edge(Edge::new(
+            format!("btrfs-qgroup:{filesystem_id}:{parent}"),
+            id.clone(),
+            Relationship::Contains,
+        ));
+    }
+    for child in &qgroup.children {
+        graph.add_edge(Edge::new(
+            id.clone(),
+            format!("btrfs-qgroup:{filesystem_id}:{child}"),
+            Relationship::Contains,
+        ));
+    }
 
     graph.add_node(node);
     graph.add_edge(Edge::new(
@@ -436,10 +459,25 @@ fn parse_qgroups(bytes: &[u8]) -> Result<Vec<Qgroup>, ProbeError> {
             exclusive: fields.get(2).and_then(|value| parse_u64(value)),
             max_referenced: fields.get(3).and_then(|value| nonempty_limit(value)),
             max_exclusive: fields.get(4).and_then(|value| nonempty_limit(value)),
+            parents: fields
+                .get(5)
+                .map_or_else(Vec::new, |value| parse_qgroup_list(value)),
+            children: fields
+                .get(6)
+                .map_or_else(Vec::new, |value| parse_qgroup_list(value)),
         });
     }
 
     Ok(qgroups)
+}
+
+fn parse_qgroup_list(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty() && *item != "-" && *item != "---" && *item != "none")
+        .map(ToOwned::to_owned)
+        .collect()
 }
 
 fn extract_quoted(line: &str, prefix: &str) -> Option<String> {
@@ -499,10 +537,12 @@ System,DUP: Size:64, Used:32\n";
 
     const SUBVOLUMES: &[u8] = b"ID 256 gen 10 cgen 7 parent 5 top level 5 uuid subvol-root parent_uuid - received_uuid - path @\n\
 ID 257 gen 11 cgen 8 parent 256 top level 5 uuid snap-1 parent_uuid subvol-root received_uuid received-snap path @/.snapshots/1/snapshot\n";
-    const QGROUPS: &[u8] = b"qgroupid         rfer         excl     max_rfer     max_excl\n\
---------         ----         ----     --------     --------\n\
-0/256            4096         2048         none         none\n\
-0/257            1024         512          8192         none\n";
+    const QGROUPS: &[u8] =
+        b"qgroupid         rfer         excl     max_rfer     max_excl     parent     child\n\
+--------         ----         ----     --------     --------     ------     -----\n\
+0/5              8192         4096         none         none         -          0/256,0/257\n\
+0/256            4096         2048         none         none         0/5        -\n\
+0/257            1024         512          8192         none         0/5        -\n";
 
     #[test]
     fn normalizes_btrfs_filesystem_devices_and_subvolumes() {
@@ -559,6 +599,14 @@ ID 257 gen 11 cgen 8 parent 256 top level 5 uuid snap-1 parent_uuid subvol-root 
             node.kind == NodeKind::BtrfsQgroup
                 && node.name == "0/257"
                 && node.usage.as_ref().and_then(|usage| usage.used_bytes) == Some(1024)
+                && node.properties.iter().any(|property| {
+                    property.key == "btrfs.qgroup-parents" && property.value == "0/5"
+                })
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "btrfs-qgroup:btrfs:fs-uuid:0/5"
+                && edge.to.0 == "btrfs-qgroup:btrfs:fs-uuid:0/257"
+                && edge.relationship == Relationship::Contains
         }));
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::BtrfsFilesystem

@@ -137,7 +137,8 @@ The current probe layer normalizes:
   `btrfs qgroup show --raw -reF` for filesystem identity, member devices,
   usage, subvolumes, subvolume generation and creation generation, parent IDs,
   top-level metadata, parent/received UUIDs for snapshot and send/receive
-  relationships, and qgroup referenced/exclusive usage and limits
+  relationships, and qgroup hierarchy plus referenced/exclusive usage and
+  limits
 - bcache sysfs metadata through `/sys/block/*/bcache` for backing devices,
   cache devices, explicit backing-device metadata, cache sets, mode,
   running/state, dirty data, available cache percentage, discard, I/O error
