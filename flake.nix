@@ -80,6 +80,17 @@
             mainProgram = "disk-nix";
           };
         };
+        integrationLoopSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-loop-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.e2fsprogs
+            pkgs.jq
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-loop-smoke.sh;
+        };
         nixosModuleTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -1334,12 +1345,22 @@
         packages = {
           default = diskNix;
           disk-nix = diskNix;
+          integration-loop-smoke = integrationLoopSmoke;
         };
 
-        apps.default = {
-          type = "app";
-          program = "${diskNix}/bin/disk-nix";
-          meta = diskNix.meta;
+        apps = {
+          default = {
+            type = "app";
+            program = "${diskNix}/bin/disk-nix";
+            meta = diskNix.meta;
+          };
+          integration-loop-smoke = {
+            type = "app";
+            program = "${integrationLoopSmoke}/bin/disk-nix-integration-loop-smoke";
+            meta = {
+              description = "Root-only loop-backed disk-nix smoke integration harness";
+            };
+          };
         };
 
         checks = {
@@ -1362,6 +1383,13 @@
               runHook postInstall
             '';
           };
+          integrationLoopSmoke = pkgs.runCommand "disk-nix-integration-loop-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'mkfs.ext4' ${./scripts/integration-loop-smoke.sh}
+            touch "$out"
+          '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''
             simplePlan=$(mktemp)
             lifecyclePlan=$(mktemp)

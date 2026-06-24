@@ -11,7 +11,8 @@ behavior across real storage stacks.
 
 - AGPL-3.0-or-later licensing from the beginning.
 - Nix flake packaging, development shell, formatting, clippy, tests, NixOS
-  module checks, example checks, schema checks, completions, and manpage output.
+  module checks, example checks, schema checks, opt-in loop integration harness
+  packaging, completions, and manpage output.
 - Rust workspace split into model, probe, plan, exec, and CLI crates.
 - Read-only topology graph with focused CLI views for devices, partitions,
   filesystems, complex filesystems, Btrfs, bcachefs, ZFS, volumes, pools,
@@ -39,6 +40,10 @@ behavior across real storage stacks.
   multipath, ZFS pools/datasets/zvols/snapshots, LVM PV/VG/LV/thin/cache
   identities, VDO volumes, loop devices, cache identities, iSCSI sessions, LUN
   host paths, NVMe namespaces, and NFS export path/client pairs.
+- A root-only, explicitly enabled loop-backed smoke integration harness that
+  creates a temporary backing file, attaches a loop device, writes an ext4
+  signature, verifies real `inspect --json`, executes a safe loop rescan apply,
+  and cleans up the temporary device.
 
 ## Implemented probe coverage
 
@@ -65,9 +70,8 @@ manual-review guidance, or non-ready command plans instead of guessing.
 
 ## Remaining for feature complete
 
-- Integration tests that exercise real loop-backed block devices, LUKS, LVM,
-  Btrfs, bcachefs, ZFS, MD RAID, multipath, iSCSI, NFS, VDO, and NVMe where
-  host support is available.
+- Broader integration tests that exercise LUKS, LVM, Btrfs, bcachefs, ZFS, MD
+  RAID, multipath, iSCSI, NFS, VDO, and NVMe where host support is available.
 - A VM-based destructive test harness that validates apply behavior on isolated
   disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional

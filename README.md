@@ -32,6 +32,8 @@ storage graph.
 
 See [docs/status.md](docs/status.md) for the current feature-completeness
 status and remaining work.
+See [docs/integration-tests.md](docs/integration-tests.md) for the opt-in
+host-backed integration harness.
 
 ## Development
 
@@ -53,6 +55,14 @@ nix flake check
 The flake checks build the CLI, run workspace tests and clippy, validate the
 NixOS module, and execute the checked-in example specs through `plan`, `apply`,
 and `--script-out` so JSON contracts and review-script generation stay covered.
+They also validate the opt-in loop-backed integration harness without creating
+block devices.
+
+Run the root-only loop-backed smoke harness explicitly with:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 nix run .#integration-loop-smoke
+```
 
 ## CLI
 
