@@ -228,12 +228,20 @@ Examples:
   mountpoint, quota, reservation, and encryption policy; dataset destruction
   remains destructive and recommends snapshots or rename-first validation.
   Logical declaration names can set `target` or `path` to the concrete
-  `pool/name` dataset used by ZFS commands.
+  `pool/name` dataset used by ZFS commands. Current-topology comparison
+  suppresses concrete dataset destroy actions only when the `pool/name` target
+  is already absent; present targets remain actionable with warnings that
+  include available mountpoint, quota, reservation, encryption, key status,
+  origin, usage, or compression metadata.
 - zvol creation, growth, and property updates are online operations, with
   advice to verify pool capacity, reservation policy, and downstream block
   consumers. zvol `properties = { ... }` render create-time `-o key=value`
   options and `zfs set key=value <zvol>` reconciliation actions. Logical zvol
   names can likewise set `target` or `path` to the concrete `pool/name` zvol.
+  Current-topology comparison suppresses concrete zvol destroy actions only
+  when the `pool/name` target is already absent; present zvols remain
+  actionable with warnings that include available volsize, origin, usage,
+  reservation, encryption, or compression metadata.
 - MD RAID creation and destruction are destructive because they write array
   metadata or remove array identity. Assemble and stop are offline-required but
   non-destructive: they activate or deactivate existing array metadata while
@@ -419,7 +427,10 @@ and export relationships. Zvol rescan renders the equivalent
 `zfs list -t volume`, `zfs get`, and graph inspection for volsize,
 reservation, and block consumers. Logical declaration keys can use `target` or
 `path` for the concrete dataset or zvol name. Use property updates or grow only
-when state must actually change.
+when state must actually change. Current-topology comparison suppresses
+concrete dataset and zvol destroy actions only when the declared `pool/name`
+target is already absent; present targets stay actionable with ZFS metadata
+warnings.
 
 Lifecycle objects may use:
 
@@ -500,6 +511,10 @@ VDO utilization metadata. VDO start/stop reconciliation uses
 volume is already in `normal` mode and stop actions only when the mode
 explicitly reports stopped, not-running, or inactive; opposite states stay
 actionable with a warning.
+ZFS dataset and zvol destroy reconciliation suppresses concrete `pool/name`
+targets only when they are already absent. Present targets stay actionable with
+warnings that include available mountpoint, quota, reservation, encryption, key
+status, origin, usage, volsize, or compression metadata.
 NFS export reconciliation compares the declared client and options against
 `nfs.export-client` and `nfs.export-option-*` topology properties.
 iSCSI session reconciliation checks all matching target and session nodes so an
@@ -510,9 +525,9 @@ present.
 Already-satisfied grow, shrink, device-mapper destroy, multipath destroy,
 bcache detach, iSCSI login/logout, LVM activation/deactivation, LUKS open, loop
 create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
-unmount, remount, NFS export/unexport, VDO destroy, VDO start, VDO stop, MD assemble, ZFS
-pool import, LVM volume-group import/export, and set-property actions with no
-warning diagnostics are
+unmount, remount, NFS export/unexport, VDO destroy, VDO start, VDO stop, MD
+assemble, ZFS dataset/zvol destroy, ZFS pool import, LVM volume-group
+import/export, and set-property actions with no warning diagnostics are
 suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 

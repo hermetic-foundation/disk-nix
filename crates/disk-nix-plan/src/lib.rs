@@ -293,6 +293,8 @@ pub enum TopologyDiagnosticKind {
     VdoStartRequired,
     VdoStopAlreadySatisfied,
     VdoStopRequired,
+    ZfsObjectDestroyAlreadySatisfied,
+    ZfsObjectDestroyRequired,
     ZfsPoolImportAlreadySatisfied,
     ZfsPoolImportRequired,
 }
@@ -802,6 +804,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::VdoDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStartAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStopAlreadySatisfied
+                        | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
                 )
             })
@@ -1419,6 +1422,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::VdoDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStartAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStopAlreadySatisfied
+                    | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
             );
             has_warning |= diagnostic.level == TopologyDiagnosticLevel::Warning;
@@ -1444,6 +1448,9 @@ fn topology_diagnostics_for_action(
             return vec![diagnostic];
         }
         if let Some(diagnostic) = vdo_destroy_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
+        if let Some(diagnostic) = zfs_object_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
         if let Some(diagnostic) = dm_map_absent_diagnostic(action, &query) {
@@ -1513,6 +1520,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(vdo_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(vdo_start_diagnostic(action, node, &query));
     diagnostics.extend(vdo_stop_diagnostic(action, node, &query));
+    diagnostics.extend(zfs_object_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(zfs_pool_import_diagnostic(action, node, &query));
     diagnostics
 }
@@ -2502,6 +2510,94 @@ fn vdo_stop_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn zfs_object_destroy_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    let object_label = zfs_object_destroy_label(action)?;
+    if action.operation != Operation::Destroy || !is_concrete_zfs_object_target(query) {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("ZFS {object_label} {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn zfs_object_destroy_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    let object_label = zfs_object_destroy_label(action)?;
+    if action.operation != Operation::Destroy {
+        return None;
+    }
+
+    match (action.context.collection.as_deref(), node.kind) {
+        (Some("datasets"), NodeKind::ZfsDataset) | (Some("zvols"), NodeKind::Zvol) => {}
+        _ => return None,
+    }
+
+    let details = zfs_object_destroy_details(node);
+    let message = if details.is_empty() {
+        format!("ZFS {object_label} {query} is still present")
+    } else {
+        format!(
+            "ZFS {object_label} {query} is still present with {}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::ZfsObjectDestroyRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn zfs_object_destroy_label(action: &PlannedAction) -> Option<&'static str> {
+    match action.context.collection.as_deref() {
+        Some("datasets") => Some("dataset"),
+        Some("zvols") => Some("zvol"),
+        _ => None,
+    }
+}
+
+fn is_concrete_zfs_object_target(query: &str) -> bool {
+    query.contains('/') && !query.starts_with('/')
+}
+
+fn zfs_object_destroy_details(node: &Node) -> Vec<String> {
+    [
+        ("zfs.type", "type"),
+        ("zfs.mountpoint", "mountpoint"),
+        ("zfs.origin", "origin"),
+        ("zfs.used", "used"),
+        ("zfs.available", "available"),
+        ("zfs.referenced", "referenced"),
+        ("zfs.quota", "quota"),
+        ("zfs.reservation", "reservation"),
+        ("zfs.volsize", "volsize"),
+        ("zfs.encryption", "encryption"),
+        ("zfs.keystatus", "key status"),
+        ("zfs.compression", "compression"),
+    ]
+    .into_iter()
+    .filter_map(|(property, label)| {
+        property_value_from_node(node, property).map(|value| format!("{label} {value}"))
+    })
+    .collect()
 }
 
 fn zfs_pool_import_diagnostic(
@@ -14938,6 +15034,147 @@ mod tests {
             diagnostic.action_id == "pools:tank:import"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsPoolImportRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_zfs_dataset_destroy_when_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "datasets": {
+                "tank/old": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/old:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_zfs_dataset_destroy_when_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "datasets": {
+                "tank/home": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zfs-dataset:tank/home", NodeKind::ZfsDataset, "tank/home")
+                .with_property("zfs.type", "filesystem")
+                .with_property("zfs.mountpoint", "/home")
+                .with_property("zfs.quota", "500G")
+                .with_property("zfs.encryption", "aes-256-gcm")
+                .with_property("zfs.keystatus", "available"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/home:destroy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectDestroyRequired
+                && diagnostic.message.contains("mountpoint /home")
+                && diagnostic.message.contains("quota 500G")
+                && diagnostic.message.contains("key status available")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_zvol_destroy_when_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "zvols": {
+                "tank/vm/old": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/old:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_zvol_destroy_when_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "zvols": {
+                "tank/vm/root": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("zvol:tank/vm/root", NodeKind::Zvol, "tank/vm/root")
+                .with_property("zfs.type", "volume")
+                .with_property("zfs.volsize", "80G")
+                .with_property("zfs.origin", "tank/vm/base@clean")
+                .with_property("zfs.compression", "zstd"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/root:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectDestroyRequired
+                && diagnostic.message.contains("volsize 80G")
+                && diagnostic.message.contains("origin tank/vm/base@clean")
+                && diagnostic.message.contains("compression zstd")
         }));
     }
 

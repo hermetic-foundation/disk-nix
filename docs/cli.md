@@ -585,17 +585,18 @@ write-policy, and LVM VDO utilization metadata, VDO start actions are compared
 with `vdo.operating-mode`, VDO stop actions are compared with
 explicitly stopped, not-running, or inactive `vdo.operating-mode` values, MD
 assemble actions are compared with `md.state`, `md.degraded-devices`, and
-`md.failed-devices`, ZFS pool import actions are compared with `zfs.state` and
-`zfs.health`, LVM volume-group import/export actions are compared with
-`lvm.vg-exported`, and iSCSI login/logout actions are compared with current
-session state across all matching target/session nodes when metadata is
-available. Safe already-satisfied grow, shrink, device-mapper destroy,
+`md.failed-devices`, ZFS dataset and zvol destroy actions are compared with
+concrete target presence and ZFS metadata, ZFS pool import actions are compared
+with `zfs.state` and `zfs.health`, LVM volume-group import/export actions are
+compared with `lvm.vg-exported`, and iSCSI login/logout actions are compared
+with current session state across all matching target/session nodes when
+metadata is available. Safe already-satisfied grow, shrink, device-mapper destroy,
 multipath destroy, bcache detach, iSCSI login/logout, LVM
 activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
 loop create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
-unmount, remount, NFS export/unexport, VDO destroy, VDO start, VDO stop, MD assemble, ZFS
-pool import, and property actions that have no warning diagnostics are
-suppressed from the actionable plan and counted as
+unmount, remount, NFS export/unexport, VDO destroy, VDO start, VDO stop, MD
+assemble, ZFS dataset/zvol destroy, ZFS pool import, and property actions that
+have no warning diagnostics are suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
 inactive LUKS open targets, active LUKS close targets, loop devices mapped to
@@ -604,8 +605,8 @@ device-mapper removal targets, present multipath flush targets, absent LUN
 attach paths, visible LUN detach paths, present bcache detach targets, absent
 NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
 destroy targets, non-normal VDO start modes, running VDO stop targets,
-degraded or failed MD arrays, degraded ZFS
-pools, mountpoints using a different source, currently mounted unmount targets,
+present ZFS dataset/zvol destroy targets, degraded or failed MD arrays,
+degraded ZFS pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
 targets without a logged-in session and logout targets that still have a
 logged-in session stay actionable with a warning diagnostic.
@@ -991,7 +992,11 @@ ZFS dataset command plans render reviewed `zfs create` commands, including
 create-time `-o key=value` options from declared properties, and policy-gated
 `zfs destroy` commands for `datasets` lifecycle declarations. Dataset
 `operation = "rescan"` renders read-only `zfs list`, `zfs get`, and graph
-inspection commands. Dataset and zvol rename declarations render reviewed
+inspection commands. With current-topology probing, concrete `pool/name`
+dataset destroy actions are suppressed only when the dataset is already absent;
+present datasets stay actionable with warnings that include mountpoint, quota,
+reservation, encryption, key status, origin, usage, or compression metadata
+when available. Dataset and zvol rename declarations render reviewed
 `zfs rename <old> <new>` commands from `operation = "rename"` plus `renameTo`.
 ZFS clone promotion declarations render reviewed `zfs get origin <clone>`
 preflight checks and `zfs promote <clone>` commands from
@@ -1002,8 +1007,11 @@ Zvol command plans render `zfs create -o key=value -V` for declared create-time
 properties, `zfs set volsize=...`, policy-gated `zfs destroy`, and
 read-only `operation = "rescan"` inventory/property probes plus
 `zfs set key=value` property reconciliation updates for `zvols` lifecycle
-declarations. Zvol clone promotion uses the same reviewed `zfs promote`
-lifecycle path.
+declarations. Current-topology probing suppresses concrete `pool/name` zvol
+destroy actions only when the zvol is already absent; present zvols stay
+actionable with warnings that include volsize, origin, usage, reservation,
+encryption, or compression metadata when available. Zvol clone promotion uses
+the same reviewed `zfs promote` lifecycle path.
 Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
 `btrfs subvolume delete`, reviewed path renames with `mv -- <old> <new>`, and
 `btrfs property set -ts <path> ro true|false` for read-only property
