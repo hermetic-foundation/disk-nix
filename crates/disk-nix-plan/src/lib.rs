@@ -2132,6 +2132,11 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
             .or_else(|| property_value_from_node(node, property).map(str::to_string));
     }
 
+    if action.context.collection.as_deref() == Some("btrfsQgroups") {
+        return current_btrfs_qgroup_property_value(property, node)
+            .or_else(|| property_value_from_node(node, property).map(str::to_string));
+    }
+
     if let Some(aliases) = aliases {
         return aliases
             .iter()
@@ -2179,7 +2184,63 @@ fn comparable_property_value(action: &PlannedAction, property: &str, value: &str
             .unwrap_or_else(|| value.to_string()),
         Some("luks.devices") => normalize_luks_property_value(&normalized_property, value)
             .unwrap_or_else(|| value.to_string()),
+        Some("btrfsQgroups") => normalize_btrfs_qgroup_property_value(&normalized_property, value)
+            .unwrap_or_else(|| value.to_string()),
         _ => value.to_string(),
+    }
+}
+
+fn current_btrfs_qgroup_property_value(property: &str, node: &Node) -> Option<String> {
+    match btrfs_qgroup_property_kind(property)? {
+        BtrfsQgroupPropertyKind::MaxReferenced => {
+            property_value_from_node(node, "btrfs.max-referenced")
+                .or_else(|| property_value_from_node(node, "btrfs.referenced-limit"))
+                .map(str::to_string)
+        }
+        BtrfsQgroupPropertyKind::MaxExclusive => {
+            property_value_from_node(node, "btrfs.max-exclusive")
+                .or_else(|| property_value_from_node(node, "btrfs.exclusive-limit"))
+                .map(str::to_string)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BtrfsQgroupPropertyKind {
+    MaxReferenced,
+    MaxExclusive,
+}
+
+fn btrfs_qgroup_property_kind(property: &str) -> Option<BtrfsQgroupPropertyKind> {
+    match normalize_storage_property_name(property).as_str() {
+        "limit"
+        | "referenced"
+        | "maxreferenced"
+        | "max-referenced"
+        | "btrfs-max-referenced"
+        | "btrfs-referenced-limit" => Some(BtrfsQgroupPropertyKind::MaxReferenced),
+        "exclusive"
+        | "maxexclusive"
+        | "max-exclusive"
+        | "btrfs-max-exclusive"
+        | "btrfs-exclusive-limit" => Some(BtrfsQgroupPropertyKind::MaxExclusive),
+        _ => None,
+    }
+}
+
+fn normalize_btrfs_qgroup_property_value(property: &str, value: &str) -> Option<String> {
+    match btrfs_qgroup_property_kind(property)? {
+        BtrfsQgroupPropertyKind::MaxReferenced | BtrfsQgroupPropertyKind::MaxExclusive => {
+            let trimmed = value.trim();
+            if matches!(
+                normalize_storage_property_name(trimmed).as_str(),
+                "none" | "null" | "unlimited" | "---"
+            ) {
+                Some("none".to_string())
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
     }
 }
 
@@ -22348,6 +22409,73 @@ mod tests {
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::BtrfsQgroupCreateRequired
                 && diagnostic.message.contains("not a Btrfs qgroup")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_btrfs_qgroup_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsQgroups": {
+                "0/257": {
+                  "target": "/mnt/persist",
+                  "properties": {
+                    "limit": "21474836480",
+                    "maxExclusive": "unlimited"
+                  }
+                },
+                "0/258": {
+                  "target": "/mnt/persist",
+                  "properties": {
+                    "btrfs.max-exclusive": "10737418240"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("btrfs-qgroup:fs-uuid:0/257", NodeKind::BtrfsQgroup, "0/257")
+                .with_property("btrfs.qgroup-id", "0/257")
+                .with_property("btrfs.max-referenced", "21474836480")
+                .with_property("btrfs.max-exclusive", "none"),
+        );
+        graph.add_node(
+            Node::new("btrfs-qgroup:fs-uuid:0/258", NodeKind::BtrfsQgroup, "0/258")
+                .with_property("btrfs.qgroup-id", "0/258")
+                .with_property("btrfs.max-exclusive", "5368709120"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.matched_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "btrfsQgroups:0/258:set-property:btrfs.max-exclusive"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfsQgroups:0/257:set-property:limit"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfsQgroups:0/257:set-property:maxExclusive"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfsQgroups:0/258:set-property:btrfs.max-exclusive"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic.message.contains("5368709120")
+                && diagnostic.message.contains("10737418240")
         }));
     }
 
