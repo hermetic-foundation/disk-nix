@@ -382,9 +382,9 @@ Use these commands for:
 - `vdo`: native VDO volumes and LVM VDO segment metadata, including backing
   device, logical and physical size, used/free/percent utilization columns,
   status/stat counters, operating mode, recovery progress, configured and
-  active write policy, LVM VDO compression and index state, used/saving
-  counters, index/cache sizing, compression, deduplication, version/release
-  data, and block accounting when probes expose them
+  active write policy, LVM VDO compression and index state, byte-normalized
+  used size, saving counters, index/cache sizing, compression, deduplication,
+  version/release data, and block accounting when probes expose them
 - `multipath`: multipath maps and their backing paths, including WWID, dm
   device, vendor/product, raw size, normalized byte capacity, features,
   hardware handler, write protection, path count, host path, SCSI

@@ -143,8 +143,8 @@ The current probe layer normalizes:
   cache block and hit/miss counters, writecache block sizing, LVM RAID
   sync/recovery/integrity status, segment stripe/reshape/range metadata,
   segment integrity settings, VDO-like logical volumes, LVM VDO operating mode,
-  compression/index state, used size, saving percentage, and detailed VDO
-  segment tuning where attributes expose them
+  compression/index state, byte-normalized VDO used size, saving percentage,
+  and detailed VDO segment tuning where attributes expose them
 - LVM `lvs --segments` JSON reports for LV segment type, segment size/start,
   physical/logical extent ranges, stripe/reshape geometry, integrity settings,
   VDO segment settings, and dependencies on backing PV devices or internal LVs

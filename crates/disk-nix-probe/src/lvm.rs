@@ -435,6 +435,14 @@ fn add_logical_volume(graph: &mut StorageGraph, lv: LogicalVolume) {
     if let Some(size_bytes) = parse_lvm_size(lv.lv_size.as_deref()) {
         node = node.with_size_bytes(size_bytes);
     }
+    let usage = Usage {
+        used_bytes: parse_lvm_size(lv.vdo_used_size.as_deref()),
+        free_bytes: None,
+        allocated_bytes: None,
+    };
+    if !usage.is_empty() {
+        node = node.with_usage(usage);
+    }
     if let Some(uuid) = &lv.lv_uuid {
         node = node.with_identity(Identity {
             uuid: Some(uuid.clone()),
@@ -1297,6 +1305,10 @@ mod tests {
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::LvmSnapshot
                 && node.name == "vg0/root-snap"
+                && node
+                    .usage
+                    .as_ref()
+                    .is_some_and(|usage| usage.used_bytes == Some(8_589_934_592))
                 && node
                     .properties
                     .iter()
