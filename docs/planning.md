@@ -704,6 +704,10 @@ Disk and partition `operation = "rescan"` actions are online refreshes that
 render `partprobe <disk>` plus `blockdev --rereadpt <disk>` and verify with
 `parted -lm <disk>`. They do not edit partition geometry; use `grow` or
 `create` when the table itself must change.
+Partition `create` actions reconcile existing matched partition targets before
+command rendering. Existing partitions suppress create when any declared
+desired size matches; different or unknown sizes and matched non-partition
+nodes stay actionable with warnings and data-preservation guidance.
 Partition `grow` actions reconcile parseable byte-sized `end` values against
 the probed partition size when current-topology comparison is enabled. Already
 satisfied numeric growth is suppressed before command rendering, while

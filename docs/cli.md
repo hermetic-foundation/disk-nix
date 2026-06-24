@@ -810,7 +810,9 @@ Disk initialization plans render policy-gated `parted mklabel` and partition
 table reread commands after inspecting the target disk.
 Partition create command plans render concrete `parted mkpart`, `partprobe`,
 and `blockdev --rereadpt` commands when `device`, `partitionType`, `start`, and
-`end` are declared.
+`end` are declared. With `--probe-current`, create is suppressed when the target
+partition already exists and any declared desired size matches; size conflicts,
+unknown current size, and matched non-partition nodes remain actionable warnings.
 Partition grow command plans render concrete `parted resizepart`, `partprobe`,
 and `blockdev --rereadpt` commands when `device`, `partitionNumber`, and `end`
 or `desiredSize` are declared. When `--probe-current` is used, parseable

@@ -408,7 +408,10 @@ Disk initialization plans render destructive-policy-gated `parted mklabel` and
 partition table reread steps after disk identity inspection.
 Partition create plans render reviewed `parted mkpart`, `partprobe`, and
 `blockdev --rereadpt` commands when `device`, `partitionType`, `start`, and
-`end` are declared.
+`end` are declared. With current-topology probing enabled, create is suppressed
+when the target partition already exists and any declared desired size matches;
+size mismatches, unknown current size, or a matched non-partition node remain
+actionable warnings.
 Partition grow plans render reviewed `parted resizepart` commands and partition
 table rereads when `device`, `partitionNumber`, and `end` or `desiredSize` are
 declared. With current-topology probing enabled, numeric `end` values are
