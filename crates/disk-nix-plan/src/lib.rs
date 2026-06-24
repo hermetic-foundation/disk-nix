@@ -1,7 +1,11 @@
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use std::{error::Error, fmt};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    error::Error,
+    fmt,
+};
 
 pub const SUPPORTED_SPEC_VERSION: u64 = 1;
 
@@ -163,6 +167,10 @@ pub struct ActionDependencyOrder {
     pub layer_rank: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collection: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unblocks: Vec<String>,
     pub notes: Vec<String>,
 }
 
@@ -737,6 +745,7 @@ fn action_order_key(action: &PlannedAction) -> (u16, u16) {
 }
 
 fn dependency_order_for_actions(actions: &[PlannedAction]) -> Vec<ActionDependencyOrder> {
+    let edges = dependency_edges_for_actions(actions);
     actions
         .iter()
         .map(|action| {
@@ -753,16 +762,195 @@ fn dependency_order_for_actions(actions: &[PlannedAction]) -> Vec<ActionDependen
                 direction,
                 layer_rank,
                 collection,
-                notes: dependency_order_notes(action, direction, layer_rank),
+                depends_on: edges
+                    .depends_on
+                    .get(&action.id)
+                    .cloned()
+                    .unwrap_or_default(),
+                unblocks: edges.unblocks.get(&action.id).cloned().unwrap_or_default(),
+                notes: dependency_order_notes(action, direction, layer_rank, &edges),
             }
         })
         .collect()
+}
+
+#[derive(Debug, Default)]
+struct DependencyEdges {
+    depends_on: BTreeMap<String, Vec<String>>,
+    unblocks: BTreeMap<String, Vec<String>>,
+}
+
+fn dependency_edges_for_actions(actions: &[PlannedAction]) -> DependencyEdges {
+    let mut edges = DependencyEdges::default();
+    for consumer in actions {
+        let consumer_inputs = action_dependency_inputs(consumer);
+        if consumer_inputs.is_empty() {
+            continue;
+        }
+        let consumer_rank = collection_dependency_rank(consumer.context.collection.as_deref());
+        let consumer_direction = if operation_runs_upper_layers_first(consumer.operation) {
+            DependencyDirection::UpperLayersFirst
+        } else {
+            DependencyDirection::LowerLayersFirst
+        };
+
+        for provider in actions {
+            if provider.id == consumer.id {
+                continue;
+            }
+            let provider_identities = action_dependency_identities(provider);
+            if provider_identities.is_empty()
+                || !consumer_inputs
+                    .iter()
+                    .any(|input| provider_identities.contains(input))
+            {
+                continue;
+            }
+
+            let provider_rank = collection_dependency_rank(provider.context.collection.as_deref());
+            let provider_direction = if operation_runs_upper_layers_first(provider.operation) {
+                DependencyDirection::UpperLayersFirst
+            } else {
+                DependencyDirection::LowerLayersFirst
+            };
+            let edge = match consumer_direction {
+                DependencyDirection::LowerLayersFirst
+                    if provider_direction == DependencyDirection::LowerLayersFirst
+                        && provider_rank < consumer_rank =>
+                {
+                    Some((provider.id.as_str(), consumer.id.as_str()))
+                }
+                DependencyDirection::UpperLayersFirst
+                    if provider_direction == DependencyDirection::UpperLayersFirst
+                        && provider_rank > consumer_rank =>
+                {
+                    Some((provider.id.as_str(), consumer.id.as_str()))
+                }
+                _ => None,
+            };
+
+            if let Some((depends_on, action_id)) = edge {
+                insert_unique_sorted(&mut edges.depends_on, action_id, depends_on);
+                insert_unique_sorted(&mut edges.unblocks, depends_on, action_id);
+            }
+        }
+    }
+    edges
+}
+
+fn action_dependency_inputs(action: &PlannedAction) -> BTreeSet<String> {
+    let mut inputs = BTreeSet::new();
+    insert_identity(&mut inputs, action.context.device.as_deref());
+    for device in &action.context.devices {
+        insert_identity(&mut inputs, Some(device));
+    }
+    match action.context.collection.as_deref() {
+        Some("loopDevices") => insert_identity(&mut inputs, action.context.device.as_deref()),
+        Some("filesystems") | Some("swaps") => {
+            insert_identity(&mut inputs, action.context.target.as_deref());
+            insert_identity(&mut inputs, action.context.device.as_deref());
+        }
+        Some("luks.devices")
+        | Some("physicalVolumes")
+        | Some("vdoVolumes")
+        | Some("partitions")
+        | Some("multipathMaps")
+        | Some("mdRaids")
+        | Some("caches") => {
+            insert_identity(&mut inputs, action.context.target.as_deref());
+            insert_identity(&mut inputs, action.context.device.as_deref());
+        }
+        Some("luns") => {
+            insert_identity(&mut inputs, action.context.portal.as_deref());
+            insert_identity(&mut inputs, action.context.target.as_deref());
+        }
+        Some("volumes") | Some("thinPools") | Some("lvmCaches") | Some("lvmSnapshots") => {
+            insert_lvm_parent_identities(&mut inputs, action.context.target.as_deref());
+            insert_lvm_parent_identities(&mut inputs, action.context.name.as_deref());
+        }
+        Some("datasets") | Some("zvols") => {
+            insert_zfs_parent_identities(&mut inputs, action.context.target.as_deref());
+            insert_zfs_parent_identities(&mut inputs, action.context.name.as_deref());
+        }
+        Some("snapshots") => {
+            insert_identity(&mut inputs, action.context.target.as_deref());
+            insert_snapshot_source_identity(&mut inputs, action.context.name.as_deref());
+        }
+        Some("btrfsSubvolumes") | Some("btrfsQgroups") | Some("nfs.mounts") | Some("exports") => {
+            insert_identity(&mut inputs, action.context.target.as_deref());
+            insert_identity(&mut inputs, action.context.mountpoint.as_deref());
+        }
+        _ => {}
+    }
+    inputs
+}
+
+fn action_dependency_identities(action: &PlannedAction) -> BTreeSet<String> {
+    let mut identities = BTreeSet::new();
+    insert_identity(&mut identities, action.context.name.as_deref());
+    insert_identity(&mut identities, action.context.target.as_deref());
+    insert_identity(&mut identities, action.context.device.as_deref());
+    insert_identity(&mut identities, action.context.mountpoint.as_deref());
+    for device in &action.context.devices {
+        insert_identity(&mut identities, Some(device));
+    }
+    if action.context.collection.as_deref() == Some("iscsiSessions") {
+        insert_identity(&mut identities, action.context.portal.as_deref());
+    }
+    identities
+}
+
+fn insert_lvm_parent_identities(identities: &mut BTreeSet<String>, value: Option<&str>) {
+    let Some(value) = value else {
+        return;
+    };
+    if let Some((vg, _lv)) = value.split_once('/') {
+        insert_identity(identities, Some(vg));
+    }
+}
+
+fn insert_zfs_parent_identities(identities: &mut BTreeSet<String>, value: Option<&str>) {
+    let Some(value) = value else {
+        return;
+    };
+    if let Some((pool, _rest)) = value.split_once('/') {
+        insert_identity(identities, Some(pool));
+    }
+    if let Some((dataset, _snapshot)) = value.split_once('@') {
+        insert_identity(identities, Some(dataset));
+        insert_zfs_parent_identities(identities, Some(dataset));
+    }
+}
+
+fn insert_snapshot_source_identity(identities: &mut BTreeSet<String>, value: Option<&str>) {
+    let Some(value) = value else {
+        return;
+    };
+    if let Some((dataset, _snapshot)) = value.split_once('@') {
+        insert_identity(identities, Some(dataset));
+    }
+}
+
+fn insert_identity(identities: &mut BTreeSet<String>, value: Option<&str>) {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    identities.insert(value.to_string());
+}
+
+fn insert_unique_sorted(map: &mut BTreeMap<String, Vec<String>>, key: &str, value: &str) {
+    let values = map.entry(key.to_string()).or_default();
+    if !values.iter().any(|existing| existing == value) {
+        values.push(value.to_string());
+        values.sort();
+    }
 }
 
 fn dependency_order_notes(
     action: &PlannedAction,
     direction: DependencyDirection,
     layer_rank: u16,
+    edges: &DependencyEdges,
 ) -> Vec<String> {
     let mut notes = vec![format!(
         "collection layer rank {layer_rank} orders {} actions",
@@ -781,6 +969,18 @@ fn dependency_order_notes(
             "consumer layers are planned before backing layers for teardown, shrink, rollback, detach, and destroy work"
                 .to_string(),
         ),
+    }
+    if let Some(depends_on) = edges.depends_on.get(&action.id) {
+        notes.push(format!(
+            "explicit dependency edge requires {} before this action",
+            depends_on.join(", ")
+        ));
+    }
+    if let Some(unblocks) = edges.unblocks.get(&action.id) {
+        notes.push(format!(
+            "this action unblocks explicit dependent action(s): {}",
+            unblocks.join(", ")
+        ));
     }
     notes
 }
@@ -8713,6 +8913,127 @@ mod tests {
                     .iter()
                     .any(|note| note.contains("collection layer rank"))
         }));
+    }
+
+    #[test]
+    fn dependency_order_reports_explicit_edges_for_layered_block_growth() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "backingFiles": {
+                "/var/lib/images/root.img": {
+                  "operation": "grow",
+                  "desiredSize": "32GiB"
+                }
+              },
+              "loopDevices": {
+                "/dev/loop7": {
+                  "operation": "grow",
+                  "device": "/var/lib/images/root.img"
+                }
+              },
+              "filesystems": {
+                "root": {
+                  "operation": "grow",
+                  "device": "/dev/loop7",
+                  "desiredSize": "100%"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let backing = plan
+            .dependency_order
+            .iter()
+            .find(|order| order.action_id == "backingfiles:/var/lib/images/root.img:grow")
+            .expect("backing file dependency order entry exists");
+        let loop_device = plan
+            .dependency_order
+            .iter()
+            .find(|order| order.action_id == "loopdevices:/dev/loop7:grow")
+            .expect("loop device dependency order entry exists");
+        let filesystem = plan
+            .dependency_order
+            .iter()
+            .find(|order| order.action_id == "filesystem:root:inspect")
+            .expect("filesystem dependency order entry exists");
+
+        assert!(backing.depends_on.is_empty());
+        assert_eq!(
+            backing.unblocks,
+            vec!["loopdevices:/dev/loop7:grow".to_string()]
+        );
+        assert_eq!(
+            loop_device.depends_on,
+            vec!["backingfiles:/var/lib/images/root.img:grow".to_string()]
+        );
+        assert_eq!(
+            loop_device.unblocks,
+            vec!["filesystem:root:inspect".to_string()]
+        );
+        assert_eq!(
+            filesystem.depends_on,
+            vec!["loopdevices:/dev/loop7:grow".to_string()]
+        );
+        assert!(filesystem.unblocks.is_empty());
+        assert!(
+            loop_device
+                .notes
+                .iter()
+                .any(|note| note.contains("explicit dependency edge"))
+        );
+    }
+
+    #[test]
+    fn dependency_order_reports_explicit_edges_for_pool_dataset_snapshot_layers() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "pools": {
+                "tank": {
+                  "operation": "import"
+                }
+              },
+              "datasets": {
+                "tank/home": {
+                  "operation": "create"
+                }
+              },
+              "snapshots": {
+                "home-before": {
+                  "target": "tank/home",
+                  "name": "tank/home@before"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let pool = plan
+            .dependency_order
+            .iter()
+            .find(|order| order.action_id == "pools:tank:import")
+            .expect("pool dependency order entry exists");
+        let dataset = plan
+            .dependency_order
+            .iter()
+            .find(|order| order.action_id == "datasets:tank/home:create")
+            .expect("dataset dependency order entry exists");
+        let snapshot = plan
+            .dependency_order
+            .iter()
+            .find(|order| order.action_id == "snapshot:home-before:create")
+            .expect("snapshot dependency order entry exists");
+
+        assert_eq!(pool.unblocks, vec!["datasets:tank/home:create".to_string()]);
+        assert_eq!(dataset.depends_on, vec!["pools:tank:import".to_string()]);
+        assert_eq!(
+            dataset.unblocks,
+            vec!["snapshot:home-before:create".to_string()]
+        );
+        assert_eq!(
+            snapshot.depends_on,
+            vec!["datasets:tank/home:create".to_string()]
+        );
     }
 
     #[test]

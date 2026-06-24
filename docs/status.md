@@ -27,7 +27,8 @@ behavior across real storage stacks.
   potential-data-loss, reversible, safe, and unsupported actions.
 - Machine-readable dependency-order metadata for planned actions, including
   build/mutate/teardown phase, lower-first or upper-first direction, and storage
-  collection layer rank.
+  collection layer rank, plus inferred `dependsOn`/`unblocks` edges for
+  declared adjacent-layer identities.
 - Guarded apply flow with dry-run reports, script generation, readiness
   summaries, manual-review markers, unresolved-input reporting, policy blocks,
   renderer tool requirement inventories with PATH availability and per-tool
@@ -80,10 +81,11 @@ manual-review guidance, or non-ready command plans instead of guessing.
   disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional
   operation types and multi-action groups before command rendering.
-- Explicit graph-edge dependency ordering for multi-layer changes. The planner
-  now applies coarse layer ordering and reports dependency-order metadata, but
-  grouped changes such as iSCSI LUN refresh, multipath, partition growth,
-  LUKS/LVM resize, and filesystem growth still need explicit dependency edges.
+- Runtime graph-edge dependency ordering for multi-layer changes. The planner
+  now applies coarse layer ordering and reports inferred dependency edges from
+  declared identities, but grouped changes such as iSCSI LUN refresh,
+  multipath, partition growth, LUKS/LVM resize, and filesystem growth still
+  need current-topology-derived dependency edges.
 - More NixOS steady-state synthesis for lifecycle-managed resources after
   mutation, especially when imperative changes should update declarative mounts,
   crypttab, swap, NFS exports, iSCSI boot, or generated files.

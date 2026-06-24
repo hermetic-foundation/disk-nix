@@ -51,8 +51,12 @@ operations run from upper layers back down. Actions in the same layer keep
 their declaration order. Plan JSON includes `dependencyOrder`, a
 machine-readable audit trail for that ordering with the action id,
 build/mutate/teardown phase, lower-first or upper-first direction, collection
-layer rank, and explanatory notes. This documents the current ordering
-rationale; explicit graph-edge dependencies are still a separate hardening step.
+layer rank, inferred `dependsOn` and `unblocks` edges where declared identities
+tie adjacent layers together, and explanatory notes. This documents the current
+ordering rationale and gives automation explicit preflight edges for common
+layered changes. It is still conservative: only relationships visible in the
+desired action context are emitted, so runtime-only graph edges remain a
+hardening step.
 
 Examples:
 

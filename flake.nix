@@ -1624,6 +1624,10 @@
             jq -e '
               .summary.actionCount == 99
               and (.dependencyOrder | length) == .summary.actionCount
+              and (.dependencyOrder | any(.actionId == "datasets:tank/home:create" and (.unblocks | index("snapshot:tank/home@before-upgrade:create") != null)))
+              and (.dependencyOrder | any(.actionId == "snapshot:tank/home@before-upgrade:create" and (.dependsOn | index("datasets:tank/home:create") != null)))
+              and (.dependencyOrder | any(.actionId == "btrfssubvolumes:/mnt/persist/@home:create" and (.unblocks | index("snapshot:/mnt/persist/@home-inventory:rescan") != null)))
+              and (.dependencyOrder | any(.actionId == "snapshot:/mnt/persist/@home-inventory:rescan" and (.dependsOn | index("btrfssubvolumes:/mnt/persist/@home:create") != null)))
               and .summary.offlineRequiredCount == 30
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
