@@ -601,9 +601,10 @@ or `device`. Swap label and UUID property updates render
 `operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
 inspection commands for activation,
 capacity, label, UUID, and backing-storage refresh.
-Zram `operation = "rescan"` renders read-only `zramctl`, `swapon --show`, and
-`disk-nix swap` commands for compressed swap size, algorithm, memory use, and
-activation refresh.
+Plain zram declarations render read-only `zramctl`, `swapon --show`, and
+`disk-nix zram` commands for compressed swap size, algorithm, memory use, and
+activation review. Explicit zram `operation = "rescan"` uses the same inventory
+path as a named refresh action.
 LUKS `operation = "open"` command plans render `cryptsetup open` for preserved
 existing containers. Legacy preserved `operation = "create"` still maps to the
 same open flow. `operation = "close"` plans render offline-policy-gated

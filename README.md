@@ -321,6 +321,10 @@ or `device`. Swap label and UUID property updates render
 changes. Swap `operation = "rescan"` renders read-only `swapon --show`,
 `blkid`, and graph inspection for
 activation, capacity, label, UUID, and backing-storage refresh.
+Plain zram declarations render read-only `zramctl`, `swapon --show`, and
+`disk-nix zram` inventory commands so generated compressed swap state can be
+reviewed without mutation. Explicit zram `operation = "rescan"` uses the same
+read-only inventory path.
 LUKS open plans render reviewed `cryptsetup open` commands for preserved
 existing containers; close plans render offline-policy-gated `cryptsetup close`
 commands and verify the topology without erasing the backing LUKS header or

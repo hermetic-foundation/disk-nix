@@ -2086,6 +2086,15 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 vec!["snapshot hold state matches the desired retention tag".to_string()],
             )
         }
+        Operation::SetProperty if collection == Some("zram") => (
+            zram_rescan_commands("verify zram compressed swap declaration after inventory refresh"),
+            vec![
+                "zram device count, algorithm, size, memory use, and swap activation are reviewed"
+                    .to_string(),
+                "NixOS zramSwap-derived settings match the generated compressed swap topology"
+                    .to_string(),
+            ],
+        ),
         Operation::Create | Operation::Export | Operation::Destroy | Operation::Unexport
             if collection == Some("exports") =>
         (
@@ -3676,6 +3685,18 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     .to_string(),
             ],
             true,
+        ),
+        Operation::SetProperty if collection == Some("zram") => (
+            zram_rescan_commands("inspect zram compressed swap declaration and current inventory"),
+            vec![
+                "plain zram declarations inspect generated compressed swap state without mutating it"
+                    .to_string(),
+                "use operation = \"rescan\" for an explicit zram inventory refresh action"
+                    .to_string(),
+                "use services.disk-nix.zram options to reconcile generated NixOS zramSwap settings"
+                    .to_string(),
+            ],
+            false,
         ),
         Operation::Grow if collection == Some("luks.devices") => {
             let mapper = target.unwrap_or("<mapper>");
@@ -10273,7 +10294,7 @@ fn zram_rescan_commands(note: &'static str) -> Vec<ExecutionCommand> {
             "refresh active swap view for zram devices",
         ),
         command(
-            ["disk-nix", "swap"],
+            ["disk-nix", "zram"],
             false,
             "inspect modeled zram swap devices after refresh",
         ),
@@ -15935,7 +15956,7 @@ mod tests {
             report.command_plan[0]
                 .commands
                 .iter()
-                .any(|command| command.argv == ["disk-nix", "swap"])
+                .any(|command| command.argv == ["disk-nix", "zram"])
         );
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "zram:rescan"
@@ -15949,6 +15970,60 @@ mod tests {
                             "--output-all",
                         ]
                 })
+        }));
+    }
+
+    #[test]
+    fn zram_default_declaration_inspects_generated_inventory() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "zram": {
+                  "enable": true,
+                  "swapDevices": 2,
+                  "memoryPercent": 40,
+                  "priority": 20,
+                  "algorithm": "zstd"
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_plan.len(), 1);
+        assert_eq!(report.command_plan[0].action_id, "zram:inspect");
+        assert!(!report.command_plan[0].requires_manual_review);
+        assert!(
+            report.command_plan[0]
+                .commands
+                .iter()
+                .all(|command| !command.mutates && command.readiness == CommandReadiness::Ready)
+        );
+        assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv
+                == [
+                    "zramctl",
+                    "--bytes",
+                    "--raw",
+                    "--noheadings",
+                    "--output-all",
+                ]
+        }));
+        assert!(
+            report.command_plan[0]
+                .commands
+                .iter()
+                .any(|command| command.argv == ["disk-nix", "zram"])
+        );
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "zram:inspect"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["disk-nix", "zram"])
         }));
     }
 
