@@ -228,9 +228,9 @@ physical-volume create/grow/rescan/remove, logical-volume growth/removal,
 LVM volume-group extension/device removal, LVM thin-pool create/grow/rescan/remove,
 LVM snapshot create/rescan/merge/remove, LVM cache attach/detach/property updates,
 loop-device mapping updates, MD RAID lifecycle/member updates, multipath map
-updates, NVMe namespace create/attach/rescan/detach/delete workflows, ZFS pool
-topology updates, dataset and zvol updates including zvol property changes,
-volume updates, network LUN growth, snapshots, and cache
+path and map removal updates, NVMe namespace create/attach/rescan/detach/delete
+workflows, ZFS pool topology updates, dataset and zvol updates including zvol
+property changes, volume updates, network LUN growth, snapshots, and cache
 attach/detach/rescan/replacement workflows.
 ZFS dataset and zvol `operation = "rescan"` plans are online read-only
 refreshes that render focused `zfs list`, `zfs get`, and graph inspection

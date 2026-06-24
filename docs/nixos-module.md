@@ -720,6 +720,10 @@ Example lifecycle planning through NixOS options:
       target = "mpatha";
       addDevices = [ "/dev/sdb" ];
     };
+    multipathMaps.mpathOld = {
+      target = "mpath-old";
+      operation = "destroy";
+    };
     exports.share = {
       operation = "export";
       path = "/srv/share";

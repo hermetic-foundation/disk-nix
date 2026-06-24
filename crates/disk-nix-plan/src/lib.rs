@@ -4079,6 +4079,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Destroy if collection == "multipathMaps" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "multipath map removal flushes the host map without deleting target-side data"
+                    .to_string(),
+                alternatives: vec![
+                    "unmount filesystems and deactivate LVM, dm, and service consumers before flushing the map"
+                        .to_string(),
+                    "remove or drain individual failed paths first when alternate paths must remain active"
+                        .to_string(),
+                    "use a rescan or reload when the map should stay present and only path metadata changed"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Grow if collection == "thinPools" => (
             RiskClass::Online,
             false,
@@ -6789,6 +6805,20 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::MultipathDevice,
+            operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "multipath map removal flushes the host map without deleting target-side data"
+                    .to_string(),
+                alternatives: vec![
+                    "deactivate filesystems, LVM, dm, and services before flushing the map"
+                        .to_string(),
+                    "prefer path removal or rescan when the map should remain available".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::MultipathDevice,
             operation: Operation::RemoveDevice,
             risk: RiskClass::PotentialDataLoss,
             advice: Some(Advice {
@@ -8073,6 +8103,21 @@ mod tests {
             ),
             (NodeKind::MdRaid, Operation::Rescan, RiskClass::Online),
             (NodeKind::MdRaid, Operation::Destroy, RiskClass::Destructive),
+            (
+                NodeKind::MultipathDevice,
+                Operation::Grow,
+                RiskClass::Online,
+            ),
+            (
+                NodeKind::MultipathDevice,
+                Operation::Rescan,
+                RiskClass::Online,
+            ),
+            (
+                NodeKind::MultipathDevice,
+                Operation::Destroy,
+                RiskClass::OfflineRequired,
+            ),
             (
                 NodeKind::MultipathDevice,
                 Operation::RemoveDevice,
@@ -10474,14 +10519,18 @@ mod tests {
                 "mpathb": {
                   "target": "mpathb",
                   "operation": "rescan"
+                },
+                "mpath-old": {
+                  "target": "mpath-old",
+                  "operation": "destroy"
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 4);
-        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.action_count, 5);
+        assert_eq!(plan.summary.offline_required_count, 2);
         let grow = plan
             .actions
             .iter()
@@ -10516,6 +10565,18 @@ mod tests {
             advice
                 .summary
                 .contains("refreshes existing storage paths without deleting target data")
+        }));
+        let destroy = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "multipathmaps:mpath-old:destroy")
+            .expect("multipath destroy action exists");
+        assert_eq!(destroy.risk, RiskClass::OfflineRequired);
+        assert!(!destroy.destructive);
+        assert!(destroy.advice.as_ref().is_some_and(|advice| {
+            advice
+                .summary
+                .contains("flushes the host map without deleting target-side data")
         }));
     }
 

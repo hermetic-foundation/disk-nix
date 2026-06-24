@@ -183,6 +183,10 @@
     "mpathb": {
       "target": "mpathb",
       "operation": "rescan"
+    },
+    "mpathOld": {
+      "target": "mpath-old",
+      "operation": "destroy"
     }
   },
   "vdoVolumes": {

@@ -658,6 +658,10 @@
                 target = "mpathb";
                 operation = "rescan";
               };
+              multipathMaps.mpathOld = {
+                target = "mpath-old";
+                operation = "destroy";
+              };
               luns."iqn.2026-06.example:storage/root:0" = {
                 operation = "grow";
                 device = "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0";
@@ -1175,8 +1179,8 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 96
-              and .summary.offlineRequiredCount == 28
+              .summary.actionCount == 97
+              and .summary.offlineRequiredCount == 29
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
               and .summary.unsupportedCount == 0
@@ -1226,6 +1230,7 @@
               and (.actions | any(.id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-md-spare" and .risk == "online"))
               and (.actions | any(.id == "multipathMaps:mpatha:add-device:/dev/sdb" and .risk == "online"))
               and (.actions | any(.id == "multipathmaps:mpathb:rescan" and .risk == "online"))
+              and (.actions | any(.id == "multipathmaps:mpathold:destroy" and .risk == "offline-required"))
               and (.actions | any(.id == "partitions:root:grow" and .risk == "offline-required"))
               and (.actions | any(.id == "partitions:data-table:rescan" and .risk == "online"))
               and (.actions | any(.id == "swaps:primary:format" and .risk == "destructive"))
@@ -1290,8 +1295,8 @@
             fi
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 35
-              and .apply.blockedSummary.offlineRequiredCount == 28
+              and .apply.blockedCount == 36
+              and .apply.blockedSummary.offlineRequiredCount == 29
               and .apply.blockedSummary.destructiveCount == 3
               and .apply.blockedSummary.potentialDataLossCount == 4
               and .apply.blockedSummary.unsupportedCount == 0
@@ -1315,18 +1320,19 @@
               and (.apply.blocked | any(.id == "lukstokens:cryptroot:1:remove-token"))
               and (.apply.blocked | any(.id == "mdraids:existing:assemble"))
               and (.apply.blocked | any(.id == "mdraids:oldroot:stop"))
+              and (.apply.blocked | any(.id == "multipathmaps:mpathold:destroy"))
               and (.apply.blocked | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained"))
             ' "$lifecycleApply"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 35
+              and .apply.blockedCount == 36
             ' "$lifecycleApplyReport"
 
             ${diskNix}/bin/disk-nix validate --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleValidateReport" --json > "$lifecycleValidate"
             jq -e '
               .status == "blocked"
-              and .apply.blockedCount == 35
-              and .messages[0] == "apply policy blocked 35 action(s)"
+              and .apply.blockedCount == 36
+              and .messages[0] == "apply policy blocked 36 action(s)"
             ' "$lifecycleValidate"
             cmp "$lifecycleValidate" "$lifecycleValidateReport"
 
@@ -1617,6 +1623,8 @@
                     and .spec.multipathMaps.mpatha.replaceDevices."/dev/sdc" == "/dev/sdd"
                     and .spec.multipathMaps.mpathb.operation == "rescan"
                     and .spec.multipathMaps.mpathb.target == "mpathb"
+                    and .spec.multipathMaps.mpathOld.operation == "destroy"
+                    and .spec.multipathMaps.mpathOld.target == "mpath-old"
                     and .spec.caches."tank/l2arc0".cacheSetUuid == "11111111-2222-3333-4444-555555555555"
                     and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
                     and .spec.caches."/dev/bcache0".operation == "rescan"

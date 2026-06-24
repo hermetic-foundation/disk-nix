@@ -1929,7 +1929,7 @@ in
     multipathMaps = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed multipath map lifecycle declarations emitted into the disk-nix planner spec. Executable grow and replacement preflight plans require a concrete mpath* or /dev/mapper/* map target.";
+      description = "Typed multipath map lifecycle declarations emitted into the disk-nix planner spec. Executable grow, replacement preflight, rescan, and destroy plans require a concrete mpath* or /dev/mapper/* map target.";
     };
 
     pools = lib.mkOption {

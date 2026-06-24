@@ -354,6 +354,12 @@ Lifecycle collections currently accepted by the planner:
 - `caches`
 - `snapshots`
 
+Multipath map lifecycle treats path membership and whole-map removal
+separately. Path removal is potential-data-loss because it can break
+redundancy, while `multipathMaps.<name>.operation = "destroy"` is
+offline-required host map flushing through `multipath -f`; target-side LUN data
+is not deleted, but filesystems, LVM, dm, and services must move away first.
+
 ZFS dataset and zvol `operation = "rescan"` actions are online read-only
 refreshes. Dataset rescan renders `zfs list -t filesystem`, `zfs get`, and
 graph inspection for mountpoint, quota, reservation, snapshot, clone, mount,

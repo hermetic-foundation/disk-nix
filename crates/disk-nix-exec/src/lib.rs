@@ -1723,6 +1723,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 ],
             )
         }
+        Operation::Destroy if collection == Some("multipathMaps") => (
+            vec![
+                command(
+                    ["multipath", "-ll"],
+                    false,
+                    "verify multipath inventory after map removal",
+                ),
+                command(
+                    ["disk-nix", "inspect", "multipath", "--json"],
+                    false,
+                    "verify multipath graph relationships after map removal",
+                ),
+            ],
+            vec![
+                "removed multipath map no longer appears in host multipath inventory".to_string(),
+                "dependent filesystems, LVM, dm, and service consumers were removed or moved first"
+                    .to_string(),
+            ],
+        ),
         Operation::Create | Operation::Grow | Operation::Destroy
             if collection == Some("nvmeNamespaces") =>
         {
@@ -4071,6 +4090,22 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "rescan backing SCSI or iSCSI paths before reloading the map".to_string(),
                     "verify the map WWID and every expected path before exposing consumers"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Destroy if collection == Some("multipathMaps") => {
+            let target = multipath_map_target(action);
+            (
+                vec![
+                    multipath_list_command(target, "inspect multipath map paths before removal"),
+                    multipath_flush_map_command(target),
+                ],
+                vec![
+                    "multipath map removal flushes the host map but does not delete target-side data"
+                        .to_string(),
+                    "unmount filesystems and deactivate LVM, dm, and service consumers before flushing the map"
                         .to_string(),
                 ],
                 true,
@@ -7912,6 +7947,23 @@ fn multipath_resize_command(target: Option<&str>) -> ExecutionCommand {
             CommandReadiness::NeedsDomainImplementation,
             ["multipath map target"],
             "resize the multipath map after every backing path sees the new LUN size",
+        ),
+    }
+}
+
+fn multipath_flush_map_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["multipath", "-f", target],
+            true,
+            "flush the reviewed multipath map from the host",
+        ),
+        None => command_with_readiness(
+            ["multipath", "-f", "<multipath-map>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["multipath map target"],
+            "flush the multipath map after selecting a concrete map target",
         ),
     }
 }
@@ -18836,6 +18888,57 @@ mod tests {
     }
 
     #[test]
+    fn multipath_map_destroy_reports_flush_command() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "multipathMaps": {
+                  "mpath-old": {
+                    "target": "mpath-old",
+                    "operation": "destroy"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "multipathmaps:mpath-old:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["multipath", "-ll", "mpath-old"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["multipath", "-f", "mpath-old"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "multipathmaps:mpath-old:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["multipath", "-ll"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "multipath", "--json"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
+
+    #[test]
     fn multipath_map_lifecycle_requires_explicit_map_target_for_execute_readiness() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
@@ -18884,6 +18987,27 @@ mod tests {
         let (commands, _, _) = commands_for_action(&remove_action);
         assert!(commands.iter().any(|command| {
             command.argv == ["multipath", "-ll", "<multipath-map>"]
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.unresolved_inputs == ["multipath map target"]
+        }));
+
+        let destroy_action = PlannedAction {
+            id: "multipathmaps:root-map:destroy".to_string(),
+            description: "remove multipath map".to_string(),
+            operation: Operation::Destroy,
+            risk: RiskClass::OfflineRequired,
+            destructive: false,
+            context: ActionContext {
+                collection: Some("multipathMaps".to_string()),
+                name: Some("root-map".to_string()),
+                target: Some("root-map".to_string()),
+                ..ActionContext::default()
+            },
+            advice: None,
+        };
+        let (commands, _, _) = commands_for_action(&destroy_action);
+        assert!(commands.iter().any(|command| {
+            command.argv == ["multipath", "-f", "<multipath-map>"]
                 && command.readiness == CommandReadiness::NeedsDomainImplementation
                 && command.unresolved_inputs == ["multipath map target"]
         }));
