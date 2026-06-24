@@ -241,9 +241,11 @@ Use these commands for:
   expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, bcachefs, ZFS, zvols,
   LUNs, and exports, including LVM origin/pool/data metadata, activation state,
-  role, layout, health, tags, thin-pool fullness behavior, metadata size, and
-  cache or writecache status, MD RAID level/state, iSCSI attached disks, NFS
-  server/export details, and ZFS zvol `volsize` when reported by `zfs list`
+  activation locality/exclusivity, role, layout, health, tags, device-mapper
+  path, parent, read-ahead, table state, thin-pool fullness behavior, metadata
+  size, and cache or writecache status, MD RAID level/state, iSCSI attached
+  disks, NFS server/export details, and ZFS zvol `volsize` when reported by
+  `zfs list`
 - `pools`: storage pools and grouping layers such as LVM volume groups, thin
   pools, Btrfs filesystems/qgroups, bcachefs filesystems, ZFS pools/vdevs, and
   MD RAID arrays,
@@ -277,14 +279,16 @@ Use these commands for:
 - `cache`: bcache devices/cache sets, LVM cache/writecache metadata, bcachefs
   member-device cache accounting, and ZFS cache vdevs, including cache mode,
   policy, dirty/writeback data, LVM cache block totals, dirty blocks,
-  hit/miss and promotion/demotion counters, writecache total/free/error
-  counters, backing device, cache-set identity, state/running flags, available
-  cache percentage, discard, I/O errors,
+  hit/miss and promotion/demotion counters, writecache total/free/block-size/
+  error counters, backing device, cache-set identity, state/running flags,
+  available cache percentage, discard, I/O errors,
   written/metadata-written accounting, priority stats, and vdev state
 - `lvm`: LVM physical volumes, volume groups, logical volumes, segments, thin
   pools, snapshots, and cache/writecache layers, including data and metadata
-  percentages, active state, extent/PV/LV counts, origin/pool relationships,
-  thin-pool fullness behavior, segment device mappings, cache policy, LVM RAID
+  percentages, active state and locality/exclusivity, device-mapper paths,
+  parent links, read-ahead, table suspension/live/inactive state, host and
+  historical flags, extent/PV/LV counts, origin/pool relationships, thin-pool
+  fullness behavior, segment device mappings, cache policy, LVM RAID
   sync/recovery/integrity status, health, tags, and backing/member counts when
   `pvs`, `vgs`, `lvs`, or `dmsetup` expose them
 - `vdo`: native VDO volumes and LVM VDO segment metadata, including backing

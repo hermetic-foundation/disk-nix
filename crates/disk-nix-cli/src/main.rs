@@ -2682,11 +2682,24 @@ fn usage_details(node: &Node) -> String {
         ("lvm.pv-count", "pvs"),
         ("lvm.lv-count", "lvs"),
         ("lvm.active", "active"),
+        ("lvm.active-locally", "active-local"),
+        ("lvm.active-remotely", "active-remote"),
+        ("lvm.active-exclusively", "active-exclusive"),
         ("lvm.permissions", "permissions"),
         ("lvm.health", "health"),
         ("lvm.when-full", "when-full"),
         ("lvm.metadata-size", "metadata-size"),
         ("lvm.tags", "tags"),
+        ("lvm.dm-path", "dm-path"),
+        ("lvm.parent", "parent"),
+        ("lvm.read-ahead", "read-ahead"),
+        ("lvm.kernel-read-ahead", "kernel-read-ahead"),
+        ("lvm.suspended", "suspended"),
+        ("lvm.live-table", "live-table"),
+        ("lvm.inactive-table", "inactive-table"),
+        ("lvm.modules", "modules"),
+        ("lvm.host", "host"),
+        ("lvm.historical", "historical"),
         ("lvm.kernel-major", "kernel-major"),
         ("lvm.kernel-minor", "kernel-minor"),
         ("lvm.device-open", "device-open"),
@@ -2720,6 +2733,7 @@ fn usage_details(node: &Node) -> String {
         ("lvm.writecache-total-blocks", "writecache-total"),
         ("lvm.writecache-free-blocks", "writecache-free"),
         ("lvm.writecache-writeback-blocks", "writecache-writeback"),
+        ("lvm.writecache-block-size", "writecache-block-size"),
         ("lvm.writecache-error", "writecache-error"),
         ("btrfs.qgroup-id", "qgroup"),
         ("btrfs.mount-target", "mount-target"),
@@ -4738,8 +4752,17 @@ mod tests {
             Node::new("lvm-lv:vg0/root", NodeKind::LvmLogicalVolume, "vg0/root")
                 .with_size_bytes(214_748_364_800)
                 .with_property("lvm.active", "active")
+                .with_property("lvm.active-locally", "active locally")
+                .with_property("lvm.active-exclusively", "active exclusively")
                 .with_property("lvm.layout", "thin")
                 .with_property("lvm.pool", "pool")
+                .with_property("lvm.dm-path", "/dev/mapper/vg0-root")
+                .with_property("lvm.read-ahead", "auto")
+                .with_property("lvm.kernel-read-ahead", "256")
+                .with_property("lvm.suspended", "not suspended")
+                .with_property("lvm.live-table", "live")
+                .with_property("lvm.modules", "thin")
+                .with_property("lvm.host", "host-a")
                 .with_property("lvm.health", "ok"),
         );
         graph.add_node(
@@ -4764,6 +4787,7 @@ mod tests {
                 .with_property("lvm.raid-integrity-mode", "journal")
                 .with_property("lvm.raid-integrity-block-size", "4096")
                 .with_property("lvm.raid-integrity-mismatches", "1")
+                .with_property("lvm.writecache-block-size", "4096")
                 .with_property("lvm.writecache-writeback-blocks", "16"),
         );
         graph.add_node(
@@ -4797,14 +4821,19 @@ mod tests {
         assert!(output.contains("42.00"));
         assert!(output.contains("7.50"));
         assert!(output.contains("when-full=queue metadata-size=8.00g"));
-        assert!(output.contains("layout=thin pool=pool active=active health=ok"));
+        assert!(output.contains("layout=thin pool=pool active=active active-local=active locally"));
+        assert!(output.contains("active-exclusive=active exclusively"));
+        assert!(output.contains("dm-path=/dev/mapper/vg0-root read-ahead=auto"));
+        assert!(output.contains("kernel-read-ahead=256 suspended=not suspended"));
+        assert!(output.contains("live-table=live modules=thin host=host-a"));
+        assert!(output.contains("health=ok"));
         assert!(output.contains("snap=12.50 origin=root active=active"));
         assert!(output.contains("raid-mismatches=2 raid-sync=repair"));
         assert!(output.contains("raid-write-behind=256 raid-min-recovery=1024"));
         assert!(output.contains("raid-max-recovery=8192 raid-integrity=journal"));
         assert!(output.contains("raid-integrity-block=4096 raid-integrity-mismatches=1"));
         assert!(output.contains("cache-mode=writeback cache-policy=smq"));
-        assert!(output.contains("writecache-writeback=16"));
+        assert!(output.contains("writecache-writeback=16 writecache-block-size=4096"));
         assert!(
             output
                 .contains("segment-type=thin segment-start=0 segment-size=200.00g devices=pool(0)")

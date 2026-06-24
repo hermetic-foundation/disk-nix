@@ -51,11 +51,24 @@ struct LogicalVolume {
     lv_attr: Option<String>,
     lv_layout: Option<String>,
     lv_active: Option<String>,
+    lv_active_locally: Option<String>,
+    lv_active_remotely: Option<String>,
+    lv_active_exclusively: Option<String>,
     lv_permissions: Option<String>,
     lv_health_status: Option<String>,
     lv_when_full: Option<String>,
     lv_metadata_size: Option<String>,
     lv_tags: Option<String>,
+    lv_dm_path: Option<String>,
+    lv_parent: Option<String>,
+    lv_read_ahead: Option<String>,
+    lv_kernel_read_ahead: Option<String>,
+    lv_suspended: Option<String>,
+    lv_live_table: Option<String>,
+    lv_inactive_table: Option<String>,
+    lv_modules: Option<String>,
+    lv_host: Option<String>,
+    lv_historical: Option<String>,
     lv_kernel_major: Option<String>,
     lv_kernel_minor: Option<String>,
     lv_device_open: Option<String>,
@@ -101,6 +114,7 @@ struct LogicalVolume {
     writecache_total_blocks: Option<String>,
     writecache_free_blocks: Option<String>,
     writecache_writeback_blocks: Option<String>,
+    writecache_block_size: Option<String>,
     writecache_error: Option<String>,
 }
 
@@ -295,11 +309,24 @@ fn add_logical_volume(graph: &mut StorageGraph, lv: LogicalVolume) {
         ("lvm.attr", lv.lv_attr.clone()),
         ("lvm.layout", lv.lv_layout.clone()),
         ("lvm.active", lv.lv_active.clone()),
+        ("lvm.active-locally", lv.lv_active_locally.clone()),
+        ("lvm.active-remotely", lv.lv_active_remotely.clone()),
+        ("lvm.active-exclusively", lv.lv_active_exclusively.clone()),
         ("lvm.permissions", lv.lv_permissions.clone()),
         ("lvm.health", lv.lv_health_status.clone()),
         ("lvm.when-full", lv.lv_when_full.clone()),
         ("lvm.metadata-size", lv.lv_metadata_size.clone()),
         ("lvm.tags", lv.lv_tags.clone()),
+        ("lvm.dm-path", lv.lv_dm_path.clone()),
+        ("lvm.parent", lv.lv_parent.clone()),
+        ("lvm.read-ahead", lv.lv_read_ahead.clone()),
+        ("lvm.kernel-read-ahead", lv.lv_kernel_read_ahead.clone()),
+        ("lvm.suspended", lv.lv_suspended.clone()),
+        ("lvm.live-table", lv.lv_live_table.clone()),
+        ("lvm.inactive-table", lv.lv_inactive_table.clone()),
+        ("lvm.modules", lv.lv_modules.clone()),
+        ("lvm.host", lv.lv_host.clone()),
+        ("lvm.historical", lv.lv_historical.clone()),
         ("lvm.kernel-major", lv.lv_kernel_major.clone()),
         ("lvm.kernel-minor", lv.lv_kernel_minor.clone()),
         ("lvm.device-open", lv.lv_device_open.clone()),
@@ -374,6 +401,10 @@ fn add_logical_volume(graph: &mut StorageGraph, lv: LogicalVolume) {
         (
             "lvm.writecache-writeback-blocks",
             lv.writecache_writeback_blocks.clone(),
+        ),
+        (
+            "lvm.writecache-block-size",
+            lv.writecache_block_size.clone(),
         ),
         ("lvm.writecache-error", lv.writecache_error.clone()),
     ] {
@@ -603,11 +634,24 @@ mod tests {
             "lv_attr": "-wi-ao----",
             "lv_layout": "linear",
             "lv_active": "active",
+            "lv_active_locally": "active locally",
+            "lv_active_remotely": "",
+            "lv_active_exclusively": "active exclusively",
             "lv_permissions": "writeable",
             "lv_health_status": "",
             "lv_when_full": "",
             "lv_metadata_size": "",
             "lv_tags": "system",
+            "lv_dm_path": "/dev/mapper/vg0-root",
+            "lv_parent": "",
+            "lv_read_ahead": "auto",
+            "lv_kernel_read_ahead": "256",
+            "lv_suspended": "not suspended",
+            "lv_live_table": "live",
+            "lv_inactive_table": "",
+            "lv_modules": "linear",
+            "lv_host": "host-a",
+            "lv_historical": "",
             "lv_kernel_major": "253",
             "lv_kernel_minor": "0",
             "lv_device_open": "open",
@@ -653,6 +697,7 @@ mod tests {
             "writecache_total_blocks": "",
             "writecache_free_blocks": "",
             "writecache_writeback_blocks": "",
+            "writecache_block_size": "",
             "writecache_error": ""
           },
           {
@@ -664,11 +709,24 @@ mod tests {
             "lv_attr": "swi-a-s---",
             "lv_layout": "snapshot",
             "lv_active": "active",
+            "lv_active_locally": "active locally",
+            "lv_active_remotely": "active remotely",
+            "lv_active_exclusively": "",
             "lv_permissions": "writeable",
             "lv_health_status": "partial",
             "lv_when_full": "queue",
             "lv_metadata_size": "128.00m",
             "lv_tags": "backup,snapshot",
+            "lv_dm_path": "/dev/mapper/vg0-root--snap",
+            "lv_parent": "root",
+            "lv_read_ahead": "auto",
+            "lv_kernel_read_ahead": "512",
+            "lv_suspended": "suspended",
+            "lv_live_table": "live",
+            "lv_inactive_table": "inactive",
+            "lv_modules": "snapshot",
+            "lv_host": "host-b",
+            "lv_historical": "historical",
             "lv_kernel_major": "253",
             "lv_kernel_minor": "1",
             "lv_device_open": "open",
@@ -714,6 +772,7 @@ mod tests {
             "writecache_total_blocks": "1024",
             "writecache_free_blocks": "512",
             "writecache_writeback_blocks": "16",
+            "writecache_block_size": "4096",
             "writecache_error": "0"
           }
         ]
@@ -838,10 +897,47 @@ mod tests {
                     .properties
                     .iter()
                     .any(|property| property.key == "lvm.active" && property.value == "active")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.active-locally" && property.value == "active locally"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.active-remotely" && property.value == "active remotely"
+                })
                 && node
                     .properties
                     .iter()
                     .any(|property| property.key == "lvm.layout" && property.value == "snapshot")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.dm-path" && property.value == "/dev/mapper/vg0-root--snap"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.parent" && property.value == "root")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.kernel-read-ahead" && property.value == "512"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.suspended" && property.value == "suspended"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.live-table" && property.value == "live")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.inactive-table" && property.value == "inactive"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.modules" && property.value == "snapshot")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "lvm.host" && property.value == "host-b")
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.historical" && property.value == "historical"
+                })
                 && node
                     .properties
                     .iter()
@@ -922,6 +1018,9 @@ mod tests {
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "lvm.writecache-writeback-blocks" && property.value == "16"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "lvm.writecache-block-size" && property.value == "4096"
                 })
         }));
         assert!(graph.edges.iter().any(|edge| {
