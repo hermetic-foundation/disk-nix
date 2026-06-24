@@ -305,10 +305,13 @@ Examples:
   graph relationships. Snapshot declarations can use `name`, `snapshotName`, or
   `snapshot-name` to provide the concrete snapshot identity when the map key is
   a friendly name. Btrfs snapshot rescans can also use `path`, `snapshotPath`,
-  or `snapshot-path` to provide the concrete snapshot path. ZFS snapshot clone
-  declarations with `cloneTo`, `cloneTarget`, or `clone` render
-  reversible `zfs clone <snapshot> <dataset>` plans. ZFS rollback command
-  rendering is available for review, and `recursiveRollback`, `recursive`, or
+  or `snapshot-path` to provide the concrete snapshot path. Snapshot clone
+  declarations with `cloneTo`, `cloneTarget`, or `clone` render reversible
+  `zfs clone <snapshot> <dataset>` plans for ZFS snapshots and
+  `btrfs subvolume snapshot <snapshot-path> <clone-path>` plans for absolute
+  Btrfs snapshot paths. Btrfs clone declarations with `readOnly = true` render
+  read-only `btrfs subvolume snapshot -r` plans. ZFS rollback command rendering
+  is available for review, and `recursiveRollback`, `recursive`, or
   `zfs.rollbackRecursive` render explicit `zfs rollback -r` details for
   recursive rollback review. Apply blocks rollback by default and requires
   explicit `allowPotentialDataLoss=true` policy before execution.

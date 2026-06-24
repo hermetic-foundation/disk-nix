@@ -2578,32 +2578,57 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         Operation::Clone if collection == Some("snapshots") => {
             let snapshot = action.context.name.as_deref().unwrap_or(target);
             let clone_target = action.context.target.as_deref().unwrap_or("<clone-dataset>");
-            if !is_zfs_snapshot_name(snapshot) {
-                return (Vec::new(), Vec::new());
+            if is_zfs_snapshot_name(snapshot) {
+                (
+                    vec![
+                        command(
+                            ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
+                            false,
+                            "verify source ZFS snapshot exists before clone",
+                        ),
+                        command(
+                            ["zfs", "list", "-H", "-p", clone_target],
+                            false,
+                            "verify cloned ZFS dataset after clone",
+                        ),
+                        command(
+                            ["disk-nix", "inspect", clone_target, "--json"],
+                            false,
+                            "verify cloned dataset graph state after clone",
+                        ),
+                    ],
+                    vec![
+                        "clone dataset exists and is mounted or configured as expected".to_string(),
+                        "clone origin points at the reviewed source snapshot".to_string(),
+                    ],
+                )
+            } else if is_btrfs_snapshot_pair(snapshot, clone_target) {
+                (
+                    vec![
+                        command(
+                            ["btrfs", "subvolume", "show", snapshot],
+                            false,
+                            "verify source Btrfs snapshot subvolume exists before clone",
+                        ),
+                        command(
+                            ["btrfs", "subvolume", "show", clone_target],
+                            false,
+                            "verify cloned Btrfs subvolume after clone",
+                        ),
+                        command(
+                            ["disk-nix", "inspect", clone_target, "--json"],
+                            false,
+                            "verify cloned Btrfs subvolume graph state after clone",
+                        ),
+                    ],
+                    vec![
+                        "clone subvolume exists at the reviewed path".to_string(),
+                        "snapshot lineage and read-only state were reviewed after clone".to_string(),
+                    ],
+                )
+            } else {
+                (Vec::new(), Vec::new())
             }
-            (
-                vec![
-                    command(
-                        ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
-                        false,
-                        "verify source ZFS snapshot exists before clone",
-                    ),
-                    command(
-                        ["zfs", "list", "-H", "-p", clone_target],
-                        false,
-                        "verify cloned ZFS dataset after clone",
-                    ),
-                    command(
-                        ["disk-nix", "inspect", clone_target, "--json"],
-                        false,
-                        "verify cloned dataset graph state after clone",
-                    ),
-                ],
-                vec![
-                    "clone dataset exists and is mounted or configured as expected".to_string(),
-                    "clone origin points at the reviewed source snapshot".to_string(),
-                ],
-            )
         }
         Operation::Promote if collection == Some("datasets") || collection == Some("zvols") => {
             let target = action.context.target.as_deref().unwrap_or(target);
@@ -6466,17 +6491,40 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ],
                     true,
                 )
+            } else if is_btrfs_snapshot_pair(snapshot, target) {
+                (
+                    vec![
+                        command(
+                            ["btrfs", "subvolume", "show", snapshot],
+                            false,
+                            "inspect source Btrfs snapshot subvolume before clone",
+                        ),
+                        snapshot_command(
+                            Some("snapshots"),
+                            snapshot,
+                            target,
+                            action.context.read_only.unwrap_or(false),
+                        ),
+                    ],
+                    vec![
+                        "use the cloned subvolume for inspection, migration, or rollback rehearsal"
+                            .to_string(),
+                        "delete temporary Btrfs clone subvolumes after validation when they are no longer needed"
+                            .to_string(),
+                    ],
+                    true,
+                )
             } else {
                 (
                     vec![command_with_readiness(
                         ["<snapshot-clone-tool>", snapshot, target],
                         true,
                         CommandReadiness::NeedsDomainImplementation,
-                        ["ZFS snapshot name"],
-                        "clone the snapshot after selecting a concrete ZFS snapshot name",
+                        ["ZFS snapshot name or Btrfs snapshot path"],
+                        "clone the snapshot after selecting a concrete ZFS snapshot name or Btrfs snapshot path",
                     )],
                     vec![
-                        "snapshot clone command is only rendered for unambiguous ZFS snapshot names"
+                        "snapshot clone command is rendered for unambiguous ZFS snapshot names or absolute Btrfs snapshot paths"
                             .to_string(),
                     ],
                     true,
@@ -17220,6 +17268,48 @@ mod tests {
     }
 
     #[test]
+    fn btrfs_snapshot_clone_renderer_reports_reviewable_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "/mnt/persist/@home-before": {
+                  "target": "/mnt/persist/@home",
+                  "cloneTo": "/mnt/persist/@home-review",
+                  "readOnly": true
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "snapshot:/mnt/persist/@home-before:clone:/mnt/persist/@home-review"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "btrfs",
+                            "subvolume",
+                            "snapshot",
+                            "-r",
+                            "/mnt/persist/@home-before",
+                            "/mnt/persist/@home-review",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "snapshot:/mnt/persist/@home-before:clone:/mnt/persist/@home-review"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["btrfs", "subvolume", "show", "/mnt/persist/@home-review"]
+                })
+        }));
+    }
+
+    #[test]
     fn rename_lifecycle_reports_domain_commands() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
@@ -17369,7 +17459,7 @@ mod tests {
                     command.argv == ["<snapshot-clone-tool>", "before-clone", "tank/home-review"]
                         && command.mutates
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
-                        && command.unresolved_inputs == ["ZFS snapshot name"]
+                        && command.unresolved_inputs == ["ZFS snapshot name or Btrfs snapshot path"]
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {

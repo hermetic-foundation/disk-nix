@@ -443,10 +443,12 @@ concrete ZFS snapshot name or absolute Btrfs snapshot path.
 ZFS snapshot hold plans render safe `zfs hold <tag> <snapshot>` and
 `zfs release <tag> <snapshot>` updates from `hold` and `releaseHold`
 declarations so retention can be changed without deleting recovery points.
-ZFS snapshot clone plans render reviewed `zfs clone <snapshot> <dataset>`
-commands from `cloneTo` so snapshots can be inspected or migrated without
-rolling back the source dataset. Clone and rollback plans remain non-ready
-until the declaration resolves to a concrete ZFS snapshot name.
+Snapshot clone plans render reviewed `zfs clone <snapshot> <dataset>` commands
+for ZFS snapshots and `btrfs subvolume snapshot <snapshot-path> <clone-path>`
+for absolute Btrfs snapshot paths. Btrfs clone declarations with
+`readOnly = true` render `btrfs subvolume snapshot -r`. Clone and rollback
+plans remain non-ready until the declaration resolves to a concrete ZFS
+snapshot name or, for clone, an absolute Btrfs snapshot path.
 Snapshot `operation = "rescan"` plans render read-only ZFS metadata, hold, and
 reference probes or Btrfs subvolume/read-only property probes, followed by graph
 inspection for snapshot/source relationships.

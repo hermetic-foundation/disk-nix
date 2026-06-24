@@ -902,9 +902,13 @@ declarations render policy-gated `zfs destroy` or `btrfs subvolume delete`
 commands for the same unambiguous domains.
 ZFS snapshot retention declarations render safe `zfs hold <tag> <snapshot>`
 and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
-ZFS snapshot clone declarations render reviewed `zfs clone <snapshot> <dataset>` commands from `cloneTo`, `cloneTarget`, or `clone`.
+Snapshot clone declarations render reviewed `zfs clone <snapshot> <dataset>`
+commands for ZFS snapshots and
+`btrfs subvolume snapshot <snapshot-path> <clone-path>` for absolute Btrfs
+snapshot paths from `cloneTo`, `cloneTarget`, or `clone`. Btrfs clone
+declarations with `readOnly = true` render `btrfs subvolume snapshot -r`.
 Clone and rollback plans remain non-ready until the declaration resolves to a
-concrete ZFS snapshot name.
+concrete ZFS snapshot name or, for clone, an absolute Btrfs snapshot path.
 Snapshot rename declarations render reviewed `zfs rename <snapshot> <new>` for
 ZFS names and `mv -- <old> <new>` for absolute Btrfs snapshot paths. Friendly
 snapshot keys remain non-ready for rename until `name`, `snapshotName`, `path`,
@@ -921,9 +925,9 @@ ZFS snapshot rollback declarations render reviewed `zfs rollback` command
 details internally, and `recursiveRollback`, `recursive`, or
 `zfs.rollbackRecursive` render reviewed `zfs rollback -r` details. Apply blocks
 rollback by default and requires `allowPotentialDataLoss=true` before execution.
-The capability inventory advertises ZFS snapshot create, hold/release,
-clone, rescan, rollback including recursive rollback review, and destroy risks
-plus Btrfs snapshot create, rescan, and destroy risks.
+The capability inventory advertises ZFS snapshot create, hold/release, clone,
+rescan, rollback including recursive rollback review, and destroy risks plus
+Btrfs snapshot create, clone, rename, rescan, and destroy risks.
 `verificationSummary` and `verificationPlan` record read-only commands and
 state checks that run after a successful `--execute` command phase or can be
 used for manual review after applying a generated script. These checks re-probe

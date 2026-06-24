@@ -2859,7 +2859,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
                 ..ActionContext::default()
             },
             advice: Some(Advice {
-                summary: "ZFS snapshot clone creates a writable dataset from the snapshot"
+                summary: "snapshot clone creates a writable ZFS dataset or Btrfs subvolume copy"
                     .to_string(),
                 alternatives: vec![
                     "inspect the clone before rollback or destructive changes".to_string(),
@@ -5705,6 +5705,33 @@ pub fn default_capabilities() -> Vec<Capability> {
         },
         Capability {
             node_kind: NodeKind::BtrfsSnapshot,
+            operation: Operation::Clone,
+            risk: RiskClass::Reversible,
+            advice: Some(Advice {
+                summary: "Btrfs snapshot clone creates a reviewed subvolume copy".to_string(),
+                alternatives: vec![
+                    "clone snapshots for inspection before rollback or pruning".to_string(),
+                    "use read-only clones when the copy should remain a recovery checkpoint"
+                        .to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsSnapshot,
+            operation: Operation::Rename,
+            risk: RiskClass::OfflineRequired,
+            advice: Some(Advice {
+                summary: "Btrfs snapshot rename preserves a recovery point at a new path"
+                    .to_string(),
+                alternatives: vec![
+                    "update mounts, qgroups, send/receive jobs, and retention references after rename"
+                        .to_string(),
+                    "clone before renaming when consumers still need the old path".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BtrfsSnapshot,
             operation: Operation::Destroy,
             risk: RiskClass::Destructive,
             advice: Some(Advice {
@@ -7907,6 +7934,20 @@ mod tests {
                     && capability.operation == Operation::Rescan
             })
             .expect("Btrfs snapshot rescan capability should exist");
+        let btrfs_clone = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsSnapshot
+                    && capability.operation == Operation::Clone
+            })
+            .expect("Btrfs snapshot clone capability should exist");
+        let btrfs_rename = capabilities
+            .iter()
+            .find(|capability| {
+                capability.node_kind == NodeKind::BtrfsSnapshot
+                    && capability.operation == Operation::Rename
+            })
+            .expect("Btrfs snapshot rename capability should exist");
         let btrfs_destroy = capabilities
             .iter()
             .find(|capability| {
@@ -7928,6 +7969,8 @@ mod tests {
         }));
         assert_eq!(btrfs_snapshot.risk, RiskClass::Reversible);
         assert_eq!(btrfs_rescan.risk, RiskClass::Online);
+        assert_eq!(btrfs_clone.risk, RiskClass::Reversible);
+        assert_eq!(btrfs_rename.risk, RiskClass::OfflineRequired);
         assert_eq!(btrfs_destroy.risk, RiskClass::Destructive);
     }
 
@@ -11169,30 +11212,58 @@ mod tests {
     }
 
     #[test]
-    fn plan_accepts_zfs_snapshot_clone_as_reversible() {
+    fn plan_accepts_snapshot_clone_as_reversible() {
         let plan = plan_from_json_bytes(
             br#"{
               "snapshots": {
                 "tank/home@before-upgrade": {
                   "target": "tank/home",
                   "cloneTo": "tank/home-review"
+                },
+                "/mnt/persist/@home-before": {
+                  "target": "/mnt/persist/@home",
+                  "cloneTo": "/mnt/persist/@home-review",
+                  "readOnly": true
                 }
               }
             }"#,
         )
         .expect("document should parse");
 
-        assert_eq!(plan.summary.action_count, 1);
-        assert_eq!(plan.actions[0].operation, Operation::Clone);
-        assert_eq!(plan.actions[0].risk, RiskClass::Reversible);
+        assert_eq!(plan.summary.action_count, 2);
+        let zfs_clone = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:tank/home@before-upgrade:clone:tank/home-review")
+            .expect("ZFS clone action exists");
+        assert_eq!(zfs_clone.operation, Operation::Clone);
+        assert_eq!(zfs_clone.risk, RiskClass::Reversible);
         assert_eq!(
-            plan.actions[0].context.name.as_deref(),
+            zfs_clone.context.name.as_deref(),
             Some("tank/home@before-upgrade")
         );
         assert_eq!(
-            plan.actions[0].context.target.as_deref(),
+            zfs_clone.context.target.as_deref(),
             Some("tank/home-review")
         );
+        let btrfs_clone = plan
+            .actions
+            .iter()
+            .find(|action| {
+                action.id == "snapshot:/mnt/persist/@home-before:clone:/mnt/persist/@home-review"
+            })
+            .expect("Btrfs clone action exists");
+        assert_eq!(btrfs_clone.operation, Operation::Clone);
+        assert_eq!(btrfs_clone.risk, RiskClass::Reversible);
+        assert_eq!(
+            btrfs_clone.context.name.as_deref(),
+            Some("/mnt/persist/@home-before")
+        );
+        assert_eq!(
+            btrfs_clone.context.target.as_deref(),
+            Some("/mnt/persist/@home-review")
+        );
+        assert_eq!(btrfs_clone.context.read_only, Some(true));
     }
 
     #[test]
