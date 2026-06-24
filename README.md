@@ -386,8 +386,10 @@ or `/dev/disk/by-*`; logical swap names can declare it with `target`, `path`,
 or `device`. Swap label and UUID property updates render
 `swaplabel --label <label> <target>` and
 `swaplabel --uuid <uuid> <target>` as offline-required signature identity
-changes. Swap `operation = "rescan"` renders read-only `swapon --show`,
-`blkid`, and graph inspection for
+changes. Current-topology probing reconciles swap label and UUID declarations
+against probed swap identity and signature metadata before suppressing
+already-satisfied updates. Swap `operation = "rescan"` renders read-only
+`swapon --show`, `blkid`, and graph inspection for
 activation, capacity, label, UUID, and backing-storage refresh.
 Swap `operation = "deactivate"` renders reviewed `swapoff` without removing the
 signature, while `operation = "destroy"` renders `swapoff` followed by

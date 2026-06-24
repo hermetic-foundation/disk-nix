@@ -788,7 +788,9 @@ or `/dev/disk/by-*`; logical swap names can declare it with `target`, `path`,
 or `device`. Swap label and UUID property updates render
 `swaplabel --label <label> <target>` and
 `swaplabel --uuid <uuid> <target>` and remain offline-required. Swap
-`operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
+property comparison maps declared label and UUID aliases onto probed swap
+identity and signature metadata before suppressing already-satisfied updates.
+Swap `operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
 inspection commands for activation,
 capacity, label, UUID, and backing-storage refresh.
 Swap `operation = "deactivate"` renders `swapoff` while keeping the signature

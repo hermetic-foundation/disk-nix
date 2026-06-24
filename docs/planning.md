@@ -852,8 +852,10 @@ swap target from the declaration key, `target`, `path`, or `device`. Label and
 UUID updates render `swaplabel --label` and `swaplabel --uuid`;
 `operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
 inspection before any later grow or identity change. Current-topology comparison
-warns when a swap format target already has swap metadata or matches another
-node kind, while keeping the destructive `mkswap` action reviewable. MD RAID
+maps declared swap label and UUID properties onto probed identity and signature
+metadata before suppressing already-satisfied property updates. It warns when a
+swap format target already has swap metadata or matches another node kind,
+while keeping the destructive `mkswap` action reviewable. MD RAID
 assemble, stop, create, grow, member add,
 replacement, and removal command plans require an explicit array path such as
 `/dev/md/root`; assemble also requires explicit reviewed member devices. MD

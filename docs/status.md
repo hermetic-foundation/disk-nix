@@ -59,7 +59,8 @@ behavior across real storage stacks.
   reconciled against probed `zfs.*` metadata with common on/off normalization,
   and filesystem identity property declarations reconciled against probed node
   identity plus filesystem label, UUID, FAT volume-ID, NTFS serial, and exFAT
-  serial metadata aliases;
+  serial metadata aliases, and swap identity property declarations reconciled
+  against probed swap label and UUID metadata;
   matching filesystem format types are reported without suppressing destructive
   format actions so policy and confirmation gates still apply;
   swap format targets report existing swap metadata or non-swap node kinds
