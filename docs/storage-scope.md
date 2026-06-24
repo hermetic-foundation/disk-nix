@@ -107,8 +107,8 @@ The current probe layer normalizes:
   without recreating or removing metadata
 - VDO `vdostats --human-readable` output for runtime size, used/free capacity,
   utilization percentage, and space-saving percentage; `vdostats --verbose`
-  output for operating mode, recovery percentage, write policy, and detailed
-  VDO block/accounting metadata
+  output for operating mode, recovery percentage, configured and active write
+  policy, version/release metadata, and detailed VDO block/accounting metadata
 - exFAT metadata through `tune.exfat` and `dump.exfat` for volume label, GUID,
   serial, volume length, FAT/cluster offsets, cluster counts, sector sizing,
   allocated capacity, and free-space estimates

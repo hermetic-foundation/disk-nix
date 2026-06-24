@@ -2718,9 +2718,16 @@ fn usage_details(node: &Node) -> String {
         ("vdo.operating-mode", "mode"),
         ("vdo.recovery-percentage", "recovery"),
         ("vdo.write-policy", "write-policy"),
+        ("vdo.configured-write-policy", "configured-write-policy"),
+        ("vdo.index-memory-setting", "index-memory"),
+        ("vdo.block-map-cache-size", "block-map-cache"),
         ("vdo.compression", "compression"),
         ("vdo.deduplication", "deduplication"),
+        ("vdo.version", "vdo-version"),
+        ("vdo.release-version", "vdo-release"),
+        ("vdo.data-blocks-used", "data-blocks"),
         ("vdo.overhead-blocks-used", "overhead-blocks"),
+        ("vdo.logical-blocks-used", "logical-blocks"),
         ("dm.name", "dm-name"),
         ("dm.uuid", "dm-uuid"),
         ("dm.major", "dm-major"),
@@ -4107,7 +4114,11 @@ mod tests {
                 .with_property("vdo.use-percent", "50%")
                 .with_property("vdo.space-saving-percent", "20%")
                 .with_property("vdo.operating-mode", "normal")
-                .with_property("vdo.write-policy", "sync"),
+                .with_property("vdo.write-policy", "sync")
+                .with_property("vdo.configured-write-policy", "auto")
+                .with_property("vdo.block-map-cache-size", "128M")
+                .with_property("vdo.data-blocks-used", "65536")
+                .with_property("vdo.logical-blocks-used", "262144"),
         );
 
         let mut output = Vec::new();
@@ -4116,7 +4127,10 @@ mod tests {
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains("backing=/dev/sdb logical=100G physical=50G"));
-        assert!(output.contains("vdo-use=50% saving=20% mode=normal write-policy=sync"));
+        assert!(output.contains(
+            "vdo-use=50% saving=20% mode=normal write-policy=sync configured-write-policy=auto"
+        ));
+        assert!(output.contains("block-map-cache=128M data-blocks=65536 logical-blocks=262144"));
     }
 
     #[test]
@@ -5153,9 +5167,16 @@ mod tests {
                 .with_property("vdo.operating-mode", "normal")
                 .with_property("vdo.recovery-percentage", "100%")
                 .with_property("vdo.write-policy", "sync")
+                .with_property("vdo.configured-write-policy", "auto")
+                .with_property("vdo.index-memory-setting", "0.25")
+                .with_property("vdo.block-map-cache-size", "128M")
                 .with_property("vdo.compression", "enabled")
                 .with_property("vdo.deduplication", "enabled")
-                .with_property("vdo.overhead-blocks-used", "4096"),
+                .with_property("vdo.version", "47")
+                .with_property("vdo.release-version", "133524")
+                .with_property("vdo.data-blocks-used", "65536")
+                .with_property("vdo.overhead-blocks-used", "4096")
+                .with_property("vdo.logical-blocks-used", "262144"),
         );
         graph.add_node(
             Node::new(
@@ -5184,9 +5205,11 @@ mod tests {
         assert!(output.contains("backing=/dev/sdb logical=1T physical=250G"));
         assert!(output.contains("stats-size=268435456 stats-used=134217728"));
         assert!(output.contains("vdo-use=50% saving=75%"));
-        assert!(output.contains("recovery=100% write-policy=sync"));
+        assert!(output.contains("recovery=100% write-policy=sync configured-write-policy=auto"));
+        assert!(output.contains("index-memory=0.25 block-map-cache=128M"));
         assert!(output.contains("compression=enabled deduplication=enabled"));
-        assert!(output.contains("overhead-blocks=4096"));
+        assert!(output.contains("vdo-version=47 vdo-release=133524"));
+        assert!(output.contains("data-blocks=65536 overhead-blocks=4096 logical-blocks=262144"));
         assert!(output.contains("vg0/archive:0"));
         assert!(output.contains("vdo-write-policy=auto"));
     }

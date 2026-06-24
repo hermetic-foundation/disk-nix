@@ -256,8 +256,9 @@ Use these commands for:
   segment data/metadata device mappings,
   thin-pool discard/zeroing/transaction details, cache segment policy/settings,
   VDO segment compression/dedup/write-policy details, multipath WWID/size/path
-  state, VDO backing device, logical/physical size, mode, and data-reduction
-  settings, loop backing/offset/read-only/direct-I/O settings, and bcache
+  state, VDO backing device, logical/physical size, mode, configured and active
+  write policy, index/cache sizing, data-reduction settings, and block
+  accounting, loop backing/offset/read-only/direct-I/O settings, and bcache
   role/cache-set/tuning details such as label, state, running flag, available
   cache percentage, cache mode, discard, I/O errors, written/metadata-written
   accounting, readahead, sequential cutoff, priority stats, writeback delay,
@@ -279,8 +280,9 @@ Use these commands for:
   expose them
 - `vdo`: native VDO volumes and LVM VDO segment metadata, including backing
   device, logical and physical size, status/stat counters, operating mode,
-  recovery progress, write policy, compression, deduplication, and overhead
-  blocks when probes expose them
+  recovery progress, configured and active write policy, index/cache sizing,
+  compression, deduplication, version/release data, and block accounting when
+  probes expose them
 - `multipath`: multipath maps and their backing paths, including WWID, dm
   device, vendor/product, size, features, hardware handler, write protection,
   path count, host path, major/minor, path-group policy, priority, group
@@ -330,8 +332,9 @@ Use these commands for:
   status, NTFS volume geometry and MFT record sizing, F2FS block usage,
   valid inode/node counts, segment layout, section/zone geometry, log sizing,
   bcachefs filesystem and member-device capacity plus data-type accounting,
-  Btrfs allocation class profiles and byte counts, VDO backing and logical/physical size
-  details, NVMe namespace details, loop mapping details, and active swap
+  Btrfs allocation class profiles and byte counts, VDO backing, logical/physical
+  size, data-reduction, cache/index, and block-accounting details, NVMe namespace
+  details, loop mapping details, and active swap
   state/type/priority when probed
 
 ## Inspect
