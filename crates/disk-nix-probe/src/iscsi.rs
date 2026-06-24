@@ -8,6 +8,7 @@ struct IscsiSession {
     target: Option<String>,
     portal: Option<String>,
     persistent_portal: Option<String>,
+    target_portal_group_tag: Option<String>,
     connection_state: Option<String>,
     session_state: Option<String>,
     internal_session_state: Option<String>,
@@ -18,6 +19,7 @@ struct IscsiSession {
     iface_netdev: Option<String>,
     host_number: Option<String>,
     host_state: Option<String>,
+    connection_params: Vec<(String, String)>,
     negotiated_params: Vec<(String, String)>,
     luns: Vec<IscsiLun>,
 }
@@ -62,6 +64,7 @@ fn parse_sessions(bytes: &[u8]) -> Result<Vec<IscsiSession>, ProbeError> {
                 target: value_after_colon(trimmed),
                 portal: None,
                 persistent_portal: None,
+                target_portal_group_tag: None,
                 connection_state: None,
                 session_state: None,
                 internal_session_state: None,
@@ -72,6 +75,7 @@ fn parse_sessions(bytes: &[u8]) -> Result<Vec<IscsiSession>, ProbeError> {
                 iface_netdev: None,
                 host_number: None,
                 host_state: None,
+                connection_params: Vec::new(),
                 negotiated_params: Vec::new(),
                 luns: Vec::new(),
             });
@@ -82,6 +86,10 @@ fn parse_sessions(bytes: &[u8]) -> Result<Vec<IscsiSession>, ProbeError> {
         } else if lower.starts_with("persistent portal:") {
             if let Some(session) = &mut current {
                 session.persistent_portal = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("target portal group tag:") {
+            if let Some(session) = &mut current {
+                session.target_portal_group_tag = value_after_colon(trimmed);
             }
         } else if lower.starts_with("sid:") {
             if let (Some(session), Some(sid)) = (&mut current, value_after_colon(trimmed)) {
@@ -124,6 +132,16 @@ fn parse_sessions(bytes: &[u8]) -> Result<Vec<IscsiSession>, ProbeError> {
                 let (host_number, host_state) = parse_host_line(trimmed);
                 session.host_number = host_number;
                 session.host_state = host_state;
+            }
+        } else if lower.starts_with("cid:")
+            || lower.starts_with("connection state:")
+            || lower.starts_with("local address:")
+            || lower.starts_with("peer address:")
+        {
+            if let (Some(session), Some((key, value))) = (&mut current, parse_key_value(trimmed)) {
+                session
+                    .connection_params
+                    .push((connection_property_key(&key), value));
             }
         } else if lower.starts_with("headerdigest:")
             || lower.starts_with("datadigest:")
@@ -181,6 +199,9 @@ fn add_session(graph: &mut StorageGraph, session: IscsiSession) {
     if let Some(portal) = &session.persistent_portal {
         session_node = session_node.with_property("iscsi.persistent-portal", portal.clone());
     }
+    if let Some(tag) = &session.target_portal_group_tag {
+        session_node = session_node.with_property("iscsi.target-portal-group-tag", tag.clone());
+    }
     if let Some(state) = &session.connection_state {
         session_node = session_node.with_property("iscsi.connection-state", state.clone());
     }
@@ -211,6 +232,9 @@ fn add_session(graph: &mut StorageGraph, session: IscsiSession) {
     }
     if let Some(host_state) = &session.host_state {
         session_node = session_node.with_property("iscsi.host-state", host_state.clone());
+    }
+    for (key, value) in &session.connection_params {
+        session_node = session_node.with_property(key.clone(), value.clone());
     }
     for (key, value) in &session.negotiated_params {
         session_node = session_node.with_property(key.clone(), value.clone());
@@ -369,6 +393,13 @@ fn parse_state_after_label(value: &str) -> Option<String> {
     })
 }
 
+fn connection_property_key(key: &str) -> String {
+    match normalize_key(key).as_str() {
+        "connection-state" => "iscsi.connection-detail-state".to_string(),
+        key => format!("iscsi.connection-{key}"),
+    }
+}
+
 fn normalize_key(key: &str) -> String {
     key.trim()
         .to_ascii_lowercase()
@@ -394,6 +425,7 @@ mod tests {
 Target: iqn.2026-06.example:storage.disk1
     Current Portal: 10.0.0.10:3260,1
     Persistent Portal: 10.0.0.10:3260,1
+    Target Portal Group Tag: 1
     **********
     Interface:
     **********
@@ -410,6 +442,10 @@ Target: iqn.2026-06.example:storage.disk1
     DataDigest: None
     MaxRecvDataSegmentLength: 262144
     MaxBurstLength: 262144
+    CID: 0
+    Connection State: LOGGED IN
+    Local Address: 10.0.0.20
+    Peer Address: 10.0.0.10
     Host Number: 4  State: running
     scsi4 Channel 00 Id 0 Lun: 0
         Attached scsi disk sdb          State: running
@@ -443,6 +479,9 @@ Target: iqn.2026-06.example:storage.disk1
                     property.key == "iscsi.connection-state" && property.value == "LOGGED IN"
                 })
                 && node.properties.iter().any(|property| {
+                    property.key == "iscsi.target-portal-group-tag" && property.value == "1"
+                })
+                && node.properties.iter().any(|property| {
                     property.key == "iscsi.session-state" && property.value == "LOGGED_IN"
                 })
                 && node.properties.iter().any(|property| {
@@ -458,6 +497,20 @@ Target: iqn.2026-06.example:storage.disk1
                     .any(|property| property.key == "iscsi.host-number" && property.value == "4")
                 && node.properties.iter().any(|property| {
                     property.key == "iscsi.maxrecvdatasegmentlength" && property.value == "262144"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.connection-cid" && property.value == "0")
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.connection-detail-state" && property.value == "LOGGED IN"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.connection-local-address"
+                        && property.value == "10.0.0.20"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.connection-peer-address" && property.value == "10.0.0.10"
                 })
         }));
         assert!(graph.nodes.iter().any(|node| {

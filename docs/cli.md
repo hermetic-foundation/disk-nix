@@ -305,10 +305,12 @@ Use these commands for:
   state, size, used bytes, free bytes, utilization, and backing relationship
   when `/proc/swaps` exposes them
 - `iscsi`: iSCSI sessions, targets, and LUNs, including current and persistent
-  portals, connection/session state, interface identity, negotiated transfer
-  parameters, target IQNs, LUN sizes, SCSI host/channel/id coordinates,
-  attached disk state, session to target imports, target-contained LUN counts,
-  and LUN-to-block-device backing relationships when `iscsiadm --mode session -P 3` exposes them
+  portals, target portal group tag, connection/session state, connection
+  CID/local/peer addresses, interface identity, negotiated transfer parameters,
+  target IQNs, LUN sizes, SCSI host/channel/id coordinates, attached disk
+  state, session to target imports, target-contained LUN counts, and
+  LUN-to-block-device backing relationships when
+  `iscsiadm --mode session -P 3` exposes them
 - `nfs`: NFS exports and client mounts, including source, server/export split,
   NFS protocol version, transport and mount transport, security flavor,
   client/server addresses, port/mount address, read/write transfer sizes,

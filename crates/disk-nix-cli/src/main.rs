@@ -2821,6 +2821,7 @@ fn usage_details(node: &Node) -> String {
         ("md.member-state", "member-state"),
         ("iscsi.portal", "portal"),
         ("iscsi.persistent-portal", "persistent-portal"),
+        ("iscsi.target-portal-group-tag", "tpgt"),
         ("iscsi.connection-state", "connection-state"),
         ("iscsi.session-state", "session-state"),
         ("iscsi.internal-session-state", "internal-session-state"),
@@ -2831,6 +2832,10 @@ fn usage_details(node: &Node) -> String {
         ("iscsi.iface-netdev", "netdev"),
         ("iscsi.host-number", "host"),
         ("iscsi.host-state", "host-state"),
+        ("iscsi.connection-cid", "cid"),
+        ("iscsi.connection-detail-state", "connection-detail-state"),
+        ("iscsi.connection-local-address", "local-address"),
+        ("iscsi.connection-peer-address", "peer-address"),
         ("iscsi.headerdigest", "header-digest"),
         ("iscsi.datadigest", "data-digest"),
         ("iscsi.maxrecvdatasegmentlength", "max-recv-data-segment"),
@@ -4675,7 +4680,12 @@ mod tests {
             )
             .with_property("iscsi.portal", "10.0.0.10:3260,1")
             .with_property("iscsi.persistent-portal", "10.0.0.11:3260,1")
-            .with_property("iscsi.connection-state", "LOGGED IN"),
+            .with_property("iscsi.target-portal-group-tag", "1")
+            .with_property("iscsi.connection-state", "LOGGED IN")
+            .with_property("iscsi.connection-cid", "0")
+            .with_property("iscsi.connection-detail-state", "LOGGED IN")
+            .with_property("iscsi.connection-local-address", "10.0.0.20")
+            .with_property("iscsi.connection-peer-address", "10.0.0.10"),
         );
         graph.add_node(Node::new(
             "iscsi-target:iqn.2026-06.example:storage",
@@ -4736,6 +4746,9 @@ mod tests {
         assert!(output.contains("10.0.0.10:3260,1"));
         assert!(output.contains("LOGGED IN"));
         assert!(output.contains("persistent-portal=10.0.0.11:3260,1"));
+        assert!(output.contains("tpgt=1 connection-state=LOGGED IN"));
+        assert!(output.contains("cid=0 connection-detail-state=LOGGED IN"));
+        assert!(output.contains("local-address=10.0.0.20 peer-address=10.0.0.10"));
         assert!(output.contains("iqn.2026-06.example:storage"));
         assert!(output.contains("1.0 GiB"));
         assert!(output.contains("attached-disk=sdb"));
