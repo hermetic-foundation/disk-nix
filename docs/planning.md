@@ -351,8 +351,11 @@ Examples:
   snapshot declarations can set `readOnly = true` to render
   `btrfs subvolume snapshot -r`. Snapshot destruction remains destructive, and
   unambiguous ZFS snapshot names or Btrfs absolute snapshot paths render
-  reviewed `zfs destroy` or `btrfs subvolume delete` commands. ZFS snapshot
-  `hold` and `releaseHold` declarations are safe property actions that render
+  reviewed `zfs destroy` or `btrfs subvolume delete` commands. Current-topology
+  comparison suppresses already-absent concrete ZFS snapshots and absolute
+  Btrfs snapshot paths; present snapshots stay actionable with warnings that
+  include available ZFS user-reference/usage metadata or Btrfs subvolume
+  metadata. ZFS snapshot `hold` and `releaseHold` declarations are safe property actions that render
   `zfs hold <tag> <snapshot>` and `zfs release <tag> <snapshot>`. ZFS snapshot
   `operation = "rescan"` and absolute Btrfs snapshot rescan declarations are
   online read-only refreshes for snapshot metadata, holds, read-only state, and
@@ -497,7 +500,7 @@ a `topologyComparison` section to the plan. The comparison matches action
 targets against the storage graph and reports missing targets, current size
 state versus `desiredSize`, filesystem type conflicts, and already-satisfied
 mount, remount, NFS export, iSCSI login, Btrfs subvolume or qgroup destroy, or
-property updates where the current graph has enough data. Remount
+generic snapshot destroy, or property updates where the current graph has enough data. Remount
 reconciliation treats declared options as a required subset of the current
 mount options, allowing kernel-added defaults to remain. Filesystem and NFS
 unmount reconciliation treats an absent mountpoint as already satisfied and
@@ -544,6 +547,11 @@ ZFS dataset and zvol destroy reconciliation suppresses concrete `pool/name`
 targets only when they are already absent. Present targets stay actionable with
 warnings that include available mountpoint, quota, reservation, encryption, key
 status, origin, usage, volsize, or compression metadata.
+Generic snapshot destroy reconciliation suppresses concrete ZFS snapshot names
+and absolute Btrfs snapshot paths only when they are already absent. Present
+snapshots stay actionable with warnings that include available ZFS
+user-reference, usage, compression, or encryption metadata, or Btrfs subvolume
+id, generation, parent, top-level, and UUID metadata.
 NFS export reconciliation compares the declared client and options against
 `nfs.export-client` and `nfs.export-option-*` topology properties.
 iSCSI session reconciliation checks all matching target and session nodes so an

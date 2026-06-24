@@ -591,17 +591,18 @@ with `vdo.operating-mode`, VDO stop actions are compared with
 explicitly stopped, not-running, or inactive `vdo.operating-mode` values, MD
 assemble actions are compared with `md.state`, `md.degraded-devices`, and
 `md.failed-devices`, ZFS dataset and zvol destroy actions are compared with
-concrete target presence and ZFS metadata, ZFS pool import actions are compared
-with `zfs.state` and `zfs.health`, LVM volume-group import/export actions are
-compared with `lvm.vg-exported`, and iSCSI login/logout actions are compared
-with current session state across all matching target/session nodes when
+concrete target presence and ZFS metadata, generic snapshot destroy actions are
+compared with concrete ZFS snapshot names or absolute Btrfs snapshot paths,
+ZFS pool import actions are compared with `zfs.state` and `zfs.health`, LVM
+volume-group import/export actions are compared with `lvm.vg-exported`, and
+iSCSI login/logout actions are compared with current session state across all matching target/session nodes when
 metadata is available. Safe already-satisfied grow, shrink, device-mapper destroy,
 multipath destroy, bcache detach, iSCSI login/logout, LVM
 activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
 LUKS keyslot/token removal, loop create/destroy, LUN attach/detach, NVMe
 namespace attach/detach, mount, unmount, remount, NFS export/unexport, VDO
 destroy, VDO start, VDO stop, MD assemble, Btrfs subvolume destroy, ZFS
-dataset/zvol destroy, ZFS pool import, LVM cache detach, and property actions that have no warning diagnostics are suppressed from the actionable plan and counted as
+dataset/zvol destroy, generic snapshot destroy, ZFS pool import, LVM cache detach, and property actions that have no warning diagnostics are suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
 inactive LUKS open targets, active LUKS close targets, still-present LUKS
@@ -611,7 +612,7 @@ present multipath flush targets, absent LUN attach paths, visible LUN detach
 paths, present bcache detach targets, still-attached LVM cache origins, absent
 NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
 destroy targets, non-normal VDO start modes, running VDO stop targets, present
-Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, degraded or failed MD arrays,
+Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, present ZFS or Btrfs snapshot destroy targets, degraded or failed MD arrays,
 degraded ZFS pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
 targets without a logged-in session and logout targets that still have a
@@ -1055,7 +1056,10 @@ Generic snapshot declarations render concrete `zfs snapshot` commands for
 `dataset@snapshot` names and Btrfs `subvolume snapshot` commands when both the
 source target and snapshot name are absolute paths. Destructive snapshot
 declarations render policy-gated `zfs destroy` or `btrfs subvolume delete`
-commands for the same unambiguous domains.
+commands for the same unambiguous domains. With current-topology probing,
+already-absent concrete ZFS snapshot names and absolute Btrfs snapshot paths
+are suppressed; present snapshots stay actionable with warnings that include
+available ZFS user-reference/usage metadata or Btrfs subvolume metadata.
 ZFS snapshot retention declarations render safe `zfs hold <tag> <snapshot>`
 and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
 Snapshot clone declarations render reviewed `zfs clone <snapshot> <dataset>`

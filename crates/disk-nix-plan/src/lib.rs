@@ -297,6 +297,8 @@ pub enum TopologyDiagnosticKind {
     NfsUnexportRequired,
     PropertyAlreadySatisfied,
     PropertyDiffers,
+    SnapshotDestroyAlreadySatisfied,
+    SnapshotDestroyRequired,
     VdoDestroyAlreadySatisfied,
     VdoDestroyRequired,
     VdoStartAlreadySatisfied,
@@ -816,6 +818,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                         | TopologyDiagnosticKind::NfsUnexportAlreadySatisfied
                         | TopologyDiagnosticKind::PropertyAlreadySatisfied
+                        | TopologyDiagnosticKind::SnapshotDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::VdoDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStartAlreadySatisfied
                         | TopologyDiagnosticKind::VdoStopAlreadySatisfied
@@ -1441,6 +1444,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::NfsExportAlreadySatisfied
                     | TopologyDiagnosticKind::NfsUnexportAlreadySatisfied
                     | TopologyDiagnosticKind::PropertyAlreadySatisfied
+                    | TopologyDiagnosticKind::SnapshotDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::VdoDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStartAlreadySatisfied
                     | TopologyDiagnosticKind::VdoStopAlreadySatisfied
@@ -1467,6 +1471,9 @@ fn topology_diagnostics_for_action(
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
         if let Some(diagnostic) = bcache_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
+        if let Some(diagnostic) = snapshot_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
         if let Some(diagnostic) = btrfs_subvolume_destroy_absent_diagnostic(action, &query) {
@@ -1538,6 +1545,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(luks_keyslot_remove_diagnostic(action, node, &query));
     diagnostics.extend(luks_token_remove_diagnostic(action, node, &query));
     diagnostics.extend(bcache_present_diagnostic(action, node, &query));
+    diagnostics.extend(snapshot_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(btrfs_subvolume_destroy_present_diagnostic(
         action, node, &query,
     ));
@@ -1580,6 +1588,18 @@ fn topology_query(action: &PlannedAction) -> Option<String> {
             .context
             .name
             .clone()
+            .or_else(|| action.context.target.clone())
+            .or_else(|| action.context.device.clone());
+    }
+
+    if action.context.collection.as_deref() == Some("snapshots")
+        && action.operation == Operation::Destroy
+    {
+        return action
+            .context
+            .snapshot_path
+            .clone()
+            .or_else(|| action.context.name.clone())
             .or_else(|| action.context.target.clone())
             .or_else(|| action.context.device.clone());
     }
@@ -2246,6 +2266,74 @@ fn bcache_detach_details(node: &Node) -> Vec<String> {
 
 fn is_concrete_bcache_target(query: &str) -> bool {
     query.starts_with("/dev/bcache") || query.starts_with("block:/dev/bcache")
+}
+
+fn snapshot_destroy_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("snapshots")
+        || action.operation != Operation::Destroy
+        || !is_concrete_snapshot_target(query)
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::SnapshotDestroyAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("snapshot {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn snapshot_destroy_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("snapshots")
+        || action.operation != Operation::Destroy
+    {
+        return None;
+    }
+
+    let (label, details) = match node.kind {
+        NodeKind::ZfsSnapshot => ("ZFS snapshot", zfs_snapshot_destroy_details(node)),
+        NodeKind::BtrfsSnapshot => ("Btrfs snapshot", btrfs_subvolume_destroy_details(node)),
+        _ => return None,
+    };
+    let message = if details.is_empty() {
+        format!("{label} {query} is still present")
+    } else {
+        format!(
+            "{label} {query} is still present with {}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::SnapshotDestroyRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn is_concrete_snapshot_target(query: &str) -> bool {
+    is_concrete_zfs_snapshot_target(query) || is_concrete_btrfs_snapshot_target(query)
+}
+
+fn is_concrete_zfs_snapshot_target(query: &str) -> bool {
+    query.contains('@') && query.contains('/') && !query.starts_with('/')
+}
+
+fn is_concrete_btrfs_snapshot_target(query: &str) -> bool {
+    query.starts_with('/')
 }
 
 fn btrfs_subvolume_destroy_absent_diagnostic(
@@ -3053,6 +3141,14 @@ fn zfs_object_destroy_details(node: &Node) -> Vec<String> {
         property_value_from_node(node, property).map(|value| format!("{label} {value}"))
     })
     .collect()
+}
+
+fn zfs_snapshot_destroy_details(node: &Node) -> Vec<String> {
+    let mut details = zfs_object_destroy_details(node);
+    if let Some(userrefs) = property_value_from_node(node, "zfs.userrefs") {
+        details.push(format!("user references {userrefs}"));
+    }
+    details
 }
 
 fn zfs_pool_import_diagnostic(
@@ -16383,6 +16479,198 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "btrfssubvolumes:old-home:destroy"
                 && diagnostic.kind == TopologyDiagnosticKind::Missing
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_zfs_snapshot_destroy_when_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@old": {
+                  "target": "tank/home",
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@old:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotDestroyAlreadySatisfied
+                && diagnostic.query == "tank/home@old"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_zfs_snapshot_destroy_when_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@old": {
+                  "target": "tank/home",
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "zfs-snapshot:tank/home@old",
+                NodeKind::ZfsSnapshot,
+                "tank/home@old",
+            )
+            .with_property("zfs.used", "10M")
+            .with_property("zfs.referenced", "1G")
+            .with_property("zfs.compression", "zstd")
+            .with_property("zfs.userrefs", "2"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@old:destroy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotDestroyRequired
+                && diagnostic.query == "tank/home@old"
+                && diagnostic.message.contains("ZFS snapshot")
+                && diagnostic.message.contains("used 10M")
+                && diagnostic.message.contains("referenced 1G")
+                && diagnostic.message.contains("user references 2")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_btrfs_snapshot_destroy_when_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "/mnt/persist/@home-old": {
+                  "target": "/mnt/persist/@home",
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:/mnt/persist/@home-old:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotDestroyAlreadySatisfied
+                && diagnostic.query == "/mnt/persist/@home-old"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_btrfs_snapshot_destroy_when_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "/mnt/persist/@home-old": {
+                  "target": "/mnt/persist/@home",
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "btrfs-snapshot:fs-uuid:@home-old",
+                NodeKind::BtrfsSnapshot,
+                "@home-old",
+            )
+            .with_path("/mnt/persist/@home-old")
+            .with_property("btrfs.id", "258")
+            .with_property("btrfs.generation", "120")
+            .with_property("btrfs.parent-uuid", "source-uuid"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:/mnt/persist/@home-old:destroy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotDestroyRequired
+                && diagnostic.query == "/mnt/persist/@home-old"
+                && diagnostic.message.contains("Btrfs snapshot")
+                && diagnostic.message.contains("subvolume id 258")
+                && diagnostic.message.contains("generation 120")
+                && diagnostic.message.contains("parent UUID source-uuid")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_logical_snapshot_destroy_missing() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "old-home": {
+                  "target": "tank/home",
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:old-home:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::Missing
+                && diagnostic.query == "old-home"
         }));
     }
 
