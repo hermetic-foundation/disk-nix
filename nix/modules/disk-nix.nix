@@ -1703,13 +1703,13 @@ in
     luksKeyslots = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed LUKS keyslot lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a LUKS backing device and keyslot or key-file metadata depending on operation.";
+      description = "Typed LUKS keyslot lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a LUKS backing device and keyslot or key-file metadata depending on operation; keySlot, key-slot, or slot supplies the concrete slot id when the attribute name is logical.";
     };
 
     luksTokens = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed LUKS token lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a LUKS backing device and token JSON file for imports or a token id for removal.";
+      description = "Typed LUKS token lifecycle declarations emitted into the disk-nix planner spec. Executable plans require a LUKS backing device and token JSON file for imports or a token id for removal; tokenId, token-id, or token supplies the concrete token id when the attribute name is logical.";
     };
 
     volumeGroups = lib.mkOption {

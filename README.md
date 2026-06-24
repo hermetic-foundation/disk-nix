@@ -321,8 +321,10 @@ LUKS keyslot and token plans use explicit `add-key`, `remove-key`,
 `cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and
 `cryptsetup token remove` with header verification. Key-file property updates
 render `luksChangeKey`. Legacy `create` and `destroy` declarations still map to
-the same access-material command plans. Keyslot and token removal are potential
-data loss because they can remove the last working unlock path.
+the same access-material command plans. Logical keyslot and token names can
+declare concrete slot/token ids with `keySlot`, `key-slot`, `slot`, `tokenId`,
+`token-id`, or `token`. Keyslot and token removal are potential data loss
+because they can remove the last working unlock path.
 Disk initialization plans render destructive-policy-gated `parted mklabel` and
 partition table reread steps after disk identity inspection.
 Partition create plans render reviewed `parted mkpart`, `partprobe`, and

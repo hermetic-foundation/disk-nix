@@ -407,6 +407,10 @@ Each lifecycle declaration includes:
 - `jsonFile`
 - `metadata`
 
+When a keyslot or token declaration key is only a friendly name, set `keySlot`,
+`key-slot`, `slot`, `tokenId`, `token-id`, or `token` to the concrete
+slot/token id used by `cryptsetup`.
+
 Typed snapshot declarations include:
 
 - `target`

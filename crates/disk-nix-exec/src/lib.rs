@@ -14700,6 +14700,175 @@ mod tests {
     }
 
     #[test]
+    fn luks_keyslot_and_token_lifecycle_accept_metadata_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "luksKeyslots": {
+                  "rootAdd": {
+                    "operation": "add-key",
+                    "device": "/dev/disk/by-id/root-luks",
+                    "keySlot": "4",
+                    "newKeyFile": "/run/keys/root-new"
+                  },
+                  "rootRotate": {
+                    "device": "/dev/disk/by-id/root-luks",
+                    "key-slot": "5",
+                    "key-file": "/run/keys/root-old",
+                    "properties": {
+                      "keyFile": "/run/keys/root-rotated"
+                    }
+                  },
+                  "rootRemove": {
+                    "operation": "remove-key",
+                    "device": "/dev/disk/by-id/root-luks",
+                    "slot": "6"
+                  }
+                },
+                "luksTokens": {
+                  "rootImport": {
+                    "operation": "import-token",
+                    "device": "/dev/disk/by-id/root-luks",
+                    "tokenId": "7",
+                    "tokenFile": "/run/keys/root-token.json"
+                  },
+                  "rootRotate": {
+                    "device": "/dev/disk/by-id/root-luks",
+                    "token-id": "8",
+                    "properties": {
+                      "tokenFile": "/run/keys/root-token-rotated.json"
+                    }
+                  },
+                  "rootRemove": {
+                    "operation": "remove-token",
+                    "device": "/dev/disk/by-id/root-luks",
+                    "token": "9"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true,
+                "allowPotentialDataLoss": true,
+                "requireBackup": false,
+                "requireConfirmation": false
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lukskeyslots:rootadd:add-key"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "luksAddKey",
+                            "--key-slot",
+                            "4",
+                            "/dev/disk/by-id/root-luks",
+                            "/run/keys/root-new",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luksKeyslots:rootRotate:set-property:keyFile"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "luksChangeKey",
+                            "--key-slot",
+                            "5",
+                            "--key-file",
+                            "/run/keys/root-old",
+                            "/dev/disk/by-id/root-luks",
+                            "/run/keys/root-rotated",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lukskeyslots:rootremove:remove-key"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "luksKillSlot",
+                            "/dev/disk/by-id/root-luks",
+                            "6",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lukstokens:rootimport:import-token"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "token",
+                            "import",
+                            "--token-id",
+                            "7",
+                            "--json-file",
+                            "/run/keys/root-token.json",
+                            "/dev/disk/by-id/root-luks",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luksTokens:rootRotate:set-property:tokenFile"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "token",
+                            "import",
+                            "--token-id",
+                            "8",
+                            "--json-file",
+                            "/run/keys/root-token-rotated.json",
+                            "/dev/disk/by-id/root-luks",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "lukstokens:rootremove:remove-token"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "token",
+                            "remove",
+                            "--token-id",
+                            "9",
+                            "/dev/disk/by-id/root-luks",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "lukskeyslots:rootremove:remove-key"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "lukstokens:rootremove:remove-token"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
+                })
+        }));
+    }
+
+    #[test]
     fn swap_and_luks_commands_follow_policy_gates() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

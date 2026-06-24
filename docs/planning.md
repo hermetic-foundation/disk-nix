@@ -485,7 +485,9 @@ same access-material command plans. `luksChangeKey` is used for key-file
 property updates. Executable keyslot add/change plans require a LUKS backing
 device and replacement key file; token imports require a token JSON file.
 Removal requires both the device and keyslot number or token id, and remains
-blocked by the potential-data-loss policy.
+blocked by the potential-data-loss policy. Logical keyslot and token names can
+declare concrete slot/token ids with `keySlot`, `key-slot`, `slot`, `tokenId`,
+`token-id`, or `token`.
 LVM cache command plans use `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` for `lvmCaches` lifecycle
 declarations. Executable attach plans require an origin `vg/lv` target and a
