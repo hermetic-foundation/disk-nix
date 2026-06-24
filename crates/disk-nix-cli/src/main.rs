@@ -184,6 +184,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// List discovered host-visible LUNs and SCSI path metadata.
+    Luns {
+        /// Emit JSON for matching graph nodes.
+        #[arg(long)]
+        json: bool,
+    },
     /// List discovered NFS exports and client mounts.
     Nfs {
         /// Emit JSON for matching graph nodes.
@@ -543,6 +549,15 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 print_filtered_json(output, &graph, is_iscsi_node)?;
             } else {
                 print_iscsi(output, &graph)?;
+            }
+            Ok(())
+        }
+        Command::Luns { json } => {
+            let graph = collect_graph()?;
+            if json {
+                print_filtered_json(output, &graph, is_lun_node)?;
+            } else {
+                print_luns(output, &graph)?;
             }
             Ok(())
         }
@@ -1958,6 +1973,32 @@ fn print_iscsi(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> 
     Ok(())
 }
 
+fn print_luns(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
+    writeln!(
+        output,
+        "{:<22} {:<40} {:>12} {:<18} {:<10} {:<18} DETAILS",
+        "KIND", "NAME", "SIZE", "PATH", "TRANSPORT", "GENERIC"
+    )?;
+    for node in graph.nodes.iter().filter(|node| is_lun_node(node)) {
+        writeln!(
+            output,
+            "{:<22} {:<40} {:>12} {:<18} {:<10} {:<18} {}",
+            node.kind,
+            node.name,
+            human_bytes(node.size_bytes),
+            node.path
+                .as_deref()
+                .or_else(|| property_value(node, "scsi.block-device"))
+                .or_else(|| property_value(node, "iscsi.attached-disk"))
+                .unwrap_or("-"),
+            property_value(node, "scsi.transport").unwrap_or("-"),
+            property_value(node, "scsi.generic-device").unwrap_or("-"),
+            usage_details(node)
+        )?;
+    }
+    Ok(())
+}
+
 fn print_nfs(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
@@ -2686,6 +2727,10 @@ fn is_iscsi_node(node: &Node) -> bool {
         .properties
         .iter()
         .any(|property| property.key.starts_with("iscsi."))
+}
+
+fn is_lun_node(node: &Node) -> bool {
+    node.kind == NodeKind::Lun
 }
 
 fn is_nfs_node(node: &Node) -> bool {
@@ -4173,16 +4218,17 @@ mod tests {
 
     use super::{
         confirmation_file_accepts, is_cache_node, is_complex_filesystem_node, is_device_node,
-        is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node, is_lvm_node,
-        is_mapping_node, is_multipath_node, is_network_storage_node, is_nfs_node, is_nvme_node,
-        is_partition_node, is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node,
-        is_volume_node, is_zfs_node, is_zram_node, iscsi_lun_count, mount_details, nfs_mount_count,
-        print_cache, print_complex_filesystems, print_devices, print_encryption, print_filesystems,
-        print_filtered_json, print_inspect, print_inspect_json, print_iscsi, print_loop, print_lvm,
-        print_mappings, print_mounts, print_multipath, print_network_storage, print_nfs,
-        print_nvme, print_partitions, print_pools, print_raid, print_snapshots, print_swap,
-        print_usage, print_vdo, print_volumes, print_zfs, print_zram, snapshot_source,
-        usage_details, usage_percent, zfs_child_count,
+        is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node, is_lun_node,
+        is_lvm_node, is_mapping_node, is_multipath_node, is_network_storage_node, is_nfs_node,
+        is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node,
+        is_swap_node, is_vdo_node, is_volume_node, is_zfs_node, is_zram_node, iscsi_lun_count,
+        mount_details, nfs_mount_count, print_cache, print_complex_filesystems, print_devices,
+        print_encryption, print_filesystems, print_filtered_json, print_inspect,
+        print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm, print_mappings,
+        print_mounts, print_multipath, print_network_storage, print_nfs, print_nvme,
+        print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
+        print_vdo, print_volumes, print_zfs, print_zram, snapshot_source, usage_details,
+        usage_percent, zfs_child_count,
     };
 
     #[test]
@@ -4273,6 +4319,11 @@ mod tests {
             "tank/home@before"
         )));
         assert!(is_network_storage_node(&Node::new(
+            "lun:iqn.example:0",
+            NodeKind::Lun,
+            "iqn.example:0"
+        )));
+        assert!(is_lun_node(&Node::new(
             "lun:iqn.example:0",
             NodeKind::Lun,
             "iqn.example:0"
@@ -6182,6 +6233,75 @@ mod tests {
         assert!(output.contains("attached-disk=sdb"));
         assert!(output.contains("scsi-address=4:0:0:0 scsi-generic=/dev/sg2"));
         assert!(output.contains("scsi-transport=iscsi scsi-state=running scsi-queue-depth=64"));
+    }
+
+    #[test]
+    fn luns_table_includes_scsi_path_and_json_neighbors() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "iscsi-target:iqn.2026-06.example:storage",
+                NodeKind::IscsiTarget,
+                "iqn.2026-06.example:storage",
+            )
+            .with_property("iscsi.node-portal", "10.0.0.10:3260,1"),
+        );
+        graph.add_node(
+            Node::new(
+                "iscsi-lun:iqn.2026-06.example:storage:0",
+                NodeKind::Lun,
+                "0",
+            )
+            .with_path("/dev/sdb")
+            .with_size_bytes(1_073_741_824)
+            .with_property("iscsi.attached-disk", "sdb")
+            .with_property("iscsi.attached-disk-state", "running")
+            .with_property("scsi.address", "4:0:0:0")
+            .with_property("scsi.host", "4")
+            .with_property("scsi.channel", "0")
+            .with_property("scsi.target", "0")
+            .with_property("scsi.lun", "0")
+            .with_property("scsi.transport", "iscsi")
+            .with_property("scsi.generic-device", "/dev/sg2")
+            .with_property("scsi.state", "running")
+            .with_property("scsi.queue-depth", "64"),
+        );
+        graph.add_node(Node::new(
+            "block:/dev/sdb",
+            NodeKind::PhysicalDisk,
+            "/dev/sdb",
+        ));
+        graph.add_edge(Edge::new(
+            "iscsi-target:iqn.2026-06.example:storage",
+            "iscsi-lun:iqn.2026-06.example:storage:0",
+            Relationship::Contains,
+        ));
+        graph.add_edge(Edge::new(
+            "iscsi-lun:iqn.2026-06.example:storage:0",
+            "block:/dev/sdb",
+            Relationship::Backs,
+        ));
+
+        let mut output = Vec::new();
+        print_luns(&mut output, &graph).expect("LUN table renders");
+        let output = String::from_utf8(output).expect("table is utf8");
+
+        assert!(output.contains("TRANSPORT"));
+        assert!(output.contains("GENERIC"));
+        assert!(output.contains("1.0 GiB"));
+        assert!(output.contains("/dev/sdb"));
+        assert!(output.contains("iscsi"));
+        assert!(output.contains("/dev/sg2"));
+        assert!(output.contains("scsi-address=4:0:0:0 scsi-host=4 scsi-channel=0"));
+        assert!(output.contains("scsi-target=0 scsi-lun=0"));
+        assert!(output.contains("attached-disk=sdb attached-disk-state=running"));
+
+        let mut json = Vec::new();
+        print_filtered_json(&mut json, &graph, is_lun_node).expect("LUN json renders");
+        let json = String::from_utf8(json).expect("json is utf8");
+        assert!(json.contains("iscsi-lun:iqn.2026-06.example:storage:0"));
+        assert!(json.contains("iscsi-target:iqn.2026-06.example:storage"));
+        assert!(json.contains("block:/dev/sdb"));
     }
 
     #[test]

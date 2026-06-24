@@ -164,6 +164,7 @@ disk-nix loop
 disk-nix swap
 disk-nix zram
 disk-nix iscsi
+disk-nix luns
 disk-nix nfs
 disk-nix mounts
 disk-nix network-storage
@@ -194,6 +195,7 @@ disk-nix loop --json
 disk-nix swap --json
 disk-nix zram --json
 disk-nix iscsi --json
+disk-nix luns --json
 disk-nix nfs --json
 disk-nix mounts --json
 disk-nix network-storage --json
@@ -377,6 +379,9 @@ Use these commands for:
   session to target imports, target-contained LUN counts, and
   LUN-to-block-device backing relationships when `iscsiadm --mode node -P 1`,
   `iscsiadm --mode session -P 3`, or `lsscsi` exposes them
+- `luns`: host-visible LUN nodes, including path, size, transport, generic
+  device, SCSI host/channel/target/LUN coordinates, queue state, attached disk
+  state, and one-hop target or backing-block relationships
 - `nfs`: NFS server exports and client mounts, including exportfs path,
   client, server/export split, export option state such as rw/ro, sync,
   subtree checking, security flavor, squash flags, FSID, NFS protocol version,
