@@ -2744,6 +2744,32 @@ fn usage_details(node: &Node) -> String {
         ("cryptsetup.luks-token-count", "tokens"),
         ("cryptsetup.luks-keyslots", "keyslot-ids"),
         ("cryptsetup.luks-tokens", "token-ids"),
+        ("cryptsetup.luks-keyslot-0-type", "keyslot-0"),
+        ("cryptsetup.luks-keyslot-0-priority", "keyslot-0-priority"),
+        ("cryptsetup.luks-keyslot-0-cipher", "keyslot-0-cipher"),
+        (
+            "cryptsetup.luks-keyslot-0-cipher-key",
+            "keyslot-0-cipher-key",
+        ),
+        ("cryptsetup.luks-keyslot-0-pbkdf", "keyslot-0-pbkdf"),
+        ("cryptsetup.luks-keyslot-0-time-cost", "keyslot-0-time"),
+        ("cryptsetup.luks-keyslot-0-memory", "keyslot-0-memory"),
+        ("cryptsetup.luks-keyslot-0-threads", "keyslot-0-threads"),
+        ("cryptsetup.luks-keyslot-1-type", "keyslot-1"),
+        ("cryptsetup.luks-keyslot-1-priority", "keyslot-1-priority"),
+        ("cryptsetup.luks-keyslot-1-cipher", "keyslot-1-cipher"),
+        (
+            "cryptsetup.luks-keyslot-1-cipher-key",
+            "keyslot-1-cipher-key",
+        ),
+        ("cryptsetup.luks-keyslot-1-pbkdf", "keyslot-1-pbkdf"),
+        ("cryptsetup.luks-keyslot-1-time-cost", "keyslot-1-time"),
+        ("cryptsetup.luks-keyslot-1-memory", "keyslot-1-memory"),
+        ("cryptsetup.luks-keyslot-1-threads", "keyslot-1-threads"),
+        ("cryptsetup.luks-token-0-type", "token-0"),
+        ("cryptsetup.luks-token-0-keyslot", "token-0-keyslot"),
+        ("cryptsetup.luks-token-1-type", "token-1"),
+        ("cryptsetup.luks-token-1-keyslot", "token-1-keyslot"),
         ("cryptsetup.luks-data-cipher", "data-cipher"),
         ("cryptsetup.luks-data-offset", "data-offset"),
         ("cryptsetup.luks-data-length", "data-length"),
@@ -5012,7 +5038,19 @@ mod tests {
             .with_property("cryptsetup.luks-keyslot-count", "2")
             .with_property("cryptsetup.luks-token-count", "1")
             .with_property("cryptsetup.luks-keyslots", "0,1")
-            .with_property("cryptsetup.luks-tokens", "0"),
+            .with_property("cryptsetup.luks-tokens", "0")
+            .with_property("cryptsetup.luks-keyslot-0-type", "luks2")
+            .with_property("cryptsetup.luks-keyslot-0-priority", "normal")
+            .with_property("cryptsetup.luks-keyslot-0-cipher", "aes-xts-plain64")
+            .with_property("cryptsetup.luks-keyslot-0-cipher-key", "512 bits")
+            .with_property("cryptsetup.luks-keyslot-0-pbkdf", "argon2id")
+            .with_property("cryptsetup.luks-keyslot-0-time-cost", "4")
+            .with_property("cryptsetup.luks-keyslot-0-memory", "1048576")
+            .with_property("cryptsetup.luks-keyslot-0-threads", "4")
+            .with_property("cryptsetup.luks-keyslot-1-type", "luks2")
+            .with_property("cryptsetup.luks-keyslot-1-priority", "ignored")
+            .with_property("cryptsetup.luks-token-0-type", "systemd-tpm2")
+            .with_property("cryptsetup.luks-token-0-keyslot", "0"),
         );
 
         let mut output = Vec::new();
@@ -5029,6 +5067,15 @@ mod tests {
         assert!(output.contains("active=true in-use=true cipher=aes-xts-plain64"));
         assert!(output.contains("luks=2 epoch=7 metadata-area=16384 [bytes]"));
         assert!(output.contains("keyslot-ids=0,1 token-ids=0"));
+        assert!(output.contains(
+            "keyslot-0=luks2 keyslot-0-priority=normal keyslot-0-cipher=aes-xts-plain64"
+        ));
+        assert!(output.contains(
+            "keyslot-0-cipher-key=512 bits keyslot-0-pbkdf=argon2id keyslot-0-time=4 keyslot-0-memory=1048576 keyslot-0-threads=4"
+        ));
+        assert!(output.contains(
+            "keyslot-1=luks2 keyslot-1-priority=ignored token-0=systemd-tpm2 token-0-keyslot=0"
+        ));
     }
 
     #[test]
@@ -5502,6 +5549,18 @@ mod tests {
             .with_property("cryptsetup.luks-token-count", "1")
             .with_property("cryptsetup.luks-keyslots", "0,1")
             .with_property("cryptsetup.luks-tokens", "0")
+            .with_property("cryptsetup.luks-keyslot-0-type", "luks2")
+            .with_property("cryptsetup.luks-keyslot-0-priority", "normal")
+            .with_property("cryptsetup.luks-keyslot-0-cipher", "aes-xts-plain64")
+            .with_property("cryptsetup.luks-keyslot-0-cipher-key", "512 bits")
+            .with_property("cryptsetup.luks-keyslot-0-pbkdf", "argon2id")
+            .with_property("cryptsetup.luks-keyslot-0-time-cost", "4")
+            .with_property("cryptsetup.luks-keyslot-0-memory", "1048576")
+            .with_property("cryptsetup.luks-keyslot-0-threads", "4")
+            .with_property("cryptsetup.luks-keyslot-1-type", "luks2")
+            .with_property("cryptsetup.luks-keyslot-1-priority", "ignored")
+            .with_property("cryptsetup.luks-token-0-type", "systemd-tpm2")
+            .with_property("cryptsetup.luks-token-0-keyslot", "0")
             .with_property("cryptsetup.luks-data-cipher", "aes-xts-plain64")
             .with_property("cryptsetup.luks-data-offset", "32768 [bytes]")
             .with_property("cryptsetup.luks-data-length", "(whole device)")
@@ -5590,9 +5649,15 @@ mod tests {
         ));
         assert!(
             output.contains(
-                "active=true in-use=true cipher=aes-xts-plain64 luks=2 epoch=7 metadata-area=16384 [bytes] keyslots-area=16744448 [bytes] subsystem=(no subsystem) flags=allow-discards keyslots=2 tokens=1 keyslot-ids=0,1 token-ids=0 data-cipher=aes-xts-plain64 data-offset=32768 [bytes] data-length=(whole device) data-sector=4096 [bytes]"
+                "active=true in-use=true cipher=aes-xts-plain64 luks=2 epoch=7 metadata-area=16384 [bytes] keyslots-area=16744448 [bytes] subsystem=(no subsystem) flags=allow-discards keyslots=2 tokens=1 keyslot-ids=0,1 token-ids=0 keyslot-0=luks2 keyslot-0-priority=normal"
             )
         );
+        assert!(output.contains(
+            "keyslot-0-cipher=aes-xts-plain64 keyslot-0-cipher-key=512 bits keyslot-0-pbkdf=argon2id keyslot-0-time=4 keyslot-0-memory=1048576 keyslot-0-threads=4"
+        ));
+        assert!(output.contains(
+            "keyslot-1=luks2 keyslot-1-priority=ignored token-0=systemd-tpm2 token-0-keyslot=0 data-cipher=aes-xts-plain64"
+        ));
         assert!(
             output.contains(
                 "dm=dm-2 wwid=3600508b400105e210000900000490000 vendor=IBM,2145 size=100G"

@@ -104,6 +104,7 @@ fn parse_luks_dump(device_path: &str, bytes: &[u8]) -> Result<LuksDump, ProbeErr
     };
     let mut section: Option<&str> = None;
     let mut current_keyslot: Option<String> = None;
+    let mut current_token: Option<String> = None;
 
     for line in text.lines() {
         let trimmed = line.trim();
@@ -114,12 +115,13 @@ fn parse_luks_dump(device_path: &str, bytes: &[u8]) -> Result<LuksDump, ProbeErr
         if !line.starts_with(char::is_whitespace) && trimmed.ends_with(':') {
             section = Some(trimmed.trim_end_matches(':'));
             current_keyslot = None;
+            current_token = None;
             continue;
         }
 
         match section {
             Some("Keyslots") => parse_keyslot_line(trimmed, &mut dump, &mut current_keyslot),
-            Some("Tokens") => parse_token_line(trimmed, &mut dump),
+            Some("Tokens") => parse_token_line(trimmed, &mut dump, &mut current_token),
             Some("Data segments") => parse_data_segment_line(trimmed, &mut dump),
             _ => parse_luks_header_line(trimmed, &mut dump),
         }
@@ -214,12 +216,27 @@ fn parse_keyslot_line(line: &str, dump: &mut LuksDump, current_keyslot: &mut Opt
     }
 }
 
-fn parse_token_line(line: &str, dump: &mut LuksDump) {
+fn parse_token_line(line: &str, dump: &mut LuksDump, current_token: &mut Option<String>) {
     if let Some((token, kind)) = numbered_section_item(line) {
         dump.tokens.push(token.to_string());
         dump.properties.push((
             format!("cryptsetup.luks-token-{token}-type"),
             kind.to_string(),
+        ));
+        *current_token = Some(token.to_string());
+        return;
+    }
+
+    let Some(token) = current_token.as_deref() else {
+        return;
+    };
+    let Some((key, value)) = split_luks_key_value(line) else {
+        return;
+    };
+    if key == "Keyslot" {
+        dump.properties.push((
+            format!("cryptsetup.luks-token-{token}-{}", normalize_key(key)),
+            value.to_string(),
         ));
     }
 }
@@ -470,6 +487,12 @@ Tokens:
         }));
         assert!(container.properties.iter().any(|property| {
             property.key == "cryptsetup.luks-token-0-type" && property.value == "systemd-tpm2"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-token-0-keyslot" && property.value == "0"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-keyslot-0-pbkdf" && property.value == "argon2id"
         }));
         assert!(container.properties.iter().any(|property| {
             property.key == "cryptsetup.luks-data-sector" && property.value == "4096 [bytes]"

@@ -91,7 +91,8 @@ The current probe layer normalizes:
 - LUKS mapper status through `cryptsetup status` for active/in-use state,
   backing device, cipher, key size, key location, sector size/count, offset, and
   access mode; LUKS header metadata through `cryptsetup luksDump` for version,
-  UUID, label, data segment, keyslot, PBKDF, and token metadata
+  UUID, label, data segment, keyslot priority/cipher/PBKDF cost, and token
+  type/keyslot binding metadata
 - Device-mapper metadata through `dmsetup info` and `dmsetup deps` for mapper
   names, UUIDs, major/minor numbers, open counts, segment/event counts, and
   backing dependency edges

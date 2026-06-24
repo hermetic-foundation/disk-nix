@@ -250,7 +250,8 @@ Use these commands for:
   parent UUIDs, and ZFS user-reference, compression, and encryption details
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
-  counts, header area/epoch/flag details, data-segment cipher/offset/length
+  counts, keyslot priorities/ciphers/PBKDF cost metadata, token-to-keyslot
+  bindings, header area/epoch/flag details, data-segment cipher/offset/length
   details, dm name/UUID, major/minor numbers, open/segment counters, LVM
   segment data/metadata device mappings,
   thin-pool discard/zeroing/transaction details, cache segment policy/settings,
@@ -263,7 +264,8 @@ Use these commands for:
   and writeback rate when probes expose them
 - `encryption`: LUKS/dm-crypt mappings and header metadata, including cipher,
   active/in-use state, keyslot/token counts and ids, LUKS version, epoch,
-  metadata/keyslot area sizes, flags, subsystem, and data-segment details
+  metadata/keyslot area sizes, flags, subsystem, keyslot priority/cipher/PBKDF
+  details, token-to-keyslot bindings, and data-segment details
 - `cache`: bcache devices/cache sets, LVM cache/writecache metadata, bcachefs
   member-device cache accounting, and ZFS cache vdevs, including cache mode,
   policy, dirty/writeback data, cache-set identity, state/running flags,
