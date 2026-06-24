@@ -51,7 +51,7 @@ fn parse_maps(bytes: &[u8]) -> Result<Vec<MultipathMap>, ProbeError> {
             continue;
         }
 
-        if let Some((name, wwid, dm_name)) = parse_header(trimmed) {
+        if let Some((name, wwid, dm_name, vendor_product)) = parse_header(trimmed) {
             if let Some(map) = current.take() {
                 maps.push(map);
             }
@@ -59,7 +59,7 @@ fn parse_maps(bytes: &[u8]) -> Result<Vec<MultipathMap>, ProbeError> {
                 name,
                 wwid,
                 dm_name,
-                vendor_product: None,
+                vendor_product,
                 size: None,
                 features: None,
                 hwhandler: None,
@@ -152,7 +152,7 @@ fn add_map(graph: &mut StorageGraph, map: MultipathMap) {
     }
 }
 
-fn parse_header(line: &str) -> Option<(String, Option<String>, Option<String>)> {
+fn parse_header(line: &str) -> Option<(String, Option<String>, Option<String>, Option<String>)> {
     let first = line.split_whitespace().next()?;
     if !line.contains("dm-") || first.contains('=') {
         return None;
@@ -167,8 +167,13 @@ fn parse_header(line: &str) -> Option<(String, Option<String>, Option<String>)> 
         .split_whitespace()
         .find(|part| part.starts_with("dm-"))
         .map(ToOwned::to_owned);
+    let vendor_product = dm_name
+        .as_deref()
+        .and_then(|dm_name| line.split_once(dm_name))
+        .map(|(_, rest)| rest.trim().to_string())
+        .filter(|value| !value.is_empty());
 
-    Some((name, wwid, dm_name))
+    Some((name, wwid, dm_name, vendor_product))
 }
 
 fn parse_properties(map: &mut MultipathMap, line: &str) {
@@ -347,6 +352,9 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
             .expect("multipath map should exist");
         assert!(map.properties.iter().any(|property| {
             property.key == "multipath.features" && property.value == "1 queue_if_no_path"
+        }));
+        assert!(map.properties.iter().any(|property| {
+            property.key == "multipath.vendor-product" && property.value == "IBM,2145"
         }));
         assert!(map.properties.iter().any(|property| {
             property.key == "multipath.hwhandler" && property.value == "1 alua"
