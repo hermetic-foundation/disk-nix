@@ -1343,7 +1343,7 @@ fn topology_diagnostics_for_action(
 
     diagnostics.extend(size_diagnostic(action, node, &query));
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
-    diagnostics.extend(iscsi_login_diagnostic(action, node, &query));
+    diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics
@@ -1501,7 +1501,7 @@ fn mount_diagnostic(
 
 fn iscsi_login_diagnostic(
     action: &PlannedAction,
-    node: &Node,
+    matches: &[&Node],
     query: &str,
 ) -> Option<TopologyDiagnostic> {
     if action.operation != Operation::Login
@@ -1510,10 +1510,14 @@ fn iscsi_login_diagnostic(
         return None;
     }
 
-    let logged_in = property_value_from_node(node, "iscsi.connection-state")
-        .or_else(|| property_value_from_node(node, "iscsi.session-state"))
-        .is_some_and(is_logged_in_iscsi_state);
-    let (level, kind, message) = if logged_in {
+    let logged_in = matches
+        .iter()
+        .copied()
+        .find(|node| iscsi_node_is_logged_in(node));
+    let current = logged_in
+        .or_else(|| matches.first().copied())
+        .map(current_node_summary);
+    let (level, kind, message) = if logged_in.is_some() {
         (
             TopologyDiagnosticLevel::Info,
             TopologyDiagnosticKind::IscsiLoginAlreadySatisfied,
@@ -1533,8 +1537,14 @@ fn iscsi_login_diagnostic(
         kind,
         query: query.to_string(),
         message,
-        current: Some(current_node_summary(node)),
+        current,
     })
+}
+
+fn iscsi_node_is_logged_in(node: &Node) -> bool {
+    property_value_from_node(node, "iscsi.connection-state")
+        .or_else(|| property_value_from_node(node, "iscsi.session-state"))
+        .is_some_and(is_logged_in_iscsi_state)
 }
 
 fn is_logged_in_iscsi_state(value: &str) -> bool {
@@ -12288,6 +12298,57 @@ mod tests {
         assert!(plan.actions.is_empty());
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.root:login"
+                && diagnostic.kind == TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_prefers_logged_in_iscsi_session_over_configured_target() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "operation": "login",
+                  "portal": "192.0.2.10:3260"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "iscsi-target:iqn.2026-06.example:storage.root",
+                NodeKind::IscsiTarget,
+                "iqn.2026-06.example:storage.root",
+            )
+            .with_property("iscsi.node-configured", "true"),
+        );
+        graph.add_node(
+            Node::new(
+                "iscsi-session:12",
+                NodeKind::IscsiSession,
+                "iscsi-session:12",
+            )
+            .with_property("iscsi.target", "iqn.2026-06.example:storage.root")
+            .with_property("iscsi.connection-state", "LOGGED IN"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.root:login"
+                && diagnostic.current.as_ref().is_some_and(|current| {
+                    current.kind == NodeKind::IscsiSession && current.id == "iscsi-session:12"
+                })
                 && diagnostic.kind == TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
         }));
     }

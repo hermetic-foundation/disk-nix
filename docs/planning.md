@@ -446,9 +446,10 @@ a `topologyComparison` section to the plan. The comparison matches action
 targets against the storage graph and reports missing targets, current size
 state versus `desiredSize`, filesystem type conflicts, and already-satisfied
 mount, iSCSI login, or property updates where the current graph has enough
-data. Already-satisfied grow, shrink, iSCSI login, mount, and set-property
-actions with no warning diagnostics are suppressed from the actionable plan and
-counted in
+data. iSCSI login reconciliation checks all matching target and session nodes
+so an active session is not hidden by a configured but disconnected target.
+Already-satisfied grow, shrink, iSCSI login, mount, and set-property actions
+with no warning diagnostics are suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy

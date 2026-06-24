@@ -566,10 +566,11 @@ With `--probe-current`, the CLI also probes the current host and adds
 size diagnostics, filesystem type conflicts, and already-satisfied property or
 size checks. Mount actions are also compared with `mount.source` when the
 current graph has mountpoint data, and iSCSI login actions are compared with
-current session state when target/session metadata is available. Safe
-already-satisfied grow, shrink, iSCSI login, mount, and property actions that
-have no warning diagnostics are suppressed from the actionable plan and counted
-as `topologyComparison.summary.suppressedActionCount`; mountpoints using a
+current session state across all matching target/session nodes when metadata is
+available. Safe already-satisfied grow, shrink, iSCSI login, mount, and
+property actions that have no warning diagnostics are suppressed from the
+actionable plan and counted as
+`topologyComparison.summary.suppressedActionCount`; mountpoints using a
 different source or known iSCSI targets without a logged-in session stay
 actionable with a warning diagnostic.
 
