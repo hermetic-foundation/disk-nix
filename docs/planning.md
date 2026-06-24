@@ -470,6 +470,11 @@ a matched LVM object is in the opposite state.
 LUKS open/close reconciliation uses `cryptsetup.active` topology metadata to
 suppress mapper opens that are already active and mapper closes that are
 already inactive; opposite-state mappers remain actionable with a warning.
+Loop-device create/destroy reconciliation uses `loop.back-file` topology
+metadata to suppress create actions only when the loop device already maps the
+declared backing file and suppress destroy/detach actions only when the loop
+device is already absent; occupied loop devices with different backing files
+stay actionable with a warning.
 NVMe namespace attach/detach reconciliation suppresses attach actions only
 when the declared namespace path is already visible and suppresses detach
 actions only when the declared namespace path is already absent; opposite
@@ -486,11 +491,11 @@ actions are suppressed only when a logged-in session is present; logout actions
 are suppressed only when the target is known and no logged-in session is
 present.
 Already-satisfied grow, shrink, iSCSI login/logout, LVM
-activation/deactivation, LUKS open, LUN attach/detach, NVMe namespace
-attach/detach, mount, unmount, remount, NFS export/unexport, VDO start, VDO
-stop, MD assemble, ZFS pool import, LVM volume-group import/export, and
-set-property actions with no warning diagnostics are suppressed from the
-actionable plan and counted in
+activation/deactivation, LUKS open, loop create/destroy, LUN attach/detach,
+NVMe namespace attach/detach, mount, unmount, remount, NFS export/unexport,
+VDO start, VDO stop, MD assemble, ZFS pool import, LVM volume-group
+import/export, and set-property actions with no warning diagnostics are
+suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy

@@ -262,6 +262,11 @@ pub enum TopologyDiagnosticKind {
     LuksCloseRequired,
     LuksOpenAlreadySatisfied,
     LuksOpenRequired,
+    LoopCreateAlreadySatisfied,
+    LoopCreateConflict,
+    LoopCreateRequired,
+    LoopDetachAlreadySatisfied,
+    LoopDetachRequired,
     MdAssembleAlreadySatisfied,
     MdAssembleRequired,
     MountAlreadySatisfied,
@@ -774,6 +779,8 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
                         | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
                         | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
+                        | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
+                        | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
                         | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
@@ -1338,7 +1345,8 @@ fn already_satisfied_action_ids(
     for action in actions {
         if !matches!(
             action.operation,
-            Operation::Grow
+            Operation::Create
+                | Operation::Grow
                 | Operation::Shrink
                 | Operation::Attach
                 | Operation::Detach
@@ -1357,6 +1365,7 @@ fn already_satisfied_action_ids(
                 | Operation::Unexport
                 | Operation::Start
                 | Operation::Stop
+                | Operation::Destroy
                 | Operation::SetProperty
         ) {
             continue;
@@ -1382,6 +1391,8 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
                     | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
                     | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
+                    | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
+                    | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
                     | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
@@ -1412,6 +1423,9 @@ fn topology_diagnostics_for_action(
 
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
+        if let Some(diagnostic) = loop_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = nvme_namespace_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1456,6 +1470,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
     diagnostics.extend(luks_close_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
+    diagnostics.extend(loop_present_diagnostic(action, node, &query));
     diagnostics.extend(md_assemble_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
@@ -1827,6 +1842,103 @@ fn luks_close_diagnostic(
             TopologyDiagnosticKind::LuksCloseAlreadySatisfied,
             format!("LUKS mapper {query} is already inactive"),
         )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn loop_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("loopDevices") {
+        return None;
+    }
+
+    let (level, kind, message) = match action.operation {
+        Operation::Create => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LoopCreateRequired,
+            format!("loop device {query} is not currently mapped"),
+        ),
+        Operation::Destroy | Operation::Detach => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LoopDetachAlreadySatisfied,
+            format!("loop device {query} is already absent from current topology"),
+        ),
+        _ => return None,
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: None,
+    })
+}
+
+fn loop_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("loopDevices") {
+        return None;
+    }
+
+    match action.operation {
+        Operation::Create => loop_create_diagnostic(action, node, query),
+        Operation::Destroy | Operation::Detach => Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::LoopDetachRequired,
+            query: query.to_string(),
+            message: format!("loop device {query} is still mapped"),
+            current: Some(current_node_summary(node)),
+        }),
+        _ => None,
+    }
+}
+
+fn loop_create_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    let desired_backing = action.context.device.as_deref();
+    let current_backing = property_value_from_node(node, "loop.back-file");
+    let (level, kind, message) = match (desired_backing, current_backing) {
+        (Some(desired), Some(current)) if desired == current => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LoopCreateAlreadySatisfied,
+            format!("loop device {query} already maps backing file {desired}"),
+        ),
+        (Some(desired), Some(current)) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LoopCreateConflict,
+            format!("loop device {query} maps backing file {current}, desired {desired}"),
+        ),
+        (Some(desired), None) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LoopCreateConflict,
+            format!("loop device {query} is present but does not report backing file {desired}"),
+        ),
+        (None, Some(current)) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LoopCreateConflict,
+            format!("loop device {query} is already mapped to backing file {current}"),
+        ),
+        (None, None) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LoopCreateConflict,
+            format!("loop device {query} is already present with unknown backing file"),
+        ),
     };
 
     Some(TopologyDiagnostic {
@@ -14663,6 +14775,180 @@ mod tests {
             diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.old:logout"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::IscsiLogoutRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_loop_create_when_mapping_matches() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "loopDevices": {
+                "/dev/loop7": {
+                  "operation": "create",
+                  "device": "/var/lib/images/root.img"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/loop7", NodeKind::LoopDevice, "/dev/loop7")
+                .with_path("/dev/loop7")
+                .with_property("loop.back-file", "/var/lib/images/root.img"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "loopdevices:/dev/loop7:create"
+                && diagnostic.kind == TopologyDiagnosticKind::LoopCreateAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_loop_create_when_mapping_differs() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "loopDevices": {
+                "/dev/loop7": {
+                  "operation": "create",
+                  "device": "/var/lib/images/root.img"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/loop7", NodeKind::LoopDevice, "/dev/loop7")
+                .with_path("/dev/loop7")
+                .with_property("loop.back-file", "/var/lib/images/other.img"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "loopdevices:/dev/loop7:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LoopCreateConflict
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_loop_create_when_mapping_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "loopDevices": {
+                "/dev/loop7": {
+                  "operation": "create",
+                  "device": "/var/lib/images/root.img"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "loopdevices:/dev/loop7:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::LoopCreateRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_loop_destroy_when_mapping_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "loopDevices": {
+                "/dev/loop9": {
+                  "operation": "destroy"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "loopdevices:/dev/loop9:destroy"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::LoopDetachAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_loop_destroy_when_mapping_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "loopDevices": {
+                "/dev/loop9": {
+                  "operation": "destroy"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/loop9", NodeKind::LoopDevice, "/dev/loop9")
+                .with_path("/dev/loop9")
+                .with_property("loop.back-file", "/var/lib/images/old.img"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "loopdevices:/dev/loop9:destroy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LoopDetachRequired
         }));
     }
 

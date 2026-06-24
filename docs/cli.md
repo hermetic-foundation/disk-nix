@@ -570,8 +570,10 @@ suppressed when the mountpoint is absent, remount actions treat declared
 options as a required subset of current mount options, LVM
 activation and deactivation actions are compared with `lvm.active` where that
 metadata is available, LUKS open and close actions are compared with
-`cryptsetup.active`, LUN attach/detach and NVMe namespace attach/detach actions
-are compared with concrete host-visible path matches, NFS export actions are compared with
+`cryptsetup.active`, loop-device create/destroy actions are compared with
+`loop.back-file` mapping metadata, LUN attach/detach and NVMe namespace
+attach/detach actions are compared with concrete host-visible path matches,
+NFS export actions are compared with
 `nfs.export-client` and `nfs.export-option-*` properties, NFS unexport actions
 are suppressed when the export is absent, VDO start actions are compared with
 `vdo.operating-mode`, VDO stop actions are compared with
@@ -583,14 +585,16 @@ assemble actions are compared with `md.state`, `md.degraded-devices`, and
 session state across all matching target/session nodes when metadata is
 available. Safe already-satisfied grow, shrink, iSCSI login/logout, LVM
 activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
-LUN attach/detach, NVMe namespace attach/detach, mount, unmount, remount, NFS
-export/unexport, VDO start, VDO stop, MD assemble, ZFS pool import, and property actions that have no warning diagnostics are
+loop create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
+unmount, remount, NFS export/unexport, VDO start, VDO stop, MD assemble, ZFS
+pool import, and property actions that have no warning diagnostics are
 suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
-inactive LUKS open targets, active LUKS close targets, absent LUN attach paths,
-visible LUN detach paths, absent NVMe namespace attach paths, visible NVMe
-namespace detach paths, non-normal VDO start
+inactive LUKS open targets, active LUKS close targets, loop devices mapped to
+different backing files, still-mapped loop detach targets, absent LUN attach
+paths, visible LUN detach paths, absent NVMe namespace attach paths, visible
+NVMe namespace detach paths, non-normal VDO start
 modes, running VDO stop targets, degraded or failed MD arrays, degraded ZFS
 pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
@@ -688,7 +692,10 @@ concrete bcache device remain marked `needs-domain-implementation`.
 Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
 detach operations. Logical loop declarations can supply that target with
 `target` or `path`; `device` is reserved for the backing file or block device
-used by create plans.
+used by create plans. Current-topology probing suppresses loop create actions
+only when the loop device already maps the declared backing file and suppresses
+destroy/detach actions only when the loop device is already absent; different
+existing backing files stay actionable with a warning.
 Backing-file command plans use `backingFiles` declarations for file-backed
 storage origins. `operation = "rescan"` renders read-only `stat`, `du`, and
 graph inspection commands. `operation = "grow"` renders `truncate --size`
