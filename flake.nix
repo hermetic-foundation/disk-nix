@@ -854,6 +854,24 @@
 
         checks = {
           inherit diskNix;
+          clippy = pkgs.rustPlatform.buildRustPackage {
+            pname = "disk-nix-clippy";
+            version = "0.1.0";
+            src = self;
+            cargoLock.lockFile = ./Cargo.lock;
+            nativeBuildInputs = [ pkgs.clippy ];
+            buildPhase = ''
+              runHook preBuild
+              cargo clippy --workspace --all-targets --offline -- -D warnings
+              runHook postBuild
+            '';
+            doCheck = false;
+            installPhase = ''
+              runHook preInstall
+              touch "$out"
+              runHook postInstall
+            '';
+          };
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''
             simplePlan=$(mktemp)
             lifecyclePlan=$(mktemp)

@@ -47,9 +47,9 @@ Or run all configured checks:
 nix flake check
 ```
 
-The flake checks build the CLI, run workspace tests, validate the NixOS module,
-and execute the checked-in example specs through `plan`, `apply`, and
-`--script-out` so JSON contracts and review-script generation stay covered.
+The flake checks build the CLI, run workspace tests and clippy, validate the
+NixOS module, and execute the checked-in example specs through `plan`, `apply`,
+and `--script-out` so JSON contracts and review-script generation stay covered.
 
 ## CLI
 
