@@ -183,10 +183,13 @@ Examples:
   and dependent
   consumers must be coordinated. LUKS header label, subsystem, and UUID
   property updates are offline-required identity metadata changes rendered
-  through `cryptsetup config` or `cryptsetup luksUUID`. Mapper close keeps the
-  LUKS header and backing data intact unless a separate format action is
-  requested. Logical LUKS declaration keys can declare the concrete mapper name
-  with `target`, `mapperName`, `mapper`, or `name`.
+  through `cryptsetup config` or `cryptsetup luksUUID`. Current-topology
+  comparison matches those property actions by backing device and reconciles
+  declared aliases against probed LUKS identity plus `cryptsetup.luks-*`
+  header metadata before suppressing already-satisfied updates. Mapper close
+  keeps the LUKS header and backing data intact unless a separate format action
+  is requested. Logical LUKS declaration keys can declare the concrete mapper
+  name with `target`, `mapperName`, `mapper`, or `name`.
 - Btrfs subvolume creation is online, while destruction is destructive and
   suggests read-only snapshots or rename-first validation. Btrfs subvolume
   `operation = "rescan"` is online and read-only; it refreshes subvolume

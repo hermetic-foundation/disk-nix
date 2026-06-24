@@ -590,9 +590,11 @@ suppressed when the mountpoint is absent, remount actions treat declared
 options as a required subset of current mount options, LVM
 activation and deactivation actions are compared with `lvm.active` where that
 metadata is available, LUKS open and close actions are compared with
-`cryptsetup.active`, and LUKS keyslot/token removal actions are compared with
-`cryptsetup.luks-keyslots` and `cryptsetup.luks-tokens` header metadata from
-the matched container. Loop-device create/destroy actions are compared with
+`cryptsetup.active`, LUKS label/subsystem/UUID property actions are reconciled
+against probed identity and `cryptsetup.luks-*` header metadata, and LUKS
+keyslot/token removal actions are compared with `cryptsetup.luks-keyslots` and
+`cryptsetup.luks-tokens` header metadata from the matched container. Loop-device
+create/destroy actions are compared with
 `loop.back-file` mapping metadata, device-mapper destroy actions are compared
 with current mapper presence and `dm.open-count` metadata, multipath destroy
 actions are compared with current map presence plus WWID or dm map metadata,
@@ -816,9 +818,11 @@ remain reviewable. `operation = "close"` plans render offline-policy-gated
 `cryptsetup close` steps and keep the backing LUKS container intact for later
 reopen. LUKS header label and subsystem property updates render
 `cryptsetup config <device> --label` or `--subsystem`, while UUID updates render
-`cryptsetup luksUUID <device> --uuid <uuid>`. Logical LUKS declaration keys can
-declare the concrete mapper name with `target`, `mapperName`, `mapper`, or
-`name`.
+`cryptsetup luksUUID <device> --uuid <uuid>`. Current-topology probing matches
+these property actions by backing device and suppresses already-satisfied
+label, subsystem, and UUID declarations after comparing probed LUKS identity and
+header metadata. Logical LUKS declaration keys can declare the concrete mapper
+name with `target`, `mapperName`, `mapper`, or `name`.
 Disk initialization plans render policy-gated `parted mklabel` and partition
 table reread commands after inspecting the target disk. With
 `--probe-current`, disk create is suppressed when the matched physical disk
