@@ -8365,8 +8365,8 @@ fn classify_operation(
             }),
         ),
         Operation::Scrub if collection == "filesystems" => {
-            if string_field(object, &["fsType", "type"]).as_deref() == Some("btrfs") {
-                (
+            match string_field(object, &["fsType", "type"]).as_deref() {
+                Some("btrfs") => (
                     RiskClass::Online,
                     false,
                     Some(Advice {
@@ -8380,14 +8380,28 @@ fn classify_operation(
                             "monitor scrub status until completion".to_string(),
                         ],
                     }),
-                )
-            } else {
-                (
+                ),
+                Some("bcachefs") => (
+                    RiskClass::Online,
+                    false,
+                    Some(Advice {
+                        summary: "bcachefs scrub verifies filesystem data and metadata online"
+                            .to_string(),
+                        alternatives: vec![
+                            "review bcachefs fs usage and device health before scrubbing"
+                                .to_string(),
+                            "run offline filesystem checks when metadata corruption is suspected"
+                                .to_string(),
+                            "monitor scrub output until completion".to_string(),
+                        ],
+                    }),
+                ),
+                _ => (
                     RiskClass::Unsupported,
                     false,
                     Some(Advice {
                         summary:
-                            "filesystem scrub command mapping is currently available for Btrfs"
+                            "filesystem scrub command mapping is currently available for Btrfs and bcachefs"
                                 .to_string(),
                         alternatives: vec![
                             "use filesystem check for ext or XFS consistency validation"
@@ -8397,7 +8411,7 @@ fn classify_operation(
                                 .to_string(),
                         ],
                     }),
-                )
+                ),
             }
         }
         Operation::Trim if collection == "filesystems" => (
@@ -14433,6 +14447,11 @@ mod tests {
                   "fsType": "btrfs",
                   "operation": "scrub"
                 },
+                "bulk": {
+                  "mountpoint": "/bulk",
+                  "fsType": "bcachefs",
+                  "operation": "scrub"
+                },
                 "archive": {
                   "mountpoint": "/archive",
                   "fsType": "ext4",
@@ -14448,7 +14467,7 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 5);
+        assert_eq!(plan.summary.action_count, 7);
         assert_eq!(plan.summary.unsupported_count, 1);
         let btrfs = plan
             .actions
@@ -14458,6 +14477,21 @@ mod tests {
         assert_eq!(btrfs.operation, Operation::Scrub);
         assert_eq!(btrfs.risk, RiskClass::Online);
         assert_eq!(btrfs.context.target.as_deref(), Some("/data"));
+
+        let bcachefs = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "filesystems:bulk:scrub")
+            .expect("bcachefs scrub action exists");
+        assert_eq!(bcachefs.operation, Operation::Scrub);
+        assert_eq!(bcachefs.risk, RiskClass::Online);
+        assert_eq!(bcachefs.context.target.as_deref(), Some("/bulk"));
+        assert!(
+            bcachefs
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("bcachefs scrub verifies") })
+        );
 
         let pool = plan
             .actions
@@ -14477,7 +14511,7 @@ mod tests {
             unsupported
                 .advice
                 .as_ref()
-                .is_some_and(|advice| { advice.summary.contains("available for Btrfs") })
+                .is_some_and(|advice| { advice.summary.contains("Btrfs and bcachefs") })
         );
     }
 
