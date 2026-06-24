@@ -647,6 +647,7 @@ disk-nix apply --spec ./examples/lifecycle-update.json --json
 disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
 disk-nix apply --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
 disk-nix apply --spec ./examples/lifecycle-update.json --report-out ./apply-report.json
+disk-nix apply --spec ./examples/lifecycle-update.json --receipt-out ./apply-receipt.json
 disk-nix validate --spec ./examples/lifecycle-update.json --json
 ```
 
@@ -1138,6 +1139,10 @@ commands.
 `--report-out <path>` writes the JSON report before returning blocked-policy or
 not-ready or failed-execution results, so automation can archive the exact
 decision record even when `apply` exits nonzero.
+`--receipt-out <path>` writes a JSON receipt that wraps the same report with
+receipt version, command name, spec path, probe-current flag, execute flag, and
+generation timestamp. Prefer receipts for apply journals and recovery handoff
+where the report must stay tied to the invocation that produced it.
 
 ## Validation
 
@@ -1149,6 +1154,7 @@ disk-nix validate --spec ./examples/lifecycle-update.json
 disk-nix validate --spec ./examples/lifecycle-update.json --json
 disk-nix validate --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
 disk-nix validate --spec ./examples/lifecycle-update.json --report-out ./validate-report.json
+disk-nix validate --spec ./examples/lifecycle-update.json --receipt-out ./validate-receipt.json
 ```
 
 Use `validate` for CI, NixOS activation-style checks, and review workflows that
@@ -1156,4 +1162,5 @@ need structured blocked-action details without failing before the report can be
 consumed. `--script-out` still requires every planned action to be policy
 allowed, because blocked reports do not have a runnable review script.
 `--report-out` always writes the JSON report when parsing and report
-preparation succeed.
+preparation succeed. `--receipt-out` writes the same receipt envelope as apply,
+with `command = "validate"` and `executeRequested = false`.

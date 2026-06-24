@@ -115,8 +115,9 @@ manual-review guidance, or non-ready command plans instead of guessing.
 - Deeper domain-specific recovery and rollback recipes for partially completed
   apply runs. Apply reports now expose generic recovery actions, targeted
   failed-action domain recovery guidance, current-topology roll-forward review,
-  and read-only rollback precondition review for concrete risky actions, but
-  safe automated rollback remains out of scope until broader topology-specific
+  read-only rollback precondition review for concrete risky actions, and
+  receipt files that bind reports to their invocation metadata, but safe
+  automated rollback remains out of scope until broader topology-specific
   recovery proofs exist.
 - Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output

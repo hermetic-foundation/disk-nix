@@ -832,10 +832,17 @@ Commands with unresolved inputs remain commented as not ready.
 `disk-nix apply --report-out <path>` writes the JSON report before returning a
 blocked-policy, not-ready, or failed-execution error, preserving the decision
 record for automation and review.
+`disk-nix apply --receipt-out <path>` writes an audit receipt that wraps the
+same report with receipt version, command name, spec path, probe-current flag,
+execute flag, and generation timestamp. This is the preferred artifact for
+apply journals and recovery handoff because it preserves how the report was
+produced.
 `disk-nix validate --spec <path>` emits the same dry-run report but treats
 blocked policy as a successful command result, making it the better fit for
 CI, preflight checks, and NixOS validation paths that need to inspect blocked
-details. `validate --report-out <path>` writes the same report to disk.
+details. `validate --report-out <path>` writes the same report to disk, while
+`validate --receipt-out <path>` writes a receipt with `command = "validate"`
+and `executeRequested = false`.
 
 Policy fields currently supported:
 

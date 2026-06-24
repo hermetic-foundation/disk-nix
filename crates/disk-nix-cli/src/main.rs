@@ -6,6 +6,7 @@ use std::{
     io::{self, Write},
     os::unix::fs::PermissionsExt,
     process::ExitCode,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use clap::{CommandFactory, Parser, Subcommand};
@@ -287,6 +288,9 @@ enum Command {
         /// Write the JSON apply report to a file before exit handling.
         #[arg(long)]
         report_out: Option<String>,
+        /// Write a JSON apply receipt with invocation metadata and the report.
+        #[arg(long)]
+        receipt_out: Option<String>,
         /// Emit JSON apply report.
         #[arg(long)]
         json: bool,
@@ -305,6 +309,9 @@ enum Command {
         /// Write the JSON validation report to a file.
         #[arg(long)]
         report_out: Option<String>,
+        /// Write a JSON validation receipt with invocation metadata and the report.
+        #[arg(long)]
+        receipt_out: Option<String>,
         /// Emit JSON validation report.
         #[arg(long)]
         json: bool,
@@ -344,6 +351,18 @@ struct MigrationReport {
     changes: Vec<String>,
     warnings: Vec<String>,
     spec: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApplyReceipt {
+    receipt_version: u64,
+    command: String,
+    spec_path: String,
+    probe_current: bool,
+    execute_requested: bool,
+    generated_at_unix_seconds: u64,
+    report: ExecutionReport,
 }
 
 impl fmt::Display for AppError {
@@ -727,6 +746,7 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             execute,
             script_out,
             report_out,
+            receipt_out,
             json,
         } => {
             let mode = if execute {
@@ -737,6 +757,19 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             let report = prepare_apply_report(&spec, probe_current, mode)?;
             if let Some(report_out) = report_out.as_deref() {
                 write_execution_report(report_out, &report)?;
+            }
+            if let Some(receipt_out) = receipt_out.as_deref() {
+                write_apply_receipt(
+                    receipt_out,
+                    apply_receipt(
+                        "apply",
+                        &spec,
+                        probe_current,
+                        execute,
+                        current_unix_seconds()?,
+                        &report,
+                    ),
+                )?;
             }
             if let Some(script_out) = script_out.as_deref() {
                 write_execution_script(script_out, &report)?;
@@ -774,11 +807,25 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             probe_current,
             script_out,
             report_out,
+            receipt_out,
             json,
         } => {
             let report = prepare_apply_report(&spec, probe_current, ExecutionMode::DryRun)?;
             if let Some(report_out) = report_out.as_deref() {
                 write_execution_report(report_out, &report)?;
+            }
+            if let Some(receipt_out) = receipt_out.as_deref() {
+                write_apply_receipt(
+                    receipt_out,
+                    apply_receipt(
+                        "validate",
+                        &spec,
+                        probe_current,
+                        false,
+                        current_unix_seconds()?,
+                        &report,
+                    ),
+                )?;
             }
             if let Some(script_out) = script_out.as_deref() {
                 write_execution_script(script_out, &report)?;
@@ -1557,6 +1604,42 @@ fn write_execution_report(path: &str, report: &ExecutionReport) -> Result<(), Ap
     report_json.push('\n');
     std::fs::write(path, report_json)?;
     Ok(())
+}
+
+fn apply_receipt(
+    command: &str,
+    spec_path: &str,
+    probe_current: bool,
+    execute_requested: bool,
+    generated_at_unix_seconds: u64,
+    report: &ExecutionReport,
+) -> ApplyReceipt {
+    ApplyReceipt {
+        receipt_version: 1,
+        command: command.to_string(),
+        spec_path: spec_path.to_string(),
+        probe_current,
+        execute_requested,
+        generated_at_unix_seconds,
+        report: report.clone(),
+    }
+}
+
+fn write_apply_receipt(path: &str, receipt: ApplyReceipt) -> Result<(), AppError> {
+    let mut receipt_json = serde_json::to_string_pretty(&receipt)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    receipt_json.push('\n');
+    std::fs::write(path, receipt_json)?;
+    Ok(())
+}
+
+fn current_unix_seconds() -> Result<u64, AppError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|error| {
+            AppError::Message(format!("system clock is before the Unix epoch: {error}"))
+        })
 }
 
 fn collect_graph() -> Result<StorageGraph, AppError> {
@@ -4658,15 +4741,18 @@ fn human_bytes(value: Option<u64>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use disk_nix_exec::{ExecutionMode, prepare_execution};
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
+    use disk_nix_plan::plan_and_policy_from_json_bytes;
     use disk_nix_probe::{ProbeReport, ProbeStatus};
+    use serde_json::Value;
 
     use super::{
-        confirmation_file_accepts, consumer_count, is_backing_file_node, is_bcachefs_node,
-        is_btrfs_node, is_cache_node, is_complex_filesystem_node, is_device_node, is_dm_node,
-        is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node, is_lun_node,
-        is_lvm_node, is_mapping_node, is_multipath_node, is_network_storage_node, is_nfs_node,
-        is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node,
+        apply_receipt, confirmation_file_accepts, consumer_count, is_backing_file_node,
+        is_bcachefs_node, is_btrfs_node, is_cache_node, is_complex_filesystem_node, is_device_node,
+        is_dm_node, is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node,
+        is_lun_node, is_lvm_node, is_mapping_node, is_multipath_node, is_network_storage_node,
+        is_nfs_node, is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node,
         is_swap_node, is_vdo_node, is_volume_node, is_zfs_node, is_zram_node, iscsi_lun_count,
         member_count, migration_report_from_json_bytes, mount_details, nfs_mount_count,
         print_backing_files, print_bcachefs, print_btrfs, print_cache, print_complex_filesystems,
@@ -4699,6 +4785,41 @@ mod tests {
         assert!(output.contains("permission-denied"));
         assert!(output.contains("remediation:"));
         assert!(output.contains("privileges"));
+    }
+
+    #[test]
+    fn apply_receipt_wraps_report_with_invocation_metadata() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "root": {
+                    "mountpoint": "/",
+                    "fsType": "ext4",
+                    "resizePolicy": "grow-only",
+                    "desiredSize": "40G"
+                  }
+                }
+              },
+              "apply": {
+                "mode": "manual"
+              }
+            }"#,
+        )
+        .expect("spec should parse");
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+        let receipt = apply_receipt("apply", "/etc/disk-nix/spec.json", true, false, 42, &report);
+        let value: Value =
+            serde_json::to_value(&receipt).expect("receipt should serialize to JSON");
+
+        assert_eq!(value["receiptVersion"], 1);
+        assert_eq!(value["command"], "apply");
+        assert_eq!(value["specPath"], "/etc/disk-nix/spec.json");
+        assert_eq!(value["probeCurrent"], true);
+        assert_eq!(value["executeRequested"], false);
+        assert_eq!(value["generatedAtUnixSeconds"], 42);
+        assert_eq!(value["report"]["status"], "dry-run");
+        assert!(value["report"]["commandSummary"].is_object());
     }
 
     #[test]

@@ -121,6 +121,7 @@ disk-nix apply --spec ./examples/lifecycle-update.json --json
 disk-nix apply --spec ./examples/lifecycle-update.json --probe-current --json
 disk-nix apply --spec ./examples/simple-root.json --script-out ./disk-nix-apply.sh
 disk-nix apply --spec ./examples/lifecycle-update.json --report-out ./apply-report.json
+disk-nix apply --spec ./examples/lifecycle-update.json --receipt-out ./apply-receipt.json
 disk-nix validate --spec ./examples/lifecycle-update.json --json
 disk-nix schema
 disk-nix completions bash
@@ -235,10 +236,13 @@ No destructive operation should be implicit.
 `disk-nix apply` defaults to a policy-gated dry run. It evaluates the planned
 actions against the `apply` policy in the spec, reports blocked operations,
 emits advisory command and verification plans, and can write those plans to a
-reviewable shell script with `--script-out`. With `--execute`, disk-nix runs
-only policy-allowed plans where every command is ready, records each command
-result, stops on the first failure, and runs verification commands only after
-the planned command phase succeeds. Failed risky actions include
+reviewable shell script with `--script-out`. `--report-out` persists the raw
+JSON execution report, while `--receipt-out` writes an audit receipt that wraps
+that report with the command name, spec path, probe-current flag, execute flag,
+and generation timestamp. With `--execute`, disk-nix runs only policy-allowed
+plans where every command is ready, records each command result, stops on the
+first failure, and runs verification commands only after the planned command
+phase succeeds. Failed risky actions include
 domain-specific recovery, roll-forward review from a fresh `--probe-current`
 dry run, and read-only rollback precondition review where the domain can be
 inspected safely.
@@ -536,4 +540,6 @@ vdev entries before rendering the mutating command.
 `disk-nix validate` emits the same dry-run report but exits successfully when
 policy blocks actions, which makes it suitable for CI and NixOS config checks.
 Use `--report-out` with either command to persist the JSON report for review
-even when policy blocks the operation.
+even when policy blocks the operation. Use `--receipt-out` when the report
+should be tied to the invoked command, spec path, probe-current choice, execute
+choice, and generation timestamp for apply journals or recovery handoff.
