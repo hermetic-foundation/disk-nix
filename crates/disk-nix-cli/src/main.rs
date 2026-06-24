@@ -3193,6 +3193,50 @@ fn usage_details(node: &Node) -> String {
         ("dm.table.segment.0.length", "dm-table-length"),
         ("dm.table.segment.0.target", "dm-table-target"),
         ("dm.table.segment.0.payload", "dm-table-payload"),
+        ("dm.table.segment.0.device", "dm-table-device"),
+        ("dm.table.segment.0.offset", "dm-table-offset"),
+        (
+            "dm.table.segment.0.metadata-device",
+            "dm-table-metadata-device",
+        ),
+        ("dm.table.segment.0.data-device", "dm-table-data-device"),
+        (
+            "dm.table.segment.0.data-block-size",
+            "dm-table-data-block-size",
+        ),
+        (
+            "dm.table.segment.0.low-water-mark",
+            "dm-table-low-water-mark",
+        ),
+        ("dm.table.segment.0.pool-device", "dm-table-pool-device"),
+        ("dm.table.segment.0.thin-device-id", "dm-table-thin-id"),
+        (
+            "dm.table.segment.0.external-origin-device",
+            "dm-table-external-origin",
+        ),
+        ("dm.table.segment.0.cache-device", "dm-table-cache-device"),
+        ("dm.table.segment.0.origin-device", "dm-table-origin-device"),
+        ("dm.table.segment.0.block-size", "dm-table-block-size"),
+        ("dm.table.segment.0.cow-device", "dm-table-cow-device"),
+        ("dm.table.segment.0.persistence", "dm-table-persistence"),
+        ("dm.table.segment.0.chunk-size", "dm-table-chunk-size"),
+        ("dm.table.segment.0.stripe-count", "dm-table-stripes"),
+        (
+            "dm.table.segment.0.stripe.0.device",
+            "dm-table-stripe0-device",
+        ),
+        (
+            "dm.table.segment.0.stripe.0.offset",
+            "dm-table-stripe0-offset",
+        ),
+        (
+            "dm.table.segment.0.stripe.1.device",
+            "dm-table-stripe1-device",
+        ),
+        (
+            "dm.table.segment.0.stripe.1.offset",
+            "dm-table-stripe1-offset",
+        ),
         ("dm.table.segment.0.crypt.cipher", "dm-crypt-cipher"),
         ("dm.table.segment.0.crypt.iv-offset", "dm-crypt-iv-offset"),
         ("dm.table.segment.0.crypt.device", "dm-crypt-device"),
@@ -7030,6 +7074,12 @@ mod tests {
             .with_path("/dev/mapper/cachevol")
             .with_property("dm.name", "cachevol")
             .with_property("dm.table.targets", "cache")
+            .with_property("dm.table.segment-count", "1")
+            .with_property("dm.table.segment.0.target", "cache")
+            .with_property("dm.table.segment.0.metadata-device", "253:10")
+            .with_property("dm.table.segment.0.cache-device", "253:11")
+            .with_property("dm.table.segment.0.origin-device", "253:12")
+            .with_property("dm.table.segment.0.block-size", "128")
             .with_property("dm.status.targets", "cache")
             .with_property("dm.status.segment-count", "1")
             .with_property("dm.status.segment.0.target", "cache")
@@ -7141,8 +7191,14 @@ mod tests {
         ));
         assert!(output.contains("cachevol"));
         assert!(output.contains(
-            "dm-name=cachevol dm-table-targets=cache dm-status-targets=cache dm-status-segments=1 dm-status-target=cache"
+            "dm-name=cachevol dm-table-targets=cache dm-table-segments=1 dm-table-target=cache"
         ));
+        assert!(output.contains(
+            "dm-table-metadata-device=253:10 dm-table-cache-device=253:11 dm-table-origin-device=253:12 dm-table-block-size=128"
+        ));
+        assert!(
+            output.contains("dm-status-targets=cache dm-status-segments=1 dm-status-target=cache")
+        );
         assert!(output.contains(
             "dm-status-metadata-used=64 dm-status-metadata-total=256 dm-status-cache-used=32 dm-status-cache-total=1024"
         ));
