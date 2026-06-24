@@ -614,7 +614,7 @@ present multipath flush targets, absent LUN attach paths, visible LUN detach
 paths, present bcache detach targets, still-attached LVM cache origins, absent
 NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
 destroy targets, non-normal VDO start modes, running VDO stop targets, present
-Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, present ZFS or Btrfs snapshot destroy targets, missing or present ZFS rollback snapshots, degraded or failed MD arrays,
+Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, present ZFS or Btrfs snapshot destroy targets, missing or present ZFS/Btrfs snapshot rename sources, missing or present ZFS rollback snapshots, degraded or failed MD arrays,
 degraded ZFS pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
 targets without a logged-in session and logout targets that still have a
@@ -1074,7 +1074,11 @@ concrete ZFS snapshot name or, for clone, an absolute Btrfs snapshot path.
 Snapshot rename declarations render reviewed `zfs rename <snapshot> <new>` for
 ZFS names and `mv -- <old> <new>` for absolute Btrfs snapshot paths. Friendly
 snapshot keys remain non-ready for rename until `name`, `snapshotName`, `path`,
-or `snapshotPath` supplies the concrete snapshot identity.
+or `snapshotPath` supplies the concrete snapshot identity. With
+current-topology probing, rename compares the concrete source snapshot name or
+absolute Btrfs snapshot path; missing and present rename sources both stay
+actionable with warning diagnostics and present sources include snapshot
+metadata.
 Snapshot `operation = "rescan"` declarations render read-only ZFS
 `zfs list`, `zfs get`, and `zfs holds` probes or Btrfs `subvolume show` and
 read-only property probes, plus graph inspection for snapshot/source

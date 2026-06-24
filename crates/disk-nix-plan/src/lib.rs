@@ -299,6 +299,8 @@ pub enum TopologyDiagnosticKind {
     PropertyDiffers,
     SnapshotDestroyAlreadySatisfied,
     SnapshotDestroyRequired,
+    SnapshotRenameRequired,
+    SnapshotRenameSourceMissing,
     SnapshotRollbackPointAvailable,
     SnapshotRollbackPointMissing,
     VdoDestroyAlreadySatisfied,
@@ -1478,6 +1480,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = snapshot_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = snapshot_rename_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = snapshot_rollback_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1551,6 +1556,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(luks_token_remove_diagnostic(action, node, &query));
     diagnostics.extend(bcache_present_diagnostic(action, node, &query));
     diagnostics.extend(snapshot_destroy_present_diagnostic(action, node, &query));
+    diagnostics.extend(snapshot_rename_present_diagnostic(action, node, &query));
     diagnostics.extend(snapshot_rollback_present_diagnostic(action, node, &query));
     diagnostics.extend(btrfs_subvolume_destroy_present_diagnostic(
         action, node, &query,
@@ -1599,7 +1605,10 @@ fn topology_query(action: &PlannedAction) -> Option<String> {
     }
 
     if action.context.collection.as_deref() == Some("snapshots")
-        && matches!(action.operation, Operation::Destroy | Operation::Rollback)
+        && matches!(
+            action.operation,
+            Operation::Destroy | Operation::Rename | Operation::Rollback
+        )
     {
         return action
             .context
@@ -2324,6 +2333,69 @@ fn snapshot_destroy_present_diagnostic(
         action_id: action.id.clone(),
         level: TopologyDiagnosticLevel::Warning,
         kind: TopologyDiagnosticKind::SnapshotDestroyRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn snapshot_rename_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("snapshots")
+        || action.operation != Operation::Rename
+        || !is_concrete_snapshot_target(query)
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::SnapshotRenameSourceMissing,
+        query: query.to_string(),
+        message: format!("snapshot rename source {query} is missing from current topology"),
+        current: None,
+    })
+}
+
+fn snapshot_rename_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("snapshots")
+        || action.operation != Operation::Rename
+    {
+        return None;
+    }
+
+    let (label, details) = match node.kind {
+        NodeKind::ZfsSnapshot => ("ZFS snapshot", zfs_snapshot_destroy_details(node)),
+        NodeKind::BtrfsSnapshot => ("Btrfs snapshot", btrfs_subvolume_destroy_details(node)),
+        _ => return None,
+    };
+    let destination = action
+        .context
+        .rename_to
+        .as_deref()
+        .unwrap_or("<rename-target>");
+    let message = if details.is_empty() {
+        format!(
+            "{label} rename source {query} is present; rename to {destination} remains offline-required"
+        )
+    } else {
+        format!(
+            "{label} rename source {query} is present with {}; rename to {destination} remains offline-required",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::SnapshotRenameRequired,
         query: query.to_string(),
         message,
         current: Some(current_node_summary(node)),
@@ -16854,6 +16926,183 @@ mod tests {
             diagnostic.action_id == "snapshot:before:rollback"
                 && diagnostic.kind == TopologyDiagnosticKind::Missing
                 && diagnostic.query == "before"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_warns_when_zfs_snapshot_rename_source_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@old": {
+                  "target": "tank/home",
+                  "renameTo": "tank/home@kept"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "zfs-dataset:tank/home",
+            NodeKind::ZfsDataset,
+            "tank/home",
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@old:rename:tank/home@kept"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotRenameSourceMissing
+                && diagnostic.query == "tank/home@old"
+                && diagnostic.current.is_none()
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_warns_when_zfs_snapshot_rename_source_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@old": {
+                  "target": "tank/home",
+                  "renameTo": "tank/home@kept"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "zfs-snapshot:tank/home@old",
+                NodeKind::ZfsSnapshot,
+                "tank/home@old",
+            )
+            .with_property("zfs.used", "12M")
+            .with_property("zfs.referenced", "2G")
+            .with_property("zfs.userrefs", "3"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@old:rename:tank/home@kept"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotRenameRequired
+                && diagnostic.query == "tank/home@old"
+                && diagnostic.message.contains("rename to tank/home@kept")
+                && diagnostic.message.contains("used 12M")
+                && diagnostic.message.contains("user references 3")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_warns_when_btrfs_snapshot_rename_source_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "/mnt/persist/@home-old": {
+                  "target": "/mnt/persist/@home",
+                  "renameTo": "/mnt/persist/@home-kept"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "btrfs-subvolume:fs-uuid:@home",
+                NodeKind::BtrfsSubvolume,
+                "@home",
+            )
+            .with_path("/mnt/persist/@home"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:/mnt/persist/@home-old:rename:/mnt/persist/@home-kept"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotRenameSourceMissing
+                && diagnostic.query == "/mnt/persist/@home-old"
+                && diagnostic.current.is_none()
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_warns_when_btrfs_snapshot_rename_source_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "/mnt/persist/@home-old": {
+                  "target": "/mnt/persist/@home",
+                  "renameTo": "/mnt/persist/@home-kept"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "btrfs-snapshot:fs-uuid:@home-old",
+                NodeKind::BtrfsSnapshot,
+                "@home-old",
+            )
+            .with_path("/mnt/persist/@home-old")
+            .with_property("btrfs.id", "258")
+            .with_property("btrfs.parent-uuid", "source-uuid"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:/mnt/persist/@home-old:rename:/mnt/persist/@home-kept"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotRenameRequired
+                && diagnostic.query == "/mnt/persist/@home-old"
+                && diagnostic
+                    .message
+                    .contains("rename to /mnt/persist/@home-kept")
+                && diagnostic.message.contains("subvolume id 258")
+                && diagnostic.message.contains("parent UUID source-uuid")
         }));
     }
 

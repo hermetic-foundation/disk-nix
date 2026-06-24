@@ -382,6 +382,9 @@ Examples:
   name or absolute Btrfs snapshot path.
   Snapshot rename remains non-ready when a friendly declaration key does not
   resolve to a concrete ZFS snapshot name or absolute Btrfs snapshot path.
+  Current-topology comparison checks the source snapshot being renamed, warns
+  when that concrete source is missing, and keeps present rename sources
+  actionable with snapshot metadata because rename remains offline-required.
 
 The checked-in specs under `examples/` are part of `nix flake check`. The
 flake validates stable plan summaries, selected action ids, allowed simple
@@ -556,6 +559,11 @@ and absolute Btrfs snapshot paths only when they are already absent. Present
 snapshots stay actionable with warnings that include available ZFS
 user-reference, usage, compression, or encryption metadata, or Btrfs subvolume
 id, generation, parent, top-level, and UUID metadata.
+Generic snapshot rename reconciliation compares the concrete source ZFS
+snapshot name or absolute Btrfs snapshot path, not just the source dataset or
+subvolume. Missing and present rename sources both stay actionable with warning
+diagnostics; present sources include snapshot metadata and the requested
+destination.
 ZFS snapshot rollback reconciliation compares the concrete rollback snapshot,
 not just the target dataset. Missing rollback points and available rollback
 points both stay actionable with warning diagnostics; available points include

@@ -456,7 +456,10 @@ identity. Snapshot rescan plans also accept `path`, `snapshotPath`, or
 `snapshot-path` when a Btrfs snapshot uses a friendly map key instead of the
 absolute snapshot path.
 Snapshot rename plans remain non-ready until the declaration resolves to a
-concrete ZFS snapshot name or absolute Btrfs snapshot path.
+concrete ZFS snapshot name or absolute Btrfs snapshot path. Current-topology
+probing checks that source snapshot directly and warns when it is missing or
+present with snapshot metadata instead of matching only the containing dataset
+or subvolume.
 ZFS snapshot hold plans render safe `zfs hold <tag> <snapshot>` and
 `zfs release <tag> <snapshot>` updates from `hold` and `releaseHold`
 declarations so retention can be changed without deleting recovery points.
