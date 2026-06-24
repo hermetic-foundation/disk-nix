@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
 
 use crate::ProbeError;
@@ -150,8 +152,9 @@ fn add_report(graph: &mut StorageGraph, report: &BtrfsReport) -> Result<(), Prob
         add_device(graph, &filesystem_id, device);
     }
 
+    let subvolume_uuid_ids = subvolume_uuid_ids(&filesystem_id, &subvolumes);
     for subvolume in subvolumes {
-        add_subvolume(graph, &filesystem_id, subvolume);
+        add_subvolume(graph, &filesystem_id, subvolume, &subvolume_uuid_ids);
     }
     for qgroup in qgroups {
         add_qgroup(graph, &filesystem_id, qgroup);
@@ -190,13 +193,34 @@ fn add_device(graph: &mut StorageGraph, filesystem_id: &str, device: BtrfsDevice
     ));
 }
 
-fn add_subvolume(graph: &mut StorageGraph, filesystem_id: &str, subvolume: Subvolume) {
+fn subvolume_id(filesystem_id: &str, path: &str) -> String {
+    format!("btrfs-subvolume:{filesystem_id}:{path}")
+}
+
+fn subvolume_uuid_ids(filesystem_id: &str, subvolumes: &[Subvolume]) -> BTreeMap<String, String> {
+    subvolumes
+        .iter()
+        .filter_map(|subvolume| {
+            subvolume
+                .uuid
+                .as_ref()
+                .map(|uuid| (uuid.clone(), subvolume_id(filesystem_id, &subvolume.path)))
+        })
+        .collect()
+}
+
+fn add_subvolume(
+    graph: &mut StorageGraph,
+    filesystem_id: &str,
+    subvolume: Subvolume,
+    subvolume_uuid_ids: &BTreeMap<String, String>,
+) {
     let kind = if subvolume.parent_uuid.is_some() || subvolume.path.contains("snapshot") {
         NodeKind::BtrfsSnapshot
     } else {
         NodeKind::BtrfsSubvolume
     };
-    let id = format!("btrfs-subvolume:{}:{}", filesystem_id, subvolume.path);
+    let id = subvolume_id(filesystem_id, &subvolume.path);
     let mut node =
         Node::new(id.clone(), kind, subvolume.path).with_property("btrfs.id", subvolume.id);
     if let Some(generation) = subvolume.generation {
@@ -220,11 +244,11 @@ fn add_subvolume(graph: &mut StorageGraph, filesystem_id: &str, subvolume: Subvo
     }
     if let Some(parent_uuid) = subvolume.parent_uuid {
         node = node.with_property("btrfs.parent-uuid", parent_uuid.clone());
-        graph.add_edge(Edge::new(
-            id.clone(),
-            format!("btrfs-subvolume-parent:{parent_uuid}"),
-            Relationship::SnapshotOf,
-        ));
+        let parent_id = subvolume_uuid_ids
+            .get(&parent_uuid)
+            .cloned()
+            .unwrap_or_else(|| format!("btrfs-subvolume-parent:{parent_uuid}"));
+        graph.add_edge(Edge::new(id.clone(), parent_id, Relationship::SnapshotOf));
     }
 
     graph.add_node(node);
@@ -607,6 +631,11 @@ ID 257 gen 11 cgen 8 parent 256 top level 5 uuid snap-1 parent_uuid subvol-root 
             edge.from.0 == "btrfs-qgroup:btrfs:fs-uuid:0/5"
                 && edge.to.0 == "btrfs-qgroup:btrfs:fs-uuid:0/257"
                 && edge.relationship == Relationship::Contains
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "btrfs-subvolume:btrfs:fs-uuid:@/.snapshots/1/snapshot"
+                && edge.to.0 == "btrfs-subvolume:btrfs:fs-uuid:@"
+                && edge.relationship == Relationship::SnapshotOf
         }));
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::BtrfsFilesystem
