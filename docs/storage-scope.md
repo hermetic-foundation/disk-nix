@@ -78,9 +78,10 @@ The current probe layer normalizes:
   metadata
 - `bcachefs show-super`, `bcachefs fs usage`, `blkid`, and `findmnt` for
   first-class bcachefs filesystem and member-device nodes with
-  external/internal UUIDs, labels, member-device indexes, mounted capacity,
-  online reservations, data-type byte accounting, and per-device free/capacity
-  metadata
+  external/internal UUIDs, labels, superblock magic, version and upgrade state,
+  member-device indexes, mounted capacity, online reservations, filesystem
+  data-type byte accounting, and per-device free/capacity, superblock, journal,
+  btree, user, and cached metadata
 - `/proc/swaps` for active swap devices/files, active size, used/free bytes,
   swap type, and priority
 - `losetup --json --list` for loop device mappings, backing files or block

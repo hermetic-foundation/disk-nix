@@ -2899,12 +2899,20 @@ fn usage_details(node: &Node) -> String {
         ("f2fs.hot-ext-count", "f2fs-hot-extensions"),
         ("bcachefs.external-uuid", "bcachefs-uuid"),
         ("bcachefs.internal-uuid", "bcachefs-internal"),
+        ("bcachefs.magic-number", "bcachefs-magic"),
+        ("bcachefs.device", "bcachefs-super-device"),
         ("bcachefs.member-device", "bcachefs-member"),
         ("bcachefs.mount-target", "bcachefs-mount"),
         ("bcachefs.device-index", "bcachefs-device"),
         ("bcachefs.version", "bcachefs-version"),
+        (
+            "bcachefs.version-upgrade-complete",
+            "bcachefs-upgrade-complete",
+        ),
         ("bcachefs.online-reserved", "bcachefs-reserved"),
         ("bcachefs.device-count", "bcachefs-devices"),
+        ("bcachefs.data-sb", "bcachefs-sb"),
+        ("bcachefs.data-journal", "bcachefs-journal"),
         ("bcachefs.data-btree", "bcachefs-btree"),
         ("bcachefs.data-user", "bcachefs-user"),
         ("bcachefs.data-cached", "bcachefs-cached"),
@@ -2913,6 +2921,8 @@ fn usage_details(node: &Node) -> String {
         ("bcachefs.device-state", "bcachefs-state"),
         ("bcachefs.device-free", "bcachefs-device-free"),
         ("bcachefs.device-capacity", "bcachefs-device-capacity"),
+        ("bcachefs.device-data-sb", "bcachefs-device-sb"),
+        ("bcachefs.device-data-journal", "bcachefs-device-journal"),
         ("bcachefs.device-data-btree", "bcachefs-device-btree"),
         ("bcachefs.device-data-user", "bcachefs-device-user"),
         ("bcachefs.device-data-cached", "bcachefs-device-cached"),
@@ -3899,17 +3909,28 @@ mod tests {
             "bcachefs.internal-uuid",
             "55083d1e-27cf-4929-ada4-3fe6e45cf02c",
         )
+        .with_property(
+            "bcachefs.magic-number",
+            "c68573f6-66ce-90a9-d96a-60cf803df7ef",
+        )
+        .with_property("bcachefs.device", "ST12000NM001G-2M")
         .with_property("bcachefs.member-device", "/dev/sdc")
         .with_property("bcachefs.mount-target", "/mnt/archive")
         .with_property("bcachefs.device-index", "6")
         .with_property("bcachefs.version", "1.20: (unknown version)")
+        .with_property(
+            "bcachefs.version-upgrade-complete",
+            "1.20: (unknown version)",
+        )
         .with_property("bcachefs.online-reserved", "507957248")
         .with_property("bcachefs.device-count", "2")
+        .with_property("bcachefs.data-sb", "3149824")
+        .with_property("bcachefs.data-journal", "4294967296")
         .with_property("bcachefs.data-btree", "1048576")
         .with_property("bcachefs.data-user", "2147483648");
         assert_eq!(
             usage_details(&bcachefs),
-            "bcachefs-uuid=a2d6fc04-efd0-4e36-aece-2475941d09a3 bcachefs-internal=55083d1e-27cf-4929-ada4-3fe6e45cf02c bcachefs-member=/dev/sdc bcachefs-mount=/mnt/archive bcachefs-device=6 bcachefs-version=1.20: (unknown version) bcachefs-reserved=507957248 bcachefs-devices=2 bcachefs-btree=1048576 bcachefs-user=2147483648"
+            "bcachefs-uuid=a2d6fc04-efd0-4e36-aece-2475941d09a3 bcachefs-internal=55083d1e-27cf-4929-ada4-3fe6e45cf02c bcachefs-magic=c68573f6-66ce-90a9-d96a-60cf803df7ef bcachefs-super-device=ST12000NM001G-2M bcachefs-member=/dev/sdc bcachefs-mount=/mnt/archive bcachefs-device=6 bcachefs-version=1.20: (unknown version) bcachefs-upgrade-complete=1.20: (unknown version) bcachefs-reserved=507957248 bcachefs-devices=2 bcachefs-sb=3149824 bcachefs-journal=4294967296 bcachefs-btree=1048576 bcachefs-user=2147483648"
         );
 
         let bcachefs_device = Node::new(
@@ -3921,11 +3942,13 @@ mod tests {
         .with_property("bcachefs.device-state", "rw")
         .with_property("bcachefs.device-free", "1649975230464")
         .with_property("bcachefs.device-capacity", "16000900661248")
+        .with_property("bcachefs.device-data-sb", "3149824")
+        .with_property("bcachefs.device-data-journal", "4294967296")
         .with_property("bcachefs.device-data-btree", "890241024")
         .with_property("bcachefs.device-data-user", "0");
         assert_eq!(
             usage_details(&bcachefs_device),
-            "bcachefs-label=hdd.archive bcachefs-state=rw bcachefs-device-free=1649975230464 bcachefs-device-capacity=16000900661248 bcachefs-device-btree=890241024 bcachefs-device-user=0"
+            "bcachefs-label=hdd.archive bcachefs-state=rw bcachefs-device-free=1649975230464 bcachefs-device-capacity=16000900661248 bcachefs-device-sb=3149824 bcachefs-device-journal=4294967296 bcachefs-device-btree=890241024 bcachefs-device-user=0"
         );
 
         let bcache = Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
@@ -4120,6 +4143,16 @@ mod tests {
             .with_property("bcachefs.member-device", "/dev/sdc")
             .with_property("bcachefs.mount-target", "/mnt/archive")
             .with_property("bcachefs.device-index", "6")
+            .with_property(
+                "bcachefs.magic-number",
+                "c68573f6-66ce-90a9-d96a-60cf803df7ef",
+            )
+            .with_property(
+                "bcachefs.version-upgrade-complete",
+                "1.20: (unknown version)",
+            )
+            .with_property("bcachefs.data-sb", "3149824")
+            .with_property("bcachefs.data-journal", "4294967296")
             .with_property("bcachefs.data-user", "2147483648"),
         );
 
@@ -4159,7 +4192,10 @@ mod tests {
             "f2fs-overprov=64 f2fs-sections=1984 f2fs-segs-per-sec=1 f2fs-secs-per-zone=1 f2fs-version=Linux version 6.12"
         ));
         assert!(output.contains(
-            "bcachefs-uuid=a2d6fc04-efd0-4e36-aece-2475941d09a3 bcachefs-member=/dev/sdc bcachefs-mount=/mnt/archive bcachefs-device=6 bcachefs-user=2147483648"
+            "bcachefs-uuid=a2d6fc04-efd0-4e36-aece-2475941d09a3 bcachefs-magic=c68573f6-66ce-90a9-d96a-60cf803df7ef bcachefs-member=/dev/sdc bcachefs-mount=/mnt/archive"
+        ));
+        assert!(output.contains(
+            "bcachefs-device=6 bcachefs-upgrade-complete=1.20: (unknown version) bcachefs-sb=3149824 bcachefs-journal=4294967296 bcachefs-user=2147483648"
         ));
     }
 

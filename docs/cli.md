@@ -50,11 +50,12 @@ GUID, serial, sector, cluster, size, and free-space metadata beyond generic
 name/state/version, serial, sector/cluster sizing, index block size, MFT record
 size, and allocated size. F2FS probing uses `dump.f2fs` when available to add
 volume name, UUID, user/valid block counts, checkpoint/SIT/NAT/SSA segment
-layout, section/zone geometry, log sizing, version metadata,
-overprovisioning, and computed usage. bcachefs probing uses `bcachefs show-super` and `bcachefs fs usage`
-when available to add external/internal UUIDs, labels, member-device indexes,
-mounted capacity, data-type byte accounting, and per-device free/capacity
-metadata.
+layout, section/zone geometry, log sizing, version metadata, overprovisioning,
+and computed usage. bcachefs probing uses `bcachefs show-super` and
+`bcachefs fs usage` when available to add external/internal UUIDs, labels,
+superblock magic, version and upgrade state, member-device indexes, mounted
+capacity, filesystem data-type byte accounting, and per-device free/capacity,
+superblock, journal, btree, user, and cached metadata.
 
 ## Probe Status
 
@@ -216,14 +217,16 @@ Use these commands for:
   section/zone geometry, log sizing, version, and overprovisioning metadata,
   XFS source, allocation-group, inode, data, naming, log, realtime, and
   metadata feature details,
-  bcachefs external/internal UUID, member-device, mounted usage, and data-type
-  byte accounting, Btrfs Data/Metadata/System allocation profiles and byte
-  counts, and ext state/features/block and inode counts when probes expose them
+  bcachefs external/internal UUID, superblock magic, version/upgrade state,
+  member-device, mounted usage, and filesystem/member data-type byte
+  accounting, Btrfs Data/Metadata/System allocation profiles and byte counts,
+  and ext state/features/block and inode counts when probes expose them
 - `complex-filesystems`: Btrfs, bcachefs, and ZFS pools, vdevs, datasets,
   zvols, subvolumes, snapshots, qgroups, and member devices, including size,
   used/free capacity, utilization, backing/member counts, allocation profiles,
-  qgroup limits, bcachefs member accounting, ZFS health/vdev state, and ZFS
-  compression/quota/reservation/encryption properties when probes expose them
+  qgroup limits, bcachefs superblock and member accounting, ZFS health/vdev
+  state, and ZFS compression/quota/reservation/encryption properties when
+  probes expose them
 - `zfs`: ZFS pools, vdevs, datasets, snapshots, and zvols, including pool
   health/state, vdev roles and error counters, dataset compression, quota,
   reservation, encryption, key status, snapshot user references, zvol volume
@@ -321,8 +324,8 @@ Use these commands for:
   details, ext superblock details, LVM layout, health, thin/cache/writecache
   status, NTFS volume geometry and MFT record sizing, F2FS block usage,
   valid inode/node counts, segment layout, section/zone geometry, log sizing,
-  bcachefs filesystem and member-device capacity accounting, Btrfs allocation
-  class profiles and byte counts, VDO backing and logical/physical size
+  bcachefs filesystem and member-device capacity plus data-type accounting,
+  Btrfs allocation class profiles and byte counts, VDO backing and logical/physical size
   details, NVMe namespace details, loop mapping details, and active swap
   state/type/priority when probed
 
