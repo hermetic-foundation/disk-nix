@@ -44,6 +44,9 @@ The graph can represent block devices, partitions, filesystems, mountpoints,
 swap, LUKS, device-mapper, LVM, VDO, MD RAID, Btrfs, ZFS, exFAT, NTFS, iSCSI,
 LUNs, NFS, bcache, multipath, NVMe namespaces, and loop devices. Nodes are
 merged by id when multiple probe adapters report complementary information.
+NVMe probing keeps controller, subsystem, transport, namespace id, namespace
+UUID, NGUID, EUI-64, ANA state, LBA format, sector size, capacity, and usage
+metadata from `nvme list --output-format=json` when available.
 exFAT probing uses `tune.exfat` and `dump.exfat` when available to add label,
 GUID, serial, tool version, sector, cluster, size, used-cluster, and free-space
 metadata beyond generic `blkid` fields. NTFS probing uses `ntfsinfo -m` when

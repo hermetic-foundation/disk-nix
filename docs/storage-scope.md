@@ -89,6 +89,9 @@ The current probe layer normalizes:
 - `losetup --json --list` for loop device mappings, backing files or block
   devices, offsets, size limits, autoclear state, read-only state, direct I/O,
   and logical sector size
+- `nvme list --output-format=json` for NVMe namespace controller/subsystem,
+  transport, namespace id, namespace UUID, NGUID, EUI-64, ANA state, LBA
+  format, sector geometry, capacity, used bytes, and generic namespace path
 - LUKS mapper status through `cryptsetup status` for active/in-use state,
   backing device, cipher, key size, key location, sector size/count, offset, and
   access mode; LUKS header metadata through `cryptsetup luksDump` for version,

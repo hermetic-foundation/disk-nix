@@ -25,6 +25,14 @@ struct NvmeDevice {
     index: Option<u64>,
     #[serde(alias = "NameSpace", alias = "Namespace")]
     namespace: Option<u64>,
+    #[serde(alias = "NSID")]
+    namespace_id: Option<u64>,
+    #[serde(alias = "NamespaceUUID", alias = "NSUUID")]
+    namespace_uuid: Option<String>,
+    #[serde(alias = "EUI64")]
+    eui64: Option<String>,
+    #[serde(alias = "NGUID")]
+    nguid: Option<String>,
     #[serde(rename = "SubSystem", alias = "Subsystem", alias = "SubsystemNQN")]
     subsystem: Option<String>,
     #[serde(alias = "Controller")]
@@ -45,6 +53,8 @@ struct NvmeDevice {
     controller_id: Option<u64>,
     #[serde(alias = "Format", alias = "LBAFormat")]
     lba_format: Option<String>,
+    #[serde(alias = "ANAState")]
+    ana_state: Option<String>,
 }
 
 pub fn normalize_nvme_list_json(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
@@ -100,6 +110,13 @@ fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
             "nvme.namespace",
             device.namespace.map(|value| value.to_string()),
         ),
+        (
+            "nvme.namespace-id",
+            device.namespace_id.map(|value| value.to_string()),
+        ),
+        ("nvme.namespace-uuid", device.namespace_uuid),
+        ("nvme.eui64", device.eui64),
+        ("nvme.nguid", device.nguid),
         ("nvme.subsystem", device.subsystem),
         ("nvme.controller", device.controller),
         ("nvme.address", device.address),
@@ -121,6 +138,7 @@ fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
             "nvme.sector-size",
             device.sector_size.map(|value| value.to_string()),
         ),
+        ("nvme.ana-state", device.ana_state),
     ] {
         if let Some(value) = value {
             node = node.with_property(key, value);
@@ -148,6 +166,10 @@ mod tests {
       "Firmware": "1.0",
       "Index": 0,
       "NameSpace": 1,
+      "NSID": 1,
+      "NamespaceUUID": "12345678-1234-1234-1234-123456789abc",
+      "EUI64": "0011223344556677",
+      "NGUID": "00112233445566778899aabbccddeeff",
       "SubSystem": "nvme-subsys0",
       "Controller": "nvme0",
       "Address": "0000:01:00.0",
@@ -158,7 +180,8 @@ mod tests {
       "NamespaceCapacity": 900,
       "Format": "512 B + 0 B",
       "MaximumLBA": 1953125,
-      "SectorSize": 512
+      "SectorSize": 512,
+      "ANAState": "optimized"
     }
   ]
 }
@@ -192,6 +215,23 @@ mod tests {
                 .iter()
                 .any(|property| property.key == "nvme.namespace" && property.value == "1")
         );
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| { property.key == "nvme.namespace-id" && property.value == "1" })
+        );
+        assert!(node.properties.iter().any(|property| {
+            property.key == "nvme.namespace-uuid"
+                && property.value == "12345678-1234-1234-1234-123456789abc"
+        }));
+        assert!(
+            node.properties.iter().any(
+                |property| property.key == "nvme.eui64" && property.value == "0011223344556677"
+            )
+        );
+        assert!(node.properties.iter().any(|property| {
+            property.key == "nvme.nguid" && property.value == "00112233445566778899aabbccddeeff"
+        }));
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.subsystem" && property.value == "nvme-subsys0"
         }));
@@ -221,5 +261,10 @@ mod tests {
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.lba-format" && property.value == "512 B + 0 B"
         }));
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "nvme.ana-state" && property.value == "optimized")
+        );
     }
 }

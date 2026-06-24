@@ -2555,6 +2555,10 @@ fn usage_details(node: &Node) -> String {
         ("nvme.firmware", "firmware"),
         ("nvme.index", "ns-index"),
         ("nvme.namespace", "namespace"),
+        ("nvme.namespace-id", "nsid"),
+        ("nvme.namespace-uuid", "ns-uuid"),
+        ("nvme.eui64", "eui64"),
+        ("nvme.nguid", "nguid"),
         ("nvme.subsystem", "subsystem"),
         ("nvme.controller", "controller"),
         ("nvme.address", "address"),
@@ -2564,6 +2568,7 @@ fn usage_details(node: &Node) -> String {
         ("nvme.lba-format", "lba-format"),
         ("nvme.maximum-lba", "max-lba"),
         ("nvme.sector-size", "sector-size"),
+        ("nvme.ana-state", "ana-state"),
         ("lsblk.type", "lsblk-type"),
         ("filesystem.type", "fstype"),
         ("blkid.type", "blkid-type"),
@@ -3802,6 +3807,13 @@ mod tests {
                 .with_property("nvme.firmware", "1.0")
                 .with_property("nvme.index", "0")
                 .with_property("nvme.namespace", "1")
+                .with_property("nvme.namespace-id", "1")
+                .with_property(
+                    "nvme.namespace-uuid",
+                    "12345678-1234-1234-1234-123456789abc",
+                )
+                .with_property("nvme.eui64", "0011223344556677")
+                .with_property("nvme.nguid", "00112233445566778899aabbccddeeff")
                 .with_property("nvme.subsystem", "nvme-subsys0")
                 .with_property("nvme.controller", "nvme0")
                 .with_property("nvme.transport", "pcie")
@@ -3810,6 +3822,7 @@ mod tests {
                 .with_property("nvme.lba-format", "512 B + 0 B")
                 .with_property("nvme.maximum-lba", "1953125")
                 .with_property("nvme.sector-size", "512")
+                .with_property("nvme.ana-state", "optimized")
                 .with_property("partition.table", "gpt")
                 .with_property("udev.symlink", "disk/by-id/nvme-Acme_FastDisk")
                 .with_property("udev.devname", "/dev/nvme0n1")
@@ -3918,11 +3931,16 @@ mod tests {
         assert!(output.contains("DETAILS"));
         assert!(output.contains("model=FastDisk vendor=Acme transport=nvme rotational=false"));
         assert!(output.contains("nvme-model=Example NVMe product=Example Controller firmware=1.0"));
-        assert!(output.contains("ns-index=0 namespace=1 subsystem=nvme-subsys0 controller=nvme0"));
+        assert!(output.contains(
+            "ns-index=0 namespace=1 nsid=1 ns-uuid=12345678-1234-1234-1234-123456789abc"
+        ));
+        assert!(output.contains(
+            "eui64=0011223344556677 nguid=00112233445566778899aabbccddeeff subsystem=nvme-subsys0 controller=nvme0"
+        ));
         assert!(output.contains(
             "transport=pcie controller-id=1 namespace-capacity=900000000000 lba-format=512 B + 0 B"
         ));
-        assert!(output.contains("max-lba=1953125 sector-size=512 ptable=gpt"));
+        assert!(output.contains("max-lba=1953125 sector-size=512 ana-state=optimized ptable=gpt"));
         assert!(output.contains("udev-link=disk/by-id/nvme-Acme_FastDisk"));
         assert!(output.contains("udev-devname=/dev/nvme0n1 udev-devtype=disk"));
         assert!(output.contains("udev-bus=nvme udev-model=FastDisk udev-model-id=a808"));
@@ -4365,6 +4383,13 @@ mod tests {
         .with_property("nvme.firmware", "1.0")
         .with_property("nvme.index", "0")
         .with_property("nvme.namespace", "1")
+        .with_property("nvme.namespace-id", "1")
+        .with_property(
+            "nvme.namespace-uuid",
+            "12345678-1234-1234-1234-123456789abc",
+        )
+        .with_property("nvme.eui64", "0011223344556677")
+        .with_property("nvme.nguid", "00112233445566778899aabbccddeeff")
         .with_property("nvme.subsystem", "nvme-subsys0")
         .with_property("nvme.controller", "nvme0")
         .with_property("nvme.address", "0000:01:00.0")
@@ -4373,10 +4398,11 @@ mod tests {
         .with_property("nvme.namespace-capacity", "900000000000")
         .with_property("nvme.lba-format", "512 B + 0 B")
         .with_property("nvme.maximum-lba", "1953125")
-        .with_property("nvme.sector-size", "512");
+        .with_property("nvme.sector-size", "512")
+        .with_property("nvme.ana-state", "optimized");
         assert_eq!(
             usage_details(&nvme),
-            "generic=/dev/ng0n1 nvme-model=Example NVMe product=Example Controller firmware=1.0 ns-index=0 namespace=1 subsystem=nvme-subsys0 controller=nvme0 address=0000:01:00.0 transport=pcie controller-id=1 namespace-capacity=900000000000 lba-format=512 B + 0 B max-lba=1953125 sector-size=512"
+            "generic=/dev/ng0n1 nvme-model=Example NVMe product=Example Controller firmware=1.0 ns-index=0 namespace=1 nsid=1 ns-uuid=12345678-1234-1234-1234-123456789abc eui64=0011223344556677 nguid=00112233445566778899aabbccddeeff subsystem=nvme-subsys0 controller=nvme0 address=0000:01:00.0 transport=pcie controller-id=1 namespace-capacity=900000000000 lba-format=512 B + 0 B max-lba=1953125 sector-size=512 ana-state=optimized"
         );
     }
 
@@ -5837,6 +5863,13 @@ mod tests {
             .with_property("nvme.firmware", "1.0")
             .with_property("nvme.index", "0")
             .with_property("nvme.namespace", "1")
+            .with_property("nvme.namespace-id", "1")
+            .with_property(
+                "nvme.namespace-uuid",
+                "12345678-1234-1234-1234-123456789abc",
+            )
+            .with_property("nvme.eui64", "0011223344556677")
+            .with_property("nvme.nguid", "00112233445566778899aabbccddeeff")
             .with_property("nvme.subsystem", "nvme-subsys0")
             .with_property("nvme.controller", "nvme0")
             .with_property("nvme.address", "0000:01:00.0")
@@ -5845,7 +5878,8 @@ mod tests {
             .with_property("nvme.namespace-capacity", "900000000000")
             .with_property("nvme.lba-format", "512 B + 0 B")
             .with_property("nvme.maximum-lba", "1953125")
-            .with_property("nvme.sector-size", "512"),
+            .with_property("nvme.sector-size", "512")
+            .with_property("nvme.ana-state", "optimized"),
         );
 
         let mut output = Vec::new();
@@ -5861,12 +5895,17 @@ mod tests {
         assert!(output.contains("40.0%"));
         assert!(output.contains("generic=/dev/ng0n1 nvme-model=Example NVMe"));
         assert!(output.contains("product=Example Controller firmware=1.0"));
-        assert!(output.contains("ns-index=0 namespace=1 subsystem=nvme-subsys0"));
+        assert!(output.contains(
+            "ns-index=0 namespace=1 nsid=1 ns-uuid=12345678-1234-1234-1234-123456789abc"
+        ));
+        assert!(output.contains(
+            "eui64=0011223344556677 nguid=00112233445566778899aabbccddeeff subsystem=nvme-subsys0"
+        ));
         assert!(output.contains("controller=nvme0 address=0000:01:00.0"));
         assert!(output.contains(
             "transport=pcie controller-id=1 namespace-capacity=900000000000 lba-format=512 B + 0 B"
         ));
-        assert!(output.contains("max-lba=1953125 sector-size=512"));
+        assert!(output.contains("max-lba=1953125 sector-size=512 ana-state=optimized"));
     }
 
     #[test]
