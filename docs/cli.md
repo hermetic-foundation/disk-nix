@@ -276,9 +276,9 @@ Use these commands for:
   details, token-to-keyslot bindings, and data-segment details
 - `cache`: bcache devices/cache sets, LVM cache/writecache metadata, bcachefs
   member-device cache accounting, and ZFS cache vdevs, including cache mode,
-  policy, dirty/writeback data, cache-set identity, state/running flags,
-  available cache percentage, discard, I/O errors, written/metadata-written
-  accounting, priority stats, and vdev state
+  policy, dirty/writeback data, backing device, cache-set identity,
+  state/running flags, available cache percentage, discard, I/O errors,
+  written/metadata-written accounting, priority stats, and vdev state
 - `lvm`: LVM physical volumes, volume groups, logical volumes, segments, thin
   pools, snapshots, and cache/writecache layers, including data and metadata
   percentages, active state, extent/PV/LV counts, origin/pool relationships,
@@ -337,7 +337,7 @@ Use these commands for:
   transfer-size details when probes expose them
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
-  metadata detail data, including bcache role/set/state, cache mode,
+  metadata detail data, including bcache role/backing-device/set/state, cache mode,
   replacement policy, available cache percentage, dirty data, I/O errors,
   writeback percentage, `blkid` signature
   details, ext superblock state, block/inode geometry, reservation, mount/check,

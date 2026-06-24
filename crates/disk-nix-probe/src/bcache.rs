@@ -129,6 +129,9 @@ fn add_device(graph: &mut StorageGraph, device: &BcacheDevice) {
     if let Some(set_uuid) = &device.set_uuid {
         node = node.with_property("bcache.set-uuid", set_uuid.clone());
     }
+    if let Some(backing_device) = &device.backing_device {
+        node = node.with_property("bcache.backing-device", dev_path(backing_device));
+    }
 
     graph.add_node(node);
 
@@ -252,6 +255,9 @@ mod tests {
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "bcache.writeback-running" && property.value == "1"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "bcache.backing-device" && property.value == "/dev/sdb1"
                 })
         }));
         assert!(graph.nodes.iter().any(|node| {

@@ -3029,6 +3029,7 @@ fn usage_details(node: &Node) -> String {
         ("bcachefs.device-data-cached", "bcachefs-device-cached"),
         ("bcache.role", "role"),
         ("bcache.kind", "kind"),
+        ("bcache.backing-device", "backing-device"),
         ("bcache.set-uuid", "set-uuid"),
         ("bcache.label", "label"),
         ("bcache.state", "state"),
@@ -4104,6 +4105,7 @@ mod tests {
         let bcache = Node::new("block:/dev/bcache0", NodeKind::CacheDevice, "bcache0")
             .with_property("bcache.role", "backing")
             .with_property("bcache.kind", "cache-set")
+            .with_property("bcache.backing-device", "/dev/sdb1")
             .with_property("bcache.set-uuid", "cache-set-uuid")
             .with_property("bcache.label", "fast-cache")
             .with_property("bcache.state", "clean")
@@ -4126,7 +4128,7 @@ mod tests {
             .with_property("bcache.writeback-running", "1");
         assert_eq!(
             usage_details(&bcache),
-            "role=backing kind=cache-set set-uuid=cache-set-uuid label=fast-cache state=clean running=1 available-percent=78 cache-mode=writeback replacement=lru discard=true dirty=64.0M io-errors=0 metadata-written=128.0M priority-stats=Unused: 0% Metadata: 1% readahead=0 sequential-cutoff=4.0M written=512.0M writeback-delay=30 writeback-metadata=true writeback-percent=10 writeback-rate=1.0M/sec writeback-running=1"
+            "role=backing kind=cache-set backing-device=/dev/sdb1 set-uuid=cache-set-uuid label=fast-cache state=clean running=1 available-percent=78 cache-mode=writeback replacement=lru discard=true dirty=64.0M io-errors=0 metadata-written=128.0M priority-stats=Unused: 0% Metadata: 1% readahead=0 sequential-cutoff=4.0M written=512.0M writeback-delay=30 writeback-metadata=true writeback-percent=10 writeback-rate=1.0M/sec writeback-running=1"
         );
 
         let swap = Node::new("swap:/dev/zram0", NodeKind::Swap, "/dev/zram0")
@@ -5257,6 +5259,7 @@ mod tests {
                 .with_path("/dev/bcache0")
                 .with_property("bcache.role", "backing")
                 .with_property("bcache.kind", "cache-set")
+                .with_property("bcache.backing-device", "/dev/sdb1")
                 .with_property("bcache.set-uuid", "cache-set-uuid")
                 .with_property("bcache.state", "clean")
                 .with_property("bcache.running", "1")
@@ -5295,6 +5298,7 @@ mod tests {
         assert!(output.contains("bcache0"));
         assert!(output.contains("writeback"));
         assert!(output.contains("lru"));
+        assert!(output.contains("backing-device=/dev/sdb1"));
         assert!(output.contains("dirty=64.0M"));
         assert!(output.contains("running=1 available-percent=78"));
         assert!(output.contains("io-errors=0 metadata-written=128.0M"));
