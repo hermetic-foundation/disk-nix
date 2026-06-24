@@ -164,11 +164,11 @@ The current probe layer normalizes:
   pool size, allocated/free usage, capacity, dedup ratio, fragmentation,
   altroot, health, status/action advisories, scan/error summaries, vdev
   topology, data/log/cache/special/dedup roles, backing devices, datasets,
-  snapshots, zvols, mountpoints, clone origins, and snapshot user-reference
-  counts that indicate active holds; ZFS dataset and zvol policy properties
-  include compression, dedup, checksum, copies, sync, primary/secondary cache,
-  record size, quota, reservation, encryption, key status, POSIX metadata
-  policy, and volsize
+  snapshots, zvols, mountpoints, clone origins, concrete snapshot-to-dataset or
+  snapshot-to-zvol lineage, and snapshot user-reference counts that indicate
+  active holds; ZFS dataset and zvol policy properties include compression,
+  dedup, checksum, copies, sync, primary/secondary cache, record size, quota,
+  reservation, encryption, key status, POSIX metadata policy, and volsize
 - Btrfs mounted filesystems through `btrfs filesystem show`,
   `btrfs filesystem usage -b`, rich `btrfs subvolume list` output, and
   `btrfs qgroup show --raw -reF -p -c` for filesystem identity, member

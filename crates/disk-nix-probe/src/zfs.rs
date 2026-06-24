@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use disk_nix_model::{Edge, Node, NodeKind, Relationship, StorageGraph, Usage};
 
 use crate::ProbeError;
@@ -12,8 +14,10 @@ pub fn normalize_zfs(
     for pool in parse_zpools(zpool_list)? {
         add_pool(&mut graph, pool);
     }
-    for dataset in parse_datasets(zfs_list)? {
-        add_dataset(&mut graph, dataset);
+    let datasets = parse_datasets(zfs_list)?;
+    let dataset_kinds = dataset_kinds(&datasets);
+    for dataset in datasets {
+        add_dataset(&mut graph, dataset, &dataset_kinds);
     }
     for pool in parse_zpool_status(zpool_status)? {
         add_status_pool(&mut graph, pool);
@@ -389,7 +393,19 @@ fn add_vdev(graph: &mut StorageGraph, pool_name: &str, vdev: ZpoolVdev) {
     }
 }
 
-fn add_dataset(graph: &mut StorageGraph, dataset: ZfsRow) {
+fn dataset_kinds(datasets: &[ZfsRow]) -> BTreeMap<String, NodeKind> {
+    datasets
+        .iter()
+        .filter(|dataset| dataset.kind != "snapshot")
+        .map(|dataset| (dataset.name.clone(), dataset_kind(&dataset.kind)))
+        .collect()
+}
+
+fn add_dataset(
+    graph: &mut StorageGraph,
+    dataset: ZfsRow,
+    dataset_kinds: &BTreeMap<String, NodeKind>,
+) {
     let kind = dataset_kind(&dataset.kind);
     let id = dataset_id(&dataset.name, kind);
     let mut node = Node::new(id.clone(), kind, dataset.name.clone())
@@ -424,6 +440,20 @@ fn add_dataset(graph: &mut StorageGraph, dataset: ZfsRow) {
             dataset_id(&origin, NodeKind::ZfsSnapshot),
             Relationship::SnapshotOf,
         ));
+    }
+
+    if kind == NodeKind::ZfsSnapshot {
+        if let Some(source) = dataset.name.split_once('@').map(|(source, _)| source) {
+            let source_kind = dataset_kinds
+                .get(source)
+                .copied()
+                .unwrap_or(NodeKind::ZfsDataset);
+            graph.add_edge(Edge::new(
+                id.clone(),
+                dataset_id(source, source_kind),
+                Relationship::SnapshotOf,
+            ));
+        }
     }
 
     if let Some(userrefs) = dataset.userrefs {
@@ -516,7 +546,8 @@ mod tests {
     const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\t-\tlz4\tnone\tnone\toff\t-\t-\t131072\toff\ton\t1\tstandard\tall\tall\ton\toff\thidden\toff\tsa\n\
 tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\tzstd\t1073741824\t268435456\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
 tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\tzstd\t-\t-\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
-tank/vm\tvolume\t50\t950\t50\t-\t-\t-\tlz4\t-\t-\toff\t-\t85899345920\t-\ton\tfletcher4\t1\tstandard\tall\tnone\toff\toff\thidden\toff\ton\n";
+tank/vm\tvolume\t50\t950\t50\t-\t-\t-\tlz4\t-\t-\toff\t-\t85899345920\t-\ton\tfletcher4\t1\tstandard\tall\tnone\toff\toff\thidden\toff\ton\n\
+tank/vm@clean\tsnapshot\t5\t-\t5\t-\t-\t1\tlz4\t-\t-\toff\t-\t-\t-\ton\tfletcher4\t1\tstandard\tall\tnone\toff\toff\thidden\toff\ton\n";
     const ZPOOL_STATUS: &[u8] = br#"
   pool: tank
  state: ONLINE
@@ -590,6 +621,12 @@ errors: No known data errors
                 .nodes
                 .iter()
                 .any(|node| node.kind == NodeKind::ZfsSnapshot && node.name == "tank/home@daily")
+        );
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.kind == NodeKind::ZfsSnapshot && node.name == "tank/vm@clean")
         );
         let snapshot = graph
             .nodes
@@ -675,6 +712,16 @@ errors: No known data errors
             edge.from.0 == "block:/dev/disk/by-id/disk-a-part1"
                 && edge.to.0 == "zfs-vdev:tank:/dev/disk/by-id/disk-a-part1"
                 && edge.relationship == Relationship::Backs
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "zfs-snapshot:tank/home@daily"
+                && edge.to.0 == "zfs-dataset:tank/home"
+                && edge.relationship == Relationship::SnapshotOf
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "zfs-snapshot:tank/vm@clean"
+                && edge.to.0 == "zvol:tank/vm"
+                && edge.relationship == Relationship::SnapshotOf
         }));
     }
 
