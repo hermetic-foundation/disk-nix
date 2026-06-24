@@ -925,8 +925,10 @@ write-policy, or LVM VDO utilization metadata.
 VDO `operation = "rescan"` renders read-only `vdo status`, `vdostats`, and
 graph inspection commands to refresh status and utilization without changing
 activation state or capacity.
-Create preflight remains non-ready until a backing device is declared. Supported
-property updates render `vdo changeWritePolicy`,
+Create preflight remains non-ready until a backing device is declared; with
+current-topology probing, create targets that already have VDO metadata or match
+another current node kind warn without suppressing the destructive create.
+Supported property updates render `vdo changeWritePolicy`,
 `vdo enableCompression`/`disableCompression`, and
 `vdo enableDeduplication`/`disableDeduplication`; unsupported VDO properties
 and invalid values are blocked as unsupported before commands are rendered.

@@ -437,7 +437,9 @@ that array path. MD RAID rescan plans render read-only `mdadm --detail --scan`,
 VDO apply plans render gated `vdo create` and `vdo remove` commands. VDO
 `desiredSize` drives online `vdo growLogical`, while explicit `physicalSize`
 drives reviewed `vdo growPhysical` after backing storage has already grown.
-Create preflight is marked unresolved until a backing device is declared. VDO
+Create preflight is marked unresolved until a backing device is declared; with
+current-topology probing, create targets that already have VDO metadata or match
+another current node kind warn without suppressing the destructive create. VDO
 property updates cover `auto`, `sync`, and `async` write policy changes,
 compression, and deduplication with concrete `vdo` commands; unsupported
 properties and invalid property values are classified as unsupported before

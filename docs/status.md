@@ -63,7 +63,8 @@ behavior across real storage stacks.
   physical-volume create targets without matching PV metadata or with duplicate
   or missing PV metadata, existing exported, partial, or missing-PV
   volume-group create targets, existing LVM volume, thin-pool, or ZFS zvol
-  create targets with different or unknown current size, MD create targets that
+  create targets with different or unknown current size, VDO create targets that
+  already have VDO metadata or match another node kind, MD create targets that
   are not cleanly active, ZFS pool create targets that are not online and
   healthy, ZFS pool/dataset/zvol or Btrfs
   subvolume/qgroup create targets that match a different node kind,
