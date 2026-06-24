@@ -158,6 +158,10 @@ Examples:
   the signature should remain available for later reactivation.
   Swap label and UUID property updates are offline-required because they mutate
   swap signature identity used by mounts, resume paths, and automation.
+  Current-topology comparison reports swap format targets that already have swap
+  metadata, including size, usage, priority, or type when probe data has it, and
+  also warns when a format target matches another current node kind. It does not
+  suppress `mkswap`; destructive policy and confirmation gates still apply.
 - zram is modeled as generated compressed swap state rather than persistent
   backing storage. NixOS module declarations derive `zramSwap`, while plain
   zram declarations render read-only `zramctl`, `swapon --show`, `disk-nix zram`, and graph inspection commands. Explicit `operation = "rescan"` uses
@@ -819,7 +823,9 @@ Swap grow, format, label, UUID, and rescan command plans require a path-shaped
 swap target from the declaration key, `target`, `path`, or `device`. Label and
 UUID updates render `swaplabel --label` and `swaplabel --uuid`;
 `operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
-inspection before any later grow or identity change. MD RAID
+inspection before any later grow or identity change. Current-topology comparison
+warns when a swap format target already has swap metadata or matches another
+node kind, while keeping the destructive `mkswap` action reviewable. MD RAID
 assemble, stop, create, grow, member add,
 replacement, and removal command plans require an explicit array path such as
 `/dev/md/root`; assemble also requires explicit reviewed member devices. MD

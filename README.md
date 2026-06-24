@@ -253,8 +253,8 @@ Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, explicit filesystem formatting/replacement, swap
 signature/resize workflows, LUKS format/resize/open/close/keyslot/token
 workflows, and current-topology diagnostics that report matching filesystem
-format types and LUKS format target metadata while keeping destructive format
-actions reviewable. Btrfs
+format types, swap format targets, and LUKS format target metadata while
+keeping destructive format actions reviewable. Btrfs
 subvolume creation/deletion/rescan, VDO create/grow/rescan/remove, LVM
 physical-volume create/grow/rescan/remove, logical-volume growth/removal,
 LVM volume-group extension/device removal, LVM thin-pool create/grow/rescan/remove,
@@ -383,7 +383,10 @@ Swap `operation = "deactivate"` renders reviewed `swapoff` without removing the
 signature, while `operation = "destroy"` renders `swapoff` followed by
 `wipefs --all` and remains destructive-policy gated. With current-topology
 probing, already inactive swap teardown requests are suppressed and active swap
-targets stay actionable with size, usage, type, or priority diagnostics.
+targets stay actionable with size, usage, type, or priority diagnostics. Swap
+format targets that already have swap metadata, or that match another current
+node kind, warn with the current metadata while keeping `mkswap` destructive and
+review-gated.
 Plain zram declarations render read-only `zramctl`, `swapon --show`, and
 `disk-nix zram` inventory commands so generated compressed swap state can be
 reviewed without mutation. Explicit zram `operation = "rescan"` uses the same

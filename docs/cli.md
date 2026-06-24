@@ -582,8 +582,9 @@ the number of graph-derived dependency edges as `graphDependencyEdgeCount`.
 With `--probe-current`, the CLI also probes the current host and adds
 `topologyComparison`, including matched target counts, missing target counts,
 size diagnostics, filesystem type conflicts, matching filesystem format types
-that still require destructive review, and already-satisfied property, size, or
-remount option checks. Mount actions are also compared with
+and swap format targets that still require destructive review, and
+already-satisfied property, size, or remount option checks. Mount actions are
+also compared with
 `mount.source` when the current graph has mountpoint data, unmount actions are
 suppressed when the mountpoint is absent, remount actions treat declared
 options as a required subset of current mount options, LVM
@@ -792,7 +793,9 @@ intact. Swap `operation = "destroy"` renders `swapoff` and `wipefs --all`, so
 it remains blocked until destructive policy is explicitly allowed. With
 `--probe-current`, inactive or absent swap teardown requests are suppressed,
 while active swap targets stay actionable with size, usage, type, or priority
-diagnostics.
+diagnostics. Swap format targets that already have swap metadata, or that match
+another current node kind, warn with the current metadata while keeping `mkswap`
+destructive and review-gated.
 Plain zram declarations render read-only `zramctl`, `swapon --show`, and
 `disk-nix zram` commands for compressed swap size, algorithm, memory use, and
 activation review. Explicit zram `operation = "rescan"` uses the same inventory

@@ -54,6 +54,8 @@ behavior across real storage stacks.
   diagnostics are present;
   matching filesystem format types are reported without suppressing destructive
   format actions so policy and confirmation gates still apply;
+  swap format targets report existing swap metadata or non-swap node kinds
+  without suppressing destructive format actions;
   LUKS format targets are matched by backing device and report existing header
   metadata or non-LUKS node kinds without suppressing destructive format
   actions;
