@@ -6552,10 +6552,50 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
         | Operation::RemoveDevice
         | Operation::Rollback
         | Operation::Destroy => (
-            Vec::new(),
+            vec![unimplemented_action_command(action, collection, target)],
             vec!["no domain-specific command plan is generated for this action yet".to_string()],
             true,
         ),
+    }
+}
+
+fn unimplemented_action_command(
+    action: &PlannedAction,
+    collection: Option<&str>,
+    target: Option<&str>,
+) -> ExecutionCommand {
+    let operation = operation_name(action.operation);
+    let collection_arg = collection.unwrap_or("<collection>");
+    let target_arg = target.unwrap_or("<target>");
+    let mut unresolved_inputs = vec!["storage-domain command renderer".to_string()];
+    if collection.is_none() {
+        unresolved_inputs.push("storage collection".to_string());
+    }
+    if target.is_none() {
+        unresolved_inputs.push("storage target".to_string());
+    }
+
+    command_vec_with_readiness(
+        vec![
+            "disk-nix".to_string(),
+            "storage-action".to_string(),
+            operation.clone(),
+            "--collection".to_string(),
+            collection_arg.to_string(),
+            "--target".to_string(),
+            target_arg.to_string(),
+        ],
+        true,
+        CommandReadiness::NeedsDomainImplementation,
+        unresolved_inputs,
+        &format!("render a domain-specific {operation} command before execution"),
+    )
+}
+
+fn operation_name(operation: Operation) -> String {
+    match serde_json::to_value(operation) {
+        Ok(serde_json::Value::String(value)) => value,
+        _ => format!("{operation:?}").to_ascii_lowercase(),
     }
 }
 
@@ -11909,7 +11949,7 @@ fn property_assignment(action: &PlannedAction) -> String {
 
 #[cfg(test)]
 mod tests {
-    use disk_nix_plan::{ActionContext, plan_and_policy_from_json_bytes};
+    use disk_nix_plan::{ActionContext, PlanSummary, plan_and_policy_from_json_bytes};
 
     use super::*;
 
@@ -19414,6 +19454,75 @@ mod tests {
                 .iter()
                 .any(|message| message.contains("every planned command must be ready"))
         );
+    }
+
+    #[test]
+    fn execute_refuses_unimplemented_domain_action_placeholders() {
+        let plan = Plan {
+            summary: PlanSummary {
+                action_count: 1,
+                offline_required_count: 0,
+                destructive_count: 0,
+                potential_data_loss_count: 0,
+                unsupported_count: 0,
+            },
+            actions: vec![PlannedAction {
+                id: "mysteryVolumes:alpha:check".to_string(),
+                description: "check a storage domain without a command renderer".to_string(),
+                operation: Operation::Check,
+                risk: RiskClass::Safe,
+                destructive: false,
+                context: ActionContext {
+                    collection: Some("mysteryVolumes".to_string()),
+                    target: Some("/dev/mystery-alpha".to_string()),
+                    ..ActionContext::default()
+                },
+                advice: None,
+            }],
+            topology_comparison: None,
+        };
+        let mut ran_commands = false;
+
+        let report = prepare_execution_with_runner(
+            &plan,
+            ApplyPolicy::default(),
+            ExecutionMode::Execute,
+            |_| {
+                ran_commands = true;
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+        );
+
+        assert_eq!(report.status, ExecutionStatus::NotReady);
+        assert!(!ran_commands);
+        assert_eq!(report.command_summary.command_count, 1);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.execution_results.is_empty());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mysteryVolumes:alpha:check"
+                && step.requires_manual_review
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "disk-nix",
+                            "storage-action",
+                            "check",
+                            "--collection",
+                            "mysteryVolumes",
+                            "--target",
+                            "/dev/mystery-alpha",
+                        ]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["storage-domain command renderer"]
+                })
+        }));
     }
 
     #[test]
