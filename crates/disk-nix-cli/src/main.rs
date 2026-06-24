@@ -2593,11 +2593,14 @@ fn usage_details(node: &Node) -> String {
         ("swap.priority", "swap-priority"),
         ("loop.backing", "loop-backing"),
         ("loop.back-file", "back-file"),
+        ("loop.backing-inode", "back-ino"),
+        ("loop.backing-major-minor", "back-major-minor"),
         ("loop.major-minor", "major-minor"),
         ("loop.offset", "offset"),
         ("loop.sizelimit", "sizelimit"),
         ("loop.logical-sector-size", "logical-sector"),
         ("loop.autoclear", "autoclear"),
+        ("loop.partscan", "partscan"),
         ("loop.read-only", "ro"),
         ("loop.direct-io", "dio"),
         ("udev.symlink", "udev-link"),
@@ -3881,8 +3884,11 @@ mod tests {
                 .with_path("/dev/loop0")
                 .with_property("lsblk.type", "loop")
                 .with_property("loop.back-file", "/var/lib/images/root.img")
+                .with_property("loop.backing-inode", "12345")
+                .with_property("loop.backing-major-minor", "0:45")
                 .with_property("loop.offset", "1048576")
                 .with_property("loop.autoclear", "true")
+                .with_property("loop.partscan", "true")
                 .with_property("loop.direct-io", "true"),
         );
         graph.add_node(
@@ -3969,7 +3975,7 @@ mod tests {
         assert!(output.contains("dm-primary-source=1 dm-disable-other-rules=0"));
         assert!(output.contains("dm-subsystem-flag0=1 dm-subsystem-flag1=0"));
         assert!(output.contains(
-            "lsblk-type=loop back-file=/var/lib/images/root.img offset=1048576 autoclear=true dio=true"
+            "lsblk-type=loop back-file=/var/lib/images/root.img back-ino=12345 back-major-minor=0:45 offset=1048576 autoclear=true partscan=true dio=true"
         ));
         assert!(output.contains("loop-backing=true"));
         assert!(output.contains("swap-active=true swap-type=partition swap-priority=100"));
@@ -4364,16 +4370,19 @@ mod tests {
 
         let loop_device = Node::new("block:/dev/loop0", NodeKind::LoopDevice, "/dev/loop0")
             .with_property("loop.back-file", "/var/lib/images/root.img")
+            .with_property("loop.backing-inode", "12345")
+            .with_property("loop.backing-major-minor", "0:45")
             .with_property("loop.major-minor", "7:0")
             .with_property("loop.offset", "1048576")
             .with_property("loop.sizelimit", "1073741824")
             .with_property("loop.logical-sector-size", "512")
             .with_property("loop.autoclear", "true")
+            .with_property("loop.partscan", "true")
             .with_property("loop.read-only", "false")
             .with_property("loop.direct-io", "true");
         assert_eq!(
             usage_details(&loop_device),
-            "back-file=/var/lib/images/root.img major-minor=7:0 offset=1048576 sizelimit=1073741824 logical-sector=512 autoclear=true ro=false dio=true"
+            "back-file=/var/lib/images/root.img back-ino=12345 back-major-minor=0:45 major-minor=7:0 offset=1048576 sizelimit=1073741824 logical-sector=512 autoclear=true partscan=true ro=false dio=true"
         );
 
         let nvme = Node::new(
@@ -6046,11 +6055,14 @@ mod tests {
             Node::new("block:/dev/loop0", NodeKind::LoopDevice, "/dev/loop0")
                 .with_path("/dev/loop0")
                 .with_property("loop.back-file", "/var/lib/images/root.img")
+                .with_property("loop.backing-inode", "12345")
+                .with_property("loop.backing-major-minor", "0:45")
                 .with_property("loop.major-minor", "7:0")
                 .with_property("loop.offset", "1048576")
                 .with_property("loop.sizelimit", "0")
                 .with_property("loop.logical-sector-size", "512")
                 .with_property("loop.autoclear", "true")
+                .with_property("loop.partscan", "true")
                 .with_property("loop.read-only", "false")
                 .with_property("loop.direct-io", "true"),
         );
@@ -6088,8 +6100,12 @@ mod tests {
         assert!(output.contains("/var/lib/images/root.img"));
         assert!(output.contains("1048576"));
         assert!(output.contains("ro=false"));
-        assert!(output.contains("back-file=/var/lib/images/root.img major-minor=7:0"));
-        assert!(output.contains("logical-sector=512 autoclear=true ro=false dio=true"));
+        assert!(output.contains(
+            "back-file=/var/lib/images/root.img back-ino=12345 back-major-minor=0:45 major-minor=7:0"
+        ));
+        assert!(
+            output.contains("logical-sector=512 autoclear=true partscan=true ro=false dio=true")
+        );
         assert!(output.contains("loop-backing=true"));
         assert!(output.contains("/dev/loop1"));
         assert!(output.contains("1.0 GiB"));

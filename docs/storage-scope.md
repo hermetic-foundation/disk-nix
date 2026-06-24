@@ -87,8 +87,8 @@ The current probe layer normalizes:
 - `/proc/swaps` for active swap devices/files, active size, used/free bytes,
   swap type, and priority
 - `losetup --json --list` for loop device mappings, backing files or block
-  devices, offsets, size limits, autoclear state, read-only state, direct I/O,
-  and logical sector size
+  devices, backing inode and major/minor, offsets, size limits, partition-scan
+  state, autoclear state, read-only state, direct I/O, and logical sector size
 - `nvme list --output-format=json` for NVMe namespace controller/subsystem,
   transport, namespace id, namespace UUID, NGUID, EUI-64, ANA state, LBA
   format, sector geometry, capacity, used bytes, and generic namespace path

@@ -204,7 +204,8 @@ Use these commands for:
   cache devices, multipath devices, NVMe namespaces, loop devices, and swap,
   including model/vendor, transport, rotational, NVMe model/firmware/namespace
   geometry, partition table/number, filesystem type, loop
-  backing/offset/autoclear metadata, multipath path host/major-minor, parsed
+  backing inode, backing major/minor, offset/autoclear/partition-scan metadata,
+  multipath path host/major-minor, parsed
   SCSI coordinates, split dm/checker/online state details, and extra path
   flags, MD RAID member number/major/minor/raid-device/state, active swap
   state/type/priority, and udev by-id/by-path links, encoded labels,
@@ -325,8 +326,9 @@ Use these commands for:
   `mdadm --examine --scan`, or
   `mdadm --detail` exposes them
 - `loop`: loop devices and backing files/devices, including backing path,
-  offset, size limit, logical sector size, major/minor, autoclear,
-  read-only, and direct-I/O settings when `losetup --json` exposes them
+  backing inode, backing major/minor, offset, size limit, logical sector size,
+  major/minor, autoclear, partition-scan, read-only, and direct-I/O settings
+  when `losetup --json` exposes them
 - `swap`: active swap devices and files, including type, priority, active
   state, size, used bytes, free bytes, utilization, and backing relationship
   when `/proc/swaps` exposes them

@@ -57,6 +57,13 @@ fn add_loop_device(graph: &mut StorageGraph, device: &Value) -> Result<(), Probe
 fn loop_properties(device: &Value) -> Vec<(&'static str, String)> {
     let mut properties = Vec::new();
     push_string(device, &mut properties, "back-file", "loop.back-file");
+    push_number(device, &mut properties, "back-ino", "loop.backing-inode");
+    push_string(
+        device,
+        &mut properties,
+        "back-maj:min",
+        "loop.backing-major-minor",
+    );
     push_string(device, &mut properties, "maj:min", "loop.major-minor");
     push_number(device, &mut properties, "offset", "loop.offset");
     push_number(device, &mut properties, "sizelimit", "loop.sizelimit");
@@ -67,6 +74,7 @@ fn loop_properties(device: &Value) -> Vec<(&'static str, String)> {
         "loop.logical-sector-size",
     );
     push_bool(device, &mut properties, "autoclear", "loop.autoclear");
+    push_bool(device, &mut properties, "partscan", "loop.partscan");
     push_bool(device, &mut properties, "ro", "loop.read-only");
     push_bool(device, &mut properties, "dio", "loop.direct-io");
     properties
@@ -140,7 +148,10 @@ mod tests {
           "autoclear": true,
           "ro": false,
           "back-file": "/var/lib/images/root.img",
+          "back-ino": 12345,
+          "back-maj:min": "0:45",
           "dio": true,
+          "partscan": true,
           "log-sec": 512
         },
         {
@@ -168,10 +179,24 @@ mod tests {
             property.key == "loop.back-file" && property.value == "/var/lib/images/root.img"
         }));
         assert!(
+            loop0.properties.iter().any(|property| {
+                property.key == "loop.backing-inode" && property.value == "12345"
+            })
+        );
+        assert!(loop0.properties.iter().any(|property| {
+            property.key == "loop.backing-major-minor" && property.value == "0:45"
+        }));
+        assert!(
             loop0
                 .properties
                 .iter()
                 .any(|property| { property.key == "loop.autoclear" && property.value == "true" })
+        );
+        assert!(
+            loop0
+                .properties
+                .iter()
+                .any(|property| { property.key == "loop.partscan" && property.value == "true" })
         );
 
         let backing = graph
