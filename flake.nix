@@ -965,6 +965,52 @@
             };
           }
         ];
+        nixosModulePoolCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              pools.tank.operation = "rescan";
+              pools.primaryPool = {
+                target = "tank";
+                operation = "import";
+              };
+            };
+          }
+        ];
+        nixosModuleDatasetCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              datasets."tank/home".operation = "rescan";
+              datasets.homeAlias = {
+                target = "tank/home";
+                operation = "create";
+              };
+            };
+          }
+        ];
+        nixosModuleZvolCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              zvols."tank/vm/root".operation = "rescan";
+              zvols.vmRootAlias = {
+                path = "tank/vm/root";
+                operation = "grow";
+                desiredSize = "80GiB";
+              };
+            };
+          }
+        ];
         nixosModuleSnapshotCollisionTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -2037,6 +2083,9 @@
             dmMapCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDmMapCollisionTest.config.system.build.toplevel).success))}
             mdRaidCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleMdRaidCollisionTest.config.system.build.toplevel).success))}
             multipathMapCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleMultipathMapCollisionTest.config.system.build.toplevel).success))}
+            poolCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModulePoolCollisionTest.config.system.build.toplevel).success))}
+            datasetCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDatasetCollisionTest.config.system.build.toplevel).success))}
+            zvolCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleZvolCollisionTest.config.system.build.toplevel).success))}
             snapshotCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleSnapshotCollisionTest.config.system.build.toplevel).success))}
             iscsiSessionCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleIscsiSessionCollisionTest.config.system.build.toplevel).success))}
             lunPathCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLunPathCollisionTest.config.system.build.toplevel).success))}
@@ -2045,6 +2094,9 @@
             test "$dmMapCollisionSuccess" = false
             test "$mdRaidCollisionSuccess" = false
             test "$multipathMapCollisionSuccess" = false
+            test "$poolCollisionSuccess" = false
+            test "$datasetCollisionSuccess" = false
+            test "$zvolCollisionSuccess" = false
             test "$snapshotCollisionSuccess" = false
             test "$iscsiSessionCollisionSuccess" = false
             test "$lunPathCollisionSuccess" = false

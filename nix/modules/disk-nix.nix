@@ -1084,6 +1084,17 @@ let
   activeMultipathMapIdentities = lib.filter (identity: identity != null) (
     lib.mapAttrsToList multipathMapIdentity activeMultipathMaps
   );
+  lifecycleIdentity =
+    name: object:
+    if object.target != null then
+      object.target
+    else if object.path != null then
+      object.path
+    else
+      name;
+  activePoolIdentities = lib.mapAttrsToList lifecycleIdentity activePools;
+  activeDatasetIdentities = lib.mapAttrsToList lifecycleIdentity activeDatasets;
+  activeZvolIdentities = lib.mapAttrsToList lifecycleIdentity activeZvols;
   snapshotIdentity =
     name: snapshot:
     if snapshot.name != null then
@@ -1151,15 +1162,12 @@ let
   hasActiveCaches = hasActiveAttrs activeCaches;
   zfsPoolNameFromIdentity =
     identity: builtins.head (lib.splitString "/" (builtins.head (lib.splitString "@" identity)));
-  zfsLifecycleIdentities =
-    attrs:
-    lib.mapAttrsToList (name: object: if object.target != null then object.target else name) attrs;
   zfsExtraPools = lib.unique (
     lib.filter (pool: pool != "" && !(lib.hasPrefix "/" pool)) (
       map zfsPoolNameFromIdentity (
-        zfsLifecycleIdentities activePools
-        ++ zfsLifecycleIdentities activeDatasets
-        ++ zfsLifecycleIdentities activeZvols
+        activePoolIdentities
+        ++ activeDatasetIdentities
+        ++ activeZvolIdentities
         ++ (map (snapshot: snapshot.target) (lib.attrValues activeSnapshots))
       )
     )
@@ -2409,6 +2417,18 @@ in
         assertion =
           lib.length activeMultipathMapIdentities == lib.length (lib.unique activeMultipathMapIdentities);
         message = "services.disk-nix.multipathMaps entries must resolve to unique active concrete map identities.";
+      }
+      {
+        assertion = lib.length activePoolIdentities == lib.length (lib.unique activePoolIdentities);
+        message = "services.disk-nix.pools entries must resolve to unique active concrete pool identities.";
+      }
+      {
+        assertion = lib.length activeDatasetIdentities == lib.length (lib.unique activeDatasetIdentities);
+        message = "services.disk-nix.datasets entries must resolve to unique active concrete dataset identities.";
+      }
+      {
+        assertion = lib.length activeZvolIdentities == lib.length (lib.unique activeZvolIdentities);
+        message = "services.disk-nix.zvols entries must resolve to unique active concrete zvol identities.";
       }
       {
         assertion = lib.length activeSnapshotIdentities == lib.length (lib.unique activeSnapshotIdentities);
