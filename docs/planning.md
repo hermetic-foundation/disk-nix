@@ -168,7 +168,11 @@ Examples:
   suggests read-only snapshots or rename-first validation. Btrfs subvolume
   `operation = "rescan"` is online and read-only; it refreshes subvolume
   metadata, read-only state, and modeled graph relationships for the declared
-  `path`.
+  `path`. Current-topology comparison suppresses concrete absolute-path
+  subvolume destroy actions only when the subvolume is already absent; present
+  subvolumes remain actionable with warnings that include available subvolume
+  id, generation, parent, top-level, and UUID metadata. Logical subvolume names
+  remain actionable unless the graph matches them.
 - VDO creation and removal are destructive because they write or remove VDO
   metadata on the backing device; VDO growth is online, with `desiredSize`
   rendering logical growth and explicit `physicalSize` rendering physical
@@ -511,6 +515,10 @@ VDO utilization metadata. VDO start/stop reconciliation uses
 volume is already in `normal` mode and stop actions only when the mode
 explicitly reports stopped, not-running, or inactive; opposite states stay
 actionable with a warning.
+Btrfs subvolume destroy reconciliation suppresses concrete absolute-path
+targets only when they are already absent. Present subvolumes stay actionable
+with warnings that include available subvolume id, generation, parent,
+top-level, and UUID metadata.
 ZFS dataset and zvol destroy reconciliation suppresses concrete `pool/name`
 targets only when they are already absent. Present targets stay actionable with
 warnings that include available mountpoint, quota, reservation, encryption, key
@@ -526,8 +534,8 @@ Already-satisfied grow, shrink, device-mapper destroy, multipath destroy,
 bcache detach, iSCSI login/logout, LVM activation/deactivation, LUKS open, loop
 create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
 unmount, remount, NFS export/unexport, VDO destroy, VDO start, VDO stop, MD
-assemble, ZFS dataset/zvol destroy, ZFS pool import, LVM volume-group
-import/export, and set-property actions with no warning diagnostics are
+assemble, Btrfs subvolume destroy, ZFS dataset/zvol destroy, ZFS pool import,
+LVM volume-group import/export, and set-property actions with no warning diagnostics are
 suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 
@@ -698,6 +706,10 @@ from lifecycle properties.
 Btrfs subvolume rename plans render reviewed `mv -- <old> <new>` commands and
 stay offline-required so mounts, qgroups, snapshots, and send/receive jobs can
 move together without deleting the original subvolume.
+Current-topology comparison suppresses Btrfs subvolume deletion only for
+concrete absolute paths that are already absent. Present subvolumes stay
+actionable with subvolume id, generation, parent, top-level, and UUID metadata
+when available.
 bcachefs filesystem topology plans support add, replace, remove, grow,
 rebalance, and scrub operations. Device growth uses `bcachefs device resize`
 against a declared member device and desired size. Device add/remove uses

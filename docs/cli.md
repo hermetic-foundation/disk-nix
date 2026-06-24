@@ -575,7 +575,9 @@ metadata is available, LUKS open and close actions are compared with
 with current mapper presence and `dm.open-count` metadata, multipath destroy
 actions are compared with current map presence plus WWID or dm map metadata,
 bcache detach actions are compared with current bcache target presence,
-dirty-data, cache-mode, and cache-set metadata, LUN attach/detach and NVMe
+dirty-data, cache-mode, and cache-set metadata, Btrfs subvolume destroy actions
+are compared with concrete absolute-path presence plus subvolume id,
+generation, parent, top-level, and UUID metadata, LUN attach/detach and NVMe
 namespace attach/detach actions are compared with concrete host-visible path
 matches, NFS export actions are compared with
 `nfs.export-client` and `nfs.export-option-*` properties, NFS unexport actions
@@ -595,8 +597,8 @@ multipath destroy, bcache detach, iSCSI login/logout, LVM
 activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
 loop create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
 unmount, remount, NFS export/unexport, VDO destroy, VDO start, VDO stop, MD
-assemble, ZFS dataset/zvol destroy, ZFS pool import, and property actions that
-have no warning diagnostics are suppressed from the actionable plan and counted as
+assemble, Btrfs subvolume destroy, ZFS dataset/zvol destroy, ZFS pool import,
+and property actions that have no warning diagnostics are suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
 inactive LUKS open targets, active LUKS close targets, loop devices mapped to
@@ -605,7 +607,7 @@ device-mapper removal targets, present multipath flush targets, absent LUN
 attach paths, visible LUN detach paths, present bcache detach targets, absent
 NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
 destroy targets, non-normal VDO start modes, running VDO stop targets,
-present ZFS dataset/zvol destroy targets, degraded or failed MD arrays,
+present Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, degraded or failed MD arrays,
 degraded ZFS pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
 targets without a logged-in session and logout targets that still have a
@@ -1017,7 +1019,12 @@ Btrfs subvolume command plans render `btrfs subvolume create`, policy-gated
 `btrfs property set -ts <path> ro true|false` for read-only property
 declarations. Subvolume `operation = "rescan"` renders read-only
 `btrfs subvolume show`, `btrfs property get -ts <path> ro`, and graph
-inspection commands for the declared path.
+inspection commands for the declared path. With current-topology probing,
+concrete absolute-path subvolume destroy actions are suppressed only when the
+subvolume is already absent; present subvolumes stay actionable with warnings
+that include subvolume id, generation, parent, top-level, or UUID metadata when
+available. Logical subvolume names remain actionable unless a graph node
+actually matches them.
 Btrfs qgroup command plans render `btrfs qgroup create`, policy-gated
 `btrfs qgroup destroy`, and `btrfs qgroup limit` for referenced and exclusive
 limit declarations in `btrfsQgroups`. Qgroup `operation = "rescan"` renders

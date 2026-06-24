@@ -238,6 +238,8 @@ pub enum TopologyDiagnosticKind {
     SizeAlreadySatisfied,
     SizeConflict,
     FilesystemTypeConflict,
+    BtrfsSubvolumeDestroyAlreadySatisfied,
+    BtrfsSubvolumeDestroyRequired,
     BcacheDetachAlreadySatisfied,
     BcacheDetachRequired,
     IscsiLoginAlreadySatisfied,
@@ -777,6 +779,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                 matches!(
                     diagnostic.kind,
                     TopologyDiagnosticKind::SizeAlreadySatisfied
+                        | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
                         | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
@@ -1395,6 +1398,7 @@ fn already_satisfied_action_ids(
             already_satisfied |= matches!(
                 diagnostic.kind,
                 TopologyDiagnosticKind::SizeAlreadySatisfied
+                    | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
                     | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
@@ -1445,6 +1449,9 @@ fn topology_diagnostics_for_action(
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
         if let Some(diagnostic) = bcache_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
+        if let Some(diagnostic) = btrfs_subvolume_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
         if let Some(diagnostic) = vdo_destroy_absent_diagnostic(action, &query) {
@@ -1507,6 +1514,9 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(luks_close_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
     diagnostics.extend(bcache_present_diagnostic(action, node, &query));
+    diagnostics.extend(btrfs_subvolume_destroy_present_diagnostic(
+        action, node, &query,
+    ));
     diagnostics.extend(dm_map_present_diagnostic(action, node, &query));
     diagnostics.extend(multipath_present_diagnostic(action, node, &query));
     diagnostics.extend(loop_present_diagnostic(action, node, &query));
@@ -1959,6 +1969,86 @@ fn bcache_detach_details(node: &Node) -> Vec<String> {
 
 fn is_concrete_bcache_target(query: &str) -> bool {
     query.starts_with("/dev/bcache") || query.starts_with("block:/dev/bcache")
+}
+
+fn btrfs_subvolume_destroy_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("btrfsSubvolumes")
+        || action.operation != Operation::Destroy
+        || !is_concrete_btrfs_subvolume_target(query)
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("Btrfs subvolume {query} is already absent from current topology"),
+        current: None,
+    })
+}
+
+fn btrfs_subvolume_destroy_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("btrfsSubvolumes")
+        || action.operation != Operation::Destroy
+        || node.kind != NodeKind::BtrfsSubvolume
+    {
+        return None;
+    }
+
+    let details = btrfs_subvolume_destroy_details(node);
+    let message = if details.is_empty() {
+        format!("Btrfs subvolume {query} is still present")
+    } else {
+        format!(
+            "Btrfs subvolume {query} is still present with {}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::BtrfsSubvolumeDestroyRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn btrfs_subvolume_destroy_details(node: &Node) -> Vec<String> {
+    let mut details = [
+        ("btrfs.id", "subvolume id"),
+        ("btrfs.generation", "generation"),
+        ("btrfs.created-generation", "created generation"),
+        ("btrfs.parent-id", "parent id"),
+        ("btrfs.top-level", "top level"),
+        ("btrfs.received-uuid", "received UUID"),
+        ("btrfs.parent-uuid", "parent UUID"),
+    ]
+    .into_iter()
+    .filter_map(|(property, label)| {
+        property_value_from_node(node, property).map(|value| format!("{label} {value}"))
+    })
+    .collect::<Vec<_>>();
+
+    if let Some(uuid) = node.identity.uuid.as_deref() {
+        details.push(format!("UUID {uuid}"));
+    }
+
+    details
+}
+
+fn is_concrete_btrfs_subvolume_target(query: &str) -> bool {
+    query.starts_with('/')
 }
 
 fn dm_map_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
@@ -15488,6 +15578,112 @@ mod tests {
         assert_eq!(plan.actions.len(), 1);
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "caches:root-cache:remove-device:cache-set-uuid"
+                && diagnostic.kind == TopologyDiagnosticKind::Missing
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_btrfs_subvolume_destroy_when_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsSubvolumes": {
+                "/mnt/persist/@old": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfssubvolumes:/mnt/persist/@old:destroy"
+                && diagnostic.kind == TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_btrfs_subvolume_destroy_when_present() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsSubvolumes": {
+                "/mnt/persist/@home": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "btrfs-subvolume:fs-uuid:@home",
+                NodeKind::BtrfsSubvolume,
+                "@home",
+            )
+            .with_path("/mnt/persist/@home")
+            .with_property("btrfs.id", "257")
+            .with_property("btrfs.generation", "100")
+            .with_property("btrfs.parent-id", "5")
+            .with_property("btrfs.top-level", "5"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfssubvolumes:/mnt/persist/@home:destroy"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::BtrfsSubvolumeDestroyRequired
+                && diagnostic.message.contains("subvolume id 257")
+                && diagnostic.message.contains("generation 100")
+                && diagnostic.message.contains("parent id 5")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_logical_btrfs_subvolume_destroy_missing() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "btrfsSubvolumes": {
+                "old-home": {
+                  "destroy": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "btrfssubvolumes:old-home:destroy"
                 && diagnostic.kind == TopologyDiagnosticKind::Missing
         }));
     }
