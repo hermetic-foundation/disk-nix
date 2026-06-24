@@ -276,11 +276,12 @@ or `device` declares the backing bcache device path.
 Loop-device create, grow, rescan, and detach plans require a `/dev/loop*`
 target; logical loop names can declare it through `target` or `path`, while
 `device` remains the backing file or block device for create plans.
-Backing-file grow and rescan plans use `backingFiles` declarations. Growth
-requires a path-shaped key, `target`, or `path` plus `desiredSize`,
-`targetSize`, or `size`; command plans render `stat`, `truncate --size`, and
-focused graph inspection so loop devices, swapfiles, and filesystem consumers
-can be refreshed separately.
+Backing-file create, grow, and rescan plans use `backingFiles` declarations.
+Create plans require a path-shaped key, `target`, or `path` plus `desiredSize`,
+`targetSize`, or `size`; command plans refuse to overwrite an existing path
+with `test ! -e` before rendering `truncate --size`. Growth uses the same path
+and size inputs to extend an existing file. Focused graph inspection keeps loop
+devices, swapfiles, and filesystem consumers as explicit follow-up work.
 Device-mapper map rescan plans use `dmMaps` declarations and render read-only
 `dmsetup info`, `dmsetup deps -o devname`, `dmsetup table`, `dmsetup status`,
 and graph inspection commands. `operation = "rename"` renders reviewed

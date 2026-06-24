@@ -742,10 +742,13 @@ only when the loop device already maps the declared backing file and suppresses
 destroy/detach actions only when the loop device is already absent; different
 existing backing files stay actionable with a warning.
 Backing-file command plans use `backingFiles` declarations for file-backed
-storage origins. `operation = "rescan"` renders read-only `stat`, `du`, and
-graph inspection commands. `operation = "grow"` renders `truncate --size`
-only when a concrete file path and desired size are declared; logical names
-can supply the file path with `target` or `path`.
+storage origins. `operation = "create"` first renders `test ! -e` for the
+reviewed path and then `truncate --size` for the requested sparse file size,
+so existing images are not overwritten by the generated command sequence.
+`operation = "rescan"` renders read-only `stat`, `du`, and graph inspection
+commands. `operation = "grow"` renders `truncate --size` only when a concrete
+file path and desired size are declared; logical names can supply the file path
+with `target` or `path`.
 Device-mapper command plans use `dmMaps` declarations for map refreshes and
 reviewed mapper renames or removals. `operation = "rescan"` renders `dmsetup info`, `dmsetup deps -o devname`, `dmsetup table`, `dmsetup status`, and graph
 inspection commands when a concrete `/dev/mapper/*` or `/dev/dm-*` target is

@@ -6415,6 +6415,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create if collection == "backingFiles" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "backing file creation initializes a new sparse file-backed storage origin"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the parent filesystem has enough free space before creating sparse images"
+                        .to_string(),
+                    "use grow only when an existing backing file should be extended".to_string(),
+                    "create loop, swap, or filesystem consumers only after the file identity is verified"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "btrfsSubvolumes" => (
             RiskClass::Online,
             false,
@@ -9000,6 +9015,19 @@ pub fn default_capabilities() -> Vec<Capability> {
                 alternatives: vec![
                     "unmount filesystems before detach".to_string(),
                     "preserve the backing file for remapping".to_string(),
+                ],
+            }),
+        },
+        Capability {
+            node_kind: NodeKind::BackingFile,
+            operation: Operation::Create,
+            risk: RiskClass::Online,
+            advice: Some(Advice {
+                summary: "backing file creation initializes a new sparse file-backed storage origin"
+                    .to_string(),
+                alternatives: vec![
+                    "verify the parent filesystem has enough free space first".to_string(),
+                    "attach loop devices or swap only after the file is verified".to_string(),
                 ],
             }),
         },
@@ -14402,6 +14430,10 @@ mod tests {
         let plan = plan_from_json_bytes(
             br#"{
               "backingFiles": {
+                "/var/lib/images/new.img": {
+                  "operation": "create",
+                  "desiredSize": "8GiB"
+                },
                 "/var/lib/images/root.img": {
                   "operation": "grow",
                   "desiredSize": "16GiB"
@@ -14415,9 +14447,28 @@ mod tests {
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.action_count, 3);
         assert_eq!(plan.summary.offline_required_count, 0);
         assert_eq!(plan.summary.destructive_count, 0);
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "backingfiles:/var/lib/images/new.img:create")
+            .expect("backing file create action exists");
+        assert_eq!(create.operation, Operation::Create);
+        assert_eq!(create.risk, RiskClass::Online);
+        assert_eq!(
+            create.context.target.as_deref(),
+            Some("/var/lib/images/new.img")
+        );
+        assert_eq!(create.context.desired_size.as_deref(), Some("8GiB"));
+        assert!(create.advice.as_ref().is_some_and(|advice| {
+            advice.summary.contains("backing file creation")
+                && advice
+                    .alternatives
+                    .iter()
+                    .any(|alternative| alternative.contains("existing backing file"))
+        }));
         let grow = plan
             .actions
             .iter()

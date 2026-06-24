@@ -84,11 +84,13 @@ Examples:
   formatting or replacement. Apply plans render reviewed `mkfs` commands for
   common filesystem types only when a concrete backing `device` or `disk` is
   declared; mountpoint-only declarations remain non-ready.
-- `backingFiles` declarations model file-backed storage origins. Rescan plans
-  are read-only and inspect size, sparse allocation, and modeled consumers;
-  grow plans require a concrete file path plus desired size before rendering
-  `truncate --size`, leaving loop, swap, and filesystem refresh as explicit
-  follow-up actions.
+- `backingFiles` declarations model file-backed storage origins. Create plans
+  require a concrete file path plus desired size, refuse to overwrite an
+  existing path with `test ! -e`, and render `truncate --size` for the new
+  sparse file. Rescan plans are read-only and inspect size, sparse allocation,
+  and modeled consumers; grow plans require the same concrete inputs before
+  rendering `truncate --size`, leaving loop, swap, and filesystem refresh as
+  explicit follow-up actions.
 - `dmMaps` declarations model device-mapper refreshes, reviewed mapper renames,
   and explicit mapper removal. Rescan plans inspect map identity, dependencies,
   table, live status, and graph consumers; rename plans are offline-required

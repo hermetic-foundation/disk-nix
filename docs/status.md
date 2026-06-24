@@ -92,6 +92,8 @@ unmount, import, export, login, logout, attach, detach, open, close, start,
 stop, assemble, activate, deactivate, add/remove/replace device, add/remove
 LUKS keys and tokens, property changes, rename, clone, promote, rollback, and
 destroy across the supported domains where those operations make sense.
+File-backed storage origins include guarded backing-file creation that refuses
+to overwrite an existing path before rendering sparse-file growth.
 
 Unsupported or unsafe requests are kept explicit. Examples include XFS shrink,
 unsupported filesystem or Btrfs subvolume properties, unsupported VDO property

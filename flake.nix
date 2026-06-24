@@ -617,6 +617,10 @@
                 device = "/var/lib/images/root.img";
               };
               loopDevices."/dev/loop10".operation = "rescan";
+              backingFiles."/var/lib/images/new.img" = {
+                operation = "create";
+                desiredSize = "8GiB";
+              };
               backingFiles."/var/lib/images/root.img" = {
                 operation = "grow";
                 desiredSize = "16GiB";
@@ -1625,7 +1629,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 101
+              .summary.actionCount == 104
               and (.dependencyOrder | length) == .summary.actionCount
               and (.dependencyOrder | any(.actionId == "datasets:tank/home:create" and (.unblocks | index("snapshot:tank/home@before-upgrade:create") != null)))
               and (.dependencyOrder | any(.actionId == "snapshot:tank/home@before-upgrade:create" and (.dependsOn | index("datasets:tank/home:create") != null)))
@@ -1677,6 +1681,9 @@
               and (.actions | any(.id == "lvmcaches:vg0/archive:rescan" and .risk == "online"))
               and (.actions | any(.id == "loopdevices:/dev/loop7:create" and .risk == "online"))
               and (.actions | any(.id == "loopdevices:/dev/loop10:rescan" and .risk == "online"))
+              and (.actions | any(.id == "backingfiles:/var/lib/images/new.img:create" and .risk == "online"))
+              and (.actions | any(.id == "backingfiles:/var/lib/images/root.img:grow" and .risk == "online"))
+              and (.actions | any(.id == "backingfiles:inventory-image:rescan" and .risk == "online"))
               and (.actions | any(.id == "mdraids:existing:assemble" and .risk == "offline-required"))
               and (.actions | any(.id == "mdraids:oldroot:stop" and .risk == "offline-required"))
               and (.actions | any(.id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-md-spare" and .risk == "online"))
@@ -2056,6 +2063,8 @@
                     and .spec.loopDevices.rootImage.path == "/dev/loop7"
                     and .spec.loopDevices.rootImage.device == "/var/lib/images/root.img"
                     and .spec.loopDevices."/dev/loop10".operation == "rescan"
+                    and .spec.backingFiles."/var/lib/images/new.img".operation == "create"
+                    and .spec.backingFiles."/var/lib/images/new.img".desiredSize == "8GiB"
                     and .spec.backingFiles."/var/lib/images/root.img".operation == "grow"
                     and .spec.backingFiles."/var/lib/images/root.img".desiredSize == "16GiB"
                     and .spec.backingFiles.inventoryImage.operation == "rescan"

@@ -1943,6 +1943,24 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
+        Operation::Create if collection == Some("backingFiles") => {
+            let target = backing_file_target_path(action);
+            (
+                vec![
+                    backing_file_stat_command(target, "verify backing file metadata after creation"),
+                    backing_file_inspect_json_command(
+                        target,
+                        "verify modeled backing-file relationships after creation",
+                    ),
+                ],
+                vec![
+                    "backing file exists at the reviewed path with the requested capacity"
+                        .to_string(),
+                    "loop devices, swapfiles, and filesystem consumers are created only after the file identity is verified"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Grow if collection == Some("luks.devices") => (
             vec![
                 command(
@@ -4410,6 +4428,24 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     "loop rescan does not refresh size; use grow after backing size changes"
                         .to_string(),
                     "review dependent filesystems and mappings before detach".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Create if collection == Some("backingFiles") => {
+            let target = backing_file_target_path(action);
+            let desired_size = action.context.desired_size.as_deref();
+            (
+                vec![
+                    backing_file_absent_command(target),
+                    backing_file_create_command(target, desired_size),
+                    backing_file_stat_command(target, "inspect backing file after creation"),
+                ],
+                vec![
+                    "create only a new file; existing backing images are left untouched"
+                        .to_string(),
+                    "verify sparse allocation policy and host filesystem free space before attaching consumers"
+                        .to_string(),
                 ],
                 true,
             )
@@ -12919,6 +12955,57 @@ fn backing_file_inspect_json_command(
     }
 }
 
+fn backing_file_absent_command(target: Option<&str>) -> ExecutionCommand {
+    match target {
+        Some(target) => command(
+            ["test", "!", "-e", target],
+            false,
+            "refuse to overwrite an existing backing file",
+        ),
+        None => command_with_readiness(
+            ["test", "!", "-e", "<backing-file>"],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing file path"],
+            "refuse to overwrite an existing backing file after selecting the path",
+        ),
+    }
+}
+
+fn backing_file_create_command(
+    target: Option<&str>,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
+    match (target, desired_size) {
+        (Some(target), Some(size)) => command_vec(
+            vec!["truncate", "--size", size, target],
+            true,
+            "create the new sparse backing file at the requested size",
+        ),
+        (Some(target), None) => command_with_readiness(
+            ["truncate", "--size", "<size>", target],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["desired backing file size"],
+            "create the backing file after selecting a desired size",
+        ),
+        (None, Some(size)) => command_with_readiness(
+            ["truncate", "--size", size, "<backing-file>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing file path"],
+            "create the selected backing file at the requested size",
+        ),
+        (None, None) => command_with_readiness(
+            ["truncate", "--size", "<size>", "<backing-file>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["backing file path", "desired backing file size"],
+            "create the backing file after selecting a path and desired size",
+        ),
+    }
+}
+
 fn backing_file_grow_command(target: Option<&str>, desired_size: Option<&str>) -> ExecutionCommand {
     match (target, desired_size) {
         (Some(target), Some(size)) => command_vec(
@@ -21278,6 +21365,10 @@ mod tests {
             br#"{
               "spec": {
                 "backingFiles": {
+                  "/var/lib/images/new.img": {
+                    "operation": "create",
+                    "desiredSize": "8GiB"
+                  },
                   "/var/lib/images/root.img": {
                     "operation": "grow",
                     "desiredSize": "16GiB"
@@ -21298,6 +21389,19 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "backingfiles:/var/lib/images/new.img:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["test", "!", "-e", "/var/lib/images/new.img"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["truncate", "--size", "8GiB", "/var/lib/images/new.img"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "backingfiles:/var/lib/images/root.img:grow"
                 && step.commands.iter().any(|command| {
@@ -21333,6 +21437,12 @@ mod tests {
                 })
         }));
         assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "backingfiles:/var/lib/images/new.img:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/var/lib/images/new.img", "--json"]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "backingfiles:/var/lib/images/root.img:grow"
                 && step.commands.iter().any(|command| {
                     command.argv == ["disk-nix", "inspect", "/var/lib/images/root.img", "--json"]
@@ -21341,11 +21451,14 @@ mod tests {
     }
 
     #[test]
-    fn backing_file_growth_requires_path_and_size_for_execute_readiness() {
+    fn backing_file_create_and_growth_require_path_and_size_for_execute_readiness() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
               "spec": {
                 "backingFiles": {
+                  "new-image": {
+                    "operation": "create"
+                  },
                   "root-image": {
                     "operation": "grow"
                   }
@@ -21362,6 +21475,20 @@ mod tests {
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "backingfiles:new-image:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["test", "!", "-e", "<backing-file>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["backing file path"]
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["truncate", "--size", "<size>", "<backing-file>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == ["backing file path", "desired backing file size"]
+                })
+        }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "backingfiles:root-image:grow"
                 && step.commands.iter().any(|command| {

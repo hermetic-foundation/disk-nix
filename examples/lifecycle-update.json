@@ -150,6 +150,20 @@
       "operation": "rescan"
     }
   },
+  "backingFiles": {
+    "/var/lib/images/new.img": {
+      "operation": "create",
+      "desiredSize": "8GiB"
+    },
+    "/var/lib/images/root.img": {
+      "operation": "grow",
+      "desiredSize": "16GiB"
+    },
+    "inventory-image": {
+      "operation": "rescan",
+      "path": "/var/lib/images/inventory.img"
+    }
+  },
   "mdRaids": {
     "existing": {
       "target": "/dev/md/existing",

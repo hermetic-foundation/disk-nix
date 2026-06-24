@@ -720,6 +720,10 @@ Example lifecycle planning through NixOS options:
       device = "/var/lib/images/root.img";
     };
     loopDevices."/dev/loop10".operation = "rescan";
+    backingFiles."/var/lib/images/new.img" = {
+      operation = "create";
+      desiredSize = "8GiB";
+    };
     backingFiles."/var/lib/images/root.img" = {
       operation = "grow";
       desiredSize = "16GiB";
