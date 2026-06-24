@@ -202,6 +202,7 @@ pub enum NodeKind {
     Swap,
     LoopDevice,
     BackingFile,
+    ZramDevice,
 }
 
 impl fmt::Display for NodeKind {
@@ -245,6 +246,7 @@ impl fmt::Display for NodeKind {
             Self::Swap => "swap",
             Self::LoopDevice => "loop-device",
             Self::BackingFile => "backing-file",
+            Self::ZramDevice => "zram-device",
         };
         f.write_str(value)
     }

@@ -59,6 +59,10 @@ The current probe layer normalizes:
   model/firmware/serial/WWN identity, user capacity, logical/physical block
   size, rotation rate, form factor, SATA link speed, power-on history,
   temperature, self-test/offline collection status, and ATA SMART attributes
+- `zramctl --bytes --raw --noheadings --output-all` for zram device size,
+  uncompressed data, compressed data, allocator total, memory limit and peak
+  usage, compression algorithm, stream count, zero pages, compaction migration,
+  compression ratio, and swap mountpoint state
 - `blkid -o export` for filesystem and block signatures, UUIDs, labels,
   PARTUUID/PARTLABEL, signature usage, versions, and block sizes
 - `parted -lm` for partition table type, disk sector sizes, partition numbers,

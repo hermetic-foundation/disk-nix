@@ -2287,6 +2287,7 @@ fn is_device_node(node: &Node) -> bool {
             | NodeKind::LoopDevice
             | NodeKind::BcachefsDevice
             | NodeKind::BackingFile
+            | NodeKind::ZramDevice
             | NodeKind::Swap
     )
 }
@@ -2497,6 +2498,8 @@ fn is_loop_node(node: &Node) -> bool {
 
 fn is_swap_node(node: &Node) -> bool {
     node.kind == NodeKind::Swap
+        || node.kind == NodeKind::ZramDevice
+        || property_value(node, "zram.swap").as_deref() == Some("true")
         || node
             .properties
             .iter()
@@ -2762,6 +2765,19 @@ fn usage_details(node: &Node) -> String {
         ("swap.active", "swap-active"),
         ("swap.type", "swap-type"),
         ("swap.priority", "swap-priority"),
+        ("zram.algorithm", "zram-algorithm"),
+        ("zram.streams", "zram-streams"),
+        ("zram.disksize", "zram-disksize"),
+        ("zram.data", "zram-data"),
+        ("zram.compressed", "zram-compressed"),
+        ("zram.total", "zram-total"),
+        ("zram.memory-limit", "zram-memory-limit"),
+        ("zram.memory-used", "zram-memory-used"),
+        ("zram.zero-pages", "zram-zero-pages"),
+        ("zram.migrated", "zram-migrated"),
+        ("zram.compression-ratio", "zram-ratio"),
+        ("zram.mountpoint", "zram-mountpoint"),
+        ("zram.swap", "zram-swap"),
         ("loop.backing", "loop-backing"),
         ("loop.back-file", "back-file"),
         ("loop.backing-inode", "back-ino"),
@@ -3994,6 +4010,10 @@ mod tests {
         assert!(is_swap_node(
             &Node::new("block:/swapfile", NodeKind::BackingFile, "/swapfile")
                 .with_property("swap.active", "true")
+        ));
+        assert!(is_swap_node(
+            &Node::new("block:/dev/zram0", NodeKind::ZramDevice, "/dev/zram0")
+                .with_property("zram.swap", "true")
         ));
     }
 
@@ -6564,6 +6584,24 @@ mod tests {
                 .with_property("swap.type", "file")
                 .with_property("swap.priority", "10"),
         );
+        graph.add_node(
+            Node::new("block:/dev/zram0", NodeKind::ZramDevice, "/dev/zram0")
+                .with_path("/dev/zram0")
+                .with_size_bytes(8_589_934_592)
+                .with_usage(Usage {
+                    used_bytes: Some(2_147_483_648),
+                    free_bytes: Some(6_442_450_944),
+                    allocated_bytes: Some(805_306_368),
+                })
+                .with_property("zram.algorithm", "zstd")
+                .with_property("zram.streams", "8")
+                .with_property("zram.compressed", "715827882")
+                .with_property("zram.total", "805306368")
+                .with_property("zram.memory-used", "900000000")
+                .with_property("zram.compression-ratio", "2.67")
+                .with_property("zram.mountpoint", "[SWAP]")
+                .with_property("zram.swap", "true"),
+        );
         graph.add_edge(Edge::new(
             "block:/dev/sda3",
             "swap:/dev/sda3",
@@ -6584,6 +6622,10 @@ mod tests {
         assert!(output.contains("file"));
         assert!(output.contains("10"));
         assert!(output.contains("swap-active=true swap-type=file swap-priority=10"));
+        assert!(output.contains("/dev/zram0"));
+        assert!(output.contains("zram-algorithm=zstd zram-streams=8 zram-compressed=715827882"));
+        assert!(output.contains("zram-total=805306368 zram-memory-used=900000000"));
+        assert!(output.contains("zram-ratio=2.67 zram-mountpoint=[SWAP] zram-swap=true"));
         assert!(output.contains("0.0%"));
     }
 

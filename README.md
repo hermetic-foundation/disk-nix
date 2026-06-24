@@ -7,8 +7,8 @@ engine second.
 The long-term goal is a full disko replacement that understands modern Linux
 storage stacks:
 
-- block devices, partitions, filesystems, mounts, swap, loop devices, and
-  SMART health telemetry
+- block devices, partitions, filesystems, mounts, swap, zram, loop devices,
+  and SMART health telemetry
 - LUKS headers, keyslots, tokens, and device-mapper mapping tables/status
 - LVM PVs, VGs, LVs, thin pools, snapshots, cache, and VDO
 - Btrfs filesystems, devices, subvolumes, snapshots, qgroups, and usage

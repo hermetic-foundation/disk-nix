@@ -31,6 +31,7 @@ mod udev;
 mod vdo;
 mod xfs;
 mod zfs;
+mod zram;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -109,6 +110,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_bcachefs(&mut result);
         collect_xfs(&mut result);
         collect_swaps(&mut result);
+        collect_zram(&mut result);
         collect_loopdev(&mut result);
         collect_cryptsetup(&mut result);
         collect_dmsetup(&mut result);
@@ -896,6 +898,44 @@ fn collect_swaps(result: &mut ProbeResult) {
             adapter: "swaps".to_string(),
             status: ProbeStatus::Unavailable,
             message: Some(error.to_string()),
+        }),
+    }
+}
+
+fn collect_zram(result: &mut ProbeResult) {
+    match run_report(
+        "zramctl",
+        &["--bytes", "--raw", "--noheadings", "--output-all"],
+    ) {
+        Ok(output) => match zram::normalize_zramctl_output(&output) {
+            Ok(graph) if graph.nodes.is_empty() => result.reports.push(ProbeReport {
+                adapter: "zramctl".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("no zram devices discovered".to_string()),
+            }),
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "zramctl".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!("normalized {node_count} graph nodes from zramctl")),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "zramctl".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "zramctl".to_string(),
+            status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
         }),
     }
 }

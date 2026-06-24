@@ -204,14 +204,14 @@ endpoints are included in the filtered node set.
 Use these commands for:
 
 - `devices`: disks, partitions, dm devices, LVM objects, VDO, RAID, zvols,
-  cache devices, multipath devices, NVMe namespaces, loop devices, and swap,
+  cache devices, multipath devices, NVMe namespaces, loop devices, zram, and swap,
   including model/vendor, transport, rotational, NVMe model/firmware/namespace
   geometry, SCSI host/channel/target/LUN address, generic device, transport,
   LU/WWN identity, queue state, SMART health, temperature, power-on, capacity,
   sector, and ATA reallocation/pending-sector counters, `lsblk` sector/I/O
   alignment, discard, scheduler, zoned-device, DAX, and hotplug metadata,
   partition table/number,
-  filesystem type, loop
+  filesystem type, zram compression/memory accounting, loop
   backing inode, backing major/minor, offset/autoclear/partition-scan metadata,
   multipath path host/major-minor, parsed
   SCSI coordinates, split dm/checker/online state details, and extra path
@@ -346,9 +346,11 @@ Use these commands for:
   backing inode, backing major/minor, offset, size limit, logical sector size,
   major/minor, autoclear, partition-scan, read-only, and direct-I/O settings
   when `losetup --json` exposes them
-- `swap`: active swap devices and files, including type, priority, active
-  state, size, used bytes, free bytes, utilization, and backing relationship
-  when `/proc/swaps` exposes them
+- `swap`: active swap devices and files plus zram swap devices, including type,
+  priority, active state, size, used bytes, free bytes, utilization, zram
+  compression algorithm, compressed/data/total memory accounting, memory limit
+  and high-water use, compression ratio, and backing relationship when
+  `/proc/swaps` exposes them
 - `iscsi`: configured iSCSI nodes, sessions, targets, and LUNs, including node
   portals, node startup policy, interface, leading-login, CHAP method/user
   hints, current and persistent session portals plus parsed portal
