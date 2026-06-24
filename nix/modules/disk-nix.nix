@@ -1021,12 +1021,15 @@ let
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;
   activeLuksDevices = lib.filterAttrs (_: luks: !isDestroyLifecycle luks) cfg.luks.devices;
   activeNfsMounts = lib.filterAttrs (_: mount: !isDestroyLifecycle mount) cfg.nfs.mounts;
+  activeBtrfsSubvolumes = activeLifecycleAttrs cfg.btrfsSubvolumes;
+  activeBtrfsQgroups = activeLifecycleAttrs cfg.btrfsQgroups;
   activePhysicalVolumes = activeLifecycleAttrs cfg.physicalVolumes;
   activeVolumeGroups = activeLifecycleAttrs cfg.volumeGroups;
   activeVolumes = activeLifecycleAttrs cfg.volumes;
   activeThinPools = activeLifecycleAttrs cfg.thinPools;
   activeLvmSnapshots = activeLifecycleAttrs cfg.lvmSnapshots;
   activeLvmCaches = activeLifecycleAttrs cfg.lvmCaches;
+  activeLoopDevices = activeLifecycleAttrs cfg.loopDevices;
   activeBackingFiles = activeLifecycleAttrs cfg.backingFiles;
   activeDmMaps = activeLifecycleAttrs cfg.dmMaps;
   activeMdRaids = activeLifecycleAttrs cfg.mdRaids;
@@ -1058,8 +1061,31 @@ let
       name
     else
       null;
+  pathLike = path: lib.hasPrefix "/dev/" path;
   activeBackingFilePaths = lib.filter (path: path != null) (
     lib.mapAttrsToList lifecyclePathTarget activeBackingFiles
+  );
+  activeBtrfsSubvolumePaths = lib.filter (path: path != null) (
+    lib.mapAttrsToList lifecyclePathTarget activeBtrfsSubvolumes
+  );
+  btrfsQgroupSelector =
+    name: qgroup:
+    let
+      qgroupId =
+        if qgroup.target != null && !(lib.hasPrefix "/" qgroup.target) then qgroup.target else name;
+      filesystemPath =
+        if qgroup.path != null then
+          qgroup.path
+        else if qgroup.mountpoint != null then
+          qgroup.mountpoint
+        else if qgroup.target != null && lib.hasPrefix "/" qgroup.target then
+          qgroup.target
+        else
+          null;
+    in
+    if filesystemPath != null then "${qgroupId} ${filesystemPath}" else null;
+  activeBtrfsQgroupSelectors = lib.filter (selector: selector != null) (
+    lib.mapAttrsToList btrfsQgroupSelector activeBtrfsQgroups
   );
   isDmMapTarget = target: lib.hasPrefix "/dev/mapper/" target || lib.hasPrefix "/dev/dm-" target;
   activeDmMapTargets = lib.filter (target: target != null && isDmMapTarget target) (
@@ -1099,6 +1125,13 @@ let
   activeVolumeIdentities = lib.mapAttrsToList lifecycleIdentity activeVolumes;
   activeThinPoolIdentities = lib.mapAttrsToList lifecycleIdentity activeThinPools;
   activeLvmCacheIdentities = lib.mapAttrsToList lifecycleIdentity activeLvmCaches;
+  activeVdoVolumeIdentities = lib.mapAttrsToList lifecycleIdentity activeVdoVolumes;
+  activePhysicalVolumePaths = lib.filter (path: path != null && pathLike path) (
+    lib.mapAttrsToList lifecyclePathTarget activePhysicalVolumes
+  );
+  activeLoopDeviceTargets = lib.filter (path: path != null && lib.hasPrefix "/dev/loop" path) (
+    lib.mapAttrsToList lifecyclePathTarget activeLoopDevices
+  );
   snapshotIdentity =
     name: snapshot:
     if snapshot.name != null then
@@ -1131,7 +1164,6 @@ let
   activeIscsiSessionIdentities = lib.filter (identity: identity != null) (
     lib.mapAttrsToList iscsiSessionIdentity activeIscsiSessions
   );
-  pathLike = path: lib.hasPrefix "/dev/" path;
   lunHostPaths =
     name: lun:
     lib.filter pathLike (
@@ -2406,6 +2438,16 @@ in
         message = "services.disk-nix.swaps entries must resolve to unique active swap device paths.";
       }
       {
+        assertion =
+          lib.length activeBtrfsSubvolumePaths == lib.length (lib.unique activeBtrfsSubvolumePaths);
+        message = "services.disk-nix.btrfsSubvolumes entries must resolve to unique active concrete subvolume paths.";
+      }
+      {
+        assertion =
+          lib.length activeBtrfsQgroupSelectors == lib.length (lib.unique activeBtrfsQgroupSelectors);
+        message = "services.disk-nix.btrfsQgroups entries must resolve to unique active qgroup/filesystem selectors.";
+      }
+      {
         assertion = lib.length activeBackingFilePaths == lib.length (lib.unique activeBackingFilePaths);
         message = "services.disk-nix.backingFiles entries must resolve to unique active backing file paths.";
       }
@@ -2450,6 +2492,20 @@ in
       {
         assertion = lib.length activeLvmCacheIdentities == lib.length (lib.unique activeLvmCacheIdentities);
         message = "services.disk-nix.lvmCaches entries must resolve to unique active concrete cache identities.";
+      }
+      {
+        assertion =
+          lib.length activeVdoVolumeIdentities == lib.length (lib.unique activeVdoVolumeIdentities);
+        message = "services.disk-nix.vdoVolumes entries must resolve to unique active concrete VDO identities.";
+      }
+      {
+        assertion =
+          lib.length activePhysicalVolumePaths == lib.length (lib.unique activePhysicalVolumePaths);
+        message = "services.disk-nix.physicalVolumes entries must resolve to unique active concrete device paths.";
+      }
+      {
+        assertion = lib.length activeLoopDeviceTargets == lib.length (lib.unique activeLoopDeviceTargets);
+        message = "services.disk-nix.loopDevices entries must resolve to unique active concrete /dev/loop* targets.";
       }
       {
         assertion = lib.length activeSnapshotIdentities == lib.length (lib.unique activeSnapshotIdentities);

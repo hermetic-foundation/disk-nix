@@ -909,6 +909,40 @@
             };
           }
         ];
+        nixosModuleBtrfsSubvolumeCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              btrfsSubvolumes."/mnt/persist/@home".operation = "rescan";
+              btrfsSubvolumes.homeAlias = {
+                path = "/mnt/persist/@home";
+                operation = "create";
+              };
+            };
+          }
+        ];
+        nixosModuleBtrfsQgroupCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              btrfsQgroups."0/257" = {
+                target = "/mnt/persist";
+                operation = "rescan";
+              };
+              btrfsQgroups.homeLimit = {
+                target = "0/257";
+                path = "/mnt/persist";
+                properties.limit = "25GiB";
+              };
+            };
+          }
+        ];
         nixosModuleDmMapCollisionTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -923,6 +957,53 @@
               dmMaps.duplicateCryptroot = {
                 operation = "rescan";
                 path = "/dev/mapper/cryptroot";
+              };
+            };
+          }
+        ];
+        nixosModuleVdoVolumeCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              vdoVolumes.archive.operation = "rescan";
+              vdoVolumes.archiveAlias = {
+                target = "archive";
+                operation = "grow";
+                desiredSize = "4TiB";
+              };
+            };
+          }
+        ];
+        nixosModulePhysicalVolumeCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              physicalVolumes."/dev/disk/by-id/nvme-pv".operation = "rescan";
+              physicalVolumes.nvmeAlias = {
+                path = "/dev/disk/by-id/nvme-pv";
+                operation = "grow";
+              };
+            };
+          }
+        ];
+        nixosModuleLoopDeviceCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              loopDevices."/dev/loop7".operation = "rescan";
+              loopDevices.rootImage = {
+                target = "/dev/loop7";
+                operation = "create";
+                device = "/var/lib/images/root.img";
               };
             };
           }
@@ -2143,7 +2224,12 @@
           nixosModuleAssertions = pkgs.runCommand "disk-nix-nixos-module-assertions-check" { } ''
             collisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleCollisionTest.config.system.build.toplevel).success))}
             backingFileCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBackingFileCollisionTest.config.system.build.toplevel).success))}
+            btrfsSubvolumeCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBtrfsSubvolumeCollisionTest.config.system.build.toplevel).success))}
+            btrfsQgroupCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBtrfsQgroupCollisionTest.config.system.build.toplevel).success))}
             dmMapCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDmMapCollisionTest.config.system.build.toplevel).success))}
+            vdoVolumeCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleVdoVolumeCollisionTest.config.system.build.toplevel).success))}
+            physicalVolumeCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModulePhysicalVolumeCollisionTest.config.system.build.toplevel).success))}
+            loopDeviceCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLoopDeviceCollisionTest.config.system.build.toplevel).success))}
             mdRaidCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleMdRaidCollisionTest.config.system.build.toplevel).success))}
             multipathMapCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleMultipathMapCollisionTest.config.system.build.toplevel).success))}
             poolCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModulePoolCollisionTest.config.system.build.toplevel).success))}
@@ -2158,7 +2244,12 @@
             lunPathCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLunPathCollisionTest.config.system.build.toplevel).success))}
             test "$collisionSuccess" = false
             test "$backingFileCollisionSuccess" = false
+            test "$btrfsSubvolumeCollisionSuccess" = false
+            test "$btrfsQgroupCollisionSuccess" = false
             test "$dmMapCollisionSuccess" = false
+            test "$vdoVolumeCollisionSuccess" = false
+            test "$physicalVolumeCollisionSuccess" = false
+            test "$loopDeviceCollisionSuccess" = false
             test "$mdRaidCollisionSuccess" = false
             test "$multipathMapCollisionSuccess" = false
             test "$poolCollisionSuccess" = false

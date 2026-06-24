@@ -88,7 +88,9 @@ re-declaring the mapper for initrd unlock.
 The module fails evaluation for ambiguous active declarations that would
 otherwise overwrite generated NixOS state: duplicate local/NFS mountpoints,
 duplicate concrete swap paths, duplicate LUKS mapper names, duplicate concrete
-MD RAID array targets, duplicate multipath map identities, duplicate LVM volume
+MD RAID array targets, duplicate Btrfs subvolume paths, duplicate Btrfs qgroup
+selectors, duplicate VDO identities, duplicate physical-volume paths, duplicate
+loop-device targets, duplicate multipath map identities, duplicate LVM volume
 group, logical volume, thin pool, or cache identities, duplicate snapshot
 identities, duplicate pool, dataset, or zvol identities, duplicate iSCSI target
 identities, duplicate LUN host paths, and duplicate NFS export path/client pairs.
@@ -368,9 +370,11 @@ Typed lifecycle declarations are available for:
 Active path-addressed declarations must resolve to unique concrete targets.
 The module rejects duplicate filesystem mountpoints, swap paths, LUKS mapper
 names, backing-file paths, device-mapper `/dev/mapper/*` or `/dev/dm-*`
-targets, `/dev/md*` array targets, multipath map identities, concrete snapshot
-identities, LVM volume group identities, LVM logical volume identities, LVM thin
-pool identities, LVM cache identities, pool identities, dataset identities, zvol
+targets, `/dev/md*` array targets, Btrfs subvolume paths, Btrfs qgroup/
+filesystem selectors, VDO identities, physical-volume device paths,
+loop-device targets, multipath map identities, concrete snapshot identities,
+LVM volume group identities, LVM logical volume identities, LVM thin pool
+identities, LVM cache identities, pool identities, dataset identities, zvol
 identities, iSCSI target identities, LUN host paths, and NFS export path/client
 pairs before generating an apply plan.
 
