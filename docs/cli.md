@@ -617,6 +617,10 @@ or `desiredSize` are declared.
 Disk and partition `operation = "rescan"` command plans rerun `partprobe` and
 `blockdev --rereadpt` against the reviewed backing disk without editing
 partition geometry, then verify the refreshed table with `parted -lm`.
+Filesystem declarations with `preserveData = false` render destructive
+`mkfs.*` command plans for common filesystem types when a concrete `device` or
+`disk` is declared. Mountpoint-only format declarations remain non-ready rather
+than guessing a backing block device.
 Filesystem shrink command plans render Btrfs allocation checks and
 `btrfs filesystem resize <size> <path>` for declared target sizes. Ext shrink
 plans render `findmnt`, `umount`, `e2fsck`, and `resize2fs` review steps. Ext

@@ -213,8 +213,9 @@ only policy-allowed plans where every command is ready, records each command
 result, stops on the first failure, and runs verification commands only after
 the planned command phase succeeds.
 Planner coverage includes filesystem resize intent, disk and partition
-lifecycle declarations, swap signature/resize workflows, LUKS
-format/resize/open/close/keyslot/token workflows, Btrfs subvolume
+lifecycle declarations, explicit filesystem formatting/replacement, swap
+signature/resize workflows, LUKS format/resize/open/close/keyslot/token
+workflows, Btrfs subvolume
 creation/deletion/rescan, VDO create/grow/rescan/remove, LVM
 physical-volume create/grow/rescan/remove, logical-volume growth/removal,
 LVM volume-group extension/device removal, LVM thin-pool create/grow/rescan/remove,

@@ -2570,6 +2570,28 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 "mapper name and backing device match the desired declaration".to_string(),
             ],
         ),
+        Operation::Format if collection == Some("filesystems") => {
+            let device = action.context.device.as_deref().unwrap_or(target);
+            (
+                vec![
+                    command(
+                        ["blkid", device],
+                        false,
+                        "verify filesystem signature identity after mkfs",
+                    ),
+                    command(
+                        ["disk-nix", "inspect", device, "--json"],
+                        false,
+                        "verify formatted filesystem graph relationships",
+                    ),
+                ],
+                vec![
+                    "formatted device reports the intended filesystem type".to_string(),
+                    "mount, UUID, label, and dependent NixOS references are reviewed after formatting"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Destroy | Operation::Close if collection == Some("luks.devices") => (
             vec![
                 command(
@@ -2811,6 +2833,36 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         "select the {fs_type} grow command: xfs_growfs, resize2fs, btrfs filesystem resize, zfs set volsize, or equivalent"
                     ),
                     "verify available backing capacity before running the grow command".to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Format
+            if collection == Some("filesystems") || action.id.starts_with("filesystem:") =>
+        {
+            let target = target.unwrap_or("<filesystem>");
+            let fs_type = action
+                .context
+                .fs_type
+                .as_deref()
+                .unwrap_or("<filesystem-type>");
+            let device = action.context.device.as_deref();
+            (
+                vec![
+                    disk_nix_inspect_command(
+                        device,
+                        "<filesystem-device>",
+                        "filesystem source device",
+                        "inspect target device before creating a filesystem signature",
+                    ),
+                    filesystem_format_command(fs_type, device),
+                ],
+                vec![
+                    format!("formatting {target} as {fs_type} destroys existing data on the selected device"),
+                    "prefer preserving or migrating data before replacing a filesystem signature"
+                        .to_string(),
+                    "mount the new filesystem only after its UUID, label, and stable device path are verified"
+                        .to_string(),
                 ],
                 true,
             )
@@ -6583,6 +6635,73 @@ fn filesystem_grow_command(
             CommandReadiness::NeedsDomainImplementation,
             ["filesystem grow tool"],
             "run the filesystem-specific online grow command after device growth is visible",
+        ),
+    }
+}
+
+fn filesystem_format_command(fs_type: &str, device: Option<&str>) -> ExecutionCommand {
+    let Some(device) = device else {
+        return command_with_readiness(
+            ["mkfs", "-t", fs_type, "<filesystem-device>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem source device"],
+            "create the filesystem signature after selecting the reviewed block device",
+        );
+    };
+
+    match fs_type {
+        "ext2" => command(
+            ["mkfs.ext2", "-F", device],
+            true,
+            "create an ext2 filesystem",
+        ),
+        "ext3" => command(
+            ["mkfs.ext3", "-F", device],
+            true,
+            "create an ext3 filesystem",
+        ),
+        "ext4" => command(
+            ["mkfs.ext4", "-F", device],
+            true,
+            "create an ext4 filesystem",
+        ),
+        "xfs" => command(["mkfs.xfs", "-f", device], true, "create an XFS filesystem"),
+        "btrfs" => command(
+            ["mkfs.btrfs", "-f", device],
+            true,
+            "create a Btrfs filesystem",
+        ),
+        "bcachefs" => command(
+            ["bcachefs", "format", "--force", device],
+            true,
+            "create a bcachefs filesystem",
+        ),
+        "f2fs" => command(
+            ["mkfs.f2fs", "-f", device],
+            true,
+            "create an F2FS filesystem",
+        ),
+        "exfat" => command(["mkfs.exfat", device], true, "create an exFAT filesystem"),
+        "fat" | "vfat" => command(["mkfs.vfat", device], true, "create a FAT filesystem"),
+        "ntfs" => command(
+            ["mkfs.ntfs", "-F", device],
+            true,
+            "create an NTFS filesystem",
+        ),
+        "unknown" | "<filesystem-type>" => command_with_readiness(
+            ["mkfs", "-t", "<filesystem-type>", device],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["filesystem type"],
+            "create the filesystem signature after selecting the filesystem type",
+        ),
+        _ => command_vec_with_readiness(
+            vec!["mkfs", "-t", fs_type, device],
+            true,
+            CommandReadiness::ManualOnly,
+            ["review filesystem-specific mkfs options"],
+            "review filesystem-specific mkfs flags before formatting this type",
         ),
     }
 }
@@ -11788,6 +11907,90 @@ mod tests {
                 && command.argv.contains(&"vg/root".to_string())
                 && command.readiness == CommandReadiness::NeedsDesiredSize
                 && command.unresolved_inputs == ["desired size delta"]
+        }));
+    }
+
+    #[test]
+    fn filesystem_format_renders_mkfs_commands_when_explicitly_allowed() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "root": {
+                    "mountpoint": "/",
+                    "device": "/dev/disk/by-label/root",
+                    "fsType": "ext4",
+                    "preserveData": false
+                  },
+                  "data": {
+                    "mountpoint": "/data",
+                    "device": "/dev/disk/by-label/data",
+                    "fsType": "xfs",
+                    "preserveData": false
+                  },
+                  "bulk": {
+                    "mountpoint": "/bulk",
+                    "device": "/dev/disk/by-label/bulk",
+                    "fsType": "btrfs",
+                    "preserveData": false
+                  },
+                  "missing": {
+                    "mountpoint": "/missing",
+                    "fsType": "ext4",
+                    "preserveData": false
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowFormat": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystem:root:preserve-data-disabled"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mkfs.ext4", "-F", "/dev/disk/by-label/root"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystem:data:preserve-data-disabled"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mkfs.xfs", "-f", "/dev/disk/by-label/data"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystem:bulk:preserve-data-disabled"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mkfs.btrfs", "-f", "/dev/disk/by-label/bulk"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "filesystem:missing:preserve-data-disabled"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mkfs", "-t", "ext4", "<filesystem-device>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["filesystem source device"]
+                })
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "filesystem:root:preserve-data-disabled"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["blkid", "/dev/disk/by-label/root"])
         }));
     }
 

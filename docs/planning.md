@@ -62,7 +62,9 @@ Examples:
   filesystem tools; repair plans mutate metadata and recommend backup or clone
   workflows before touching production storage.
 - `preserveData = false` is classified as destructive because it permits
-  formatting or replacement.
+  formatting or replacement. Apply plans render reviewed `mkfs` commands for
+  common filesystem types only when a concrete backing `device` or `disk` is
+  declared; mountpoint-only declarations remain non-ready.
 - LUKS keyslot and token add/change operations are offline-required header
   updates. Keyslot or token removal is potential-data-loss because deleting the
   last usable unlock path can make encrypted data inaccessible.
