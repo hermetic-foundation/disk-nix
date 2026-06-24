@@ -704,6 +704,11 @@ Disk and partition `operation = "rescan"` actions are online refreshes that
 render `partprobe <disk>` plus `blockdev --rereadpt <disk>` and verify with
 `parted -lm <disk>`. They do not edit partition geometry; use `grow` or
 `create` when the table itself must change.
+Partition `grow` actions reconcile parseable byte-sized `end` values against
+the probed partition size when current-topology comparison is enabled. Already
+satisfied numeric growth is suppressed before command rendering, while
+percentage geometry such as `100%` remains actionable because it depends on the
+current table layout and free-space review.
 Filesystem `operation = "remount"` actions are online, non-destructive updates
 that render `mount -o remount,<options> <mountpoint>`. Missing concrete
 mountpoints remain non-ready, and long-lived options should be kept in the

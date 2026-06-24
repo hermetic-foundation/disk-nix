@@ -813,7 +813,10 @@ and `blockdev --rereadpt` commands when `device`, `partitionType`, `start`, and
 `end` are declared.
 Partition grow command plans render concrete `parted resizepart`, `partprobe`,
 and `blockdev --rereadpt` commands when `device`, `partitionNumber`, and `end`
-or `desiredSize` are declared.
+or `desiredSize` are declared. When `--probe-current` is used, parseable
+byte-sized `end` values are reconciled against the current partition size so
+already-satisfied growth is suppressed; percentage ends such as `100%` still
+render reviewable geometry changes.
 Disk and partition `operation = "rescan"` command plans rerun `partprobe` and
 `blockdev --rereadpt` against the reviewed backing disk without editing
 partition geometry, then verify the refreshed table with `parted -lm`.

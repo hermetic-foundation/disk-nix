@@ -411,7 +411,10 @@ Partition create plans render reviewed `parted mkpart`, `partprobe`, and
 `end` are declared.
 Partition grow plans render reviewed `parted resizepart` commands and partition
 table rereads when `device`, `partitionNumber`, and `end` or `desiredSize` are
-declared.
+declared. With current-topology probing enabled, numeric `end` values are
+compared against the probed partition byte size so already-large partitions are
+suppressed before command rendering; percentage geometry such as `100%` remains
+actionable for explicit table review.
 MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit member devices and RAID level declarations, with exact
 unresolved-input markers when either field is missing. MD create, grow, member
