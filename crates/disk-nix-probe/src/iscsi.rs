@@ -351,6 +351,9 @@ fn add_session(graph: &mut StorageGraph, session: IscsiSession) {
         NodeKind::IscsiSession,
         session.id.clone(),
     );
+    if let Some(target) = &session.target {
+        session_node = session_node.with_property("iscsi.target", target.clone());
+    }
     if let Some(portal) = &session.portal {
         session_node = session_node.with_property("iscsi.portal", portal.clone());
         for (key, value) in portal_parts("iscsi.portal", portal) {
@@ -692,6 +695,10 @@ Target: iqn.2026-06.example:storage.disk1
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::IscsiSession
                 && node.name == "iscsi-session:12"
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.target"
+                        && property.value == "iqn.2026-06.example:storage.disk1"
+                })
                 && node.properties.iter().any(|property| {
                     property.key == "iscsi.persistent-portal"
                         && property.value == "10.0.0.10:3260,1"

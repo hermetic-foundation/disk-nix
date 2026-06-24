@@ -3504,6 +3504,7 @@ fn usage_details(node: &Node) -> String {
         ("md.member-minor", "member-minor"),
         ("md.member-raid-device", "member-raid-device"),
         ("md.member-state", "member-state"),
+        ("iscsi.target", "target"),
         ("iscsi.portal", "portal"),
         ("iscsi.portal-address", "portal-address"),
         ("iscsi.portal-port", "portal-port"),
@@ -6007,6 +6008,7 @@ mod tests {
                 "iscsi-session:12",
             )
             .with_property("iscsi.portal", "10.0.0.10:3260,1")
+            .with_property("iscsi.target", "iqn.2026-06.example:storage")
             .with_property("iscsi.portal-address", "10.0.0.10")
             .with_property("iscsi.portal-port", "3260")
             .with_property("iscsi.portal-tpgt", "1")
@@ -6094,6 +6096,7 @@ mod tests {
         assert!(output.contains("iscsi-session:12"));
         assert!(output.contains("10.0.0.10:3260,1"));
         assert!(output.contains("LOGGED IN"));
+        assert!(output.contains("target=iqn.2026-06.example:storage"));
         assert!(output.contains("portal-address=10.0.0.10 portal-port=3260 portal-tpgt=1"));
         assert!(
             output
