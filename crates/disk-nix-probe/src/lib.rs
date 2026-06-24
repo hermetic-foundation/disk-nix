@@ -115,6 +115,7 @@ impl ProbeAdapter for LinuxProbe {
         collect_zfs(&mut result);
         collect_btrfs(&mut result);
         collect_bcache(&mut result);
+        collect_iscsi_nodes(&mut result);
         collect_iscsi(&mut result);
         collect_nfs(&mut result);
         collect_mdraid(&mut result);
@@ -1269,6 +1270,45 @@ fn collect_iscsi(result: &mut ProbeResult) {
         Err(message) => result.reports.push(ProbeReport {
             adapter: "iscsi".to_string(),
             status: if message.contains("not found") || message.contains("No such file") {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(message),
+        }),
+    }
+}
+
+fn collect_iscsi_nodes(result: &mut ProbeResult) {
+    match run_report("iscsiadm", &["-m", "node", "-P", "1"]) {
+        Ok(output) => match iscsi::normalize_iscsi_node_output(&output) {
+            Ok(graph) if graph.nodes.is_empty() => result.reports.push(ProbeReport {
+                adapter: "iscsi-nodes".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("no configured iSCSI nodes discovered".to_string()),
+            }),
+            Ok(graph) => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "iscsi-nodes".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from configured iSCSI nodes"
+                    )),
+                });
+            }
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "iscsi-nodes".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(message) => result.reports.push(ProbeReport {
+            adapter: "iscsi-nodes".to_string(),
+            status: if message.contains("No records found") {
+                ProbeStatus::Available
+            } else if message.contains("not found") || message.contains("No such file") {
                 ProbeStatus::Unavailable
             } else {
                 ProbeStatus::Partial

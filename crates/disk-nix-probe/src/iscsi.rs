@@ -25,6 +25,19 @@ struct IscsiSession {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct IscsiNodeRecord {
+    target: String,
+    portal: Option<String>,
+    persistent_portal: Option<String>,
+    target_portal_group_tag: Option<String>,
+    iface_name: Option<String>,
+    startup: Option<String>,
+    leading_login: Option<String>,
+    auth_method: Option<String>,
+    username: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct IscsiLun {
     lun: String,
     attached_device: Option<String>,
@@ -40,6 +53,17 @@ pub fn normalize_iscsi_session_output(bytes: &[u8]) -> Result<StorageGraph, Prob
 
     for session in sessions {
         add_session(&mut graph, session);
+    }
+
+    Ok(graph)
+}
+
+pub fn normalize_iscsi_node_output(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
+    let nodes = parse_node_records(bytes)?;
+    let mut graph = StorageGraph::empty();
+
+    for record in nodes {
+        add_node_record(&mut graph, record);
     }
 
     Ok(graph)
@@ -187,6 +211,140 @@ fn parse_sessions(bytes: &[u8]) -> Result<Vec<IscsiSession>, ProbeError> {
     Ok(sessions)
 }
 
+fn parse_node_records(bytes: &[u8]) -> Result<Vec<IscsiNodeRecord>, ProbeError> {
+    let text = std::str::from_utf8(bytes).map_err(|error| {
+        ProbeError::Adapter(format!("failed to read iscsiadm node output: {error}"))
+    })?;
+    let mut records = Vec::new();
+    let mut current: Option<IscsiNodeRecord> = None;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let lower = trimmed.to_ascii_lowercase();
+
+        if lower.starts_with("target:") {
+            flush_node_record(&mut records, &mut current);
+            current = value_after_colon(trimmed).map(|target| IscsiNodeRecord {
+                target,
+                portal: None,
+                persistent_portal: None,
+                target_portal_group_tag: None,
+                iface_name: None,
+                startup: None,
+                leading_login: None,
+                auth_method: None,
+                username: None,
+            });
+        } else if lower.starts_with("portal:") {
+            if let Some(record) = &mut current {
+                record.portal = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("persistent portal:") {
+            if let Some(record) = &mut current {
+                record.persistent_portal = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("tpgt:") || lower.starts_with("target portal group tag:") {
+            if let Some(record) = &mut current {
+                record.target_portal_group_tag = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("iface name:") {
+            if let Some(record) = &mut current {
+                record.iface_name = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("startup:") || lower.starts_with("node.startup:") {
+            if let Some(record) = &mut current {
+                record.startup = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("leading login:") || lower.starts_with("node.leading_login:") {
+            if let Some(record) = &mut current {
+                record.leading_login = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("authmethod:")
+            || lower.starts_with("auth method:")
+            || lower.starts_with("node.session.auth.authmethod:")
+        {
+            if let Some(record) = &mut current {
+                record.auth_method = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("username:") || lower.starts_with("node.session.auth.username:")
+        {
+            if let Some(record) = &mut current {
+                record.username = value_after_colon(trimmed);
+            }
+        } else if let Some(record) = parse_concise_node_record(trimmed) {
+            flush_node_record(&mut records, &mut current);
+            records.push(record);
+        }
+    }
+
+    flush_node_record(&mut records, &mut current);
+
+    Ok(records)
+}
+
+fn parse_concise_node_record(value: &str) -> Option<IscsiNodeRecord> {
+    let mut parts = value.split_whitespace();
+    let portal = parts.next()?.to_string();
+    let target = parts.next()?.to_string();
+    is_iscsi_target_name(&target).then_some(IscsiNodeRecord {
+        target,
+        portal: Some(portal),
+        persistent_portal: None,
+        target_portal_group_tag: None,
+        iface_name: None,
+        startup: None,
+        leading_login: None,
+        auth_method: None,
+        username: None,
+    })
+}
+
+fn is_iscsi_target_name(value: &str) -> bool {
+    value.starts_with("iqn.") || value.starts_with("eui.") || value.starts_with("naa.")
+}
+
+fn add_node_record(graph: &mut StorageGraph, record: IscsiNodeRecord) {
+    let target_id = format!("iscsi-target:{}", record.target);
+    let mut target_node = Node::new(target_id, NodeKind::IscsiTarget, record.target)
+        .with_property("iscsi.node-configured", "true");
+
+    if let Some(portal) = &record.portal {
+        target_node = target_node.with_property("iscsi.node-portal", portal.clone());
+        for (key, value) in portal_parts("iscsi.node-portal", portal) {
+            target_node = target_node.with_property(key, value);
+        }
+    }
+    if let Some(portal) = &record.persistent_portal {
+        target_node = target_node.with_property("iscsi.node-persistent-portal", portal.clone());
+        for (key, value) in portal_parts("iscsi.node-persistent-portal", portal) {
+            target_node = target_node.with_property(key, value);
+        }
+    }
+    if let Some(tag) = &record.target_portal_group_tag {
+        target_node = target_node.with_property("iscsi.node-tpgt", tag.clone());
+    }
+    if let Some(iface_name) = &record.iface_name {
+        target_node = target_node.with_property("iscsi.node-iface-name", iface_name.clone());
+    }
+    if let Some(startup) = &record.startup {
+        target_node = target_node.with_property("iscsi.node-startup", startup.clone());
+    }
+    if let Some(leading_login) = &record.leading_login {
+        target_node = target_node.with_property("iscsi.node-leading-login", leading_login.clone());
+    }
+    if let Some(auth_method) = &record.auth_method {
+        target_node = target_node.with_property("iscsi.node-auth-method", auth_method.clone());
+    }
+    if let Some(username) = &record.username {
+        target_node = target_node.with_property("iscsi.node-auth-username", username.clone());
+    }
+
+    graph.add_node(target_node);
+}
+
 fn add_session(graph: &mut StorageGraph, session: IscsiSession) {
     let mut session_node = Node::new(
         session.id.clone(),
@@ -321,6 +479,12 @@ fn add_session(graph: &mut StorageGraph, session: IscsiSession) {
 fn flush_lun(current: &mut Option<IscsiSession>, pending_lun: &mut Option<IscsiLun>) {
     if let (Some(session), Some(lun)) = (current, pending_lun.take()) {
         session.luns.push(lun);
+    }
+}
+
+fn flush_node_record(records: &mut Vec<IscsiNodeRecord>, current: &mut Option<IscsiNodeRecord>) {
+    if let Some(record) = current.take() {
+        records.push(record);
     }
 }
 
@@ -634,5 +798,60 @@ Target: iqn.2026-06.example:storage.disk1
                 "2001:db8::10".to_string()
             )]
         );
+    }
+
+    #[test]
+    fn normalizes_configured_iscsi_nodes() {
+        let graph = normalize_iscsi_node_output(
+            br#"
+Target: iqn.2026-06.example:storage.disk1
+    Portal: 10.0.0.10:3260,1
+    Persistent Portal: 10.0.0.11:3260,1
+    TPGT: 1
+    Iface Name: default
+    Startup: automatic
+    Leading Login: Yes
+    AuthMethod: CHAP
+    Username: node-user
+10.0.0.12:3260,2 iqn.2026-06.example:storage.disk2
+"#,
+        )
+        .expect("fixture should parse");
+
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::IscsiTarget
+                && node.name == "iqn.2026-06.example:storage.disk1"
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.node-configured")
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-portal" && property.value == "10.0.0.10:3260,1"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-portal-address" && property.value == "10.0.0.10"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-persistent-portal"
+                        && property.value == "10.0.0.11:3260,1"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.node-tpgt" && property.value == "1")
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-startup" && property.value == "automatic"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-auth-method" && property.value == "CHAP"
+                })
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::IscsiTarget
+                && node.name == "iqn.2026-06.example:storage.disk2"
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-portal" && property.value == "10.0.0.12:3260,2"
+                })
+        }));
     }
 }

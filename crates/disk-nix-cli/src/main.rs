@@ -1818,7 +1818,9 @@ fn print_iscsi(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> 
             node.name,
             human_bytes(node.size_bytes),
             property_value(node, "iscsi.portal")
+                .or_else(|| property_value(node, "iscsi.node-portal"))
                 .or_else(|| property_value(node, "iscsi.persistent-portal"))
+                .or_else(|| property_value(node, "iscsi.node-persistent-portal"))
                 .unwrap_or("-"),
             property_value(node, "iscsi.connection-state").unwrap_or("-"),
             iscsi_lun_count(graph, node),
@@ -2995,6 +2997,30 @@ fn usage_details(node: &Node) -> String {
         ("iscsi.scsi-id", "scsi-id"),
         ("iscsi.attached-disk", "attached-disk"),
         ("iscsi.attached-disk-state", "attached-disk-state"),
+        ("iscsi.node-configured", "configured"),
+        ("iscsi.node-portal", "node-portal"),
+        ("iscsi.node-portal-address", "node-portal-address"),
+        ("iscsi.node-portal-port", "node-portal-port"),
+        ("iscsi.node-portal-tpgt", "node-portal-tpgt"),
+        ("iscsi.node-persistent-portal", "node-persistent-portal"),
+        (
+            "iscsi.node-persistent-portal-address",
+            "node-persistent-portal-address",
+        ),
+        (
+            "iscsi.node-persistent-portal-port",
+            "node-persistent-portal-port",
+        ),
+        (
+            "iscsi.node-persistent-portal-tpgt",
+            "node-persistent-portal-tpgt",
+        ),
+        ("iscsi.node-tpgt", "node-tpgt"),
+        ("iscsi.node-iface-name", "node-iface"),
+        ("iscsi.node-startup", "startup"),
+        ("iscsi.node-leading-login", "leading-login"),
+        ("iscsi.node-auth-method", "auth-method"),
+        ("iscsi.node-auth-username", "auth-username"),
         ("nfs.source", "source"),
         ("nfs.server", "server"),
         ("nfs.export", "export"),
@@ -4992,11 +5018,21 @@ mod tests {
             .with_property("iscsi.connection-local-address", "10.0.0.20")
             .with_property("iscsi.connection-peer-address", "10.0.0.10"),
         );
-        graph.add_node(Node::new(
-            "iscsi-target:iqn.2026-06.example:storage",
-            NodeKind::IscsiTarget,
-            "iqn.2026-06.example:storage",
-        ));
+        graph.add_node(
+            Node::new(
+                "iscsi-target:iqn.2026-06.example:storage",
+                NodeKind::IscsiTarget,
+                "iqn.2026-06.example:storage",
+            )
+            .with_property("iscsi.node-configured", "true")
+            .with_property("iscsi.node-portal", "10.0.0.10:3260,1")
+            .with_property("iscsi.node-portal-address", "10.0.0.10")
+            .with_property("iscsi.node-portal-port", "3260")
+            .with_property("iscsi.node-portal-tpgt", "1")
+            .with_property("iscsi.node-startup", "automatic")
+            .with_property("iscsi.node-iface-name", "default")
+            .with_property("iscsi.node-auth-method", "CHAP"),
+        );
         graph.add_node(
             Node::new(
                 "iscsi-lun:iqn.2026-06.example:storage:0",
@@ -5060,6 +5096,10 @@ mod tests {
         assert!(output.contains("cid=0 connection-detail-state=LOGGED IN"));
         assert!(output.contains("local-address=10.0.0.20 peer-address=10.0.0.10"));
         assert!(output.contains("iqn.2026-06.example:storage"));
+        assert!(output.contains("configured=true node-portal=10.0.0.10:3260,1"));
+        assert!(output.contains("node-portal-address=10.0.0.10 node-portal-port=3260"));
+        assert!(output.contains("node-portal-tpgt=1 node-iface=default startup=automatic"));
+        assert!(output.contains("auth-method=CHAP"));
         assert!(output.contains("1.0 GiB"));
         assert!(output.contains("attached-disk=sdb"));
     }

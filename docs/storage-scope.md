@@ -138,8 +138,10 @@ The current probe layer normalizes:
   running/state, dirty data, available cache percentage, discard, I/O error
   counters, written/metadata-written accounting, replacement policy, priority
   stats, writeback delay/running/metadata settings, and cache relationships
-- iSCSI sessions through `iscsiadm -m session -P 3` for session ids, target
-  IQNs, current and persistent portals, parsed portal address/port/TPGT fields,
+- iSCSI configured nodes through `iscsiadm -m node -P 1` and active sessions
+  through `iscsiadm -m session -P 3` for configured target IQNs, node portals,
+  parsed portal address/port/TPGT fields, startup, interface, leading-login,
+  CHAP method/user hints, session ids, current and persistent session portals,
   target portal group tag, interface identity, connection/session state,
   connection CID/local/peer addresses, negotiated transfer parameters, host
   state, LUN SCSI coordinates, and attached disk state
