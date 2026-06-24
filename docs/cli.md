@@ -876,7 +876,9 @@ destructive-policy-gated `mdadm --create` commands from explicit `level` and
 unresolved-input markers and `/proc/mdstat` verification. MD assemble, stop,
 create, grow, member add, replacement, and removal commands require an explicit
 array path such as `/dev/md/root`; logical declarations can provide that path
-through `target` or `device`. MD RAID `operation = "rescan"` renders
+through `target` or `device`. Current-topology probing suppresses MD create
+only when the matched array is already cleanly active; degraded, inactive, or
+wrong-kind matches stay actionable with warnings. MD RAID `operation = "rescan"` renders
 read-only `mdadm --detail --scan`, `mdadm --examine --scan`, `/proc/mdstat`,
 and topology verification; a declared `/dev/md*` target adds targeted
 `mdadm --detail <array>` inspection. Current-topology probing suppresses an

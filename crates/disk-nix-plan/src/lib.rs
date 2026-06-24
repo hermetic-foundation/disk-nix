@@ -299,6 +299,8 @@ pub enum TopologyDiagnosticKind {
     LoopCreateRequired,
     LoopDetachAlreadySatisfied,
     LoopDetachRequired,
+    MdCreateAlreadySatisfied,
+    MdCreateRequired,
     MdAssembleAlreadySatisfied,
     MdAssembleRequired,
     MountAlreadySatisfied,
@@ -845,6 +847,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::SwapDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
+                        | TopologyDiagnosticKind::MdCreateAlreadySatisfied
                         | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
@@ -1481,6 +1484,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::SwapDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
+                    | TopologyDiagnosticKind::MdCreateAlreadySatisfied
                     | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
@@ -1624,6 +1628,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(multipath_present_diagnostic(action, node, &query));
     diagnostics.extend(loop_present_diagnostic(action, node, &query));
     diagnostics.extend(backing_file_create_diagnostic(action, node, &query));
+    diagnostics.extend(md_create_diagnostic(action, node, &query));
     diagnostics.extend(md_assemble_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
@@ -3310,6 +3315,71 @@ fn backing_file_create_diagnostic(
     })
 }
 
+fn md_create_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Create
+        || action.context.collection.as_deref() != Some("mdRaids")
+    {
+        return None;
+    }
+
+    if node.kind != NodeKind::MdRaid {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MdCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not an MD RAID array; mdadm --create remains actionable",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let Some(status) = md_array_status(node) else {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MdCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "MD RAID array {query} already exists, but current state is unknown; rescan before treating create as satisfied"
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    };
+
+    if !status.cleanly_active {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::MdCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "MD RAID array {query} already exists, but state needs review before treating create as satisfied: state={}, degradedDevices={}, failedDevices={}",
+                status.state, status.degraded_devices, status.failed_devices
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::MdCreateAlreadySatisfied,
+        query: query.to_string(),
+        message: format!(
+            "MD RAID array {query} already exists and is cleanly active: state={}, degradedDevices=0, failedDevices=0",
+            status.state
+        ),
+        current: Some(current_node_summary(node)),
+    })
+}
+
 fn md_assemble_diagnostic(
     action: &PlannedAction,
     node: &Node,
@@ -3320,12 +3390,8 @@ fn md_assemble_diagnostic(
     {
         return None;
     }
-    let state = property_value_from_node(node, "md.state")?;
-    let degraded_devices = md_device_count_property(node, "md.degraded-devices")?;
-    let failed_devices = md_device_count_property(node, "md.failed-devices")?;
-    let state_indicates_active = md_state_indicates_active(state);
-    let cleanly_assembled = state_indicates_active && degraded_devices == 0 && failed_devices == 0;
-    let (level, kind, message) = if cleanly_assembled {
+    let status = md_array_status(node)?;
+    let (level, kind, message) = if status.cleanly_active {
         (
             TopologyDiagnosticLevel::Info,
             TopologyDiagnosticKind::MdAssembleAlreadySatisfied,
@@ -3336,7 +3402,8 @@ fn md_assemble_diagnostic(
             TopologyDiagnosticLevel::Warning,
             TopologyDiagnosticKind::MdAssembleRequired,
             format!(
-                "MD RAID array {query} is not cleanly assembled: state={state}, degradedDevices={degraded_devices}, failedDevices={failed_devices}"
+                "MD RAID array {query} is not cleanly assembled: state={}, degradedDevices={}, failedDevices={}",
+                status.state, status.degraded_devices, status.failed_devices
             ),
         )
     };
@@ -3348,6 +3415,26 @@ fn md_assemble_diagnostic(
         query: query.to_string(),
         message,
         current: Some(current_node_summary(node)),
+    })
+}
+
+struct MdArrayStatus<'a> {
+    state: &'a str,
+    degraded_devices: u64,
+    failed_devices: u64,
+    cleanly_active: bool,
+}
+
+fn md_array_status(node: &Node) -> Option<MdArrayStatus<'_>> {
+    let state = property_value_from_node(node, "md.state")?;
+    let degraded_devices = md_device_count_property(node, "md.degraded-devices")?;
+    let failed_devices = md_device_count_property(node, "md.failed-devices")?;
+    let state_indicates_active = md_state_indicates_active(state);
+    Some(MdArrayStatus {
+        state,
+        degraded_devices,
+        failed_devices,
+        cleanly_active: state_indicates_active && degraded_devices == 0 && failed_devices == 0,
     })
 }
 
@@ -17270,6 +17357,92 @@ mod tests {
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "mdraids:existing:assemble"
                 && diagnostic.kind == TopologyDiagnosticKind::MdAssembleAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_md_create() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "mdRaids": {
+                "existing": {
+                  "operation": "create",
+                  "target": "/dev/md/existing",
+                  "level": "1",
+                  "devices": ["/dev/sdb1", "/dev/sdc1"]
+                },
+                "degraded": {
+                  "operation": "create",
+                  "target": "/dev/md/degraded",
+                  "level": "1",
+                  "devices": ["/dev/sdd1", "/dev/sde1"]
+                },
+                "wrong-kind": {
+                  "operation": "create",
+                  "target": "/dev/md/wrong-kind",
+                  "level": "1",
+                  "devices": ["/dev/sdf1", "/dev/sdg1"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("md:/dev/md/existing", NodeKind::MdRaid, "/dev/md/existing")
+                .with_path("/dev/md/existing")
+                .with_property("md.state", "clean")
+                .with_property("md.degraded-devices", "0")
+                .with_property("md.failed-devices", "0"),
+        );
+        graph.add_node(
+            Node::new("md:/dev/md/degraded", NodeKind::MdRaid, "/dev/md/degraded")
+                .with_path("/dev/md/degraded")
+                .with_property("md.state", "clean, degraded")
+                .with_property("md.degraded-devices", "1")
+                .with_property("md.failed-devices", "0"),
+        );
+        graph.add_node(
+            Node::new(
+                "filesystem:/dev/md/wrong-kind",
+                NodeKind::Filesystem,
+                "/dev/md/wrong-kind",
+            )
+            .with_path("/dev/md/wrong-kind"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.summary.action_count, 2);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "mdraids:existing:create")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:existing:create"
+                && diagnostic.kind == TopologyDiagnosticKind::MdCreateAlreadySatisfied
+                && diagnostic.message.contains("cleanly active")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:degraded:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdCreateRequired
+                && diagnostic.message.contains("state=clean, degraded")
+                && diagnostic.message.contains("degradedDevices=1")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:wrong-kind:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdCreateRequired
+                && diagnostic.message.contains("not an MD RAID array")
         }));
     }
 
