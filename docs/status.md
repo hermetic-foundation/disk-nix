@@ -53,7 +53,9 @@ behavior across real storage stacks.
   actions when the graph proves they are already satisfied and no warning
   diagnostics are present, including VDO property declarations reconciled
   against native `vdo.*` and LVM `lvm.vdo-*` metadata with boolean
-  compression/deduplication normalization;
+  compression/deduplication normalization, and cache property declarations
+  reconciled against bcache `bcache.*` and LVM cache `lvm.*` metadata with
+  cache-mode spelling normalization;
   matching filesystem format types are reported without suppressing destructive
   format actions so policy and confirmation gates still apply;
   swap format targets report existing swap metadata or non-swap node kinds

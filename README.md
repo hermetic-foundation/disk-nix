@@ -272,6 +272,9 @@ dirty-data, and replacement review steps instead of a generic cache
 placeholder. bcache replacement renders deterministic `make-bcache --cset-uuid`,
 detach, and attach steps when `cacheSetUuid` is declared. bcache rescan reads
 state, cache mode, dirty-data, and graph inventory without changing attachment.
+Current-topology probing reconciles `cacheMode` and `cachePolicy` aliases
+against bcache `bcache.*` and LVM cache `lvm.*` metadata, normalizing dashed
+cache-mode spellings before suppressing already-satisfied property changes.
 bcache sysfs commands require a concrete
 `/dev/bcache*` target; logical cache names become ready when `target`, `path`,
 or `device` declares the backing bcache device path.

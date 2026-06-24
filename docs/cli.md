@@ -738,7 +738,10 @@ rescan, and property commands ready. Logical cache declarations without a
 concrete bcache device remain marked `needs-domain-implementation`. With
 current-topology probing, concrete absent bcache detach actions are suppressed
 as already satisfied, while present targets stay actionable with a warning that
-includes dirty data, cache mode, and cache-set UUID when available.
+includes dirty data, cache mode, and cache-set UUID when available. Cache
+property comparison also reconciles declared `cacheMode`/`cachePolicy` aliases
+with bcache `bcache.*` and LVM cache `lvm.*` metadata, normalizing dashed
+cache-mode values before suppressing already-satisfied updates.
 Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
 detach operations. Logical loop declarations can supply that target with
 `target` or `path`; `device` is reserved for the backing file or block device

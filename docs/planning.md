@@ -352,7 +352,11 @@ Examples:
   `lvconvert` changes origin LV I/O paths and dirty cache state must be drained.
   LVM cache mode and policy updates are safe but still include verification
   advice. LVM cache `operation = "rescan"` is online and read-only; it refreshes
-  cache mode, policy, utilization, and modeled relationships.
+  cache mode, policy, utilization, and modeled relationships. Current-topology
+  comparison maps declared `cacheMode` and `cachePolicy` aliases onto
+  `lvm.cache-mode` and `lvm.cache-policy` metadata, normalizing dashed
+  cache-mode spellings such as `write-through` before suppressing no-op
+  property updates.
 - NFS export publication with `operation = "export"` is online when it
   publishes an existing path to explicit clients and options; unexporting is
   offline-required because remote clients may need to be drained, but it is not
@@ -697,7 +701,10 @@ attachment, cache-mode property changes, read-only rescans, dirty-data checks,
 and replacement steps that remain non-ready until the replacement cache device,
 concrete `/dev/bcache*` target, and new cache-set UUID are declared. Once
 `cacheSetUuid` is declared, replacement renders `make-bcache --cset-uuid`,
-detach, and attach steps without guessing generated identity. bcache sysfs
+detach, and attach steps without guessing generated identity. Current-topology
+comparison maps declared bcache `cacheMode`/`cachePolicy` aliases onto
+`bcache.cache-mode` and `bcache.cache-policy` metadata, with cache-mode value
+normalization for dashed spellings. bcache sysfs
 operations require a concrete `/dev/bcache*` target; logical cache declaration
 names become ready when `target`, `path`, or `device` declares the backing
 bcache device path. Current-topology comparison keeps logical cache names
