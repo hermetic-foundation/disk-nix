@@ -142,6 +142,8 @@ pub enum RecoveryActionKind {
     InspectCurrentState,
     ReviewExecutionFailure,
     DomainRecovery,
+    RollForwardReview,
+    RollbackReview,
     RunVerification,
     ResumeAfterFix,
     PreserveRecoveryPoints,
@@ -516,12 +518,15 @@ fn domain_recovery_actions_for_failure(
                 && command_plan_command(report, result).is_some_and(|command| command.mutates)
         })
         .count();
-    vec![RecoveryAction {
+    let mut actions = vec![RecoveryAction {
         kind: RecoveryActionKind::DomainRecovery,
         summary: domain_recovery_summary(step),
         commands: domain_recovery_commands(step),
         notes: domain_recovery_notes(step, failed, completed_mutating_commands),
-    }]
+    }];
+    actions.extend(roll_forward_recovery_actions(report, step, failed));
+    actions.extend(rollback_recovery_actions(step, failed));
+    actions
 }
 
 fn requires_domain_recovery(step: &ExecutionStep) -> bool {
@@ -561,6 +566,262 @@ fn domain_recovery_summary(step: &ExecutionStep) -> String {
         "Plan domain-specific recovery for {:?} action {} after partial execution",
         step.operation, step.action_id
     )
+}
+
+fn roll_forward_recovery_actions(
+    report: &ExecutionReport,
+    step: &ExecutionStep,
+    failed: &ExecutionCommandResult,
+) -> Vec<RecoveryAction> {
+    if !requires_domain_recovery(step) {
+        return Vec::new();
+    }
+
+    let mut commands = vec![manual_probe_current_apply_command()];
+    commands.extend(domain_roll_forward_inspection_commands(step));
+    commands.extend(verification_commands_for_report(report));
+
+    vec![RecoveryAction {
+        kind: RecoveryActionKind::RollForwardReview,
+        summary: format!(
+            "Review whether completing the remaining {:?} workflow is safer than rollback",
+            step.operation
+        ),
+        commands,
+        notes: vec![
+            format!(
+                "base the roll-forward decision on fresh topology after failed command: {}",
+                failed.argv.join(" ")
+            ),
+            "prefer roll-forward when data placement, metadata generation, or exported state may already have advanced".to_string(),
+            "remove or skip commands that current topology proves already succeeded before resuming execution".to_string(),
+        ],
+    }]
+}
+
+fn rollback_recovery_actions(
+    step: &ExecutionStep,
+    failed: &ExecutionCommandResult,
+) -> Vec<RecoveryAction> {
+    let Some(action) = rollback_recovery_action(step, failed) else {
+        return Vec::new();
+    };
+    vec![action]
+}
+
+fn rollback_recovery_action(
+    step: &ExecutionStep,
+    failed: &ExecutionCommandResult,
+) -> Option<RecoveryAction> {
+    let commands = domain_rollback_inspection_commands(step);
+    if commands.is_empty() {
+        return None;
+    }
+
+    Some(RecoveryAction {
+        kind: RecoveryActionKind::RollbackReview,
+        summary: format!(
+            "Review rollback preconditions for {:?} action {}",
+            step.operation, step.action_id
+        ),
+        commands,
+        notes: vec![
+            format!(
+                "rollback review starts from failed command: {}",
+                failed.argv.join(" ")
+            ),
+            "do not run rollback tooling until read-only checks prove the rollback point and consumers are consistent".to_string(),
+            "capture a fresh post-failure snapshot, metadata export, or report before attempting any rollback when the domain supports it".to_string(),
+        ],
+    })
+}
+
+fn manual_probe_current_apply_command() -> ExecutionCommand {
+    command_with_readiness(
+        [
+            "disk-nix",
+            "apply",
+            "--spec",
+            "<spec>",
+            "--probe-current",
+            "--json",
+        ],
+        false,
+        CommandReadiness::ManualOnly,
+        ["original spec path"],
+        "rerun apply as a fresh current-topology dry run before resuming",
+    )
+}
+
+fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
+    let mut commands = Vec::new();
+    if let Some(target) = command_step_target(step) {
+        commands.push(command_vec(
+            ["disk-nix", "inspect", target, "--json"],
+            false,
+            "inspect the failed target before choosing roll-forward",
+        ));
+    }
+
+    match (
+        step.operation,
+        command_step_collection(step),
+        command_step_target(step),
+    ) {
+        (Operation::Rollback, Some("snapshots"), Some(target)) if is_zfs_snapshot_name(target) => {
+            if let Some(dataset) = target.split_once('@').map(|(dataset, _)| dataset) {
+                commands.push(command_vec(
+                    ["zfs", "list", "-H", "-p", dataset],
+                    false,
+                    "inspect the dataset that would be rolled forward or retried",
+                ));
+                commands.push(command_vec(
+                    [
+                        "zfs",
+                        "list",
+                        "-t",
+                        "snapshot",
+                        "-H",
+                        "-p",
+                        "-o",
+                        "name,creation,used,referenced,userrefs",
+                        "-r",
+                        dataset,
+                    ],
+                    false,
+                    "inspect newer snapshots before completing rollback or choosing roll-forward",
+                ));
+            }
+        }
+        (Operation::Rollback, Some("lvmSnapshots"), Some(target)) => {
+            commands.push(command_vec(
+                ["lvs", "--reportformat", "json", "-a", target],
+                false,
+                "inspect LVM origin, snapshot, and merge state before roll-forward",
+            ));
+        }
+        (
+            Operation::RemoveDevice | Operation::ReplaceDevice,
+            Some("volumeGroups"),
+            Some(target),
+        ) => {
+            commands.push(command_vec(
+                ["vgs", "--reportformat", "json", target],
+                false,
+                "inspect VG allocation and free space before completing device migration",
+            ));
+            commands.push(command_vec(
+                ["pvs", "--reportformat", "json"],
+                false,
+                "inspect PV allocation before retrying pvmove, vgreduce, or replacement",
+            ));
+        }
+        (
+            Operation::RemoveDevice | Operation::Detach,
+            Some("caches" | "lvmCaches"),
+            Some(target),
+        ) => {
+            commands.push(command_vec(
+                ["disk-nix", "cache", "--json"],
+                false,
+                "inspect cache mode and dirty-data state before completing detach",
+            ));
+            commands.push(command_vec(
+                ["disk-nix", "inspect", target, "--json"],
+                false,
+                "inspect the cache origin or bcache target before roll-forward",
+            ));
+        }
+        (Operation::Destroy | Operation::RemoveDevice | Operation::Detach, Some("luns"), _) => {
+            commands.push(command_vec(
+                ["disk-nix", "luns", "--json"],
+                false,
+                "inspect host-side LUN paths before completing detach or cleanup",
+            ));
+            commands.push(command_vec(
+                ["multipath", "-ll"],
+                false,
+                "inspect multipath maps before retrying LUN path changes",
+            ));
+        }
+        _ => {}
+    }
+
+    commands
+}
+
+fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
+    match (
+        step.operation,
+        command_step_collection(step),
+        command_step_target(step),
+    ) {
+        (Operation::Rollback, Some("snapshots"), Some(target)) if is_zfs_snapshot_name(target) => {
+            let mut commands = vec![command_vec(
+                ["zfs", "list", "-t", "snapshot", "-H", "-p", target],
+                false,
+                "confirm the rollback point still exists before any retry",
+            )];
+            if let Some(dataset) = target.split_once('@').map(|(dataset, _)| dataset) {
+                commands.push(command_vec(
+                    ["zfs", "list", "-H", "-p", dataset],
+                    false,
+                    "inspect the dataset state that rollback would replace",
+                ));
+            }
+            commands
+        }
+        (Operation::Rollback, Some("lvmSnapshots"), Some(target)) => vec![command_vec(
+            ["lvs", "--reportformat", "json", "-a", target],
+            false,
+            "confirm the LVM snapshot and origin state before retrying merge rollback",
+        )],
+        (
+            Operation::RemoveDevice | Operation::ReplaceDevice,
+            Some("volumeGroups"),
+            Some(target),
+        ) => {
+            vec![
+                command_vec(
+                    ["vgs", "--reportformat", "json", target],
+                    false,
+                    "confirm VG metadata before undoing a partially completed PV migration",
+                ),
+                command_vec(
+                    ["pvs", "--reportformat", "json"],
+                    false,
+                    "confirm whether extents remain on the source or replacement PV",
+                ),
+            ]
+        }
+        (Operation::RemoveDevice | Operation::Detach, Some("caches" | "lvmCaches"), _) => vec![
+            command_vec(
+                ["disk-nix", "cache", "--json"],
+                false,
+                "confirm cache attachment and dirty-data state before undoing cache changes",
+            ),
+            command_vec(
+                ["disk-nix", "volumes", "--json"],
+                false,
+                "inspect backing volumes before reattaching or disabling cache layers",
+            ),
+        ],
+        (Operation::Destroy | Operation::RemoveDevice | Operation::Detach, Some("luns"), _) => {
+            vec![
+                command_vec(
+                    ["disk-nix", "luns", "--json"],
+                    false,
+                    "confirm which LUN paths remain visible before reversing host-side detach",
+                ),
+                command_vec(
+                    ["multipath", "-ll"],
+                    false,
+                    "confirm path grouping before restoring or removing multipath maps",
+                ),
+            ]
+        }
+        _ => Vec::new(),
+    }
 }
 
 fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
@@ -21722,6 +21983,70 @@ mod tests {
                 .notes
                 .iter()
                 .any(|note| note.contains("cloning the snapshot"))
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "disk-nix",
+                    "apply",
+                    "--spec",
+                    "<spec>",
+                    "--probe-current",
+                    "--json",
+                ]
+                && command.readiness == CommandReadiness::ManualOnly
+                && command.unresolved_inputs == ["original spec path"]
+        }));
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "zfs",
+                    "list",
+                    "-t",
+                    "snapshot",
+                    "-H",
+                    "-p",
+                    "-o",
+                    "name,creation,used,referenced,userrefs",
+                    "-r",
+                    "tank/home",
+                ]
+                && !command.mutates
+        }));
+        assert!(
+            roll_forward
+                .notes
+                .iter()
+                .any(|note| note.contains("fresh topology"))
+        );
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "zfs",
+                    "list",
+                    "-t",
+                    "snapshot",
+                    "-H",
+                    "-p",
+                    "tank/home@before",
+                ]
+                && !command.mutates
+        }));
+        assert!(
+            rollback
+                .notes
+                .iter()
+                .any(|note| note.contains("read-only checks"))
         );
     }
 

@@ -678,8 +678,13 @@ policy review, missing-input resolution, validation before resume, and preservin
 recovery points after partial mutation. Failed risky actions also include
 `domain-recovery` guidance with domain-specific read-only inspection commands
 where the failed action context is concrete, such as ZFS snapshot rollback
-checks. They do not automatically roll back storage because rollback safety is
-domain- and topology-specific.
+checks. Concrete risky failures also emit `roll-forward-review` guidance that
+starts with a fresh `disk-nix apply --probe-current --json` dry run against the
+original spec and `rollback-review` guidance for domains with inspectable
+rollback preconditions, such as ZFS rollback points, LVM snapshot merges, VG
+device migration, cache detach, and host-side LUN detach. These commands remain
+read-only or manual-only; disk-nix does not automatically roll back storage
+because rollback safety is domain- and topology-specific.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

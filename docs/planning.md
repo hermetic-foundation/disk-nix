@@ -612,6 +612,17 @@ suppressed before command rendering. It also includes a
 commands and checks for the relevant storage domain. Executed reports also
 include `executionResults` with command phase, argv, success, exit status,
 stdout, and stderr for each command that ran.
+Blocked, non-ready, and failed execution reports include structured
+`recoveryActions`. Failed risky actions keep the generic current-state capture
+and preserve-recovery-point advice, then add domain-specific recovery,
+`roll-forward-review`, and, where read-only preconditions are available,
+`rollback-review` entries. Roll-forward review starts with a manual-only
+`disk-nix apply --spec <spec> --probe-current --json` dry run against the
+current graph and adds domain inspection plus post-apply verification commands
+when they were rendered. Rollback review is intentionally read-only and covers
+concrete domains such as ZFS rollback points, LVM snapshot merges, VG device
+migration, cache detach, and host-side LUN detach; it does not run rollback
+commands automatically.
 Cache command plans include bcache-aware sysfs updates for existing cache-set
 attachment, cache-mode property changes, read-only rescans, dirty-data checks,
 and replacement steps that remain non-ready until the replacement cache device,

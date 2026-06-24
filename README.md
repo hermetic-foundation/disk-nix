@@ -235,7 +235,10 @@ emits advisory command and verification plans, and can write those plans to a
 reviewable shell script with `--script-out`. With `--execute`, disk-nix runs
 only policy-allowed plans where every command is ready, records each command
 result, stops on the first failure, and runs verification commands only after
-the planned command phase succeeds.
+the planned command phase succeeds. Failed risky actions include
+domain-specific recovery, roll-forward review from a fresh `--probe-current`
+dry run, and read-only rollback precondition review where the domain can be
+inspected safely.
 Planner coverage includes filesystem resize intent, disk and partition
 lifecycle declarations, explicit filesystem formatting/replacement, swap
 signature/resize workflows, LUKS format/resize/open/close/keyslot/token
