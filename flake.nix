@@ -113,6 +113,7 @@
                 properties."luks.subsystem" = "nixos";
               };
               luks.devices.cryptTargetSize = {
+                target = "cryptTargetSizeMapper";
                 device = "/dev/disk/by-id/target-size-luks";
                 operation = "grow";
                 targetSize = "90%";
@@ -1295,6 +1296,7 @@
                     and .spec.luks.devices.cryptroot.properties.label == "cryptroot"
                     and .spec.luks.devices.cryptroot.properties."luks.subsystem" == "nixos"
                     and .spec.luks.devices.cryptTargetSize.operation == "grow"
+                    and .spec.luks.devices.cryptTargetSize.target == "cryptTargetSizeMapper"
                     and .spec.luks.devices.cryptTargetSize.targetSize == "90%"
                     and .spec.luks.devices.cryptSize.operation == "grow"
                     and .spec.luks.devices.cryptSize.size == "80%"
@@ -1568,8 +1570,9 @@
                   jq -e '
                     has("cryptroot")
                     and .cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
-                    and has("cryptTargetSize")
-                    and .cryptTargetSize.device == "/dev/disk/by-id/target-size-luks"
+                    and has("cryptTargetSizeMapper")
+                    and .cryptTargetSizeMapper.device == "/dev/disk/by-id/target-size-luks"
+                    and (has("cryptTargetSize") | not)
                     and has("cryptSize")
                     and .cryptSize.device == "/dev/disk/by-id/size-luks"
                     and has("cryptarchive")

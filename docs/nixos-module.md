@@ -269,6 +269,10 @@ valid with a single zram swap device, matching the upstream NixOS assertion.
 Typed LUKS declarations include:
 
 - `name`
+- `target`
+- `mapperName`
+- `mapper-name`
+- `mapper`
 - `device`
 - `operation`
 - `action`
@@ -284,9 +288,10 @@ Typed LUKS declarations include:
 
 `targetSize` and `size` are serialized as aliases accepted by the planner for
 the desired opened mapper size.
-When a declaration key is only a friendly name, set `name` to the concrete LUKS
-mapper name used by `cryptsetup open`, `cryptsetup resize`, and
-`cryptsetup close`.
+When a declaration key is only a friendly name, set `target`, `mapperName`,
+`mapper`, or `name` to the concrete LUKS mapper name used by
+`cryptsetup open`, `cryptsetup resize`, and `cryptsetup close`. The generated
+`boot.initrd.luks.devices` entry is keyed by that concrete mapper name.
 
 Typed NFS client mount declarations include:
 

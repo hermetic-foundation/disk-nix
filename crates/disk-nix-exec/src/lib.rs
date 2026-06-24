@@ -15216,17 +15216,17 @@ mod tests {
                 "luks": {
                   "devices": {
                     "rootMapping": {
-                      "name": "cryptroot",
+                      "target": "cryptroot",
                       "device": "/dev/disk/by-id/root-luks",
                       "operation": "grow"
                     },
                     "archiveMapping": {
-                      "name": "cryptarchive",
+                      "mapperName": "cryptarchive",
                       "device": "/dev/disk/by-id/archive-luks",
                       "operation": "open"
                     },
                     "headerIdentity": {
-                      "name": "cryptroot",
+                      "mapper-name": "cryptroot",
                       "device": "/dev/disk/by-id/root-luks",
                       "properties": {
                         "label": "root",
@@ -15235,7 +15235,7 @@ mod tests {
                       }
                     },
                     "closedMapping": {
-                      "name": "cryptclosed",
+                      "mapper": "cryptclosed",
                       "device": "/dev/disk/by-id/closed-luks",
                       "operation": "close"
                     }

@@ -902,6 +902,10 @@ let
     inherit (luks)
       device
       name
+      target
+      mapperName
+      mapper
+      mapper-name
       operation
       action
       desiredSize
@@ -915,6 +919,33 @@ let
       properties
       ;
   }) cfg.luks.devices;
+  luksMapperName =
+    _attrName: luks:
+    if luks.target != null then
+      luks.target
+    else if luks.mapperName != null then
+      luks.mapperName
+    else if luks.mapper-name != null then
+      luks.mapper-name
+    else if luks.mapper != null then
+      luks.mapper
+    else
+      luks.name;
+  activeLuksMapperNames = lib.mapAttrsToList luksMapperName activeLuksDevices;
+  luksDeviceConfig = luks: {
+    inherit (luks)
+      device
+      preLVM
+      allowDiscards
+      bypassWorkqueues
+      ;
+  };
+  activeLuksDeviceConfig = builtins.listToAttrs (
+    lib.mapAttrsToList (name: luks: {
+      name = luksMapperName name luks;
+      value = luksDeviceConfig luks;
+    }) activeLuksDevices
+  );
   typedIscsiSpec = cleanSpecAttrs {
     inherit (cfg.iscsi)
       initiatorName
@@ -1446,6 +1477,34 @@ in
                 description = "Mapper name for the opened LUKS device. Set this explicitly when the attribute name is only a friendly declaration key.";
               };
 
+              target = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Concrete mapper name when the attribute name is only a friendly declaration key.";
+                example = "cryptroot";
+              };
+
+              mapperName = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Alias for target accepted by disk-nix for logical LUKS declaration keys.";
+                example = "cryptroot";
+              };
+
+              mapper-name = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Hyphenated alias for mapperName accepted by disk-nix.";
+                example = "cryptroot";
+              };
+
+              mapper = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Short alias for target accepted by disk-nix for logical LUKS declaration keys.";
+                example = "cryptroot";
+              };
+
               device = lib.mkOption {
                 type = lib.types.str;
                 description = "Encrypted block device path.";
@@ -1531,7 +1590,7 @@ in
         )
       );
       default = { };
-      description = "Typed LUKS declarations used to generate both disk-nix spec and boot.initrd.luks.devices. The name option supplies the concrete mapper name when the attribute name is logical.";
+      description = "Typed LUKS declarations used to generate both disk-nix spec and boot.initrd.luks.devices. The name, target, mapperName, or mapper option supplies the concrete mapper name when the attribute name is logical.";
     };
 
     nfs.mounts = lib.mkOption {
@@ -2072,14 +2131,7 @@ in
       }
     );
 
-    boot.initrd.luks.devices = lib.mapAttrs (_: luks: {
-      inherit (luks)
-        device
-        preLVM
-        allowDiscards
-        bypassWorkqueues
-        ;
-    }) activeLuksDevices;
+    boot.initrd.luks.devices = activeLuksDeviceConfig;
 
     boot.supportedFilesystems = supportedFilesystemTypes;
 
@@ -2189,6 +2241,10 @@ in
       {
         assertion = cfg.zram.writebackDevice == null || cfg.zram.swapDevices <= 1;
         message = "services.disk-nix.zram.writebackDevice cannot be shared by multiple zram swap devices.";
+      }
+      {
+        assertion = lib.length activeLuksMapperNames == lib.length (lib.unique activeLuksMapperNames);
+        message = "services.disk-nix.luks.devices entries must resolve to unique mapper names.";
       }
     ];
   };

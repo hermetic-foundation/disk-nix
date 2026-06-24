@@ -590,7 +590,8 @@ same open flow. `operation = "close"` plans render offline-policy-gated
 reopen. LUKS header label and subsystem property updates render
 `cryptsetup config <device> --label` or `--subsystem`, while UUID updates render
 `cryptsetup luksUUID <device> --uuid <uuid>`. Logical LUKS declaration keys can
-declare the concrete mapper name with `name`.
+declare the concrete mapper name with `target`, `mapperName`, `mapper`, or
+`name`.
 Disk initialization plans render policy-gated `parted mklabel` and partition
 table reread commands after inspecting the target disk.
 Partition create command plans render concrete `parted mkpart`, `partprobe`,

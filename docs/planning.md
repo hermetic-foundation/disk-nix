@@ -118,7 +118,7 @@ Examples:
   through `cryptsetup config` or `cryptsetup luksUUID`. Mapper close keeps the
   LUKS header and backing data intact unless a separate format action is
   requested. Logical LUKS declaration keys can declare the concrete mapper name
-  with `name`.
+  with `target`, `mapperName`, `mapper`, or `name`.
 - Btrfs subvolume creation is online, while destruction is destructive and
   suggests read-only snapshots or rename-first validation. Btrfs subvolume
   `operation = "rescan"` is online and read-only; it refreshes subvolume

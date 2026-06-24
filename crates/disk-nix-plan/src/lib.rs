@@ -1840,7 +1840,11 @@ fn swap_format_action(
 fn add_luks_actions(actions: &mut Vec<PlannedAction>, name: &str, luks: &Value) {
     let device = string_field(luks, &["device"]);
     let device_label = device.as_deref().unwrap_or("<device>");
-    let mapper_name = string_field(luks, &["name"]).unwrap_or_else(|| name.to_string());
+    let mapper_name = string_field(
+        luks,
+        &["target", "mapperName", "mapper-name", "mapper", "name"],
+    )
+    .unwrap_or_else(|| name.to_string());
     let operation = luks
         .get("operation")
         .or_else(|| luks.get("action"))
@@ -9271,6 +9275,67 @@ mod tests {
             explicit_close.context.target.as_deref(),
             Some("cryptclosed")
         );
+    }
+
+    #[test]
+    fn plan_accepts_luks_mapper_aliases_for_logical_keys() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luks": {
+                "devices": {
+                  "rootMapping": {
+                    "target": "cryptroot",
+                    "device": "/dev/disk/by-id/root-luks",
+                    "operation": "grow"
+                  },
+                  "archiveMapping": {
+                    "mapperName": "cryptarchive",
+                    "device": "/dev/disk/by-id/archive-luks",
+                    "operation": "open"
+                  },
+                  "backupMapping": {
+                    "mapper": "cryptbackup",
+                    "device": "/dev/disk/by-id/backup-luks",
+                    "operation": "close"
+                  },
+                  "hyphenMapping": {
+                    "mapper-name": "crypthyphen",
+                    "device": "/dev/disk/by-id/hyphen-luks",
+                    "operation": "open"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let root = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:rootMapping:grow")
+            .expect("target alias grow action exists");
+        assert_eq!(root.context.target.as_deref(), Some("cryptroot"));
+
+        let archive = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:archiveMapping:open")
+            .expect("mapperName alias open action exists");
+        assert_eq!(archive.context.target.as_deref(), Some("cryptarchive"));
+
+        let backup = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:backupMapping:close")
+            .expect("mapper alias close action exists");
+        assert_eq!(backup.context.target.as_deref(), Some("cryptbackup"));
+
+        let hyphen = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luks.devices:hyphenMapping:open")
+            .expect("hyphenated mapper alias open action exists");
+        assert_eq!(hyphen.context.target.as_deref(), Some("crypthyphen"));
     }
 
     #[test]
