@@ -68,6 +68,15 @@ and selected `services.nfs.server.exports` entries.
 Raw `spec` remains available for storage domains whose typed NixOS options have
 not been implemented yet.
 
+The module also writes `/etc/disk-nix/steady-state.json`. That file is a
+machine-readable inventory of the native NixOS storage state derived from the
+same declaration: active `fileSystems`, `swapDevices`, zram settings, initrd
+LUKS devices, supported filesystem types, NFS export lines, iSCSI service and
+boot initiator settings, and native storage service flags for LVM, LVM thin,
+LVM VDO, MD RAID, multipath, ZFS extra pools, bcache, and NFS server support.
+Planner and apply tooling can use it to compare imperative storage changes
+with the declarative steady state that NixOS will keep enforcing.
+
 `toolPackages` defaults to the storage tools used by the probe and executor
 adapters, including Btrfs, bcachefs, ext, XFS, F2FS, exFAT, LVM, cryptsetup,
 MD RAID, multipath, NFS, iSCSI, SCSI inventory, NVMe, SMART, VDO, bcache, ZFS,

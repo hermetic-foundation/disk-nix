@@ -38,7 +38,10 @@ behavior across real storage stacks.
   property actions when the graph proves they are already satisfied and no
   warning diagnostics are present.
 - NixOS module options for steady-state resources plus imperative lifecycle
-  declarations emitted into `/etc/disk-nix/spec.json`.
+  declarations emitted into `/etc/disk-nix/spec.json`, with a generated
+  `/etc/disk-nix/steady-state.json` inventory of native NixOS mounts, swaps,
+  zram, LUKS, supported filesystems, NFS exports, iSCSI settings, and storage
+  service enablement.
 - NixOS assertions for duplicate active identities across mountpoints, swaps,
   LUKS mapper names, LUKS keyslot/token selectors, disk and partition targets,
   backing files, Btrfs subvolumes and qgroups, device-mapper maps, MD RAID,

@@ -2304,6 +2304,47 @@
                     and .openIscsiDiscoverPortal == "192.0.2.10:3260"
                     and .bootIscsiDiscoverPortal == "192.0.2.10:3260"
                   ' native-storage
+                  steadyState=${
+                    pkgs.lib.escapeShellArg (
+                      builtins.readFile nixosModuleTest.config.environment.etc."disk-nix/steady-state.json".source
+                    )
+                  }
+                  printf '%s\n' "$steadyState" > steady-state
+                  jq -e '
+                    .version == 1
+                    and .fileSystems."/srv/tuned".device == "nas.example.com:/srv/tuned"
+                    and .fileSystems."/srv/tuned".fsType == "nfs4"
+                    and .fileSystems."/mnt/local-mount".device == "/dev/disk/by-label/local-mount"
+                    and .fileSystems."/mnt/local-mount".fsType == "xfs"
+                    and (.fileSystems | has("/mnt/local-unmount") | not)
+                    and (.fileSystems | has("/srv/old") | not)
+                    and (.swapDevices | length == 4)
+                    and (.swapDevices | any(.device == "/dev/disk/by-label/swap"))
+                    and (.swapDevices | all(.device != "/dev/disk/by-label/destroyed-swap"))
+                    and .luksDevices.cryptroot.device == "/dev/disk/by-partuuid/d024c121-4300-4493-a643-055bc4d5caa7"
+                    and (.luksDevices | has("cryptclosed") | not)
+                    and .zramSwap.enable == true
+                    and .zramSwap.swapDevices == 2
+                    and .zramSwap.memoryMax == 8589934592
+                    and (.supportedFilesystems | index("xfs") != null)
+                    and (.supportedFilesystems | index("nfs4") != null)
+                    and (.supportedFilesystems | index("zfs") != null)
+                    and (.nfsExports | index("/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)") != null)
+                    and (.nfsExports | all(. | contains("/srv/old-share") | not))
+                    and .iscsi.openiscsi.enable == true
+                    and .iscsi.openiscsi.discoverPortal == "192.0.2.10:3260"
+                    and .iscsi.bootInitiator.enable == true
+                    and .iscsi.bootInitiator.discoverPortal == "192.0.2.10:3260"
+                    and .nativeServices.lvm == true
+                    and .nativeServices.lvmThin == true
+                    and .nativeServices.lvmVdo == true
+                    and .nativeServices.mdraid == true
+                    and .nativeServices.multipath == true
+                    and .nativeServices.bcache == true
+                    and .nativeServices.nfsServer == true
+                    and (.nativeServices.zfsExtraPools | index("tank") != null)
+                    and (.nativeServices.zfsExtraPools | index("mnt") == null)
+                  ' steady-state
                   printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
                   grep -- '/srv/share 192.0.2.0/24(rw,sync,no_subtree_check)' nfs-exports
                   ! grep -- '/srv/old-share' nfs-exports

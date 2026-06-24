@@ -1354,6 +1354,97 @@ let
     ++ (map (mount: mount.fsType) (lib.attrValues activeNfsMounts))
     ++ lib.optional (zfsExtraPools != [ ]) "zfs"
   );
+  nativeFileSystems =
+    lib.mapAttrs' (_: filesystem: {
+      name = filesystem.mountpoint;
+      value = filesystemToNixos filesystem;
+    }) activeFilesystems
+    // lib.mapAttrs' (_: mount: {
+      name = mount.mountpoint;
+      value = filesystemToNixos {
+        inherit (mount)
+          fsType
+          neededForBoot
+          options
+          ;
+        device = mount.source;
+      };
+    }) activeNfsMounts;
+  nativeSwapDevices = lib.mapAttrsToList (
+    _: swap:
+    {
+      device = swapDevicePath swap;
+    }
+    // lib.optionalAttrs (swap.priority != null) {
+      inherit (swap) priority;
+    }
+    // lib.optionalAttrs swap.randomEncryption {
+      randomEncryption.enable = true;
+    }
+  ) activeSwaps;
+  nativeZramSwap = {
+    enable = true;
+    inherit (cfg.zram)
+      swapDevices
+      memoryPercent
+      priority
+      algorithm
+      ;
+  }
+  // lib.optionalAttrs (cfg.zram.memoryMax != null) {
+    inherit (cfg.zram) memoryMax;
+  }
+  // lib.optionalAttrs (cfg.zram.writebackDevice != null) {
+    inherit (cfg.zram) writebackDevice;
+  };
+  nativeOpenIscsi = cleanSpecAttrs {
+    enable = cfg.iscsi.initiatorName != null;
+    name = cfg.iscsi.initiatorName;
+    inherit (cfg.iscsi)
+      enableAutoLoginOut
+      extraConfig
+      ;
+    discoverPortal = iscsiDiscoverPortal;
+  };
+  nativeBootIscsi = cleanSpecAttrs {
+    enable = cfg.iscsi.boot.enable;
+    name = cfg.iscsi.initiatorName;
+    inherit (cfg.iscsi.boot)
+      target
+      loginAll
+      logLevel
+      extraIscsiCommands
+      extraConfig
+      ;
+    discoverPortal =
+      if cfg.iscsi.boot.discoverPortal != null then
+        cfg.iscsi.boot.discoverPortal
+      else
+        iscsiDiscoverPortal;
+  };
+  steadyState = {
+    version = 1;
+    fileSystems = nativeFileSystems;
+    swapDevices = nativeSwapDevices;
+    zramSwap = lib.optionalAttrs cfg.zram.enable nativeZramSwap;
+    luksDevices = activeLuksDeviceConfig;
+    supportedFilesystems = supportedFilesystemTypes;
+    nfsExports = nfsExportLines;
+    iscsi = {
+      openiscsi = nativeOpenIscsi;
+      bootInitiator = nativeBootIscsi;
+    };
+    nativeServices = {
+      lvm = hasActiveLvm || hasActiveVdoVolumes;
+      lvmThin = hasActiveLvmThinSupport;
+      lvmVdo = hasActiveVdoVolumes;
+      mdraid = hasActiveMdRaids;
+      multipath = hasActiveMultipathMaps;
+      zfsExtraPools = zfsExtraPools;
+      bcache = hasActiveCaches;
+      nfsServer = nfsExportLines != [ ];
+    };
+  };
 in
 {
   options.services.disk-nix = {
@@ -2374,53 +2465,14 @@ in
       apply = applyPolicy;
     };
 
-    fileSystems =
-      lib.mapAttrs' (_: filesystem: {
-        name = filesystem.mountpoint;
-        value = filesystemToNixos filesystem;
-      }) activeFilesystems
-      // lib.mapAttrs' (_: mount: {
-        name = mount.mountpoint;
-        value = filesystemToNixos {
-          inherit (mount)
-            fsType
-            neededForBoot
-            options
-            ;
-          device = mount.source;
-        };
-      }) activeNfsMounts;
+    environment.etc."disk-nix/steady-state.json".source =
+      json.generate "disk-nix-steady-state.json" steadyState;
 
-    swapDevices = lib.mapAttrsToList (
-      _: swap:
-      {
-        device = swapDevicePath swap;
-      }
-      // lib.optionalAttrs (swap.priority != null) {
-        inherit (swap) priority;
-      }
-      // lib.optionalAttrs swap.randomEncryption {
-        randomEncryption.enable = true;
-      }
-    ) activeSwaps;
+    fileSystems = nativeFileSystems;
 
-    zramSwap = lib.mkIf cfg.zram.enable (
-      {
-        enable = true;
-        inherit (cfg.zram)
-          swapDevices
-          memoryPercent
-          priority
-          algorithm
-          ;
-      }
-      // lib.optionalAttrs (cfg.zram.memoryMax != null) {
-        inherit (cfg.zram) memoryMax;
-      }
-      // lib.optionalAttrs (cfg.zram.writebackDevice != null) {
-        inherit (cfg.zram) writebackDevice;
-      }
-    );
+    swapDevices = nativeSwapDevices;
+
+    zramSwap = lib.mkIf cfg.zram.enable nativeZramSwap;
 
     boot.initrd.luks.devices = activeLuksDeviceConfig;
 
