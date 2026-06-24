@@ -57,8 +57,9 @@ behavior across real storage stacks.
   reconciled against bcache `bcache.*` and LVM cache `lvm.*` metadata with
   cache-mode spelling normalization, Btrfs qgroup referenced/exclusive limit
   declarations reconciled against probed `btrfs.max-*` metadata with
-  unlimited-value normalization, and ZFS dataset/zvol property declarations
-  reconciled against probed `zfs.*` metadata with common on/off normalization,
+  unlimited-value normalization, and ZFS pool/dataset/zvol property
+  declarations reconciled against probed `zfs.*` and pool-scoped `zfs.pool-*`
+  metadata with common on/off normalization,
   and filesystem identity property declarations reconciled against probed node
   identity plus filesystem label, UUID, FAT volume-ID, NTFS serial, and exFAT
   serial metadata aliases, swap identity property declarations reconciled

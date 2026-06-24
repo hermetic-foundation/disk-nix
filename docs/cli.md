@@ -1105,7 +1105,10 @@ as create-time `-o key=value` options. They also render policy-gated
 declared path-like vdev entries instead of topology keywords such as `mirror`.
 Current-topology probing suppresses pool create only when the matched pool is
 already visible with `zfs.state = ONLINE` and `zfs.health = ONLINE`; degraded,
-faulted, or wrong-kind matches stay actionable with warnings. Pool
+faulted, or wrong-kind matches stay actionable with warnings. Pool property
+comparison maps declarations such as `autotrim`, `autoExpand`, `altroot`, and
+`cachefile` onto `zfs.*` or pool-scoped `zfs.pool-*` metadata before suppressing
+already-satisfied `zpool set` updates. Pool
 import/export lifecycle declarations render `zpool import`, optional
 `zpool import -o readonly=on <pool>` for `readOnly = true`, and
 `zpool export <pool>` command plans. Current-topology probing suppresses a pool

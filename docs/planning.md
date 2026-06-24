@@ -260,6 +260,10 @@ Examples:
   Current-topology comparison suppresses pool create only when the matched pool
   is already visible with `zfs.state` and `zfs.health` both `ONLINE`; visible
   degraded, faulted, or wrong-kind matches stay actionable with warnings.
+  Property comparison maps declared pool keys such as `autotrim`,
+  `autoExpand`, `altroot`, and `cachefile` onto probed `zfs.*` and
+  pool-scoped `zfs.pool-*` metadata, normalizing common on/off spellings before
+  suppressing already-satisfied `zpool set` actions.
   Import/export is preferred when moving an existing pool. `operation = "import"` and `operation = "export"` are offline-required, non-destructive
   pool lifecycle operations; `readOnly = true` renders a reviewed read-only
   import. Current-topology comparison suppresses import actions only when

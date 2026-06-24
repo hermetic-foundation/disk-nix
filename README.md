@@ -261,16 +261,17 @@ LVM volume-group extension/device removal, LVM thin-pool create/grow/rescan/remo
 LVM snapshot create/rescan/merge/remove, LVM cache attach/detach/property updates,
 loop-device mapping updates, MD RAID lifecycle/member updates, multipath map
 path and map removal updates, NVMe namespace create/attach/rescan/detach/delete
-workflows, ZFS pool topology updates, dataset and zvol updates including zvol
-property changes, volume updates, network LUN growth, snapshots, and cache
-attach/detach/rescan/replacement workflows.
+workflows, ZFS pool topology/property updates, dataset and zvol updates
+including zvol property changes, volume updates, network LUN growth, snapshots,
+and cache attach/detach/rescan/replacement workflows.
 ZFS dataset and zvol `operation = "rescan"` plans are online read-only
 refreshes that render focused `zfs list`, `zfs get`, and graph inspection
 commands before later property, growth, promotion, or destruction work.
-Current-topology probing reconciles dataset and zvol property declarations
-against probed `zfs.*` metadata, including mountpoint, compression, volsize,
-cache, and on/off property aliases, so matching `zfs set` updates are
-suppressed while drift remains actionable.
+Current-topology probing reconciles ZFS pool, dataset, and zvol property
+declarations against probed `zfs.*` and pool-scoped `zfs.pool-*` metadata,
+including autotrim, autoexpand, altroot, mountpoint, compression, volsize,
+cache, and on/off property aliases, so matching `zpool set` or `zfs set`
+updates are suppressed while drift remains actionable.
 Cache apply plans include bcache-aware attach, detach, rescan, cache-mode,
 dirty-data, and replacement review steps instead of a generic cache
 placeholder. bcache replacement renders deterministic `make-bcache --cset-uuid`,
