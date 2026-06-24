@@ -242,6 +242,10 @@ pub enum TopologyDiagnosticKind {
     IscsiLoginRequired,
     IscsiLogoutAlreadySatisfied,
     IscsiLogoutRequired,
+    LunAttachAlreadySatisfied,
+    LunAttachRequired,
+    LunDetachAlreadySatisfied,
+    LunDetachRequired,
     LvmActivateAlreadySatisfied,
     LvmActivateRequired,
     LvmDeactivateAlreadySatisfied,
@@ -756,6 +760,8 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
+                        | TopologyDiagnosticKind::LunAttachAlreadySatisfied
+                        | TopologyDiagnosticKind::LunDetachAlreadySatisfied
                         | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
@@ -1328,6 +1334,8 @@ fn already_satisfied_action_ids(
             action.operation,
             Operation::Grow
                 | Operation::Shrink
+                | Operation::Attach
+                | Operation::Detach
                 | Operation::Assemble
                 | Operation::Import
                 | Operation::Activate
@@ -1358,6 +1366,8 @@ fn already_satisfied_action_ids(
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
+                    | TopologyDiagnosticKind::LunAttachAlreadySatisfied
+                    | TopologyDiagnosticKind::LunDetachAlreadySatisfied
                     | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
@@ -1394,6 +1404,9 @@ fn topology_diagnostics_for_action(
 
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
+        if let Some(diagnostic) = lun_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = nfs_unexport_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1424,6 +1437,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
     diagnostics.extend(iscsi_logout_diagnostic(action, &matches, &query));
+    diagnostics.extend(lun_present_diagnostic(action, node, &query));
     diagnostics.extend(lvm_activate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_deactivate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_export_diagnostic(action, node, &query));
@@ -1444,6 +1458,15 @@ fn topology_diagnostics_for_action(
 }
 
 fn topology_query(action: &PlannedAction) -> Option<String> {
+    if action.context.collection.as_deref() == Some("luns") {
+        return action
+            .context
+            .device
+            .clone()
+            .or_else(|| action.context.target.clone())
+            .or_else(|| action.context.name.clone());
+    }
+
     action
         .context
         .target
@@ -2114,6 +2137,68 @@ fn zfs_pool_import_diagnostic(
             TopologyDiagnosticKind::ZfsPoolImportRequired,
             format!("ZFS pool {query} is visible but not online: state={state}, health={health}"),
         )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn lun_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("luns") {
+        return None;
+    }
+
+    let (level, kind, message) = match action.operation {
+        Operation::Attach => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LunAttachRequired,
+            format!("LUN path {query} is not currently visible on this host"),
+        ),
+        Operation::Detach => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LunDetachAlreadySatisfied,
+            format!("LUN path {query} is already absent from current topology"),
+        ),
+        _ => return None,
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: None,
+    })
+}
+
+fn lun_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("luns") {
+        return None;
+    }
+
+    let (level, kind, message) = match action.operation {
+        Operation::Attach => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LunAttachAlreadySatisfied,
+            format!("LUN path {query} is already visible on this host"),
+        ),
+        Operation::Detach => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LunDetachRequired,
+            format!("LUN path {query} is still visible on this host"),
+        ),
+        _ => return None,
     };
 
     Some(TopologyDiagnostic {
@@ -14465,6 +14550,145 @@ mod tests {
             diagnostic.action_id == "iscsisessions:iqn.2026-06.example:storage.old:logout"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::IscsiLogoutRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_lun_attach_when_path_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/root:0": {
+                  "operation": "attach",
+                  "device": "/dev/disk/by-path/ip-192.0.2.10-lun-0"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lun:0", NodeKind::Lun, "0")
+                .with_path("/dev/disk/by-path/ip-192.0.2.10-lun-0")
+                .with_property("iscsi.attached-disk", "sdb"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luns:iqn.2026-06.example:storage/root:0:attach"
+                && diagnostic.kind == TopologyDiagnosticKind::LunAttachAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_lun_attach_when_path_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/root:0": {
+                  "operation": "attach",
+                  "device": "/dev/disk/by-path/ip-192.0.2.10-lun-0"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luns:iqn.2026-06.example:storage/root:0:attach"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LunAttachRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_lun_detach_when_path_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/old:1": {
+                  "operation": "detach",
+                  "device": "/dev/disk/by-path/ip-192.0.2.10-lun-1"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luns:iqn.2026-06.example:storage/old:1:detach"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::LunDetachAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_lun_detach_when_path_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luns": {
+                "iqn.2026-06.example:storage/old:1": {
+                  "operation": "detach",
+                  "device": "/dev/disk/by-path/ip-192.0.2.10-lun-1"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lun:1", NodeKind::Lun, "1")
+                .with_path("/dev/disk/by-path/ip-192.0.2.10-lun-1")
+                .with_property("iscsi.attached-disk", "sdc"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luns:iqn.2026-06.example:storage/old:1:detach"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LunDetachRequired
         }));
     }
 

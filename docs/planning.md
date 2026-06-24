@@ -296,6 +296,10 @@ Examples:
   the same detach lifecycle. When stable paths are declared through `device`,
   `path`, `devices`, `paths`, or `devicePaths`, apply plans render per-path SCSI
   rescans or deletes in addition to broad iSCSI session and multipath refreshes.
+  Current-topology comparison suppresses attach actions only when the declared
+  LUN path is already visible and suppresses detach actions only when the
+  declared LUN path is already absent; opposite states stay actionable with a
+  warning.
   Executable attach, grow, and detach plans remain non-ready until those stable
   LUN paths are declared.
 - iSCSI session `operation = "login"` discovers/logs into an existing target
