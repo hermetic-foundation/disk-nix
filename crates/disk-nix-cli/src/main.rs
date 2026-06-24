@@ -1298,24 +1298,33 @@ fn print_filtered_json(
     graph: &StorageGraph,
     predicate: fn(&Node) -> bool,
 ) -> Result<(), AppError> {
-    let nodes: Vec<Node> = graph
+    let matched_ids: BTreeSet<String> = graph
         .nodes
         .iter()
         .filter(|node| predicate(node))
+        .map(|node| node.id.0.clone())
+        .collect();
+
+    let mut node_ids = matched_ids.clone();
+    let edges = graph
+        .edges
+        .iter()
+        .filter(|edge| {
+            matched_ids.contains(edge.from.0.as_str()) || matched_ids.contains(edge.to.0.as_str())
+        })
+        .inspect(|edge| {
+            node_ids.insert(edge.from.0.clone());
+            node_ids.insert(edge.to.0.clone());
+        })
         .cloned()
         .collect();
-    let node_ids: BTreeSet<String> = nodes.iter().map(|node| node.id.0.clone()).collect();
-    let filtered = StorageGraph {
-        nodes,
-        edges: graph
-            .edges
-            .iter()
-            .filter(|edge| {
-                node_ids.contains(edge.from.0.as_str()) && node_ids.contains(edge.to.0.as_str())
-            })
-            .cloned()
-            .collect(),
-    };
+    let nodes = graph
+        .nodes
+        .iter()
+        .filter(|node| node_ids.contains(node.id.0.as_str()))
+        .cloned()
+        .collect();
+    let filtered = StorageGraph { nodes, edges };
 
     writeln!(
         output,
@@ -3837,10 +3846,11 @@ mod tests {
         is_partition_node, is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node,
         is_volume_node, is_zfs_node, iscsi_lun_count, mount_details, nfs_mount_count, print_cache,
         print_complex_filesystems, print_devices, print_encryption, print_filesystems,
-        print_inspect, print_iscsi, print_loop, print_lvm, print_mappings, print_mounts,
-        print_multipath, print_network_storage, print_nfs, print_nvme, print_partitions,
-        print_pools, print_raid, print_snapshots, print_swap, print_usage, print_vdo,
-        print_volumes, print_zfs, snapshot_source, usage_details, usage_percent, zfs_child_count,
+        print_filtered_json, print_inspect, print_iscsi, print_loop, print_lvm, print_mappings,
+        print_mounts, print_multipath, print_network_storage, print_nfs, print_nvme,
+        print_partitions, print_pools, print_raid, print_snapshots, print_swap, print_usage,
+        print_vdo, print_volumes, print_zfs, snapshot_source, usage_details, usage_percent,
+        zfs_child_count,
     };
 
     #[test]
@@ -4092,6 +4102,56 @@ mod tests {
             .find(|node| node.kind == NodeKind::ZfsSnapshot)
             .expect("snapshot exists");
         assert_eq!(snapshot_source(&graph, snapshot), Some("tank/home"));
+    }
+
+    #[test]
+    fn focused_json_includes_direct_relationship_neighbors() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "filesystem:root",
+            NodeKind::Filesystem,
+            "/dev/mapper/vg-root",
+        ));
+        graph.add_node(Node::new("mount:/", NodeKind::Mountpoint, "/"));
+        graph.add_node(Node::new(
+            "block:/dev/nvme0n1",
+            NodeKind::PhysicalDisk,
+            "/dev/nvme0n1",
+        ));
+        graph.add_edge(Edge::new(
+            "filesystem:root",
+            "mount:/",
+            Relationship::MountedAt,
+        ));
+
+        let mut output = Vec::new();
+        print_filtered_json(&mut output, &graph, is_filesystem_node)
+            .expect("filtered graph renders");
+        let output = String::from_utf8(output).expect("json is utf8");
+        let graph: StorageGraph = serde_json::from_str(&output).expect("valid storage graph json");
+
+        assert_eq!(graph.nodes.len(), 2);
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.id.0 == "filesystem:root")
+        );
+        assert!(graph.nodes.iter().any(|node| node.id.0 == "mount:/"));
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .all(|node| node.id.0 != "block:/dev/nvme0n1")
+        );
+        assert_eq!(
+            graph.edges,
+            vec![Edge::new(
+                "filesystem:root",
+                "mount:/",
+                Relationship::MountedAt
+            )]
+        );
     }
 
     #[test]

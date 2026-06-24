@@ -111,8 +111,9 @@ as `devices --json`, `partitions --json`, `complex-filesystems --json`,
 `encryption --json`, `cache --json`, `lvm --json`, `vdo --json`,
 `multipath --json`, `nvme --json`, `raid --json`, `loop --json`,
 `swap --json`, `iscsi --json`, `nfs --json`, `network-storage --json`,
-`ids --json`, and `usage --json` return subgraphs and preserve relationships between nodes
-included in the result. `usage`
+`ids --json`, and `usage --json` return focused one-hop subgraphs containing
+matching nodes, directly related neighbors, and the relationship edges between
+them. `usage`
 summarizes size, used, free, allocated, utilization, and selected metadata
 details across graph nodes that expose capacity data.
 exFAT probing uses `tune.exfat` and `dump.exfat` to add label, GUID, serial,

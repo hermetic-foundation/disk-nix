@@ -198,8 +198,10 @@ disk-nix ids --json
 disk-nix usage --json
 ```
 
-The JSON form returns a `StorageGraph` subgraph. Edges are preserved when both
-endpoints are included in the filtered node set.
+The JSON form returns a focused `StorageGraph` subgraph. It includes matching
+nodes plus directly related neighbors and the relationship edges that connect
+them, so automation can see immediate backing devices, mountpoints, members,
+exports, snapshots, and imported targets without fetching the full topology.
 
 Use these commands for:
 
