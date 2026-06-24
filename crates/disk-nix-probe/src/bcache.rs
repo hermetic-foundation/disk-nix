@@ -85,6 +85,8 @@ fn read_device(name: &str, bcache_dir: &Path) -> BcacheDevice {
         "cache_available_percent",
         "cache_mode",
         "cache_replacement_policy",
+        "congested_read_threshold_us",
+        "congested_write_threshold_us",
         "discard",
         "dirty_data",
         "io_errors",
@@ -100,6 +102,12 @@ fn read_device(name: &str, bcache_dir: &Path) -> BcacheDevice {
         "writeback_metadata",
         "writeback_percent",
         "writeback_rate",
+        "writeback_rate_debug",
+        "writeback_rate_d_term",
+        "writeback_rate_i_term_inverse",
+        "writeback_rate_minimum",
+        "writeback_rate_p_term_inverse",
+        "writeback_rate_update_seconds",
         "writeback_running",
     ] {
         if let Some(value) = read_trimmed(bcache_dir.join(key)) {
@@ -216,10 +224,26 @@ mod tests {
                             "78".to_string(),
                         ),
                         ("bcache.cache-mode".to_string(), "writeback".to_string()),
+                        (
+                            "bcache.congested-read-threshold-us".to_string(),
+                            "2000".to_string(),
+                        ),
+                        (
+                            "bcache.congested-write-threshold-us".to_string(),
+                            "20000".to_string(),
+                        ),
                         ("bcache.dirty-data".to_string(), "64.0M".to_string()),
                         ("bcache.running".to_string(), "1".to_string()),
                         ("bcache.state".to_string(), "clean".to_string()),
                         ("bcache.writeback-delay".to_string(), "30".to_string()),
+                        (
+                            "bcache.writeback-rate-minimum".to_string(),
+                            "4.0k".to_string(),
+                        ),
+                        (
+                            "bcache.writeback-rate-update-seconds".to_string(),
+                            "5".to_string(),
+                        ),
                         ("bcache.writeback-running".to_string(), "1".to_string()),
                     ],
                 },
@@ -255,6 +279,12 @@ mod tests {
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "bcache.writeback-running" && property.value == "1"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "bcache.congested-read-threshold-us" && property.value == "2000"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "bcache.writeback-rate-update-seconds" && property.value == "5"
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "bcache.backing-device" && property.value == "/dev/sdb1"

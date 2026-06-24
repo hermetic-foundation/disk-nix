@@ -3212,6 +3212,8 @@ fn usage_details(node: &Node) -> String {
         ("bcache.cache-available-percent", "available-percent"),
         ("bcache.cache-mode", "cache-mode"),
         ("bcache.cache-replacement-policy", "replacement"),
+        ("bcache.congested-read-threshold-us", "congested-read-us"),
+        ("bcache.congested-write-threshold-us", "congested-write-us"),
         ("bcache.discard", "discard"),
         ("bcache.dirty-data", "dirty"),
         ("bcache.io-errors", "io-errors"),
@@ -3224,6 +3226,21 @@ fn usage_details(node: &Node) -> String {
         ("bcache.writeback-metadata", "writeback-metadata"),
         ("bcache.writeback-percent", "writeback-percent"),
         ("bcache.writeback-rate", "writeback-rate"),
+        ("bcache.writeback-rate-debug", "writeback-rate-debug"),
+        ("bcache.writeback-rate-d-term", "writeback-rate-d-term"),
+        (
+            "bcache.writeback-rate-i-term-inverse",
+            "writeback-rate-i-inverse",
+        ),
+        ("bcache.writeback-rate-minimum", "writeback-rate-min"),
+        (
+            "bcache.writeback-rate-p-term-inverse",
+            "writeback-rate-p-inverse",
+        ),
+        (
+            "bcache.writeback-rate-update-seconds",
+            "writeback-rate-update",
+        ),
         ("bcache.writeback-running", "writeback-running"),
         ("zfs.health", "health"),
         ("zfs.state", "state"),
@@ -4288,6 +4305,8 @@ mod tests {
             .with_property("bcache.cache-available-percent", "78")
             .with_property("bcache.cache-mode", "writeback")
             .with_property("bcache.cache-replacement-policy", "lru")
+            .with_property("bcache.congested-read-threshold-us", "2000")
+            .with_property("bcache.congested-write-threshold-us", "20000")
             .with_property("bcache.discard", "true")
             .with_property("bcache.dirty-data", "64.0M")
             .with_property("bcache.io-errors", "0")
@@ -4300,10 +4319,16 @@ mod tests {
             .with_property("bcache.writeback-metadata", "true")
             .with_property("bcache.writeback-percent", "10")
             .with_property("bcache.writeback-rate", "1.0M/sec")
+            .with_property("bcache.writeback-rate-debug", "rate=1024")
+            .with_property("bcache.writeback-rate-d-term", "30")
+            .with_property("bcache.writeback-rate-i-term-inverse", "10000")
+            .with_property("bcache.writeback-rate-minimum", "4.0k")
+            .with_property("bcache.writeback-rate-p-term-inverse", "40")
+            .with_property("bcache.writeback-rate-update-seconds", "5")
             .with_property("bcache.writeback-running", "1");
         assert_eq!(
             usage_details(&bcache),
-            "role=backing kind=cache-set backing-device=/dev/sdb1 set-uuid=cache-set-uuid label=fast-cache state=clean running=1 available-percent=78 cache-mode=writeback replacement=lru discard=true dirty=64.0M io-errors=0 metadata-written=128.0M priority-stats=Unused: 0% Metadata: 1% readahead=0 sequential-cutoff=4.0M written=512.0M writeback-delay=30 writeback-metadata=true writeback-percent=10 writeback-rate=1.0M/sec writeback-running=1"
+            "role=backing kind=cache-set backing-device=/dev/sdb1 set-uuid=cache-set-uuid label=fast-cache state=clean running=1 available-percent=78 cache-mode=writeback replacement=lru congested-read-us=2000 congested-write-us=20000 discard=true dirty=64.0M io-errors=0 metadata-written=128.0M priority-stats=Unused: 0% Metadata: 1% readahead=0 sequential-cutoff=4.0M written=512.0M writeback-delay=30 writeback-metadata=true writeback-percent=10 writeback-rate=1.0M/sec writeback-rate-debug=rate=1024 writeback-rate-d-term=30 writeback-rate-i-inverse=10000 writeback-rate-min=4.0k writeback-rate-p-inverse=40 writeback-rate-update=5 writeback-running=1"
         );
 
         let swap = Node::new("swap:/dev/zram0", NodeKind::Swap, "/dev/zram0")

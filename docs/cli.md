@@ -284,7 +284,8 @@ Use these commands for:
   hit/miss and promotion/demotion counters, writecache total/free/block-size/
   error counters, backing device, cache-set identity, state/running flags,
   available cache percentage, discard, I/O errors,
-  written/metadata-written accounting, priority stats, and vdev state
+  written/metadata-written accounting, priority stats, congestion thresholds,
+  writeback-rate tuning, and vdev state
 - `lvm`: LVM physical volumes, volume groups, logical volumes, segments, thin
   pools, snapshots, and cache/writecache layers, including data and metadata
   percentages, active state and locality/exclusivity, device-mapper paths,

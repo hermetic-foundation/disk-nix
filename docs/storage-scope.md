@@ -137,7 +137,8 @@ The current probe layer normalizes:
   cache devices, explicit backing-device metadata, cache sets, mode,
   running/state, dirty data, available cache percentage, discard, I/O error
   counters, written/metadata-written accounting, replacement policy, priority
-  stats, writeback delay/running/metadata settings, and cache relationships
+  stats, congestion thresholds, writeback delay/running/metadata/rate tuning
+  settings, and cache relationships
 - iSCSI configured nodes through `iscsiadm -m node -P 1` and active sessions
   through `iscsiadm -m session -P 3` for configured target IQNs, node portals,
   parsed portal address/port/TPGT fields, startup, interface, leading-login,
