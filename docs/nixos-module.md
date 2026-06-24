@@ -477,15 +477,16 @@ Address fields have domain-specific meaning:
   snapshot path when the attribute name is a friendly key. NFS client mounts
   use the typed `mountpoint` field instead.
 
-- `name`, `snapshotName`, `snapshot-name`: concrete snapshot identity for ZFS
+- `name`, `snapshotName`, `snapshot-name`: concrete snapshot identity for
   snapshot lifecycle actions when the declaration key is a friendly name.
-  Snapshot clone and rollback remain non-ready until this resolves to a
-  concrete ZFS snapshot name.
+  Snapshot rollback remains non-ready until this resolves to a concrete ZFS
+  snapshot name. Snapshot clone remains non-ready until this resolves to a
+  concrete ZFS snapshot name or absolute Btrfs snapshot path.
 
 - `snapshotPath`: explicit snapshot identity alias for `path`, useful for
-  Btrfs snapshot rescans and renames with non-path attribute names. Snapshot
-  rename remains non-ready until the declaration resolves to a concrete ZFS
-  snapshot name or absolute Btrfs snapshot path.
+  Btrfs snapshot rescans, clones, and renames with non-path attribute names.
+  Snapshot clone and rename remain non-ready until the declaration resolves to
+  a concrete ZFS snapshot name or absolute Btrfs snapshot path.
 
 - `device`: backing block device or image path used by formats, LUKS, swap,
   filesystems, partitions, and loop-device setup

@@ -431,6 +431,11 @@
       "operation": "rescan",
       "target": "tank/home"
     },
+    "/mnt/persist/@home-before-clone": {
+      "target": "/mnt/persist/@home",
+      "cloneTo": "/mnt/persist/@home-review",
+      "readOnly": true
+    },
     "/mnt/persist/@home-inventory": {
       "operation": "rescan",
       "target": "/mnt/persist/@home",

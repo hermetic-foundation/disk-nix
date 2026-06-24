@@ -315,8 +315,10 @@ Examples:
   `zfs.rollbackRecursive` render explicit `zfs rollback -r` details for
   recursive rollback review. Apply blocks rollback by default and requires
   explicit `allowPotentialDataLoss=true` policy before execution.
-  Snapshot clone and rollback remain non-ready when a friendly declaration key
-  does not resolve to a concrete ZFS snapshot name.
+  Snapshot rollback remains non-ready when a friendly declaration key does not
+  resolve to a concrete ZFS snapshot name. Snapshot clone remains non-ready
+  when a friendly declaration key does not resolve to a concrete ZFS snapshot
+  name or absolute Btrfs snapshot path.
   Snapshot rename remains non-ready when a friendly declaration key does not
   resolve to a concrete ZFS snapshot name or absolute Btrfs snapshot path.
 

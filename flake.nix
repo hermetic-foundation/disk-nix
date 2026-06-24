@@ -771,6 +771,11 @@
                 target = "/mnt/persist/@home";
                 readOnly = true;
               };
+              snapshots."/mnt/persist/@home-before-clone" = {
+                target = "/mnt/persist/@home";
+                cloneTo = "/mnt/persist/@home-review";
+                readOnly = true;
+              };
               snapshots."tank/home@inventory" = {
                 operation = "rescan";
                 target = "tank/home";
@@ -1183,7 +1188,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 98
+              .summary.actionCount == 99
               and .summary.offlineRequiredCount == 30
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4
@@ -1256,6 +1261,7 @@
               and (.actions | any(.id == "datasets:tank/legacy:rename" and .risk == "offline-required"))
               and (.actions | any(.id == "datasets:tank/archive:destroy"))
               and (.actions | any(.id == "snapshot:tank/home@before-prune:rename:tank/home@retained" and .risk == "offline-required"))
+              and (.actions | any(.id == "snapshot:/mnt/persist/@home-before-clone:clone:/mnt/persist/@home-review" and .risk == "reversible" and .context.readOnly == true))
               and (.actions | any(.id == "snapshot:tank/root@rollback-point:rollback"))
               and (.actions | any(.id == "snapshot:tank/home@inventory:rescan" and .risk == "online"))
               and (.actions | any(.id == "snapshot:/mnt/persist/@home-inventory:rescan" and .risk == "online"))
@@ -1671,6 +1677,9 @@
                     and .spec.snapshots."tank/home@old".releaseHold == "old-retention"
                     and .spec.snapshots."/mnt/persist/@home-before-upgrade".target == "/mnt/persist/@home"
                     and .spec.snapshots."/mnt/persist/@home-before-upgrade".readOnly == true
+                    and .spec.snapshots."/mnt/persist/@home-before-clone".target == "/mnt/persist/@home"
+                    and .spec.snapshots."/mnt/persist/@home-before-clone".cloneTo == "/mnt/persist/@home-review"
+                    and .spec.snapshots."/mnt/persist/@home-before-clone".readOnly == true
                     and .spec.snapshots."tank/home@inventory".operation == "rescan"
                     and .spec.snapshots."/mnt/persist/@home-inventory".operation == "rescan"
                     and .spec.snapshots."/mnt/persist/@home-inventory".readOnly == true
