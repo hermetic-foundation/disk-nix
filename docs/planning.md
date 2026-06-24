@@ -105,11 +105,12 @@ Examples:
   Swap label and UUID property updates are offline-required because they mutate
   swap signature identity used by mounts, resume paths, and automation.
 - zram is modeled as generated compressed swap state rather than persistent
-  backing storage. NixOS module declarations derive `zramSwap`, while
-  `operation = "rescan"` renders read-only `zramctl`, `swapon --show`, and
-  graph inspection commands. Algorithm, size, priority, and writeback-device
-  changes should be reviewed as generator configuration changes because active
-  `/dev/zram*` devices may need swapoff/setup coordination to take effect.
+  backing storage. NixOS module declarations derive `zramSwap`, while plain
+  zram declarations render read-only `zramctl`, `swapon --show`, `disk-nix zram`, and graph inspection commands. Explicit `operation = "rescan"` uses
+  the same inventory refresh path. Algorithm, size, priority, and
+  writeback-device changes should be reviewed as generator configuration
+  changes because active `/dev/zram*` devices may need swapoff/setup
+  coordination to take effect.
 - LUKS `operation = "open"` opens an existing encrypted container as a mapper
   and is offline-required. Legacy `operation = "create"` with preserved data
   remains accepted for the same preserved open flow. LUKS `operation = "close"`
