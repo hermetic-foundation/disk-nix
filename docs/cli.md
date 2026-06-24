@@ -967,7 +967,11 @@ missing target form and size separately when either is absent. LV grow and
 remove commands also require the canonical `vg/lv` target form from the
 declaration key, `target`, or `path`.
 `operation = "rescan"` renders read-only `lvs` and graph inspection commands
-for LV size, attributes, and dependent mappings.
+for LV size, attributes, and dependent mappings. Current-topology probing
+suppresses `volumes` create actions when the matched LVM logical volume already
+exists and any declared desired size exactly matches; existing LVs with
+different or unknown size remain actionable with warnings that recommend grow
+or shrink lifecycle instead of recreating data.
 LVM physical volume command plans render `pvcreate`, `pvresize`, explicit
 `operation = "rescan"` plans through `pvscan --cache`, and policy-gated
 `pvremove` for `physicalVolumes` lifecycle declarations. Create, grow, and
@@ -997,6 +1001,9 @@ read-only `lvs` rescans, and policy-gated `lvremove` commands for `thinPools`
 lifecycle declarations, with separate unresolved-input markers for target form
 and size. Thin-pool grow, rescan, and remove commands require the canonical
 `vg/pool` target form from the declaration key, `target`, or `path`.
+Current-topology probing suppresses thin-pool create actions only when the
+matched object is an LVM thin pool and any declared desired size exactly
+matches; wrong-kind or size-mismatched targets stay planned with warnings.
 LVM cache command plans render `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` commands for `lvmCaches`
 lifecycle declarations. Executable attach plans require both an origin `vg/lv`

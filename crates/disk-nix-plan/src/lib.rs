@@ -248,6 +248,8 @@ pub enum TopologyDiagnosticKind {
     BackingFileCreateRequired,
     LvmPvCreateAlreadySatisfied,
     LvmPvCreateRequired,
+    LvmVolumeCreateAlreadySatisfied,
+    LvmVolumeCreateRequired,
     LvmVgCreateAlreadySatisfied,
     LvmVgCreateRequired,
     IscsiLoginAlreadySatisfied,
@@ -807,6 +809,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                     TopologyDiagnosticKind::SizeAlreadySatisfied
                         | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
+                        | TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgCreateAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
@@ -1438,6 +1441,7 @@ fn already_satisfied_action_ids(
                 TopologyDiagnosticKind::SizeAlreadySatisfied
                     | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
+                    | TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgCreateAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
@@ -1573,6 +1577,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(iscsi_logout_diagnostic(action, &matches, &query));
     diagnostics.extend(nvme_namespace_present_diagnostic(action, node, &query));
     diagnostics.extend(lun_present_diagnostic(action, node, &query));
+    diagnostics.extend(lvm_volume_create_diagnostic(action, node, &query));
     diagnostics.extend(lvm_activate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_deactivate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_pv_create_diagnostic(action, &matches, &query));
@@ -1867,6 +1872,96 @@ fn lvm_deactivate_diagnostic(
             TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied,
             format!("LVM object {query} is already inactive"),
         )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn lvm_volume_create_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Create
+        || !matches!(
+            action.context.collection.as_deref(),
+            Some("volumes" | "thinPools")
+        )
+    {
+        return None;
+    }
+
+    let (expected_kind, label, command) = match action.context.collection.as_deref() {
+        Some("volumes") => (NodeKind::LvmLogicalVolume, "logical volume", "lvcreate"),
+        Some("thinPools") => (
+            NodeKind::LvmThinPool,
+            "thin pool",
+            "lvcreate --type thin-pool",
+        ),
+        _ => return None,
+    };
+
+    if node.kind != expected_kind {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::LvmVolumeCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not the expected LVM {label}; {command} would create a new object",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let desired = action.context.desired_size.as_deref();
+    let desired_bytes = desired.and_then(parse_size_bytes);
+    let (level, kind, message) = match (desired, desired_bytes, node.size_bytes) {
+        (Some(desired), Some(desired_bytes), Some(current_bytes))
+            if current_bytes == desired_bytes =>
+        {
+            (
+                TopologyDiagnosticLevel::Info,
+                TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied,
+                format!(
+                    "LVM {label} {query} already exists with desired size {desired} ({current_bytes} bytes)"
+                ),
+            )
+        }
+        (None, _, _) => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied,
+            format!("LVM {label} {query} already exists"),
+        ),
+        (Some(desired), Some(_), Some(current_bytes)) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LvmVolumeCreateRequired,
+            format!(
+                "LVM {label} {query} already exists with size {current_bytes} bytes, not desired size {desired}; use grow or shrink lifecycle instead of create when preserving data"
+            ),
+        ),
+        (Some(desired), None, _) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LvmVolumeCreateRequired,
+            format!(
+                "LVM {label} {query} already exists, but desired size {desired} could not be compared"
+            ),
+        ),
+        (Some(desired), Some(_), None) => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::LvmVolumeCreateRequired,
+            format!(
+                "LVM {label} {query} already exists, but current size is unknown; desired size is {desired}"
+            ),
+        ),
     };
 
     Some(TopologyDiagnostic {
@@ -16204,6 +16299,82 @@ mod tests {
             diagnostic.action_id == "volumes:vg0/archive:deactivate"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::LvmDeactivateRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_lvm_volume_and_thin_pool_create() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg0/home": {
+                  "operation": "create",
+                  "desiredSize": "8GiB"
+                },
+                "vg0/archive": {
+                  "operation": "create",
+                  "desiredSize": "8GiB"
+                }
+              },
+              "thinPools": {
+                "vg0/pool": {
+                  "operation": "create",
+                  "desiredSize": "16GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lvm-lv:vg0/home", NodeKind::LvmLogicalVolume, "vg0/home")
+                .with_path("/dev/vg0/home")
+                .with_size_bytes(8 * 1024 * 1024 * 1024),
+        );
+        graph.add_node(
+            Node::new(
+                "lvm-lv:vg0/archive",
+                NodeKind::LvmLogicalVolume,
+                "vg0/archive",
+            )
+            .with_path("/dev/vg0/archive")
+            .with_size_bytes(4 * 1024 * 1024 * 1024),
+        );
+        graph.add_node(
+            Node::new("lvm-thin-pool:vg0/pool", NodeKind::LvmThinPool, "vg0/pool")
+                .with_path("/dev/vg0/pool")
+                .with_size_bytes(16 * 1024 * 1024 * 1024),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.summary.action_count, 1);
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id == "volumes:vg0/archive:create")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/home:create"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "thinpools:vg0/pool:create"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/archive:create"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmVolumeCreateRequired
+                && diagnostic.message.contains("not desired size 8GiB")
+                && diagnostic.message.contains("grow or shrink")
         }));
     }
 

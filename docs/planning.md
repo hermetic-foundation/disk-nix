@@ -694,8 +694,14 @@ LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
 for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
 destructive policy gates allow removal. LV grow and remove commands require
 canonical `vg/lv` targets from the declaration key, `target`, or `path`.
+Current-topology comparison suppresses create actions only when the matched LVM
+logical volume already exists and any declared desired size exactly matches;
+existing LVs with different or unknown size stay planned with warnings that
+point to grow or shrink lifecycle instead of recreate.
 LVM thin-pool command plans require canonical `vg/pool` targets for grow and
 remove operations, supplied by the declaration key, `target`, or `path`.
+Current-topology comparison applies the same create reconciliation to
+thin-pools, but only when the matched node is an LVM thin pool.
 LVM volume group grow and add-device command plans use `vgextend <vg> <pv>`
 when a physical volume device is declared. Replacement plans render
 `vgextend <vg> <new-pv>`, `pvmove <old-pv> <new-pv>`, and
