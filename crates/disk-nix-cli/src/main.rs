@@ -2569,6 +2569,34 @@ fn usage_details(node: &Node) -> String {
         ("nvme.maximum-lba", "max-lba"),
         ("nvme.sector-size", "sector-size"),
         ("nvme.ana-state", "ana-state"),
+        ("nvme.formatted-lba-index", "flba-index"),
+        ("nvme.formatted-lba-data-size", "flba-data"),
+        ("nvme.formatted-lba-metadata-size", "flba-metadata"),
+        (
+            "nvme.formatted-lba-relative-performance",
+            "flba-relative-performance",
+        ),
+        ("nvme.id-ns.nsze", "nsze"),
+        ("nvme.id-ns.ncap", "ncap"),
+        ("nvme.id-ns.nuse", "nuse"),
+        ("nvme.id-ns.nsfeat", "nsfeat"),
+        ("nvme.id-ns.nlbaf", "nlbaf"),
+        ("nvme.id-ns.flbas", "flbas"),
+        ("nvme.id-ns.mc", "mc"),
+        ("nvme.id-ns.dpc", "dpc"),
+        ("nvme.id-ns.dps", "dps"),
+        ("nvme.id-ns.nmic", "nmic"),
+        ("nvme.id-ns.rescap", "rescap"),
+        ("nvme.id-ns.fpi", "fpi"),
+        ("nvme.id-ns.dlfeat", "dlfeat"),
+        ("nvme.id-ns.nawun", "nawun"),
+        ("nvme.id-ns.nawupf", "nawupf"),
+        ("nvme.id-ns.nacwu", "nacwu"),
+        ("nvme.id-ns.nabsn", "nabsn"),
+        ("nvme.id-ns.nabo", "nabo"),
+        ("nvme.id-ns.nabspf", "nabspf"),
+        ("nvme.id-ns.noiob", "noiob"),
+        ("nvme.id-ns.nvmcap", "nvmcap"),
         ("lsblk.type", "lsblk-type"),
         ("lsblk.logical-sector-size", "logical-sector"),
         ("lsblk.physical-sector-size", "physical-sector"),
@@ -6012,7 +6040,19 @@ mod tests {
             .with_property("nvme.lba-format", "512 B + 0 B")
             .with_property("nvme.maximum-lba", "1953125")
             .with_property("nvme.sector-size", "512")
-            .with_property("nvme.ana-state", "optimized"),
+            .with_property("nvme.ana-state", "optimized")
+            .with_property("nvme.formatted-lba-index", "0")
+            .with_property("nvme.formatted-lba-data-size", "512")
+            .with_property("nvme.formatted-lba-metadata-size", "0")
+            .with_property("nvme.formatted-lba-relative-performance", "0")
+            .with_property("nvme.id-ns.nsze", "1953125")
+            .with_property("nvme.id-ns.ncap", "1800000")
+            .with_property("nvme.id-ns.nuse", "900000")
+            .with_property("nvme.id-ns.nsfeat", "0")
+            .with_property("nvme.id-ns.nlbaf", "1")
+            .with_property("nvme.id-ns.flbas", "0")
+            .with_property("nvme.id-ns.nmic", "1")
+            .with_property("nvme.id-ns.nvmcap", "1000000000"),
         );
 
         let mut output = Vec::new();
@@ -6039,6 +6079,12 @@ mod tests {
             "transport=pcie controller-id=1 namespace-capacity=900000000000 lba-format=512 B + 0 B"
         ));
         assert!(output.contains("max-lba=1953125 sector-size=512 ana-state=optimized"));
+        assert!(
+            output
+                .contains("flba-index=0 flba-data=512 flba-metadata=0 flba-relative-performance=0")
+        );
+        assert!(output.contains("nsze=1953125 ncap=1800000 nuse=900000 nsfeat=0"));
+        assert!(output.contains("nlbaf=1 flbas=0 nmic=1 nvmcap=1000000000"));
     }
 
     #[test]

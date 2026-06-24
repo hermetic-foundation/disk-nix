@@ -1070,6 +1070,11 @@ fn collect_nvme(result: &mut ProbeResult) {
     match run_report("nvme", &["list", "-o", "json"]) {
         Ok(output) => match nvme::normalize_nvme_list_json(&output) {
             Ok(graph) => {
+                let namespace_paths: Vec<String> = graph
+                    .nodes
+                    .iter()
+                    .filter_map(|node| node.path.clone())
+                    .collect();
                 let node_count = graph.nodes.len();
                 merge_graph(&mut result.graph, graph);
                 result.reports.push(ProbeReport {
@@ -1079,6 +1084,7 @@ fn collect_nvme(result: &mut ProbeResult) {
                         "normalized {node_count} graph nodes from NVMe JSON"
                     )),
                 });
+                collect_nvme_namespace_details(result, namespace_paths);
             }
             Err(error) => result.reports.push(ProbeReport {
                 adapter: "nvme".to_string(),
@@ -1095,6 +1101,51 @@ fn collect_nvme(result: &mut ProbeResult) {
             },
             message: Some(message),
         }),
+    }
+}
+
+fn collect_nvme_namespace_details(result: &mut ProbeResult, namespace_paths: Vec<String>) {
+    let mut node_count = 0_usize;
+    let mut failures = Vec::new();
+    for path in namespace_paths {
+        match run_report("nvme", &["id-ns", path.as_str(), "-o", "json"]) {
+            Ok(output) => match nvme::normalize_nvme_id_ns_json(&path, &output) {
+                Ok(graph) => {
+                    node_count += graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                }
+                Err(error) => failures.push(format!("{path}: {error}")),
+            },
+            Err(message) => failures.push(format!("{path}: {message}")),
+        }
+    }
+
+    if node_count > 0 {
+        result.reports.push(ProbeReport {
+            adapter: "nvme-id-ns".to_string(),
+            status: if failures.is_empty() {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(format!(
+                "normalized {node_count} graph nodes from NVMe namespace identity JSON{}",
+                if failures.is_empty() {
+                    String::new()
+                } else {
+                    format!("; {} namespace probes failed", failures.len())
+                }
+            )),
+        });
+    } else if !failures.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "nvme-id-ns".to_string(),
+            status: ProbeStatus::Partial,
+            message: Some(format!(
+                "NVMe namespace identity probes failed: {}",
+                failures.join("; ")
+            )),
+        });
     }
 }
 

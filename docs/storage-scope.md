@@ -95,6 +95,9 @@ The current probe layer normalizes:
 - `nvme list --output-format=json` for NVMe namespace controller/subsystem,
   transport, namespace id, namespace UUID, NGUID, EUI-64, ANA state, LBA
   format, sector geometry, capacity, used bytes, and generic namespace path
+- `nvme id-ns -o json` for NVMe namespace size/capacity/usage counters,
+  feature flags, formatted LBA descriptor, metadata size, and namespace capacity
+  metadata when namespace paths are discovered by `nvme list`
 - LUKS mapper status through `cryptsetup status` for active/in-use state,
   backing device, cipher, key size, key location, sector size/count, offset, and
   access mode; LUKS header metadata through `cryptsetup luksDump` for version,
@@ -176,7 +179,8 @@ The current probe layer normalizes:
 - NVMe namespaces through `nvme list -o json` for namespace path, generic
   namespace path, serial, model/product, firmware, subsystem, controller,
   controller id, transport, address, namespace id/index, capacity, usage, LBA
-  format, maximum LBA, and sector size
+  format, maximum LBA, and sector size; `nvme id-ns -o json` adds namespace
+  feature/capacity counters and formatted LBA descriptor metadata
 
 LVM probing may report `partial` when the process lacks permission to talk to
 device-mapper. That should not prevent the rest of discovery from succeeding.
