@@ -2892,6 +2892,7 @@ fn usage_details(node: &Node) -> String {
         ("ext.os-type", "os"),
         ("ext.block-count", "blocks"),
         ("ext.reserved-block-count", "reserved-blocks"),
+        ("ext.overhead-clusters", "overhead-clusters"),
         ("ext.free-blocks", "free-blocks"),
         ("ext.block-size", "block-size"),
         ("ext.fragment-size", "fragment-size"),
@@ -2902,6 +2903,8 @@ fn usage_details(node: &Node) -> String {
         ("ext.inodes-per-group", "inodes-per-group"),
         ("ext.features", "features"),
         ("ext.flags", "flags"),
+        ("ext.default-directory-hash", "dir-hash"),
+        ("ext.directory-hash-seed", "dir-hash-seed"),
         ("ext.default-mount-options", "default-mount"),
         ("ext.created", "created"),
         ("ext.last-mount-time", "last-mounted"),
@@ -2916,9 +2919,12 @@ fn usage_details(node: &Node) -> String {
         ("ext.first-inode", "first-inode"),
         ("ext.inode-size", "inode-size"),
         ("ext.journal-inode", "journal-inode"),
+        ("ext.journal-uuid", "journal-uuid"),
         ("ext.journal-backup", "journal-backup"),
         ("ext.journal-features", "journal-features"),
         ("ext.journal-size", "journal-size"),
+        ("ext.checksum-type", "checksum-type"),
+        ("ext.checksum", "checksum"),
         ("exfat.guid", "guid"),
         ("exfat.volume-serial", "serial"),
         ("exfat.volume-length-sectors", "sectors"),
@@ -3904,6 +3910,7 @@ mod tests {
             .with_property("ext.os-type", "Linux")
             .with_property("ext.block-count", "122096646")
             .with_property("ext.reserved-block-count", "6104832")
+            .with_property("ext.overhead-clusters", "123456")
             .with_property("ext.free-blocks", "73328197")
             .with_property("ext.block-size", "4096")
             .with_property("ext.fragment-size", "4096")
@@ -3914,6 +3921,11 @@ mod tests {
             .with_property("ext.inodes-per-group", "8192")
             .with_property("ext.features", "has_journal extent metadata_csum")
             .with_property("ext.flags", "signed_directory_hash")
+            .with_property("ext.default-directory-hash", "half_md4")
+            .with_property(
+                "ext.directory-hash-seed",
+                "11111111-2222-3333-4444-555555555555",
+            )
             .with_property("ext.default-mount-options", "user_xattr acl")
             .with_property("ext.created", "Mon Jan 01 00:00:00 2024")
             .with_property("ext.last-mount-time", "Mon Jun 22 12:00:00 2026")
@@ -3928,12 +3940,15 @@ mod tests {
             .with_property("ext.first-inode", "11")
             .with_property("ext.inode-size", "256")
             .with_property("ext.journal-inode", "8")
+            .with_property("ext.journal-uuid", "99999999-aaaa-bbbb-cccc-dddddddddddd")
             .with_property("ext.journal-backup", "inode blocks")
             .with_property("ext.journal-features", "journal_incompat_revoke")
-            .with_property("ext.journal-size", "1024M");
+            .with_property("ext.journal-size", "1024M")
+            .with_property("ext.checksum-type", "crc32c")
+            .with_property("ext.checksum", "0x12345678");
         assert_eq!(
             usage_details(&ext),
-            "fstype=ext4 version=1.0 blkid-block-size=4096 usage=filesystem uuid-sub=subvol-uuid ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 free-blocks=73328197 block-size=4096 fragment-size=4096 blocks-per-group=32768 fragments-per-group=32768 inodes=30531584 free-inodes=27187554 inodes-per-group=8192 features=has_journal extent metadata_csum flags=signed_directory_hash default-mount=user_xattr acl created=Mon Jan 01 00:00:00 2024 last-mounted=Mon Jun 22 12:00:00 2026 last-written=Mon Jun 22 12:00:00 2026 mount-count=12 max-mount-count=-1 last-checked=Mon Jan 01 00:00:00 2024 check-interval=0 (<none>) lifetime-writes=189 GB reserved-uid=0 (user root) reserved-gid=0 (group root) first-inode=11 inode-size=256 journal-inode=8 journal-backup=inode blocks journal-features=journal_incompat_revoke journal-size=1024M"
+            "fstype=ext4 version=1.0 blkid-block-size=4096 usage=filesystem uuid-sub=subvol-uuid ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197 block-size=4096 fragment-size=4096 blocks-per-group=32768 fragments-per-group=32768 inodes=30531584 free-inodes=27187554 inodes-per-group=8192 features=has_journal extent metadata_csum flags=signed_directory_hash dir-hash=half_md4 dir-hash-seed=11111111-2222-3333-4444-555555555555 default-mount=user_xattr acl created=Mon Jan 01 00:00:00 2024 last-mounted=Mon Jun 22 12:00:00 2026 last-written=Mon Jun 22 12:00:00 2026 mount-count=12 max-mount-count=-1 last-checked=Mon Jan 01 00:00:00 2024 check-interval=0 (<none>) lifetime-writes=189 GB reserved-uid=0 (user root) reserved-gid=0 (group root) first-inode=11 inode-size=256 journal-inode=8 journal-uuid=99999999-aaaa-bbbb-cccc-dddddddddddd journal-backup=inode blocks journal-features=journal_incompat_revoke journal-size=1024M checksum-type=crc32c checksum=0x12345678"
         );
 
         let exfat = Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
@@ -4202,6 +4217,7 @@ mod tests {
                 .with_property("ext.os-type", "Linux")
                 .with_property("ext.block-count", "122096646")
                 .with_property("ext.reserved-block-count", "6104832")
+                .with_property("ext.overhead-clusters", "123456")
                 .with_property("ext.free-blocks", "73328197")
                 .with_property("ext.block-size", "4096")
                 .with_property("ext.blocks-per-group", "32768")
@@ -4210,13 +4226,21 @@ mod tests {
                 .with_property("ext.inodes-per-group", "8192")
                 .with_property("ext.features", "has_journal extent metadata_csum")
                 .with_property("ext.flags", "signed_directory_hash")
+                .with_property("ext.default-directory-hash", "half_md4")
+                .with_property(
+                    "ext.directory-hash-seed",
+                    "11111111-2222-3333-4444-555555555555",
+                )
                 .with_property("ext.default-mount-options", "user_xattr acl")
                 .with_property("ext.mount-count", "12")
                 .with_property("ext.maximum-mount-count", "-1")
                 .with_property("ext.check-interval", "0 (<none>)")
                 .with_property("ext.inode-size", "256")
                 .with_property("ext.journal-inode", "8")
-                .with_property("ext.journal-size", "1024M"),
+                .with_property("ext.journal-uuid", "99999999-aaaa-bbbb-cccc-dddddddddddd")
+                .with_property("ext.journal-size", "1024M")
+                .with_property("ext.checksum-type", "crc32c")
+                .with_property("ext.checksum", "0x12345678"),
         );
         graph.add_node(
             Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
@@ -4308,17 +4332,19 @@ mod tests {
         assert!(output.contains("xfs-imaxpct=25 reflink=1 bigtime=1"));
         assert!(output.contains("xfs-ftype=1 log-blocks=2560 xfs-realtime-blocks=0"));
         assert!(output.contains(
-            "fstype=ext4 ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 free-blocks=73328197"
+            "fstype=ext4 ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197"
         ));
         assert!(output.contains(
             "block-size=4096 blocks-per-group=32768 inodes=30531584 free-inodes=27187554 inodes-per-group=8192"
         ));
         assert!(output.contains(
-            "features=has_journal extent metadata_csum flags=signed_directory_hash default-mount=user_xattr acl"
+            "features=has_journal extent metadata_csum flags=signed_directory_hash dir-hash=half_md4 dir-hash-seed=11111111-2222-3333-4444-555555555555"
         ));
+        assert!(output.contains("default-mount=user_xattr acl"));
         assert!(output.contains(
-            "mount-count=12 max-mount-count=-1 check-interval=0 (<none>) inode-size=256 journal-inode=8 journal-size=1024M"
+            "mount-count=12 max-mount-count=-1 check-interval=0 (<none>) inode-size=256 journal-inode=8 journal-uuid=99999999-aaaa-bbbb-cccc-dddddddddddd"
         ));
+        assert!(output.contains("journal-size=1024M checksum-type=crc32c checksum=0x12345678"));
         assert!(output.contains(
             "guid=01234567-89ab-cdef-0123-456789abcdef serial=0x6eef953b sectors=3203072"
         ));

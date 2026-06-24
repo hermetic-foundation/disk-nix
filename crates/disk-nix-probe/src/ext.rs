@@ -69,6 +69,7 @@ const PROPERTIES: &[(&str, &str)] = &[
     ("Free inodes", "ext.free-inodes"),
     ("Block count", "ext.block-count"),
     ("Reserved block count", "ext.reserved-block-count"),
+    ("Overhead clusters", "ext.overhead-clusters"),
     ("Free blocks", "ext.free-blocks"),
     ("Block size", "ext.block-size"),
     ("Fragment size", "ext.fragment-size"),
@@ -77,6 +78,8 @@ const PROPERTIES: &[(&str, &str)] = &[
     ("Inodes per group", "ext.inodes-per-group"),
     ("Filesystem features", "ext.features"),
     ("Filesystem flags", "ext.flags"),
+    ("Default directory hash", "ext.default-directory-hash"),
+    ("Directory Hash Seed", "ext.directory-hash-seed"),
     ("Default mount options", "ext.default-mount-options"),
     ("Filesystem created", "ext.created"),
     ("Last mount time", "ext.last-mount-time"),
@@ -91,9 +94,12 @@ const PROPERTIES: &[(&str, &str)] = &[
     ("First inode", "ext.first-inode"),
     ("Inode size", "ext.inode-size"),
     ("Journal inode", "ext.journal-inode"),
+    ("Journal UUID", "ext.journal-uuid"),
     ("Journal backup", "ext.journal-backup"),
     ("Journal features", "ext.journal-features"),
     ("Total journal size", "ext.journal-size"),
+    ("Checksum type", "ext.checksum-type"),
+    ("Checksum", "ext.checksum"),
 ];
 
 fn parse_tune2fs(bytes: &[u8]) -> Result<BTreeMap<String, String>, ProbeError> {
@@ -181,6 +187,8 @@ Filesystem magic number:  0xEF53
 Filesystem revision #:    1 (dynamic)
 Filesystem features:      has_journal ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize metadata_csum
 Filesystem flags:         signed_directory_hash
+Default directory hash:   half_md4
+Directory Hash Seed:      11111111-2222-3333-4444-555555555555
 Default mount options:    user_xattr acl
 Filesystem state:         clean
 Errors behavior:          Continue
@@ -188,6 +196,7 @@ Filesystem OS type:       Linux
 Inode count:              30531584
 Block count:              122096646
 Reserved block count:     6104832
+Overhead clusters:        123456
 Free blocks:              73328197
 Free inodes:              27187554
 First block:              0
@@ -206,7 +215,10 @@ Check interval:           0 (<none>)
 Lifetime writes:          189 GB
 Inode size:               256
 Journal inode:            8
+Journal UUID:             99999999-aaaa-bbbb-cccc-dddddddddddd
 Total journal size:       1024M
+Checksum type:            crc32c
+Checksum:                 0x12345678
 "#;
 
     #[test]
@@ -236,6 +248,30 @@ Total journal size:       1024M
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ext.lifetime-writes" && property.value == "189 GB"
         }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ext.overhead-clusters" && property.value == "123456"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ext.default-directory-hash" && property.value == "half_md4"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ext.directory-hash-seed"
+                && property.value == "11111111-2222-3333-4444-555555555555"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ext.journal-uuid"
+                && property.value == "99999999-aaaa-bbbb-cccc-dddddddddddd"
+        }));
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ext.checksum-type" && property.value == "crc32c"
+            })
+        );
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ext.checksum" && property.value == "0x12345678"
+            })
+        );
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0 == "block:/dev/sda2"
                 && edge.to.0 == "fs:/dev/sda2"

@@ -221,9 +221,10 @@ Use these commands for:
   bcachefs external/internal UUID, superblock magic, version/upgrade state,
   member-device, mounted usage, and filesystem/member data-type byte
   accounting, Btrfs Data/Metadata/System allocation profiles and byte counts,
-  and ext state/features, reserved blocks, block/inode group geometry,
-  mount/check counters, timestamps, default mount options, lifetime writes,
-  and journal metadata when probes expose them
+  and ext state/features, reserved and overhead block accounting, block/inode
+  group geometry, mount/check counters, timestamps, directory hash settings,
+  default mount options, lifetime writes, journal identity, and checksum
+  metadata when probes expose them
 - `complex-filesystems`: Btrfs, bcachefs, and ZFS pools, vdevs, datasets,
   zvols, subvolumes, snapshots, qgroups, and member devices, including size,
   used/free capacity, utilization, backing/member counts, allocation profiles,

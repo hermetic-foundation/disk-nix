@@ -61,9 +61,10 @@ The current probe layer normalizes:
   exports, tmpfs sizing and ownership options, bind source paths, overlayfs
   lower/upper/work directories, mount propagation, and read/write state
 - `tune2fs -l` for ext2/ext3/ext4 superblock metadata, feature flags,
-  filesystem state, reservation counts, block/inode group geometry,
-  mount/check counters, timestamps, default mount options, journal metadata,
-  UUIDs, labels, and computed capacity/usage where device access is permitted
+  filesystem state, reservation and overhead accounting, block/inode group
+  geometry, mount/check counters, timestamps, directory hash settings, default
+  mount options, journal identity/metadata, checksum metadata, UUIDs, labels,
+  and computed capacity/usage where device access is permitted
 - `xfs_info` for mounted XFS filesystem geometry, allocation group layout,
   inode size, sector size, metadata feature flags such as reflink, bigtime,
   finobt, sparse, and rmapbt, data allocation parameters, naming format, log
