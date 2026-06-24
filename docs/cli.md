@@ -881,8 +881,12 @@ volume-ID, or volume-serial updates render
 `fatlabel -i <device> <volume-id>`, `ntfslabel --new-serial=<serial> <device>`,
 `exfatlabel -i <device> <serial>`, and `xfs_admin -U <uuid> <device>` as
 offline-required changes. Missing devices remain marked
-`needs-domain-implementation`, while unsupported filesystem property keys are
-classified as unsupported before execution.
+`needs-domain-implementation`. With current-topology probing, filesystem label,
+UUID, FAT volume-ID, NTFS serial, and exFAT serial property declarations are
+compared against probed identity fields and filesystem metadata aliases with
+hex identity normalization before already-satisfied updates are suppressed,
+while unsupported filesystem property keys are classified as unsupported before
+execution.
 Filesystem remount command plans render reviewed
 `mount -o remount,<options> <mountpoint>` operations for `filesystems` entries
 without deleting data. Missing concrete mountpoints keep remount commands

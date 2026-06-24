@@ -914,10 +914,13 @@ filesystem UUID, volume-ID, or volume-serial updates render
 `exfatlabel -i <device> <serial>`, and `xfs_admin -U <uuid> <device>` and are
 offline-required because they mutate filesystem identity used by mounts and boot
 paths. FAT volume IDs and exFAT volume serials must be 8 hex digits, and NTFS
-volume serials must be 16 hex digits; all allow optional dash grouping. Missing
-devices stay marked `needs-domain-implementation`, while
-unsupported filesystem property keys are classified as unsupported before
-execution.
+volume serials must be 16 hex digits; all allow optional dash grouping.
+Current-topology comparison maps declared label, UUID, FAT volume-ID, NTFS
+serial, and exFAT serial aliases onto probed node identity and filesystem
+metadata, normalizing hex identity spellings before suppressing
+already-satisfied property updates. Missing devices stay marked
+`needs-domain-implementation`, while unsupported filesystem property keys are
+classified as unsupported before execution.
 Btrfs subvolume property updates only treat read-only aliases (`readOnly`,
 `readonly`, `ro`, `btrfs.readonly`, and `btrfs.ro`) as safe planned property
 changes. Other Btrfs subvolume property keys are classified as unsupported so

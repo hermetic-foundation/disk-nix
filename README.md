@@ -339,6 +339,9 @@ filesystem UUID, volume-ID, or volume-serial updates render
 `fatlabel -i <device> <volume-id>`, `ntfslabel --new-serial=<serial> <device>`,
 `exfatlabel -i <device> <serial>`, and `xfs_admin -U <uuid> <device>` as
 offline-required identity changes.
+Current-topology probing reconciles declared filesystem label, UUID, FAT volume
+ID, NTFS serial, and exFAT serial properties against probed node identity and
+filesystem metadata aliases before suppressing already-satisfied updates.
 Missing backing devices keep the command non-ready until the source device is
 resolved.
 Unsupported filesystem properties are classified as unsupported so apply policy
