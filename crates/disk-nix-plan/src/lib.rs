@@ -297,6 +297,8 @@ pub enum TopologyDiagnosticKind {
     NfsUnexportRequired,
     PropertyAlreadySatisfied,
     PropertyDiffers,
+    SnapshotCloneSourceAvailable,
+    SnapshotCloneSourceMissing,
     SnapshotDestroyAlreadySatisfied,
     SnapshotDestroyRequired,
     SnapshotRenameRequired,
@@ -1477,6 +1479,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = bcache_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = snapshot_clone_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = snapshot_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1555,6 +1560,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(luks_keyslot_remove_diagnostic(action, node, &query));
     diagnostics.extend(luks_token_remove_diagnostic(action, node, &query));
     diagnostics.extend(bcache_present_diagnostic(action, node, &query));
+    diagnostics.extend(snapshot_clone_present_diagnostic(action, node, &query));
     diagnostics.extend(snapshot_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(snapshot_rename_present_diagnostic(action, node, &query));
     diagnostics.extend(snapshot_rollback_present_diagnostic(action, node, &query));
@@ -1607,7 +1613,7 @@ fn topology_query(action: &PlannedAction) -> Option<String> {
     if action.context.collection.as_deref() == Some("snapshots")
         && matches!(
             action.operation,
-            Operation::Destroy | Operation::Rename | Operation::Rollback
+            Operation::Clone | Operation::Destroy | Operation::Rename | Operation::Rollback
         )
     {
         return action
@@ -2281,6 +2287,63 @@ fn bcache_detach_details(node: &Node) -> Vec<String> {
 
 fn is_concrete_bcache_target(query: &str) -> bool {
     query.starts_with("/dev/bcache") || query.starts_with("block:/dev/bcache")
+}
+
+fn snapshot_clone_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("snapshots")
+        || action.operation != Operation::Clone
+        || !is_concrete_snapshot_target(query)
+    {
+        return None;
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::SnapshotCloneSourceMissing,
+        query: query.to_string(),
+        message: format!("snapshot clone source {query} is missing from current topology"),
+        current: None,
+    })
+}
+
+fn snapshot_clone_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("snapshots")
+        || action.operation != Operation::Clone
+    {
+        return None;
+    }
+
+    let (label, details) = match node.kind {
+        NodeKind::ZfsSnapshot => ("ZFS snapshot", zfs_snapshot_destroy_details(node)),
+        NodeKind::BtrfsSnapshot => ("Btrfs snapshot", btrfs_subvolume_destroy_details(node)),
+        _ => return None,
+    };
+    let destination = action.context.target.as_deref().unwrap_or("<clone-target>");
+    let message = if details.is_empty() {
+        format!("{label} clone source {query} is available for clone to {destination}")
+    } else {
+        format!(
+            "{label} clone source {query} is available with {}; clone target {destination}",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::SnapshotCloneSourceAvailable,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
 }
 
 fn snapshot_destroy_absent_diagnostic(
@@ -5806,6 +5869,7 @@ fn add_snapshot_actions(actions: &mut Vec<PlannedAction>, name: &str, snapshot: 
                 collection: Some("snapshots".to_string()),
                 name: Some(snapshot_name.clone()),
                 target: Some(clone_to),
+                snapshot_path: snapshot_path.clone(),
                 read_only,
                 ..ActionContext::default()
             },
@@ -16926,6 +16990,232 @@ mod tests {
             diagnostic.action_id == "snapshot:before:rollback"
                 && diagnostic.kind == TopologyDiagnosticKind::Missing
                 && diagnostic.query == "before"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_warns_when_zfs_snapshot_clone_source_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home",
+                  "cloneTo": "tank/home-review"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(Node::new(
+            "zfs-dataset:tank/home-review",
+            NodeKind::ZfsDataset,
+            "tank/home-review",
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@before:clone:tank/home-review"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotCloneSourceMissing
+                && diagnostic.query == "tank/home@before"
+                && diagnostic.current.is_none()
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reports_zfs_snapshot_clone_source_available() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home",
+                  "cloneTo": "tank/home-review"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "zfs-snapshot:tank/home@before",
+                NodeKind::ZfsSnapshot,
+                "tank/home@before",
+            )
+            .with_property("zfs.used", "8M")
+            .with_property("zfs.referenced", "4G")
+            .with_property("zfs.userrefs", "1"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@before:clone:tank/home-review"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotCloneSourceAvailable
+                && diagnostic.query == "tank/home@before"
+                && diagnostic.message.contains("clone target tank/home-review")
+                && diagnostic.message.contains("used 8M")
+                && diagnostic.message.contains("user references 1")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_warns_when_btrfs_snapshot_clone_source_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "/mnt/persist/@home-before": {
+                  "target": "/mnt/persist/@home",
+                  "cloneTo": "/mnt/persist/@home-review"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "btrfs-subvolume:fs-uuid:@home-review",
+                NodeKind::BtrfsSubvolume,
+                "@home-review",
+            )
+            .with_path("/mnt/persist/@home-review"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id
+                == "snapshot:/mnt/persist/@home-before:clone:/mnt/persist/@home-review"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotCloneSourceMissing
+                && diagnostic.query == "/mnt/persist/@home-before"
+                && diagnostic.current.is_none()
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reports_btrfs_snapshot_clone_source_available() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "/mnt/persist/@home-before": {
+                  "target": "/mnt/persist/@home",
+                  "cloneTo": "/mnt/persist/@home-review"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "btrfs-snapshot:fs-uuid:@home-before",
+                NodeKind::BtrfsSnapshot,
+                "@home-before",
+            )
+            .with_path("/mnt/persist/@home-before")
+            .with_property("btrfs.id", "300")
+            .with_property("btrfs.parent-uuid", "source-uuid"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id
+                == "snapshot:/mnt/persist/@home-before:clone:/mnt/persist/@home-review"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotCloneSourceAvailable
+                && diagnostic.query == "/mnt/persist/@home-before"
+                && diagnostic
+                    .message
+                    .contains("clone target /mnt/persist/@home-review")
+                && diagnostic.message.contains("subvolume id 300")
+                && diagnostic.message.contains("parent UUID source-uuid")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_uses_snapshot_path_for_friendly_btrfs_clone() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "before-home": {
+                  "target": "/mnt/persist/@home",
+                  "snapshotPath": "/mnt/persist/@home-before",
+                  "cloneTo": "/mnt/persist/@home-review"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "btrfs-snapshot:fs-uuid:@home-before",
+                NodeKind::BtrfsSnapshot,
+                "@home-before",
+            )
+            .with_path("/mnt/persist/@home-before")
+            .with_property("btrfs.id", "300"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        let action = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "snapshot:before-home:clone:/mnt/persist/@home-review")
+            .expect("friendly clone action should remain actionable");
+        assert_eq!(
+            action.context.snapshot_path.as_deref(),
+            Some("/mnt/persist/@home-before")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:before-home:clone:/mnt/persist/@home-review"
+                && diagnostic.kind == TopologyDiagnosticKind::SnapshotCloneSourceAvailable
+                && diagnostic.query == "/mnt/persist/@home-before"
         }));
     }
 

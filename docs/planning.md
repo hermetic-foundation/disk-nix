@@ -367,8 +367,11 @@ Examples:
   `zfs clone <snapshot> <dataset>` plans for ZFS snapshots and
   `btrfs subvolume snapshot <snapshot-path> <clone-path>` plans for absolute
   Btrfs snapshot paths. Btrfs clone declarations with `readOnly = true` render
-  read-only `btrfs subvolume snapshot -r` plans. ZFS rollback command rendering
-  is available for review, and `recursiveRollback`, `recursive`, or
+  read-only `btrfs subvolume snapshot -r` plans. Current-topology comparison
+  checks concrete clone sources, warns when a source snapshot is missing, and
+  reports available clone sources with snapshot metadata. Friendly Btrfs clone
+  declarations can use `snapshotPath` or `snapshot-path` to provide the
+  concrete source path. ZFS rollback command rendering is available for review, and `recursiveRollback`, `recursive`, or
   `zfs.rollbackRecursive` render explicit `zfs rollback -r` details for
   recursive rollback review. Apply blocks rollback by default and requires
   explicit `allowPotentialDataLoss=true` policy before execution.
@@ -559,6 +562,11 @@ and absolute Btrfs snapshot paths only when they are already absent. Present
 snapshots stay actionable with warnings that include available ZFS
 user-reference, usage, compression, or encryption metadata, or Btrfs subvolume
 id, generation, parent, top-level, and UUID metadata.
+Generic snapshot clone reconciliation compares the concrete source ZFS
+snapshot name or absolute Btrfs snapshot path before considering the clone
+destination. Missing clone sources stay actionable with warning diagnostics;
+available clone sources are reported with snapshot metadata and the requested
+destination.
 Generic snapshot rename reconciliation compares the concrete source ZFS
 snapshot name or absolute Btrfs snapshot path, not just the source dataset or
 subvolume. Missing and present rename sources both stay actionable with warning

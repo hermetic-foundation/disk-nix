@@ -614,7 +614,7 @@ present multipath flush targets, absent LUN attach paths, visible LUN detach
 paths, present bcache detach targets, still-attached LVM cache origins, absent
 NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
 destroy targets, non-normal VDO start modes, running VDO stop targets, present
-Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, present ZFS or Btrfs snapshot destroy targets, missing or present ZFS/Btrfs snapshot rename sources, missing or present ZFS rollback snapshots, degraded or failed MD arrays,
+Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, present ZFS or Btrfs snapshot destroy targets, missing ZFS/Btrfs snapshot clone sources, missing or present ZFS/Btrfs snapshot rename sources, missing or present ZFS rollback snapshots, degraded or failed MD arrays,
 degraded ZFS pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
 targets without a logged-in session and logout targets that still have a
@@ -1070,7 +1070,11 @@ commands for ZFS snapshots and
 snapshot paths from `cloneTo`, `cloneTarget`, or `clone`. Btrfs clone
 declarations with `readOnly = true` render `btrfs subvolume snapshot -r`.
 Clone and rollback plans remain non-ready until the declaration resolves to a
-concrete ZFS snapshot name or, for clone, an absolute Btrfs snapshot path.
+concrete ZFS snapshot name or, for clone, an absolute Btrfs snapshot path. With
+current-topology probing, clone compares the source snapshot identity or
+absolute Btrfs snapshot path; missing sources warn, and available sources are
+reported with snapshot metadata. Friendly Btrfs clone declarations can use
+`snapshotPath` or `snapshot-path` to provide the concrete source path.
 Snapshot rename declarations render reviewed `zfs rename <snapshot> <new>` for
 ZFS names and `mv -- <old> <new>` for absolute Btrfs snapshot paths. Friendly
 snapshot keys remain non-ready for rename until `name`, `snapshotName`, `path`,

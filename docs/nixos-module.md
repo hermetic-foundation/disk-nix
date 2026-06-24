@@ -252,6 +252,9 @@ Typed ZFS dataset and zvol declarations can request `operation = "promote"` to
 render reviewed `zfs promote` plans for clones after snapshot-based validation.
 Typed snapshot declarations can request `operation = "clone"` with `cloneTo` to
 render reviewed `zfs clone <snapshot> <dataset>` plans through the NixOS module.
+When `probeCurrent = true`, clone topology comparison checks the concrete
+source snapshot and reports missing or available clone sources before module
+apply policy evaluates execution.
 
 Typed swap declarations include:
 
@@ -514,7 +517,9 @@ Address fields have domain-specific meaning:
 - `snapshotPath`: explicit snapshot identity alias for `path`, useful for
   Btrfs snapshot rescans, clones, and renames with non-path attribute names.
   Snapshot clone and rename remain non-ready until the declaration resolves to
-  a concrete ZFS snapshot name or absolute Btrfs snapshot path.
+  a concrete ZFS snapshot name or absolute Btrfs snapshot path. With
+  `probeCurrent = true`, snapshot clone reconciliation uses this path as the
+  concrete source when the map key is friendly.
 
 - `device`: backing block device or image path used by formats, LUKS, swap,
   filesystems, partitions, and loop-device setup

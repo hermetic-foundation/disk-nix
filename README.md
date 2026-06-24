@@ -468,7 +468,10 @@ for ZFS snapshots and `btrfs subvolume snapshot <snapshot-path> <clone-path>`
 for absolute Btrfs snapshot paths. Btrfs clone declarations with
 `readOnly = true` render `btrfs subvolume snapshot -r`. Clone and rollback
 plans remain non-ready until the declaration resolves to a concrete ZFS
-snapshot name or, for clone, an absolute Btrfs snapshot path.
+snapshot name or, for clone, an absolute Btrfs snapshot path. Current-topology
+probing checks clone sources directly, warns when a source snapshot is missing,
+and reports available clone sources with snapshot metadata. Friendly Btrfs
+clone declarations can use `snapshotPath` to provide the concrete source path.
 Snapshot `operation = "rescan"` plans render read-only ZFS metadata, hold, and
 reference probes or Btrfs subvolume/read-only property probes, followed by graph
 inspection for snapshot/source relationships.
