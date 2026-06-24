@@ -25,6 +25,9 @@ behavior across real storage stacks.
   human CLI text, NixOS options, generated artifacts, and safety invariants.
 - Policy-classified planning for online, offline-required, destructive,
   potential-data-loss, reversible, safe, and unsupported actions.
+- Machine-readable dependency-order metadata for planned actions, including
+  build/mutate/teardown phase, lower-first or upper-first direction, and storage
+  collection layer rank.
 - Guarded apply flow with dry-run reports, script generation, readiness
   summaries, manual-review markers, unresolved-input reporting, policy blocks,
   renderer tool requirement inventories, optional current-topology probing, and
@@ -76,10 +79,10 @@ manual-review guidance, or non-ready command plans instead of guessing.
   disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional
   operation types and multi-action groups before command rendering.
-- Graph-derived dependency ordering for multi-layer changes. The planner now
-  applies coarse layer ordering, but grouped changes such as iSCSI LUN refresh,
-  multipath, partition growth, LUKS/LVM resize, and filesystem growth still need
-  explicit dependency edges.
+- Explicit graph-edge dependency ordering for multi-layer changes. The planner
+  now applies coarse layer ordering and reports dependency-order metadata, but
+  grouped changes such as iSCSI LUN refresh, multipath, partition growth,
+  LUKS/LVM resize, and filesystem growth still need explicit dependency edges.
 - More NixOS steady-state synthesis for lifecycle-managed resources after
   mutation, especially when imperative changes should update declarative mounts,
   crypttab, swap, NFS exports, iSCSI boot, or generated files.

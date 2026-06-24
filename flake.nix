@@ -1611,6 +1611,10 @@
               and .summary.potentialDataLossCount == 0
               and .summary.unsupportedCount == 0
               and .actions[0].id == "filesystem:root:grow"
+              and .dependencyOrder[0].actionId == "filesystem:root:grow"
+              and .dependencyOrder[0].phase == "mutate-in-place"
+              and .dependencyOrder[0].direction == "lower-layers-first"
+              and .dependencyOrder[0].layerRank == 90
               and .actions[0].operation == "grow"
               and .actions[0].risk == "online"
               and .actions[0].context.desiredSize == "100%"
@@ -1619,6 +1623,7 @@
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
               .summary.actionCount == 99
+              and (.dependencyOrder | length) == .summary.actionCount
               and .summary.offlineRequiredCount == 30
               and .summary.destructiveCount == 3
               and .summary.potentialDataLossCount == 4

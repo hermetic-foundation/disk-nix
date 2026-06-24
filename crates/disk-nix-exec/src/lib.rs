@@ -20981,6 +20981,7 @@ mod tests {
                 potential_data_loss_count: 0,
                 unsupported_count: 0,
             },
+            dependency_order: Vec::new(),
             actions: vec![PlannedAction {
                 id: "mysteryVolumes:alpha:check".to_string(),
                 description: "check a storage domain without a command renderer".to_string(),

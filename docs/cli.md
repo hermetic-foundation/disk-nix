@@ -539,11 +539,17 @@ Plan JSON includes:
 - `summary.destructiveCount`
 - `summary.potentialDataLossCount`
 - `summary.unsupportedCount`
+- `dependencyOrder`
 - `topologyComparison` when `--probe-current` is set
 - `actions`
 
 Each action includes the target id, operation, risk class, destructive flag,
 typed context, and optional advice with non-destructive alternatives.
+`dependencyOrder` explains the current planner ordering for every action,
+including build/mutate/teardown phase, lower-first or upper-first direction,
+collection layer rank, and ordering notes. It reflects the current coarse layer
+ordering and is intended for audit and automation preflight; it is not yet a
+complete graph-edge dependency model.
 With `--probe-current`, the CLI also probes the current host and adds
 `topologyComparison`, including matched target counts, missing target counts,
 size diagnostics, filesystem type conflicts, and already-satisfied property or

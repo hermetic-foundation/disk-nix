@@ -48,7 +48,11 @@ Planned actions are ordered by coarse storage dependency layers after parsing.
 Create, attach, open, grow, and other build/update operations run from lower
 layers toward upper layers; shrink, remove, unmount, detach, close, and destroy
 operations run from upper layers back down. Actions in the same layer keep
-their declaration order.
+their declaration order. Plan JSON includes `dependencyOrder`, a
+machine-readable audit trail for that ordering with the action id,
+build/mutate/teardown phase, lower-first or upper-first direction, collection
+layer rank, and explanatory notes. This documents the current ordering
+rationale; explicit graph-edge dependencies are still a separate hardening step.
 
 Examples:
 

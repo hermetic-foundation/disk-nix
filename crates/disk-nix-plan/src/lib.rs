@@ -131,6 +131,8 @@ pub enum Operation {
 #[serde(rename_all = "camelCase")]
 pub struct Plan {
     pub summary: PlanSummary,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependency_order: Vec<ActionDependencyOrder>,
     pub actions: Vec<PlannedAction>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub topology_comparison: Option<TopologyComparison>,
@@ -150,6 +152,33 @@ pub struct PlanSummary {
     pub destructive_count: usize,
     pub potential_data_loss_count: usize,
     pub unsupported_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionDependencyOrder {
+    pub action_id: String,
+    pub phase: DependencyPhase,
+    pub direction: DependencyDirection,
+    pub layer_rank: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection: Option<String>,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DependencyPhase {
+    BuildLowerLayers,
+    MutateInPlace,
+    TearDownUpperLayers,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DependencyDirection {
+    LowerLayersFirst,
+    UpperLayersFirst,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -623,6 +652,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
 
     Plan {
         summary: plan_summary(&actions),
+        dependency_order: dependency_order_for_actions(&actions),
         actions,
         topology_comparison: None,
     }
@@ -682,6 +712,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
             .retain(|action| !suppressed_action_ids.contains(&action.id));
         plan.summary = plan_summary(&plan.actions);
     }
+    plan.dependency_order = dependency_order_for_actions(&plan.actions);
 
     plan.topology_comparison = Some(TopologyComparison {
         summary,
@@ -705,7 +736,56 @@ fn action_order_key(action: &PlannedAction) -> (u16, u16) {
     (operation_dependency_phase(action.operation), layer)
 }
 
-fn operation_dependency_phase(operation: Operation) -> u16 {
+fn dependency_order_for_actions(actions: &[PlannedAction]) -> Vec<ActionDependencyOrder> {
+    actions
+        .iter()
+        .map(|action| {
+            let collection = action.context.collection.clone();
+            let layer_rank = collection_dependency_rank(collection.as_deref());
+            let direction = if operation_runs_upper_layers_first(action.operation) {
+                DependencyDirection::UpperLayersFirst
+            } else {
+                DependencyDirection::LowerLayersFirst
+            };
+            ActionDependencyOrder {
+                action_id: action.id.clone(),
+                phase: operation_dependency_phase_kind(action.operation),
+                direction,
+                layer_rank,
+                collection,
+                notes: dependency_order_notes(action, direction, layer_rank),
+            }
+        })
+        .collect()
+}
+
+fn dependency_order_notes(
+    action: &PlannedAction,
+    direction: DependencyDirection,
+    layer_rank: u16,
+) -> Vec<String> {
+    let mut notes = vec![format!(
+        "collection layer rank {layer_rank} orders {} actions",
+        action
+            .context
+            .collection
+            .as_deref()
+            .unwrap_or("unclassified")
+    )];
+    match direction {
+        DependencyDirection::LowerLayersFirst => notes.push(
+            "lower storage layers are planned before consumers for build, grow, rescan, and property work"
+                .to_string(),
+        ),
+        DependencyDirection::UpperLayersFirst => notes.push(
+            "consumer layers are planned before backing layers for teardown, shrink, rollback, detach, and destroy work"
+                .to_string(),
+        ),
+    }
+    notes
+}
+
+fn operation_dependency_phase_kind(operation: Operation) -> DependencyPhase {
     match operation {
         Operation::Create
         | Operation::Import
@@ -714,7 +794,7 @@ fn operation_dependency_phase(operation: Operation) -> u16 {
         | Operation::Open
         | Operation::Activate
         | Operation::Assemble
-        | Operation::Start => 10,
+        | Operation::Start => DependencyPhase::BuildLowerLayers,
         Operation::Format
         | Operation::Grow
         | Operation::AddDevice
@@ -733,7 +813,7 @@ fn operation_dependency_phase(operation: Operation) -> u16 {
         | Operation::Trim
         | Operation::Rescan
         | Operation::Rename
-        | Operation::Rebalance => 20,
+        | Operation::Rebalance => DependencyPhase::MutateInPlace,
         Operation::Shrink
         | Operation::RemoveDevice
         | Operation::RemoveKey
@@ -747,7 +827,15 @@ fn operation_dependency_phase(operation: Operation) -> u16 {
         | Operation::Detach
         | Operation::Export
         | Operation::Unexport
-        | Operation::Destroy => 30,
+        | Operation::Destroy => DependencyPhase::TearDownUpperLayers,
+    }
+}
+
+fn operation_dependency_phase(operation: Operation) -> u16 {
+    match operation_dependency_phase_kind(operation) {
+        DependencyPhase::BuildLowerLayers => 10,
+        DependencyPhase::MutateInPlace => 20,
+        DependencyPhase::TearDownUpperLayers => 30,
     }
 }
 
@@ -8584,6 +8672,47 @@ mod tests {
                 "snapshot:old-root:destroy",
             ]
         );
+        let dependency_ids: Vec<&str> = plan
+            .dependency_order
+            .iter()
+            .map(|order| order.action_id.as_str())
+            .collect();
+        assert_eq!(dependency_ids, ids);
+        assert_eq!(
+            plan.dependency_order.first().map(|order| (
+                order.phase,
+                order.direction,
+                order.layer_rank,
+                order.collection.as_deref()
+            )),
+            Some((
+                DependencyPhase::BuildLowerLayers,
+                DependencyDirection::LowerLayersFirst,
+                20,
+                Some("disks")
+            ))
+        );
+        assert_eq!(
+            plan.dependency_order.last().map(|order| (
+                order.phase,
+                order.direction,
+                order.layer_rank,
+                order.collection.as_deref()
+            )),
+            Some((
+                DependencyPhase::TearDownUpperLayers,
+                DependencyDirection::UpperLayersFirst,
+                95,
+                Some("snapshots")
+            ))
+        );
+        assert!(plan.dependency_order.iter().all(|order| {
+            !order.notes.is_empty()
+                && order
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("collection layer rank"))
+        }));
     }
 
     #[test]
