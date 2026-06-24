@@ -410,9 +410,11 @@ disk-nix inspect tank/home
 disk-nix inspect 7420d5e2-2f0f-4709-a1d1-61a9116412f8
 ```
 
-The text form prints identity fields, properties, and direct relationships for
-matched nodes. The JSON form returns a subgraph containing matched nodes, direct
-neighbor nodes, and the relationship edges between them:
+The text form prints identity fields, capacity details, properties, and direct
+relationships for matched nodes. Capacity output includes size plus used, free,
+allocated, and utilization percentage when the node exposes those fields. The
+JSON form returns a subgraph containing matched nodes, direct neighbor nodes,
+and the relationship edges between them:
 
 ```sh
 disk-nix inspect / --json

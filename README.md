@@ -117,9 +117,11 @@ summarizes size, used, free, allocated, utilization, and selected metadata
 details across graph nodes that expose capacity data.
 exFAT probing uses `tune.exfat` and `dump.exfat` to add label, GUID, serial,
 sector, cluster, size, and free-space metadata when exfatprogs is available.
-`inspect --json` returns matched nodes plus their direct neighbors and
-relationship edges. `capabilities --json` returns the modeled operation/risk
-matrix.
+`inspect` prints matched-node identity, properties, direct relationships, and
+capacity details including used, free, allocated, and use percentage when
+available. `inspect --json` returns matched nodes plus their direct neighbors
+and relationship edges. `capabilities --json` returns the modeled
+operation/risk matrix.
 The Nix package installs generated bash, zsh, and fish completions plus a
 `disk-nix(1)` manpage. The `completions` and `manpage` commands can also emit
 those artifacts directly.

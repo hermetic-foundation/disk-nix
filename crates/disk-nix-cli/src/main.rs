@@ -2010,12 +2010,17 @@ fn print_inspect(output: &mut impl Write, graph: &StorageGraph, query: &str) -> 
             writeln!(output, "  size: {}", human_bytes(Some(size_bytes)))?;
         }
         if let Some(usage) = &node.usage {
-            if usage.used_bytes.is_some() || usage.free_bytes.is_some() {
+            if usage.used_bytes.is_some()
+                || usage.free_bytes.is_some()
+                || usage.allocated_bytes.is_some()
+            {
                 writeln!(
                     output,
-                    "  usage: used={} free={}",
+                    "  usage: used={} free={} allocated={} use={}",
                     human_bytes(usage.used_bytes),
-                    human_bytes(usage.free_bytes)
+                    human_bytes(usage.free_bytes),
+                    human_bytes(usage.allocated_bytes),
+                    usage_percent(node)
                 )?;
             }
         }
@@ -3831,11 +3836,11 @@ mod tests {
         is_mapping_node, is_multipath_node, is_network_storage_node, is_nfs_node, is_nvme_node,
         is_partition_node, is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node,
         is_volume_node, is_zfs_node, iscsi_lun_count, mount_details, nfs_mount_count, print_cache,
-        print_complex_filesystems, print_devices, print_encryption, print_filesystems, print_iscsi,
-        print_loop, print_lvm, print_mappings, print_mounts, print_multipath,
-        print_network_storage, print_nfs, print_nvme, print_partitions, print_pools, print_raid,
-        print_snapshots, print_swap, print_usage, print_vdo, print_volumes, print_zfs,
-        snapshot_source, usage_details, usage_percent, zfs_child_count,
+        print_complex_filesystems, print_devices, print_encryption, print_filesystems,
+        print_inspect, print_iscsi, print_loop, print_lvm, print_mappings, print_mounts,
+        print_multipath, print_network_storage, print_nfs, print_nvme, print_partitions,
+        print_pools, print_raid, print_snapshots, print_swap, print_usage, print_vdo,
+        print_volumes, print_zfs, snapshot_source, usage_details, usage_percent, zfs_child_count,
     };
 
     #[test]
@@ -4819,6 +4824,58 @@ mod tests {
             "vdo-use=50% saving=20% mode=normal write-policy=sync configured-write-policy=auto"
         ));
         assert!(output.contains("block-map-cache=128M data-blocks=65536 logical-blocks=262144"));
+    }
+
+    #[test]
+    fn inspect_includes_capacity_usage_identity_properties_and_relationships() {
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "filesystem:/srv/archive",
+                NodeKind::Filesystem,
+                "/srv/archive",
+            )
+            .with_path("/srv/archive")
+            .with_size_bytes(1024)
+            .with_usage(Usage {
+                used_bytes: Some(256),
+                free_bytes: Some(768),
+                allocated_bytes: Some(512),
+            })
+            .with_identity(Identity {
+                uuid: Some("fs-uuid".to_string()),
+                partuuid: None,
+                label: Some("archive".to_string()),
+                serial: None,
+                wwn: None,
+            })
+            .with_property("filesystem.type", "xfs")
+            .with_property("mount.source", "/dev/mapper/archive"),
+        );
+        graph.add_node(Node::new(
+            "block:/dev/mapper/archive",
+            NodeKind::DeviceMapper,
+            "/dev/mapper/archive",
+        ));
+        graph.add_edge(Edge::new(
+            "block:/dev/mapper/archive",
+            "filesystem:/srv/archive",
+            Relationship::Backs,
+        ));
+
+        let mut output = Vec::new();
+        print_inspect(&mut output, &graph, "archive").expect("inspect renders");
+        let output = String::from_utf8(output).expect("inspect output is utf8");
+
+        assert!(output.contains("filesystem /srv/archive"));
+        assert!(output.contains("  path: /srv/archive"));
+        assert!(output.contains("  size: 1.0 KiB"));
+        assert!(output.contains("  usage: used=256 B free=768 B allocated=512 B use=25.0%"));
+        assert!(output.contains("    uuid: fs-uuid"));
+        assert!(output.contains("    label: archive"));
+        assert!(output.contains("    filesystem.type: xfs"));
+        assert!(output.contains("    mount.source: /dev/mapper/archive"));
+        assert!(output.contains("    in backs block:/dev/mapper/archive (/dev/mapper/archive)"));
     }
 
     #[test]
