@@ -5276,7 +5276,10 @@ mod tests {
             Node::new("lvm-lv:vg/root", NodeKind::LvmLogicalVolume, "vg/root")
                 .with_property("lvm.cache-mode", "writethrough")
                 .with_property("lvm.cache-policy", "smq")
-                .with_property("lvm.writecache-writeback-blocks", "16"),
+                .with_property("lvm.writecache-total-blocks", "1024")
+                .with_property("lvm.writecache-free-blocks", "512")
+                .with_property("lvm.writecache-writeback-blocks", "16")
+                .with_property("lvm.writecache-error", "0"),
         );
         graph.add_node(
             Node::new(
@@ -5307,7 +5310,10 @@ mod tests {
         assert!(output.contains("vg/root"));
         assert!(output.contains("writethrough"));
         assert!(output.contains("cache-policy=smq"));
+        assert!(output.contains("writecache-total=1024"));
+        assert!(output.contains("writecache-free=512"));
         assert!(output.contains("writecache-writeback=16"));
+        assert!(output.contains("writecache-error=0"));
         assert!(output.contains("/dev/disk/by-id/cache0"));
         assert!(output.contains("vdev-role=cache vdev-state=ONLINE"));
     }

@@ -276,8 +276,9 @@ Use these commands for:
   details, token-to-keyslot bindings, and data-segment details
 - `cache`: bcache devices/cache sets, LVM cache/writecache metadata, bcachefs
   member-device cache accounting, and ZFS cache vdevs, including cache mode,
-  policy, dirty/writeback data, backing device, cache-set identity,
-  state/running flags, available cache percentage, discard, I/O errors,
+  policy, dirty/writeback data, writecache total/free/error counters,
+  backing device, cache-set identity, state/running flags, available cache
+  percentage, discard, I/O errors,
   written/metadata-written accounting, priority stats, and vdev state
 - `lvm`: LVM physical volumes, volume groups, logical volumes, segments, thin
   pools, snapshots, and cache/writecache layers, including data and metadata
@@ -342,7 +343,8 @@ Use these commands for:
   writeback percentage, `blkid` signature
   details, ext superblock state, block/inode geometry, reservation, mount/check,
   and journal details, LVM layout, health, thin/cache/writecache
-  status, NTFS volume geometry and MFT record sizing, F2FS block usage,
+  capacity/status counters, NTFS volume geometry and MFT record sizing, F2FS
+  block usage,
   valid inode/node counts, segment layout, section/zone geometry, log sizing,
   bcachefs filesystem and member-device capacity plus data-type accounting,
   Btrfs allocation class profiles and byte counts, VDO backing, logical/physical
