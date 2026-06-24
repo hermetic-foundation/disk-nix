@@ -570,15 +570,18 @@ treat declared options as a required subset of current mount options, LVM
 activation actions are compared with `lvm.active`, LUKS open actions are
 compared with `cryptsetup.active`, NFS export actions are compared with
 `nfs.export-client` and `nfs.export-option-*` properties, VDO start actions are
-compared with `vdo.operating-mode`, and iSCSI login actions are compared with
-current session state across all matching target/session nodes when metadata is
-available. Safe already-satisfied grow, shrink, iSCSI login, LVM activation,
-LUKS open, mount, remount, NFS export, VDO start, and property actions that
-have no warning diagnostics are suppressed from the actionable plan and counted
-as `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
-inactive LUKS mappers, non-normal VDO modes, mountpoints using a different
-source, export client/option differences, or known iSCSI targets without a
-logged-in session stay actionable with a warning diagnostic.
+compared with `vdo.operating-mode`, MD assemble actions are compared with
+`md.state`, `md.degraded-devices`, and `md.failed-devices`, and iSCSI login
+actions are compared with current session state across all matching
+target/session nodes when metadata is available. Safe already-satisfied grow,
+shrink, iSCSI login, LVM activation, LUKS open, mount, remount, NFS export, VDO
+start, MD assemble, and property actions that have no warning diagnostics are
+suppressed from the actionable plan and counted as
+`topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
+inactive LUKS mappers, non-normal VDO modes, degraded or failed MD arrays,
+mountpoints using a different source, export client/option differences, or
+known iSCSI targets without a logged-in session stay actionable with a warning
+diagnostic.
 
 ## Apply Evaluation
 
@@ -793,7 +796,9 @@ array path such as `/dev/md/root`; logical declarations can provide that path
 through `target` or `device`. MD RAID `operation = "rescan"` renders
 read-only `mdadm --detail --scan`, `mdadm --examine --scan`, `/proc/mdstat`,
 and topology verification; a declared `/dev/md*` target adds targeted
-`mdadm --detail <array>` inspection.
+`mdadm --detail <array>` inspection. Current-topology probing suppresses an
+assemble action only when the current array is active or clean and has zero
+degraded and failed devices.
 VDO command plans render policy-gated `vdo create` and `vdo remove` commands,
 online `vdo growLogical` for `desiredSize`, explicit `vdo growPhysical` for
 `physicalSize`, and offline-required `vdo start`/`vdo stop` lifecycle steps for

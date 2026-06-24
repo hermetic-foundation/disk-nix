@@ -244,6 +244,8 @@ pub enum TopologyDiagnosticKind {
     LvmActivateRequired,
     LuksOpenAlreadySatisfied,
     LuksOpenRequired,
+    MdAssembleAlreadySatisfied,
+    MdAssembleRequired,
     MountAlreadySatisfied,
     MountSourceConflict,
     MountOptionsAlreadySatisfied,
@@ -737,6 +739,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                         | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
                         | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
+                        | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
                         | TopologyDiagnosticKind::MountAlreadySatisfied
                         | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                         | TopologyDiagnosticKind::NfsExportAlreadySatisfied
@@ -1298,6 +1301,7 @@ fn already_satisfied_action_ids(
             action.operation,
             Operation::Grow
                 | Operation::Shrink
+                | Operation::Assemble
                 | Operation::Activate
                 | Operation::Login
                 | Operation::Open
@@ -1321,6 +1325,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                     | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
                     | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
+                    | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
                     | TopologyDiagnosticKind::MountAlreadySatisfied
                     | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
                     | TopologyDiagnosticKind::NfsExportAlreadySatisfied
@@ -1371,6 +1376,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
     diagnostics.extend(lvm_activate_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
+    diagnostics.extend(md_assemble_diagnostic(action, node, &query));
     diagnostics.extend(mount_diagnostic(action, node, &query));
     diagnostics.extend(mount_options_diagnostic(action, node, &query));
     diagnostics.extend(nfs_export_diagnostic(action, node, &query));
@@ -1584,6 +1590,47 @@ fn luks_open_diagnostic(
             TopologyDiagnosticLevel::Warning,
             TopologyDiagnosticKind::LuksOpenRequired,
             format!("LUKS mapper {query} is known but not active"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn md_assemble_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Assemble
+        || action.context.collection.as_deref() != Some("mdRaids")
+    {
+        return None;
+    }
+    let state = property_value_from_node(node, "md.state")?;
+    let degraded_devices = md_device_count_property(node, "md.degraded-devices")?;
+    let failed_devices = md_device_count_property(node, "md.failed-devices")?;
+    let state_indicates_active = md_state_indicates_active(state);
+    let cleanly_assembled = state_indicates_active && degraded_devices == 0 && failed_devices == 0;
+    let (level, kind, message) = if cleanly_assembled {
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::MdAssembleAlreadySatisfied,
+            format!("MD RAID array {query} is already cleanly assembled"),
+        )
+    } else {
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::MdAssembleRequired,
+            format!(
+                "MD RAID array {query} is not cleanly assembled: state={state}, degradedDevices={degraded_devices}, failedDevices={failed_devices}"
+            ),
         )
     };
 
@@ -1811,6 +1858,16 @@ fn lvm_node_is_active(node: &Node) -> Option<bool> {
             .next()
             .is_some_and(|state| state.eq_ignore_ascii_case("active"))
     })
+}
+
+fn md_state_indicates_active(value: &str) -> bool {
+    value
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .any(|token| matches!(token.to_ascii_lowercase().as_str(), "clean" | "active"))
+}
+
+fn md_device_count_property(node: &Node, key: &str) -> Option<u64> {
+    property_value_from_node(node, key).and_then(|value| value.trim().parse().ok())
 }
 
 fn property_value_from_node<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
@@ -13044,6 +13101,125 @@ mod tests {
             diagnostic.action_id == "vdovolumes:archive:start"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::VdoStartRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_md_assemble_when_clean() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "mdRaids": {
+                "existing": {
+                  "operation": "assemble",
+                  "target": "/dev/md/existing",
+                  "devices": ["/dev/sdb1", "/dev/sdc1"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("md:/dev/md/existing", NodeKind::MdRaid, "/dev/md/existing")
+                .with_path("/dev/md/existing")
+                .with_property("md.state", "clean")
+                .with_property("md.degraded-devices", "0")
+                .with_property("md.failed-devices", "0"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:existing:assemble"
+                && diagnostic.kind == TopologyDiagnosticKind::MdAssembleAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_md_assemble_when_degraded() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "mdRaids": {
+                "existing": {
+                  "operation": "assemble",
+                  "target": "/dev/md/existing",
+                  "devices": ["/dev/sdb1", "/dev/sdc1"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("md:/dev/md/existing", NodeKind::MdRaid, "/dev/md/existing")
+                .with_path("/dev/md/existing")
+                .with_property("md.state", "clean, degraded")
+                .with_property("md.degraded-devices", "1")
+                .with_property("md.failed-devices", "0"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:existing:assemble"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdAssembleRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_md_assemble_when_inactive() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "mdRaids": {
+                "existing": {
+                  "operation": "assemble",
+                  "target": "/dev/md/existing",
+                  "devices": ["/dev/sdb1", "/dev/sdc1"]
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("md:/dev/md/existing", NodeKind::MdRaid, "/dev/md/existing")
+                .with_path("/dev/md/existing")
+                .with_property("md.state", "inactive")
+                .with_property("md.degraded-devices", "0")
+                .with_property("md.failed-devices", "0"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "mdraids:existing:assemble"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MdAssembleRequired
         }));
     }
 

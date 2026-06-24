@@ -603,7 +603,10 @@ replacement, and removal command plans require an explicit array path such as
 `/dev/md/root`; assemble also requires explicit reviewed member devices. MD
 RAID rescan plans render read-only `mdadm --detail --scan`,
 `mdadm --examine --scan`, and `/proc/mdstat` inventory checks without
-assembling arrays.
+assembling arrays. Current-topology comparison suppresses assemble actions only
+when the probed array has `md.state` indicating an active or clean array and
+both `md.degraded-devices` and `md.failed-devices` are zero; degraded or failed
+arrays stay planned and emit a warning.
 Loop-device refresh, rescan, and detach command plans require `/dev/loop*`
 targets. Rescan reads `losetup --json --list` and graph state without changing
 capacity; grow uses `losetup -c` after backing size changes.
