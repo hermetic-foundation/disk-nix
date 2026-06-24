@@ -570,8 +570,8 @@ suppressed when the mountpoint is absent, remount actions treat declared
 options as a required subset of current mount options, LVM
 activation and deactivation actions are compared with `lvm.active` where that
 metadata is available, LUKS open and close actions are compared with
-`cryptsetup.active`, LUN attach/detach actions are compared with concrete
-host-visible path matches, NFS export actions are compared with
+`cryptsetup.active`, LUN attach/detach and NVMe namespace attach/detach actions
+are compared with concrete host-visible path matches, NFS export actions are compared with
 `nfs.export-client` and `nfs.export-option-*` properties, NFS unexport actions
 are suppressed when the export is absent, VDO start actions are compared with
 `vdo.operating-mode`, VDO stop actions are compared with
@@ -583,13 +583,14 @@ assemble actions are compared with `md.state`, `md.degraded-devices`, and
 session state across all matching target/session nodes when metadata is
 available. Safe already-satisfied grow, shrink, iSCSI login/logout, LVM
 activation/deactivation, LVM volume-group import/export, LUKS open, LUKS close,
-LUN attach/detach, mount, unmount, remount, NFS export/unexport, VDO start, VDO
-stop, MD assemble, ZFS pool import, and property actions that have no warning diagnostics are
+LUN attach/detach, NVMe namespace attach/detach, mount, unmount, remount, NFS
+export/unexport, VDO start, VDO stop, MD assemble, ZFS pool import, and property actions that have no warning diagnostics are
 suppressed from the actionable plan and counted as
 `topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
 inactive LUKS open targets, active LUKS close targets, absent LUN attach paths,
-visible LUN detach paths, non-normal VDO start
+visible LUN detach paths, absent NVMe namespace attach paths, visible NVMe
+namespace detach paths, non-normal VDO start
 modes, running VDO stop targets, degraded or failed MD arrays, degraded ZFS
 pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
@@ -864,20 +865,25 @@ declared through `device`, `path`, `devices`, `paths`, or `devicePaths`.
 Target-side array
 provisioning or deletion must be handled outside the host plan unless a future
 target adapter is added.
-The capability inventory advertises iSCSI login/logout and LUN attach/detach
-as host lifecycle operations, distinct from target-side LUN creation or
-deletion.
+The capability inventory advertises iSCSI login/logout, LUN attach/detach, and
+NVMe namespace attach/detach as host lifecycle operations, distinct from
+target-side LUN provisioning or destructive namespace deletion.
 Multipath map command plans render reviewed path add, remove, replacement,
 growth, map flush, and `operation = "rescan"` lifecycle actions. Rescan
 inspects the reviewed map with `multipath -ll`, reloads maps with `multipath -r`, and verifies the map again. `operation = "destroy"` or `destroy = true`
 renders offline-gated `multipath -f <map>` after map inspection; missing
 stable map targets keep map-specific commands non-ready.
-NVMe namespace command plans render `nvme create-ns`, `nvme attach-ns`,
-explicit `operation = "rescan"` plans through `nvme ns-rescan`,
-`nvme detach-ns`, and `nvme delete-ns`. Executable create plans require a
-`/dev/nvme*` controller path from the declaration key, `target`, `path`, or
-`device`, plus `desiredSize`; attach and delete flows also require
-`namespaceId` plus `controllers` where detach or attach is involved.
+NVMe namespace command plans render `nvme create-ns`, standalone
+`operation = "attach"` plans through `nvme attach-ns`, explicit
+`operation = "rescan"` plans through `nvme ns-rescan`, standalone
+`operation = "detach"` plans through `nvme detach-ns`, and destructive
+delete plans through `nvme detach-ns` plus `nvme delete-ns`. Executable create
+plans require a `/dev/nvme*` controller path from the declaration key,
+`target`, `path`, or `device`, plus `desiredSize`; attach, detach, and delete
+flows also require `namespaceId` plus `controllers` where attachment state is
+changed. When a declaration needs both executable commands and topology
+reconciliation, use `target` or `path` for the controller and `device` for the
+host-visible namespace block path such as `/dev/nvme0n1`.
 Namespace growth is modeled as a host rescan after a controller-side namespace
 size change.
 LVM logical volume command plans render concrete `lvcreate` commands when a

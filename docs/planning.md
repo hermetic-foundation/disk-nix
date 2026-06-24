@@ -240,7 +240,9 @@ Examples:
 - NVMe namespace creation and deletion are destructive because they allocate
   or remove controller-managed namespace capacity. Namespace growth is
   offline-required because disk-nix models it as a host rescan after
-  controller-side namespace resize or replacement.
+  controller-side namespace resize or replacement. Namespace attach is an
+  online controller visibility change for an existing namespace, while detach
+  is offline-required because consumers must be drained before removing access.
 - LVM thin pool growth is online, with advice to monitor data and metadata
   utilization, autoextend policy, and thin-volume overcommit. Thin pool
   `operation = "rescan"` is online and read-only; it refreshes data,
@@ -468,6 +470,10 @@ a matched LVM object is in the opposite state.
 LUKS open/close reconciliation uses `cryptsetup.active` topology metadata to
 suppress mapper opens that are already active and mapper closes that are
 already inactive; opposite-state mappers remain actionable with a warning.
+NVMe namespace attach/detach reconciliation suppresses attach actions only
+when the declared namespace path is already visible and suppresses detach
+actions only when the declared namespace path is already absent; opposite
+states stay actionable with a warning.
 VDO start/stop reconciliation uses `vdo.operating-mode` topology metadata to
 suppress start actions only when the volume is already in `normal` mode and
 stop actions only when the mode explicitly reports stopped, not-running, or
@@ -480,9 +486,11 @@ actions are suppressed only when a logged-in session is present; logout actions
 are suppressed only when the target is known and no logged-in session is
 present.
 Already-satisfied grow, shrink, iSCSI login/logout, LVM
-activation/deactivation, LUKS open, mount, unmount, remount, NFS export, VDO
-start, and set-property actions with no warning diagnostics are suppressed from
-the actionable plan and counted in
+activation/deactivation, LUKS open, LUN attach/detach, NVMe namespace
+attach/detach, mount, unmount, remount, NFS export/unexport, VDO start, VDO
+stop, MD assemble, ZFS pool import, LVM volume-group import/export, and
+set-property actions with no warning diagnostics are suppressed from the
+actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
 
 ## Apply policy
@@ -607,12 +615,16 @@ cache-pool LV through `device` or `addDevices`.
 NVMe namespace command plans use `nvme create-ns`, `nvme attach-ns`,
 explicit `operation = "rescan"` plans through `nvme ns-rescan`,
 `nvme detach-ns`, and `nvme delete-ns`. Create and delete are destructive
-controller namespace-management operations. Rescan is online and refreshes
-host namespace inventory. Grow is offline-required and means host namespace
-rescan after controller-side resize or replacement. Executable create plans
-require a `/dev/nvme*` controller path from the declaration key, `target`,
-`path`, or `device`, plus `desiredSize`; attach and delete flows require
-`namespaceId` plus `controllers` when attachment state is changed.
+controller namespace-management operations. Standalone attach is online;
+standalone detach is offline-required and preserves the namespace. Rescan is
+online and refreshes host namespace inventory. Grow is offline-required and
+means host namespace rescan after controller-side resize or replacement.
+Executable create plans require a `/dev/nvme*` controller path from the
+declaration key, `target`, `path`, or `device`, plus `desiredSize`; attach,
+detach, and delete flows require `namespaceId` plus `controllers` when
+attachment state is changed. Use `target` or `path` for the controller and
+`device` for the host-visible namespace path when the same declaration should
+also reconcile topology visibility.
 Swap grow, format, label, UUID, and rescan command plans require a path-shaped
 swap target from the declaration key, `target`, `path`, or `device`. Label and
 UUID updates render `swaplabel --label` and `swaplabel --uuid`;

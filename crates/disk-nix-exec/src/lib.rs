@@ -2391,7 +2391,11 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                     .to_string(),
             ],
         ),
-        Operation::Create | Operation::Grow | Operation::Destroy
+        Operation::Create
+        | Operation::Attach
+        | Operation::Grow
+        | Operation::Detach
+        | Operation::Destroy
             if collection == Some("nvmeNamespaces") =>
         {
             (
@@ -4820,6 +4824,32 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Attach if collection == Some("nvmeNamespaces") => {
+            let controller = nvme_controller_target(action);
+            let namespace_id = action.context.namespace_id.as_deref();
+            let controllers = action.context.controllers.as_deref();
+            (
+                vec![
+                    nvme_list_namespaces_command(
+                        controller,
+                        "inspect NVMe namespace inventory before attach",
+                    ),
+                    nvme_attach_namespace_command(controller, namespace_id, controllers),
+                    nvme_namespace_rescan_command(controller),
+                    nvme_list_namespaces_command(
+                        controller,
+                        "verify NVMe namespace inventory after attach",
+                    ),
+                ],
+                vec![
+                    "attach preserves the namespace and only changes controller visibility"
+                        .to_string(),
+                    "verify namespace id and controller attachment before exposing consumers"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Grow if collection == Some("partitions") => {
             let partition_target = partition_target_path(action);
             let disk = action.context.device.as_deref();
@@ -7026,6 +7056,31 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 vec![
                     "detach namespace consumers and migrate data before delete-ns".to_string(),
                     "prefer detach without delete when target-side namespace data must remain"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
+        Operation::Detach if collection == Some("nvmeNamespaces") => {
+            let controller = nvme_controller_target(action);
+            let namespace_id = action.context.namespace_id.as_deref();
+            let controllers = action.context.controllers.as_deref();
+            (
+                vec![
+                    nvme_list_namespaces_command(
+                        controller,
+                        "inspect NVMe namespace inventory before detach",
+                    ),
+                    nvme_detach_namespace_command(controller, namespace_id, controllers),
+                    nvme_namespace_rescan_command(controller),
+                    nvme_list_namespaces_command(
+                        controller,
+                        "verify NVMe namespace inventory after detach",
+                    ),
+                ],
+                vec![
+                    "detach removes controller access without deleting the namespace".to_string(),
+                    "unmount filesystems and deactivate dependent mappings before detach"
                         .to_string(),
                 ],
                 true,
@@ -12809,13 +12864,14 @@ fn zvol_set_volsize_command(target: &str, desired_size: Option<&str>) -> Executi
 }
 
 fn nvme_controller_target(action: &PlannedAction) -> Option<&str> {
-    action
-        .context
-        .device
-        .as_deref()
-        .or(action.context.target.as_deref())
-        .or(action.context.name.as_deref())
-        .filter(|target| is_nvme_controller_path(target))
+    [
+        action.context.device.as_deref(),
+        action.context.target.as_deref(),
+        action.context.name.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .find(|target| is_nvme_controller_path(target))
 }
 
 fn is_nvme_controller_path(target: &str) -> bool {
@@ -22055,9 +22111,19 @@ mod tests {
                   "operation": "grow"
                 },
                 "/dev/nvme2": {
-                  "destroy": true,
+                  "operation": "attach",
                   "namespaceId": "7",
                   "controllers": "0x2"
+                },
+                "/dev/nvme3": {
+                  "operation": "detach",
+                  "namespaceId": "8",
+                  "controllers": "0x3"
+                },
+                "/dev/nvme4": {
+                  "destroy": true,
+                  "namespaceId": "9",
+                  "controllers": "0x4"
                 }
               },
               "apply": {
@@ -22109,12 +22175,12 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "nvmenamespaces:/dev/nvme2:destroy"
+            step.action_id == "nvmenamespaces:/dev/nvme2:attach"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
                             "nvme",
-                            "detach-ns",
+                            "attach-ns",
                             "/dev/nvme2",
                             "--namespace-id",
                             "7",
@@ -22124,7 +22190,47 @@ mod tests {
                         && command.readiness == CommandReadiness::Ready
                 })
                 && step.commands.iter().any(|command| {
-                    command.argv == ["nvme", "delete-ns", "/dev/nvme2", "--namespace-id", "7"]
+                    command.argv == ["nvme", "ns-rescan", "/dev/nvme2"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:/dev/nvme3:detach"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "nvme",
+                            "detach-ns",
+                            "/dev/nvme3",
+                            "--namespace-id",
+                            "8",
+                            "--controllers",
+                            "0x3",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "ns-rescan", "/dev/nvme3"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:/dev/nvme4:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "nvme",
+                            "detach-ns",
+                            "/dev/nvme4",
+                            "--namespace-id",
+                            "9",
+                            "--controllers",
+                            "0x4",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "delete-ns", "/dev/nvme4", "--namespace-id", "9"]
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
@@ -22211,11 +22317,25 @@ mod tests {
                     "operation": "grow",
                     "device": "/dev/nvme1"
                   },
-                  "logical-detach": {
-                    "destroy": true,
+                  "logical-attach": {
+                    "operation": "attach",
                     "target": "/dev/nvme2",
+                    "device": "/dev/nvme2n1",
                     "namespaceId": "7",
                     "controllers": "0x2"
+                  },
+                  "logical-detach": {
+                    "operation": "detach",
+                    "target": "/dev/nvme3",
+                    "device": "/dev/nvme3n1",
+                    "namespaceId": "8",
+                    "controllers": "0x3"
+                  },
+                  "logical-destroy": {
+                    "destroy": true,
+                    "target": "/dev/nvme4",
+                    "namespaceId": "9",
+                    "controllers": "0x4"
                   }
                 }
               },
@@ -22256,17 +22376,49 @@ mod tests {
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
-            step.action_id == "nvmenamespaces:logical-detach:destroy"
+            step.action_id == "nvmenamespaces:logical-attach:attach"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
                             "nvme",
-                            "detach-ns",
+                            "attach-ns",
                             "/dev/nvme2",
                             "--namespace-id",
                             "7",
                             "--controllers",
                             "0x2",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:logical-detach:detach"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "nvme",
+                            "detach-ns",
+                            "/dev/nvme3",
+                            "--namespace-id",
+                            "8",
+                            "--controllers",
+                            "0x3",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nvmenamespaces:logical-destroy:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "nvme",
+                            "detach-ns",
+                            "/dev/nvme4",
+                            "--namespace-id",
+                            "9",
+                            "--controllers",
+                            "0x4",
                         ]
                         && command.readiness == CommandReadiness::Ready
                 })

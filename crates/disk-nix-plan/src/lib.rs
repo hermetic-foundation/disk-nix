@@ -246,6 +246,10 @@ pub enum TopologyDiagnosticKind {
     LunAttachRequired,
     LunDetachAlreadySatisfied,
     LunDetachRequired,
+    NvmeNamespaceAttachAlreadySatisfied,
+    NvmeNamespaceAttachRequired,
+    NvmeNamespaceDetachAlreadySatisfied,
+    NvmeNamespaceDetachRequired,
     LvmActivateAlreadySatisfied,
     LvmActivateRequired,
     LvmDeactivateAlreadySatisfied,
@@ -762,6 +766,8 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
                         | TopologyDiagnosticKind::LunAttachAlreadySatisfied
                         | TopologyDiagnosticKind::LunDetachAlreadySatisfied
+                        | TopologyDiagnosticKind::NvmeNamespaceAttachAlreadySatisfied
+                        | TopologyDiagnosticKind::NvmeNamespaceDetachAlreadySatisfied
                         | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
@@ -1368,6 +1374,8 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
                     | TopologyDiagnosticKind::LunAttachAlreadySatisfied
                     | TopologyDiagnosticKind::LunDetachAlreadySatisfied
+                    | TopologyDiagnosticKind::NvmeNamespaceAttachAlreadySatisfied
+                    | TopologyDiagnosticKind::NvmeNamespaceDetachAlreadySatisfied
                     | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
@@ -1404,6 +1412,9 @@ fn topology_diagnostics_for_action(
 
     let matches = graph.find_nodes(&query);
     if matches.is_empty() {
+        if let Some(diagnostic) = nvme_namespace_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = lun_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1437,6 +1448,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(filesystem_type_diagnostic(action, node, &query));
     diagnostics.extend(iscsi_login_diagnostic(action, &matches, &query));
     diagnostics.extend(iscsi_logout_diagnostic(action, &matches, &query));
+    diagnostics.extend(nvme_namespace_present_diagnostic(action, node, &query));
     diagnostics.extend(lun_present_diagnostic(action, node, &query));
     diagnostics.extend(lvm_activate_diagnostic(action, node, &query));
     diagnostics.extend(lvm_deactivate_diagnostic(action, node, &query));
@@ -1458,7 +1470,10 @@ fn topology_diagnostics_for_action(
 }
 
 fn topology_query(action: &PlannedAction) -> Option<String> {
-    if action.context.collection.as_deref() == Some("luns") {
+    if matches!(
+        action.context.collection.as_deref(),
+        Some("luns" | "nvmeNamespaces")
+    ) {
         return action
             .context
             .device
@@ -2137,6 +2152,71 @@ fn zfs_pool_import_diagnostic(
             TopologyDiagnosticKind::ZfsPoolImportRequired,
             format!("ZFS pool {query} is visible but not online: state={state}, health={health}"),
         )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn nvme_namespace_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("nvmeNamespaces") {
+        return None;
+    }
+
+    let (level, kind, message) = match action.operation {
+        Operation::Attach => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::NvmeNamespaceAttachRequired,
+            format!("NVMe namespace path {query} is not currently visible on this host"),
+        ),
+        Operation::Detach => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::NvmeNamespaceDetachAlreadySatisfied,
+            format!("NVMe namespace path {query} is already absent from current topology"),
+        ),
+        _ => return None,
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: None,
+    })
+}
+
+fn nvme_namespace_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("nvmeNamespaces") {
+        return None;
+    }
+
+    let (level, kind, message) = match action.operation {
+        Operation::Attach => (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::NvmeNamespaceAttachAlreadySatisfied,
+            format!("NVMe namespace path {query} is already visible on this host"),
+        ),
+        Operation::Detach => (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::NvmeNamespaceDetachRequired,
+            format!("NVMe namespace path {query} is still visible on this host"),
+        ),
+        _ => return None,
     };
 
     Some(TopologyDiagnostic {
@@ -5976,6 +6056,22 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Attach if collection == "nvmeNamespaces" => (
+            RiskClass::Online,
+            false,
+            Some(Advice {
+                summary: "NVMe namespace attach exposes an existing namespace to selected controllers"
+                    .to_string(),
+                alternatives: vec![
+                    "attach an existing namespace instead of creating one when preserving data"
+                        .to_string(),
+                    "verify namespace id and controller list with nvme list-ns before attach"
+                        .to_string(),
+                    "rescan the controller and verify dependent consumers after attachment"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Grow | Operation::AddDevice | Operation::Rebalance => {
             (RiskClass::Online, false, None)
         }
@@ -6135,6 +6231,21 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Detach if collection == "nvmeNamespaces" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "NVMe namespace detach removes host/controller access without deleting the namespace"
+                    .to_string(),
+                alternatives: vec![
+                    "detach from selected controllers before deleting only when data removal is intended"
+                        .to_string(),
+                    "unmount filesystems and deactivate LVM, dm, or multipath consumers before detach"
+                        .to_string(),
+                    "use rescan when namespace visibility changed outside disk-nix".to_string(),
+                ],
+            }),
+        ),
         Operation::Rollback if collection == "lvmSnapshots" => (
             RiskClass::PotentialDataLoss,
             false,
@@ -6186,11 +6297,13 @@ fn classify_operation(
             false,
             Some(Advice {
                 summary: format!(
-                    "{} operations are currently only supported for luns",
+                    "{} operations are currently only supported for LUNs and NVMe namespaces",
                     operation_label(operation)
                 ),
                 alternatives: vec![
                     "use operation = \"attach\" or \"detach\" on luns declarations for host-side LUN path lifecycle"
+                        .to_string(),
+                    "use operation = \"attach\" or \"detach\" on nvmeNamespaces declarations for namespace/controller lifecycle"
                         .to_string(),
                     "use operation = \"login\" or \"logout\" on iscsiSessions declarations for target session lifecycle"
                         .to_string(),
@@ -14554,6 +14667,165 @@ mod tests {
     }
 
     #[test]
+    fn topology_comparison_suppresses_nvme_namespace_attach_when_path_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "nvmeNamespaces": {
+                "root-ns": {
+                  "operation": "attach",
+                  "target": "/dev/nvme0",
+                  "device": "/dev/nvme0n1",
+                  "namespaceId": "1",
+                  "controllers": "0x1"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/nvme0n1",
+                NodeKind::NvmeNamespace,
+                "/dev/nvme0n1",
+            )
+            .with_path("/dev/nvme0n1")
+            .with_property("nvme.namespace-id", "1"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "nvmenamespaces:root-ns:attach"
+                && diagnostic.kind == TopologyDiagnosticKind::NvmeNamespaceAttachAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_nvme_namespace_attach_when_path_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "nvmeNamespaces": {
+                "root-ns": {
+                  "operation": "attach",
+                  "target": "/dev/nvme0",
+                  "device": "/dev/nvme0n1",
+                  "namespaceId": "1",
+                  "controllers": "0x1"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "nvmenamespaces:root-ns:attach"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::NvmeNamespaceAttachRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_suppresses_nvme_namespace_detach_when_path_absent() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "nvmeNamespaces": {
+                "old-ns": {
+                  "operation": "detach",
+                  "target": "/dev/nvme1",
+                  "device": "/dev/nvme1n1",
+                  "namespaceId": "2",
+                  "controllers": "0x2"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let graph = StorageGraph::empty();
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert!(plan.actions.is_empty());
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "nvmenamespaces:old-ns:detach"
+                && diagnostic.current.is_none()
+                && diagnostic.kind == TopologyDiagnosticKind::NvmeNamespaceDetachAlreadySatisfied
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_nvme_namespace_detach_when_path_exists() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "nvmeNamespaces": {
+                "old-ns": {
+                  "operation": "detach",
+                  "target": "/dev/nvme1",
+                  "device": "/dev/nvme1n1",
+                  "namespaceId": "2",
+                  "controllers": "0x2"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/nvme1n1",
+                NodeKind::NvmeNamespace,
+                "/dev/nvme1n1",
+            )
+            .with_path("/dev/nvme1n1")
+            .with_property("nvme.namespace-id", "2"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "nvmenamespaces:old-ns:detach"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::NvmeNamespaceDetachRequired
+        }));
+    }
+
+    #[test]
     fn topology_comparison_suppresses_lun_attach_when_path_exists() {
         let plan = plan_from_json_bytes(
             br#"{
@@ -15649,18 +15921,28 @@ mod tests {
                   "operation": "grow"
                 },
                 "/dev/nvme2": {
-                  "destroy": true,
+                  "operation": "attach",
                   "namespaceId": "7",
                   "controllers": "0x2"
+                },
+                "/dev/nvme3": {
+                  "operation": "detach",
+                  "namespaceId": "8",
+                  "controllers": "0x3"
+                },
+                "/dev/nvme4": {
+                  "destroy": true,
+                  "namespaceId": "9",
+                  "controllers": "0x4"
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.action_count, 5);
         assert_eq!(plan.summary.destructive_count, 2);
-        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.offline_required_count, 2);
 
         let create = plan
             .actions
@@ -15680,10 +15962,31 @@ mod tests {
         assert_eq!(grow.operation, Operation::Grow);
         assert_eq!(grow.risk, RiskClass::OfflineRequired);
 
+        let attach = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "nvmenamespaces:/dev/nvme2:attach")
+            .expect("NVMe namespace attach action exists");
+        assert_eq!(attach.operation, Operation::Attach);
+        assert_eq!(attach.risk, RiskClass::Online);
+        assert_eq!(attach.context.namespace_id.as_deref(), Some("7"));
+        assert_eq!(attach.context.controllers.as_deref(), Some("0x2"));
+
+        let detach = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "nvmenamespaces:/dev/nvme3:detach")
+            .expect("NVMe namespace detach action exists");
+        assert_eq!(detach.operation, Operation::Detach);
+        assert_eq!(detach.risk, RiskClass::OfflineRequired);
+        assert!(!detach.destructive);
+        assert_eq!(detach.context.namespace_id.as_deref(), Some("8"));
+        assert_eq!(detach.context.controllers.as_deref(), Some("0x3"));
+
         let destroy = plan
             .actions
             .iter()
-            .find(|action| action.id == "nvmenamespaces:/dev/nvme2:destroy")
+            .find(|action| action.id == "nvmenamespaces:/dev/nvme4:destroy")
             .expect("NVMe namespace destroy action exists");
         assert_eq!(destroy.operation, Operation::Destroy);
         assert_eq!(destroy.risk, RiskClass::Destructive);
