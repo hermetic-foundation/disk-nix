@@ -650,7 +650,8 @@ destructive-policy-gated `mdadm --create` commands from explicit `level` and
 `devices` fields. Missing array, level, or member fields get exact
 unresolved-input markers and `/proc/mdstat` verification. MD assemble, stop,
 create, grow, member add, replacement, and removal commands require an explicit
-array path such as `/dev/md/root`. MD RAID `operation = "rescan"` renders
+array path such as `/dev/md/root`; logical declarations can provide that path
+through `target` or `device`. MD RAID `operation = "rescan"` renders
 read-only `mdadm --detail --scan`, `mdadm --examine --scan`, `/proc/mdstat`,
 and topology verification; a declared `/dev/md*` target adds targeted
 `mdadm --detail <array>` inspection.

@@ -330,8 +330,9 @@ MD RAID create plans render destructive-policy-gated `mdadm --create` commands
 from explicit member devices and RAID level declarations, with exact
 unresolved-input markers when either field is missing. MD create, grow, member
 add, replacement, and removal command plans require an explicit array path such
-as `/dev/md/root`; logical array names remain non-ready. MD RAID rescan plans
-render read-only `mdadm --detail --scan`, `mdadm --examine --scan`, and
+as `/dev/md/root`; logical array names can declare `target` or `device` with
+that array path. MD RAID rescan plans render read-only `mdadm --detail --scan`,
+`mdadm --examine --scan`, and
 `/proc/mdstat` inventory checks without assembling arrays.
 VDO apply plans render gated `vdo create` and `vdo remove` commands, plus
 online `vdo growLogical` and physical growth review steps. Create preflight is

@@ -915,14 +915,24 @@ fn lifecycle_target(collection: &str, name: &str, object: &Value) -> Option<Stri
     if let Some(target) = string_field(object, &["target", "path", "mountpoint"]) {
         return Some(target);
     }
-    if collection == "caches" {
+    if collection == "caches" || collection == "mdRaids" {
         if let Some(device) = string_field(object, &["device", "disk", "source"])
-            .filter(|target| target.starts_with("/dev/bcache"))
+            .filter(|target| lifecycle_device_can_be_target(collection, target))
         {
             return Some(device);
         }
     }
     Some(name.to_string())
+}
+
+fn lifecycle_device_can_be_target(collection: &str, target: &str) -> bool {
+    matches!(
+        (collection, target),
+        ("caches", target) if target.starts_with("/dev/bcache")
+    ) || matches!(
+        (collection, target),
+        ("mdRaids", target) if target.starts_with("/dev/md")
+    )
 }
 
 fn string_field(object: &Value, keys: &[&str]) -> Option<String> {

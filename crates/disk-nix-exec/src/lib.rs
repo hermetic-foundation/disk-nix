@@ -16251,6 +16251,98 @@ mod tests {
     }
 
     #[test]
+    fn md_raid_lifecycle_uses_declared_device_as_array_target_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "mdRaids": {
+                  "root": {
+                    "device": "/dev/md/root",
+                    "operation": "grow",
+                    "desiredSize": "max",
+                    "addDevices": ["/dev/disk/by-id/nvme-spare"],
+                    "replaceDevices": {
+                      "/dev/disk/by-id/old-md-member": "/dev/disk/by-id/new-md-member"
+                    }
+                  },
+                  "oldroot": {
+                    "device": "/dev/md/oldroot",
+                    "operation": "stop"
+                  },
+                  "inventory": {
+                    "device": "/dev/md/root",
+                    "operation": "rescan"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true,
+                "allowDeviceReplacement": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:root:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mdadm", "--grow", "/dev/md/root", "--size", "max"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdRaids:root:add-device:/dev/disk/by-id/nvme-spare"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mdadm",
+                            "/dev/md/root",
+                            "--add",
+                            "/dev/disk/by-id/nvme-spare",
+                        ]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdRaids:root:replace-device:/dev/disk/by-id/old-md-member"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mdadm",
+                            "/dev/md/root",
+                            "--replace",
+                            "/dev/disk/by-id/old-md-member",
+                            "--with",
+                            "/dev/disk/by-id/new-md-member",
+                        ]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:oldroot:stop"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["mdadm", "--stop", "/dev/md/oldroot"])
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "mdraids:inventory:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["mdadm", "--detail", "/dev/md/root"])
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "mdraids:root:grow"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/dev/md/root", "--json"]
+                })
+        }));
+    }
+
+    #[test]
     fn md_raid_create_requires_destructive_policy_and_renders_mdadm_create() {
         let (blocked_plan, blocked_policy) = plan_and_policy_from_json_bytes(
             br#"{
