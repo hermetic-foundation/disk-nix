@@ -47,6 +47,18 @@ struct ZfsRow {
     encryption: Option<String>,
     keystatus: Option<String>,
     volsize: Option<String>,
+    recordsize: Option<String>,
+    dedup: Option<String>,
+    checksum: Option<String>,
+    copies: Option<String>,
+    sync: Option<String>,
+    primarycache: Option<String>,
+    secondarycache: Option<String>,
+    atime: Option<String>,
+    relatime: Option<String>,
+    snapdir: Option<String>,
+    acltype: Option<String>,
+    xattr: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -252,6 +264,18 @@ fn parse_datasets(bytes: &[u8]) -> Result<Vec<ZfsRow>, ProbeError> {
             encryption: fields.get(11).and_then(|value| nonempty_dash(value)),
             keystatus: fields.get(12).and_then(|value| nonempty_dash(value)),
             volsize: fields.get(13).and_then(|value| nonempty_dash(value)),
+            recordsize: fields.get(14).and_then(|value| nonempty_dash(value)),
+            dedup: fields.get(15).and_then(|value| nonempty_dash(value)),
+            checksum: fields.get(16).and_then(|value| nonempty_dash(value)),
+            copies: fields.get(17).and_then(|value| nonempty_dash(value)),
+            sync: fields.get(18).and_then(|value| nonempty_dash(value)),
+            primarycache: fields.get(19).and_then(|value| nonempty_dash(value)),
+            secondarycache: fields.get(20).and_then(|value| nonempty_dash(value)),
+            atime: fields.get(21).and_then(|value| nonempty_dash(value)),
+            relatime: fields.get(22).and_then(|value| nonempty_dash(value)),
+            snapdir: fields.get(23).and_then(|value| nonempty_dash(value)),
+            acltype: fields.get(24).and_then(|value| nonempty_dash(value)),
+            xattr: fields.get(25).and_then(|value| nonempty_dash(value)),
         });
     }
 
@@ -394,6 +418,18 @@ fn add_dataset(graph: &mut StorageGraph, dataset: ZfsRow) {
         ("zfs.encryption", dataset.encryption),
         ("zfs.keystatus", dataset.keystatus),
         ("zfs.volsize", dataset.volsize),
+        ("zfs.recordsize", dataset.recordsize),
+        ("zfs.dedup", dataset.dedup),
+        ("zfs.checksum", dataset.checksum),
+        ("zfs.copies", dataset.copies),
+        ("zfs.sync", dataset.sync),
+        ("zfs.primarycache", dataset.primarycache),
+        ("zfs.secondarycache", dataset.secondarycache),
+        ("zfs.atime", dataset.atime),
+        ("zfs.relatime", dataset.relatime),
+        ("zfs.snapdir", dataset.snapdir),
+        ("zfs.acltype", dataset.acltype),
+        ("zfs.xattr", dataset.xattr),
     ] {
         if let Some(value) = value {
             node = node.with_property(key, value);
@@ -459,10 +495,10 @@ mod tests {
     use super::*;
 
     const ZPOOL: &[u8] = b"tank\t1000\t400\t600\tONLINE\n";
-    const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\t-\tlz4\tnone\tnone\toff\t-\t-\n\
-tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\tzstd\t1073741824\t268435456\taes-256-gcm\tavailable\t-\n\
-tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\tzstd\t-\t-\taes-256-gcm\tavailable\t-\n\
-tank/vm\tvolume\t50\t950\t50\t-\t-\t-\tlz4\t-\t-\toff\t-\t85899345920\n";
+    const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\t-\tlz4\tnone\tnone\toff\t-\t-\t131072\toff\ton\t1\tstandard\tall\tall\ton\toff\thidden\toff\tsa\n\
+tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\tzstd\t1073741824\t268435456\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
+tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\tzstd\t-\t-\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
+tank/vm\tvolume\t50\t950\t50\t-\t-\t-\tlz4\t-\t-\toff\t-\t85899345920\t-\ton\tfletcher4\t1\tstandard\tall\tnone\toff\toff\thidden\toff\ton\n";
     const ZPOOL_STATUS: &[u8] = br#"
   pool: tank
  state: ONLINE
@@ -543,6 +579,23 @@ errors: No known data errors
         assert!(dataset.properties.iter().any(|property| {
             property.key == "zfs.encryption" && property.value == "aes-256-gcm"
         }));
+        assert!(
+            dataset.properties.iter().any(|property| {
+                property.key == "zfs.recordsize" && property.value == "1048576"
+            })
+        );
+        assert!(
+            dataset
+                .properties
+                .iter()
+                .any(|property| property.key == "zfs.checksum" && property.value == "sha512")
+        );
+        assert!(
+            dataset
+                .properties
+                .iter()
+                .any(|property| property.key == "zfs.primarycache" && property.value == "metadata")
+        );
         let zvol = graph
             .nodes
             .iter()

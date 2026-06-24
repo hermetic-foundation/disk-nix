@@ -13,8 +13,8 @@ storage stacks:
 - Btrfs filesystems, devices, subvolumes, snapshots, qgroups, and usage
 - bcachefs filesystems, member devices, usage, and topology updates
 - ZFS pools, vdevs, datasets, zvols, snapshots, snapshot hold reference counts,
-  compression/quota/reservation/encryption properties, cache, log, and special
-  vdevs
+  compression/dedup/checksum/copies/cache/sync/record-size/quota/reservation/encryption
+  properties, POSIX metadata policy, and cache, log, and special vdevs
 - MD RAID, multipath, NVMe namespaces, iSCSI sessions/targets/LUNs, and NFS
 - safe lifecycle operations such as grow, replace, rebalance, filesystem checks,
   property updates, and migration advice

@@ -3301,6 +3301,18 @@ fn usage_details(node: &Node) -> String {
         ("zfs.encryption", "encryption"),
         ("zfs.keystatus", "keystatus"),
         ("zfs.volsize", "volsize"),
+        ("zfs.recordsize", "recordsize"),
+        ("zfs.dedup", "dedup"),
+        ("zfs.checksum", "checksum"),
+        ("zfs.copies", "copies"),
+        ("zfs.sync", "sync"),
+        ("zfs.primarycache", "primarycache"),
+        ("zfs.secondarycache", "secondarycache"),
+        ("zfs.atime", "atime"),
+        ("zfs.relatime", "relatime"),
+        ("zfs.snapdir", "snapdir"),
+        ("zfs.acltype", "acltype"),
+        ("zfs.xattr", "xattr"),
         ("xfs.meta-data.meta-data", "xfs-source"),
         ("xfs.meta-data.isize", "xfs-isize"),
         ("xfs.meta-data.agcount", "xfs-agcount"),
@@ -4780,7 +4792,11 @@ mod tests {
             Node::new("zfs-dataset:tank/home", NodeKind::ZfsDataset, "tank/home")
                 .with_property("zfs.compression", "zstd")
                 .with_property("zfs.encryption", "aes-256-gcm")
-                .with_property("zfs.keystatus", "available"),
+                .with_property("zfs.keystatus", "available")
+                .with_property("zfs.recordsize", "1048576")
+                .with_property("zfs.dedup", "off")
+                .with_property("zfs.checksum", "sha512")
+                .with_property("zfs.primarycache", "metadata"),
         );
         graph.add_node(
             Node::new(
@@ -4817,7 +4833,10 @@ mod tests {
         assert!(output.contains("tank"));
         assert!(output.contains("health=ONLINE"));
         assert!(output.contains("tank/home"));
-        assert!(output.contains("compression=zstd encryption=aes-256-gcm keystatus=available"));
+        assert!(output.contains(
+            "compression=zstd encryption=aes-256-gcm keystatus=available recordsize=1048576"
+        ));
+        assert!(output.contains("dedup=off checksum=sha512 primarycache=metadata"));
         assert!(output.contains("bcachefs-state=rw bcachefs-device-free=8589934592"));
     }
 
@@ -4863,7 +4882,19 @@ mod tests {
                 .with_property("zfs.quota", "500G")
                 .with_property("zfs.reservation", "10G")
                 .with_property("zfs.encryption", "aes-256-gcm")
-                .with_property("zfs.keystatus", "available"),
+                .with_property("zfs.keystatus", "available")
+                .with_property("zfs.recordsize", "1048576")
+                .with_property("zfs.dedup", "off")
+                .with_property("zfs.checksum", "sha512")
+                .with_property("zfs.copies", "2")
+                .with_property("zfs.sync", "disabled")
+                .with_property("zfs.primarycache", "metadata")
+                .with_property("zfs.secondarycache", "all")
+                .with_property("zfs.atime", "off")
+                .with_property("zfs.relatime", "on")
+                .with_property("zfs.snapdir", "visible")
+                .with_property("zfs.acltype", "posixacl")
+                .with_property("zfs.xattr", "sa"),
         );
         graph.add_node(
             Node::new(
@@ -4934,6 +4965,9 @@ mod tests {
         assert!(output.contains(
             "compression=zstd quota=500G reservation=10G encryption=aes-256-gcm keystatus=available"
         ));
+        assert!(output.contains("recordsize=1048576 dedup=off checksum=sha512 copies=2"));
+        assert!(output.contains("sync=disabled primarycache=metadata secondarycache=all"));
+        assert!(output.contains("atime=off relatime=on snapdir=visible acltype=posixacl xattr=sa"));
         assert!(output.contains("tank/home@daily"));
         assert!(output.contains("userrefs=2 compression=zstd"));
         assert!(output.contains("tank/vm/root"));
@@ -5513,7 +5547,9 @@ mod tests {
             .with_property("zfs.userrefs", "2")
             .with_property("zfs.compression", "zstd")
             .with_property("zfs.encryption", "aes-256-gcm")
-            .with_property("zfs.keystatus", "available"),
+            .with_property("zfs.keystatus", "available")
+            .with_property("zfs.checksum", "sha512")
+            .with_property("zfs.copies", "2"),
         );
         graph.add_edge(Edge::new(
             "zfs-snapshot:tank/home@daily",
@@ -5551,6 +5587,7 @@ mod tests {
             output
                 .contains("userrefs=2 compression=zstd encryption=aes-256-gcm keystatus=available")
         );
+        assert!(output.contains("checksum=sha512 copies=2"));
         assert!(output.contains("data=12.50 origin=root pool=thinpool"));
         assert!(output.contains("subvol-id=257 generation=11 created-generation=8 parent-id=256"));
         assert!(output.contains("top-level=5 parent-uuid=subvol-root received-uuid=received-snap"));
