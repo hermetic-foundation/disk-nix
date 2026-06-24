@@ -352,12 +352,14 @@ read-only `operation = "rescan"`, and `operation = "unexport"` commands from
 explicit client and option declarations. Export rescan refreshes `exportfs -v`
 and modeled graph state without reloading exports. Legacy export `create` and
 `destroy` still map to the same command plans. Export mutations require a
-path-shaped local export target such as `/srv/share`.
+path-shaped local export target such as `/srv/share`; logical export names can
+declare it through `target` or `path`.
 NFS client mount apply plans render reviewed `operation = "mount"` commands,
 `operation = "remount"` option updates, read-only `operation = "rescan"`
 mount inventory/stat probes, and `operation = "unmount"` commands from
 `nfs.mounts`; legacy NFS mount `create` and `destroy` still map to the same
 command plans. Missing sources or concrete mountpoints remain non-ready.
+Logical NFS mount names can declare the concrete local path with `mountpoint`.
 Local filesystem apply plans also render reviewed `operation = "mount"`,
 read-only `operation = "rescan"`, `operation = "remount"`, and
 `operation = "unmount"` commands from `filesystems`/NixOS

@@ -675,13 +675,15 @@ to render reviewed `operation = "export"`, option update, and
 `operation = "unexport"` commands. Legacy export `create` and `destroy` map to
 the same command plans. `operation = "rescan"` renders read-only export
 inventory and graph probes. They also require a path-shaped local export target
-such as `/srv/share`.
+such as `/srv/share`; logical export names can declare it through `target` or
+`path`.
 NFS client mount command plans render reviewed `operation = "mount"` commands,
 `mount -o remount,<options>` option-update commands, read-only
 `operation = "rescan"` mount inventory/stat probes, and
 `operation = "unmount"` commands from `nfs.mounts`; legacy NFS mount `create`
 and `destroy` map to the same command plans. Missing sources or path-shaped
-mountpoints keep those commands non-ready.
+mountpoints keep those commands non-ready. Logical NFS mount names can declare
+the concrete local path with `mountpoint`.
 Local filesystem command plans render reviewed `operation = "mount"` commands,
 `mount -o remount,<options>` option-update commands, and
 `operation = "unmount"` commands from `filesystems`/NixOS `fileSystems`-style

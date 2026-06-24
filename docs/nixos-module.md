@@ -444,7 +444,8 @@ Address fields have domain-specific meaning:
 
 - `path`: local filesystem path for Btrfs subvolumes, Btrfs qgroups, and NFS
   exports; in snapshot declarations it is also accepted as the concrete
-  snapshot path when the attribute name is a friendly key
+  snapshot path when the attribute name is a friendly key. NFS client mounts
+  use the typed `mountpoint` field instead.
 
 - `snapshotPath`: explicit snapshot identity alias for `path`, useful for
   Btrfs snapshot rescans with non-path attribute names
@@ -654,8 +655,9 @@ Example lifecycle planning through NixOS options:
       target = "mpatha";
       addDevices = [ "/dev/sdb" ];
     };
-    exports."/srv/share" = {
+    exports.share = {
       operation = "export";
+      path = "/srv/share";
       client = "192.0.2.0/24";
       options = "rw,sync,no_subtree_check";
     };
@@ -672,8 +674,9 @@ Example lifecycle planning through NixOS options:
       addDevices = [ "cache-set-uuid" ];
       properties."bcache.cache-mode" = "writethrough";
     };
-    nfs.mounts."/srv/shared" = {
+    nfs.mounts.shared = {
       source = "nas.example.com:/srv/shared";
+      mountpoint = "/srv/shared";
       fsType = "nfs4";
       operation = "mount";
       options = [ "_netdev" "x-systemd.automount" "vers=4.2" ];

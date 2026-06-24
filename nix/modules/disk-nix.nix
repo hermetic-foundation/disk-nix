@@ -1575,7 +1575,7 @@ in
         )
       );
       default = { };
-      description = "Typed NFS client mounts used to generate both disk-nix spec and NixOS fileSystems.";
+      description = "Typed NFS client mounts used to generate both disk-nix spec and NixOS fileSystems. The mountpoint option supplies the concrete local path when the attribute name is logical.";
     };
 
     iscsi = {
@@ -1787,7 +1787,7 @@ in
     exports = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed NFS export lifecycle declarations emitted into the disk-nix planner spec. Executable exportfs plans require a local export path plus explicit client and options fields.";
+      description = "Typed NFS export lifecycle declarations emitted into the disk-nix planner spec. Executable exportfs plans require a local export path through the declaration key, target, or path, plus explicit client and options fields.";
     };
 
     caches = lib.mkOption {

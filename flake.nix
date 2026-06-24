@@ -341,8 +341,9 @@
                 device = "/dev/disk/by-id/action-luks";
                 action = "open";
               };
-              nfs.mounts."/srv/shared" = {
+              nfs.mounts.shared = {
                 source = "nas.example.com:/srv/shared";
+                mountpoint = "/srv/shared";
                 fsType = "nfs4";
                 operation = "mount";
                 options = [
@@ -669,8 +670,9 @@
                 namespaceId = "8";
                 controller = "0x3";
               };
-              exports."/srv/share" = {
+              exports.share = {
                 operation = "export";
+                path = "/srv/share";
                 client = "192.0.2.0/24";
                 options = "rw,sync,no_subtree_check";
               };
@@ -1292,14 +1294,16 @@
                     and .spec.luks.devices.cryptarchive.device == "/dev/disk/by-id/archive-luks"
                     and .spec.luks.devices.cryptclosed.operation == "close"
                     and .spec.luks.devices.cryptclosed.device == "/dev/disk/by-id/closed-luks"
-                    and .spec.filesystems."/srv/shared".device == "nas.example.com:/srv/shared"
-                    and .spec.filesystems."/srv/shared".fsType == "nfs4"
-                    and (.spec.filesystems."/srv/shared".options | index("x-systemd.automount") != null)
+                    and .spec.filesystems.shared.device == "nas.example.com:/srv/shared"
+                    and .spec.filesystems.shared.mountpoint == "/srv/shared"
+                    and .spec.filesystems.shared.fsType == "nfs4"
+                    and (.spec.filesystems.shared.options | index("x-systemd.automount") != null)
                     and (.spec.filesystems | has("/srv/old") | not)
-                    and .spec.nfs.mounts."/srv/shared".source == "nas.example.com:/srv/shared"
-                    and .spec.nfs.mounts."/srv/shared".operation == "mount"
-                    and .spec.nfs.mounts."/srv/shared".metadata.server == "nas.example.com"
-                    and .spec.nfs.mounts."/srv/shared".metadata.export == "/srv/shared"
+                    and .spec.nfs.mounts.shared.source == "nas.example.com:/srv/shared"
+                    and .spec.nfs.mounts.shared.mountpoint == "/srv/shared"
+                    and .spec.nfs.mounts.shared.operation == "mount"
+                    and .spec.nfs.mounts.shared.metadata.server == "nas.example.com"
+                    and .spec.nfs.mounts.shared.metadata.export == "/srv/shared"
                     and .spec.nfs.mounts."/srv/tuned".operation == "remount"
                     and (.spec.nfs.mounts."/srv/tuned".options | index("ro") != null)
                     and .spec.nfs.mounts."/srv/action".action == "remount"
@@ -1346,9 +1350,10 @@
                     and .spec.nvmeNamespaces."/dev/nvme2".controllerId == "0x2"
                     and .spec.nvmeNamespaces."/dev/nvme3".namespaceId == "8"
                     and .spec.nvmeNamespaces."/dev/nvme3".controller == "0x3"
-                    and .spec.exports."/srv/share".operation == "export"
-                    and .spec.exports."/srv/share".client == "192.0.2.0/24"
-                    and .spec.exports."/srv/share".options == "rw,sync,no_subtree_check"
+                    and .spec.exports.share.operation == "export"
+                    and .spec.exports.share.path == "/srv/share"
+                    and .spec.exports.share.client == "192.0.2.0/24"
+                    and .spec.exports.share.options == "rw,sync,no_subtree_check"
                     and .spec.exports."/srv/inventory".operation == "rescan"
                     and .spec.exports."/srv/old-share".operation == "unexport"
                     and .spec.exports."/srv/old-share".client == "192.0.2.55"

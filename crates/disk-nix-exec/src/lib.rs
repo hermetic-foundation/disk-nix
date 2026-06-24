@@ -19979,4 +19979,132 @@ mod tests {
                 })
         }));
     }
+
+    #[test]
+    fn nfs_lifecycle_accepts_path_aliases_for_logical_names() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "exports": {
+                  "share": {
+                    "operation": "export",
+                    "path": "/srv/share",
+                    "client": "192.0.2.0/24",
+                    "options": "rw,sync,no_subtree_check"
+                  },
+                  "inventory": {
+                    "operation": "rescan",
+                    "target": "/srv/inventory"
+                  },
+                  "oldshare": {
+                    "operation": "unexport",
+                    "path": "/srv/old",
+                    "client": "192.0.2.55"
+                  }
+                },
+                "nfs": {
+                  "mounts": {
+                    "shared": {
+                      "operation": "mount",
+                      "mountpoint": "/srv/shared",
+                      "source": "nas.example.com:/srv/shared",
+                      "fsType": "nfs4",
+                      "options": ["_netdev", "vers=4.2"]
+                    },
+                    "tuned": {
+                      "operation": "remount",
+                      "mountpoint": "/srv/tuned",
+                      "source": "nas.example.com:/srv/tuned",
+                      "options": ["ro"]
+                    },
+                    "inventory": {
+                      "operation": "rescan",
+                      "mountpoint": "/srv/inventory",
+                      "source": "nas.example.com:/srv/inventory"
+                    },
+                    "old": {
+                      "operation": "unmount",
+                      "mountpoint": "/srv/old",
+                      "source": "nas.example.com:/srv/old"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "exports:share:export"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "exportfs",
+                            "-i",
+                            "-o",
+                            "rw,sync,no_subtree_check",
+                            "192.0.2.0/24:/srv/share",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "exports:inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "/srv/inventory"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "exports:oldshare:unexport"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["exportfs", "-u", "192.0.2.55:/srv/old"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:shared:mount"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "mount",
+                            "-t",
+                            "nfs4",
+                            "-o",
+                            "_netdev,vers=4.2",
+                            "nas.example.com:/srv/shared",
+                            "/srv/shared",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:tuned:remount"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["mount", "-o", "remount,ro", "/srv/tuned"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:inventory:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nfsstat", "-m", "/srv/inventory"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "nfs.mounts:old:unmount"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["umount", "/srv/old"]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+    }
 }
