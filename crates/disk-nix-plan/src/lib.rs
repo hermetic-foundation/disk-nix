@@ -304,6 +304,7 @@ pub enum TopologyDiagnosticKind {
     SwapDeactivateRequired,
     SwapDestroyAlreadySatisfied,
     SwapDestroyRequired,
+    SwapFormatTargetPresent,
     LoopCreateAlreadySatisfied,
     LoopCreateConflict,
     LoopCreateRequired,
@@ -1694,6 +1695,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(nfs_export_diagnostic(action, node, &query));
     diagnostics.extend(nfs_unexport_diagnostic(action, node, &query));
     diagnostics.extend(swap_active_diagnostic(action, node, &query));
+    diagnostics.extend(swap_format_present_diagnostic(action, node, &query));
     diagnostics.extend(luks_format_present_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics.extend(vdo_destroy_present_diagnostic(action, node, &query));
@@ -4391,6 +4393,46 @@ fn swap_active_diagnostic(
         action_id: action.id.clone(),
         level: TopologyDiagnosticLevel::Warning,
         kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn swap_format_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Format
+        || action.context.collection.as_deref() != Some("swaps")
+    {
+        return None;
+    }
+
+    let message = if node.kind == NodeKind::Swap {
+        let details = swap_active_details(node);
+        if details.is_empty() {
+            format!(
+                "swap format target {query} already has swap metadata; mkswap remains destructive and requires review"
+            )
+        } else {
+            format!(
+                "swap format target {query} already has swap metadata with {}; mkswap remains destructive and requires review",
+                details.join(", ")
+            )
+        }
+    } else {
+        format!(
+            "swap format target {query} matched current {} node {}; mkswap remains destructive and requires review",
+            node.kind, node.name
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::SwapFormatTargetPresent,
         query: query.to_string(),
         message,
         current: Some(current_node_summary(node)),
@@ -17075,6 +17117,83 @@ mod tests {
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::SwapDestroyRequired
                 && diagnostic.message.contains("type partition")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reports_swap_format_target_metadata() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "swaps": {
+                "scratch": {
+                  "path": "/swapfile",
+                  "operation": "format"
+                },
+                "device": {
+                  "device": "/dev/disk/by-label/swap",
+                  "operation": "format"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("swap:/swapfile", NodeKind::Swap, "/swapfile")
+                .with_path("/swapfile")
+                .with_size_bytes(2_147_483_648)
+                .with_usage(Usage {
+                    used_bytes: Some(268_435_456),
+                    free_bytes: Some(1_879_048_192),
+                    allocated_bytes: Some(2_147_483_648),
+                })
+                .with_property("swap.active", "true")
+                .with_property("swap.type", "file")
+                .with_property("swap.priority", "5"),
+        );
+        graph.add_node(
+            Node::new(
+                "filesystem:/dev/disk/by-label/swap",
+                NodeKind::Filesystem,
+                "/dev/disk/by-label/swap",
+            )
+            .with_path("/dev/disk/by-label/swap")
+            .with_property("filesystem.type", "ext4"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.matched_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(plan.summary.action_count, 2);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "swaps:scratch:format" && action.operation == Operation::Format
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "swaps:device:format" && action.operation == Operation::Format
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:scratch:format"
+                && diagnostic.query == "/swapfile"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SwapFormatTargetPresent
+                && diagnostic.message.contains("size 2147483648 bytes")
+                && diagnostic.message.contains("used 268435456 bytes")
+                && diagnostic.message.contains("priority 5")
+                && diagnostic.message.contains("type file")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:device:format"
+                && diagnostic.query == "/dev/disk/by-label/swap"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::SwapFormatTargetPresent
+                && diagnostic.message.contains("filesystem")
         }));
     }
 
