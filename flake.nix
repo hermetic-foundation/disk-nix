@@ -927,6 +927,44 @@
             };
           }
         ];
+        nixosModuleMdRaidCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              mdRaids."/dev/md/root" = {
+                operation = "assemble";
+                devices = [
+                  "/dev/disk/by-id/md-a"
+                  "/dev/disk/by-id/md-b"
+                ];
+              };
+              mdRaids.rootAlias = {
+                target = "/dev/md/root";
+                operation = "rescan";
+              };
+            };
+          }
+        ];
+        nixosModuleMultipathMapCollisionTest = pkgs.nixos [
+          self.nixosModules.default
+          {
+            system.stateVersion = "26.05";
+            boot.loader.grub.enable = false;
+            services.disk-nix = {
+              enable = true;
+              multipathMaps.mpatha = {
+                operation = "rescan";
+              };
+              multipathMaps.primaryPath = {
+                target = "mpatha";
+                operation = "grow";
+              };
+            };
+          }
+        ];
         nixosModuleSnapshotCollisionTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -1997,12 +2035,16 @@
             collisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleCollisionTest.config.system.build.toplevel).success))}
             backingFileCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleBackingFileCollisionTest.config.system.build.toplevel).success))}
             dmMapCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleDmMapCollisionTest.config.system.build.toplevel).success))}
+            mdRaidCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleMdRaidCollisionTest.config.system.build.toplevel).success))}
+            multipathMapCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleMultipathMapCollisionTest.config.system.build.toplevel).success))}
             snapshotCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleSnapshotCollisionTest.config.system.build.toplevel).success))}
             iscsiSessionCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleIscsiSessionCollisionTest.config.system.build.toplevel).success))}
             lunPathCollisionSuccess=${pkgs.lib.escapeShellArg (builtins.toJSON ((builtins.tryEval nixosModuleLunPathCollisionTest.config.system.build.toplevel).success))}
             test "$collisionSuccess" = false
             test "$backingFileCollisionSuccess" = false
             test "$dmMapCollisionSuccess" = false
+            test "$mdRaidCollisionSuccess" = false
+            test "$multipathMapCollisionSuccess" = false
             test "$snapshotCollisionSuccess" = false
             test "$iscsiSessionCollisionSuccess" = false
             test "$lunPathCollisionSuccess" = false

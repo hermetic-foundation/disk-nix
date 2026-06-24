@@ -1065,6 +1065,25 @@ let
   activeDmMapTargets = lib.filter (target: target != null && isDmMapTarget target) (
     lib.mapAttrsToList lifecyclePathTarget activeDmMaps
   );
+  isMdRaidTarget = target: lib.hasPrefix "/dev/md" target;
+  activeMdRaidTargets = lib.filter (target: target != null && isMdRaidTarget target) (
+    lib.mapAttrsToList lifecyclePathTarget activeMdRaids
+  );
+  multipathMapIdentity =
+    name: map:
+    if map.target != null then
+      map.target
+    else if map.path != null then
+      map.path
+    else if map.device != null then
+      map.device
+    else if lib.hasPrefix "mpath" name || lib.hasPrefix "/dev/mapper/" name then
+      name
+    else
+      null;
+  activeMultipathMapIdentities = lib.filter (identity: identity != null) (
+    lib.mapAttrsToList multipathMapIdentity activeMultipathMaps
+  );
   snapshotIdentity =
     name: snapshot:
     if snapshot.name != null then
@@ -2381,6 +2400,15 @@ in
       {
         assertion = lib.length activeDmMapTargets == lib.length (lib.unique activeDmMapTargets);
         message = "services.disk-nix.dmMaps entries must resolve to unique active /dev/mapper/* or /dev/dm-* targets.";
+      }
+      {
+        assertion = lib.length activeMdRaidTargets == lib.length (lib.unique activeMdRaidTargets);
+        message = "services.disk-nix.mdRaids entries must resolve to unique active concrete /dev/md* array targets.";
+      }
+      {
+        assertion =
+          lib.length activeMultipathMapIdentities == lib.length (lib.unique activeMultipathMapIdentities);
+        message = "services.disk-nix.multipathMaps entries must resolve to unique active concrete map identities.";
       }
       {
         assertion = lib.length activeSnapshotIdentities == lib.length (lib.unique activeSnapshotIdentities);
