@@ -221,7 +221,13 @@ Examples:
   below-target or unknown current sizes actionable. VDO destroy actions are
   suppressed only when the volume is already absent; present targets remain
   actionable with warnings that include operating mode, size, backing-device,
-  write-policy, or LVM VDO utilization metadata when available.
+  write-policy, or LVM VDO utilization metadata when available. Property
+  comparison maps declared VDO write policy, compression, and deduplication
+  fields onto native `vdo.write-policy`, `vdo.compression`,
+  `vdo.deduplication`, and LVM `lvm.vdo-*` metadata when available. Boolean
+  spellings such as `enabled`, `true`, `off`, and `0` are normalized for
+  compression and deduplication so no-op property changes are suppressed, while
+  mismatched values still emit warning diagnostics.
 - LVM logical volume creation is online when it allocates from existing volume
   group free extents; LV growth is also online when the volume group has free
   extents; LV removal is destructive because it deletes the volume contents.
@@ -607,7 +613,11 @@ reconciliation uses
 `vdo.operating-mode` topology metadata to suppress start actions only when the
 volume is already in `normal` mode and stop actions only when the mode
 explicitly reports stopped, not-running, or inactive; opposite states stay
-actionable with a warning.
+actionable with a warning. VDO property reconciliation compares declared
+`writePolicy`, `compression`, and `deduplication` settings with native
+`vdo.*` metadata and LVM `lvm.vdo-*` metadata, including boolean normalization
+for compression and deduplication aliases, before deciding whether to suppress
+an already-satisfied property update.
 Btrfs subvolume destroy reconciliation suppresses concrete absolute-path
 targets only when they are already absent. Present subvolumes stay actionable
 with warnings that include available subvolume id, generation, parent,

@@ -51,7 +51,9 @@ behavior across real storage stacks.
   dataset/zvol create, Btrfs subvolume create, Btrfs qgroup create, LVM
   volume/thin-pool create, LVM volume-group create/import/export, and property
   actions when the graph proves they are already satisfied and no warning
-  diagnostics are present;
+  diagnostics are present, including VDO property declarations reconciled
+  against native `vdo.*` and LVM `lvm.vdo-*` metadata with boolean
+  compression/deduplication normalization;
   matching filesystem format types are reported without suppressing destructive
   format actions so policy and confirmation gates still apply;
   swap format targets report existing swap metadata or non-swap node kinds

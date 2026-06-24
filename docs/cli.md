@@ -932,6 +932,12 @@ Supported property updates render `vdo changeWritePolicy`,
 `vdo enableCompression`/`disableCompression`, and
 `vdo enableDeduplication`/`disableDeduplication`; unsupported VDO properties
 and invalid values are blocked as unsupported before commands are rendered.
+With current-topology probing, declared VDO write policy, compression, and
+deduplication properties are compared against native `vdo.*` metadata and LVM
+`lvm.vdo-*` metadata. Compression and deduplication boolean values are
+normalized across spellings such as `enabled`, `true`, `disabled`, and `0`, so
+already-satisfied changes are suppressed and real mismatches remain visible as
+warnings.
 Logical VDO volume names can declare the concrete VDO name with `target`.
 NFS export command plans use explicit `client` and `options` lifecycle fields
 to render reviewed `operation = "export"`, option update, and

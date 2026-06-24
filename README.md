@@ -444,7 +444,10 @@ property updates cover `auto`, `sync`, and `async` write policy changes,
 compression, and deduplication with concrete `vdo` commands; unsupported
 properties and invalid property values are classified as unsupported before
 execution. Logical VDO volume names can declare the concrete VDO name with
-`target`.
+`target`. Current-topology probing reconciles VDO property declarations against
+native `vdo.*` metadata and LVM `lvm.vdo-*` metadata, normalizing boolean
+compression and deduplication spellings so already-satisfied updates are
+suppressed while real drift remains actionable.
 VDO rescan plans render read-only `vdo status`, `vdostats`, and graph
 inspection commands to refresh status and utilization without changing
 activation state or capacity.
