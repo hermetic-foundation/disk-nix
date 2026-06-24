@@ -231,10 +231,11 @@ Use these commands for:
   state, and ZFS compression/quota/reservation/encryption properties when
   probes expose them
 - `zfs`: ZFS pools, vdevs, datasets, snapshots, and zvols, including pool
-  health/state, vdev roles and error counters, dataset compression, quota,
-  reservation, encryption, key status, snapshot user references, zvol volume
-  size, origin, and pool/dataset/snapshot child relationships when `zpool` and
-  `zfs` probes expose them
+  health/state, status/action advisories, scan/error summaries, vdev roles and
+  error counters, dataset compression, quota, reservation, encryption, key
+  status, snapshot user references, zvol volume size, origin, and
+  pool/dataset/snapshot child relationships when `zpool` and `zfs` probes
+  expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, bcachefs, ZFS, zvols,
   LUNs, and exports, including LVM origin/pool/data metadata, activation state,
   role, layout, health, tags, thin-pool fullness behavior, metadata size, and

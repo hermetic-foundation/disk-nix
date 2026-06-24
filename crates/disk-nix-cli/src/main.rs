@@ -3014,6 +3014,10 @@ fn usage_details(node: &Node) -> String {
         ("bcache.writeback-running", "writeback-running"),
         ("zfs.health", "health"),
         ("zfs.state", "state"),
+        ("zfs.status", "status"),
+        ("zfs.action", "action"),
+        ("zfs.scan", "scan"),
+        ("zfs.errors", "errors"),
         ("zfs.vdev-role", "vdev-role"),
         ("zfs.vdev-state", "vdev-state"),
         ("zfs.read-errors", "read-errors"),
@@ -4428,7 +4432,11 @@ mod tests {
                     allocated_bytes: Some(274_877_906_944),
                 })
                 .with_property("zfs.health", "ONLINE")
-                .with_property("zfs.state", "ONLINE"),
+                .with_property("zfs.state", "ONLINE")
+                .with_property("zfs.status", "some devices need attention")
+                .with_property("zfs.action", "replace the faulted device")
+                .with_property("zfs.scan", "scrub repaired 0B")
+                .with_property("zfs.errors", "No known data errors"),
         );
         graph.add_node(
             Node::new(
@@ -4514,6 +4522,9 @@ mod tests {
         assert!(output.contains("CHILDREN"));
         assert!(output.contains("tank"));
         assert!(output.contains("ONLINE"));
+        assert!(output.contains(
+            "status=some devices need attention action=replace the faulted device scan=scrub repaired 0B errors=No known data errors"
+        ));
         assert!(
             output
                 .contains("data vdev-state=ONLINE read-errors=0 write-errors=1 checksum-errors=2")

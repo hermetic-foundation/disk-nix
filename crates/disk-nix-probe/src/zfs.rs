@@ -53,6 +53,10 @@ struct ZfsRow {
 struct ZpoolStatus {
     name: String,
     state: Option<String>,
+    status: Option<String>,
+    action: Option<String>,
+    scan: Option<String>,
+    errors: Option<String>,
     vdevs: Vec<ZpoolVdev>,
 }
 
@@ -116,6 +120,10 @@ fn parse_zpool_status(bytes: &[u8]) -> Result<Vec<ZpoolStatus>, ProbeError> {
             current = Some(ZpoolStatus {
                 name: name.to_string(),
                 state: None,
+                status: None,
+                action: None,
+                scan: None,
+                errors: None,
                 vdevs: Vec::new(),
             });
             in_config = false;
@@ -132,11 +140,24 @@ fn parse_zpool_status(bytes: &[u8]) -> Result<Vec<ZpoolStatus>, ProbeError> {
             pool.state = nonempty(state);
             continue;
         }
+        if let Some(status) = trimmed.strip_prefix("status:").map(str::trim) {
+            pool.status = nonempty(status);
+            continue;
+        }
+        if let Some(action) = trimmed.strip_prefix("action:").map(str::trim) {
+            pool.action = nonempty(action);
+            continue;
+        }
+        if let Some(scan) = trimmed.strip_prefix("scan:").map(str::trim) {
+            pool.scan = nonempty(scan);
+            continue;
+        }
         if trimmed == "config:" {
             in_config = true;
             continue;
         }
-        if trimmed == "errors:" || trimmed.starts_with("errors:") {
+        if let Some(errors) = trimmed.strip_prefix("errors:").map(str::trim) {
+            pool.errors = nonempty(errors);
             in_config = false;
             continue;
         }
@@ -264,6 +285,16 @@ fn add_status_pool(graph: &mut StorageGraph, pool: ZpoolStatus) {
     let mut node = Node::new(pool_id(&pool.name), NodeKind::ZfsPool, pool.name.clone());
     if let Some(state) = pool.state {
         node = node.with_property("zfs.state", state);
+    }
+    for (key, value) in [
+        ("zfs.status", pool.status),
+        ("zfs.action", pool.action),
+        ("zfs.scan", pool.scan),
+        ("zfs.errors", pool.errors),
+    ] {
+        if let Some(value) = value {
+            node = node.with_property(key, value);
+        }
     }
     graph.add_node(node);
 
@@ -435,6 +466,7 @@ tank/vm\tvolume\t50\t950\t50\t-\t-\t-\tlz4\t-\t-\toff\t-\t85899345920\n";
     const ZPOOL_STATUS: &[u8] = br#"
   pool: tank
  state: ONLINE
+  scan: scrub repaired 0B in 00:01:02 with 0 errors on Sun Jun 21 00:00:00 2026
 config:
 
         NAME                                      STATE     READ WRITE CKSUM
@@ -446,6 +478,20 @@ config:
           /dev/disk/by-id/log0                   ONLINE       0     0     0
         cache
           /dev/disk/by-id/cache0                 ONLINE       0     0     0
+
+errors: No known data errors
+"#;
+    const DEGRADED_ZPOOL_STATUS: &[u8] = br#"
+  pool: tank
+ state: DEGRADED
+status: One or more devices could not be used because the label is missing or invalid.
+action: Replace the device using 'zpool replace'.
+  scan: resilvered 1024B in 00:00:01 with 0 errors on Sun Jun 21 00:00:00 2026
+config:
+
+        NAME                                      STATE     READ WRITE CKSUM
+        tank                                      DEGRADED     0     0     0
+          /dev/disk/by-id/disk-a-part1           ONLINE       0     0     0
 
 errors: No known data errors
 "#;
@@ -539,6 +585,34 @@ errors: No known data errors
             edge.from.0 == "block:/dev/disk/by-id/disk-a-part1"
                 && edge.to.0 == "zfs-vdev:tank:/dev/disk/by-id/disk-a-part1"
                 && edge.relationship == Relationship::Backs
+        }));
+    }
+
+    #[test]
+    fn normalizes_zpool_status_advisory_fields() {
+        let graph = normalize_zfs(ZPOOL, ZFS, DEGRADED_ZPOOL_STATUS).expect("fixture should parse");
+        let pool = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::ZfsPool && node.name == "tank")
+            .expect("pool node exists");
+
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.status"
+                && property.value
+                    == "One or more devices could not be used because the label is missing or invalid."
+        }));
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.action"
+                && property.value == "Replace the device using 'zpool replace'."
+        }));
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.scan"
+                && property.value
+                    == "resilvered 1024B in 00:00:01 with 0 errors on Sun Jun 21 00:00:00 2026"
+        }));
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.errors" && property.value == "No known data errors"
         }));
     }
 }
