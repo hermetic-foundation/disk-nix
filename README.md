@@ -145,7 +145,9 @@ treated as version `1`, and unsupported future versions are rejected before
 planning. The Nix package also installs it at
 `share/disk-nix/schema/disk-nix-spec.schema.json`.
 
-See [docs/cli.md](docs/cli.md) for the command reference and JSON contracts.
+See [docs/cli.md](docs/cli.md) for the command reference and JSON contracts,
+and [docs/compatibility.md](docs/compatibility.md) for spec, JSON, CLI, NixOS
+option, and generated-artifact compatibility policy.
 
 ## NixOS module
 

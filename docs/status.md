@@ -20,6 +20,8 @@ behavior across real storage stacks.
   storage, identities, usage, and object inspection.
 - JSON output contracts for topology, focused views, capabilities, schema,
   plan, apply, validate, and probe-status commands.
+- Compatibility policy for spec versions, migration expectations, JSON reports,
+  human CLI text, NixOS options, generated artifacts, and safety invariants.
 - Policy-classified planning for online, offline-required, destructive,
   potential-data-loss, reversible, safe, and unsupported actions.
 - Guarded apply flow with dry-run reports, script generation, readiness
@@ -87,6 +89,7 @@ manual-review guidance, or non-ready command plans instead of guessing.
   per-tool remediation and renderer availability checks still need expansion.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
-- Deeper stability policy for JSON contracts, NixOS option compatibility, and
-  migration between schema versions. The parser now validates version `1`, but
-  future migration and deprecation policy still needs to be documented.
+- Implemented migration tooling and tests for future spec versions. The parser
+  now validates version `1` and the compatibility policy documents migration and
+  deprecation expectations, but no future-version migrator exists yet because no
+  version `2` contract exists.
