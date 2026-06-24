@@ -1482,6 +1482,7 @@
                   grep -- 'exfatprogs-' service-paths
                   grep -- 'f2fs-tools-' service-paths
                   grep -- 'lvm2-' service-paths
+                  grep -- 'lsscsi-' service-paths
                   grep -- 'ntfs3g-' service-paths
                   grep -- 'open-iscsi-' service-paths
                   grep -- 'smartmontools-' service-paths

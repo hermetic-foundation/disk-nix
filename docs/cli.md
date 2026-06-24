@@ -206,9 +206,11 @@ Use these commands for:
 - `devices`: disks, partitions, dm devices, LVM objects, VDO, RAID, zvols,
   cache devices, multipath devices, NVMe namespaces, loop devices, and swap,
   including model/vendor, transport, rotational, NVMe model/firmware/namespace
-  geometry, SMART health, temperature, power-on, capacity, sector, and ATA
-  reallocation/pending-sector counters, `lsblk` sector/I/O alignment, discard,
-  scheduler, zoned-device, DAX, and hotplug metadata, partition table/number,
+  geometry, SCSI host/channel/target/LUN address, generic device, transport,
+  LU/WWN identity, queue state, SMART health, temperature, power-on, capacity,
+  sector, and ATA reallocation/pending-sector counters, `lsblk` sector/I/O
+  alignment, discard, scheduler, zoned-device, DAX, and hotplug metadata,
+  partition table/number,
   filesystem type, loop
   backing inode, backing major/minor, offset/autoclear/partition-scan metadata,
   multipath path host/major-minor, parsed
@@ -352,8 +354,10 @@ Use these commands for:
   address/port/TPGT fields, target portal group tag, connection/session state,
   connection CID/local/peer addresses, interface identity, negotiated transfer
   parameters, target IQNs, LUN sizes, SCSI host/channel/id coordinates,
-  attached disk state, session to target imports, target-contained LUN counts,
-  and LUN-to-block-device backing relationships when `iscsiadm --mode node -P 1` or `iscsiadm --mode session -P 3` exposes them
+  generic devices, transport, LU/WWN identity, queue state, attached disk state,
+  session to target imports, target-contained LUN counts, and
+  LUN-to-block-device backing relationships when `iscsiadm --mode node -P 1`,
+  `iscsiadm --mode session -P 3`, or `lsscsi` exposes them
 - `nfs`: NFS server exports and client mounts, including exportfs path,
   client, server/export split, export option state such as rw/ro, sync,
   subtree checking, security flavor, squash flags, FSID, NFS protocol version,

@@ -17,6 +17,7 @@ mod findmnt;
 mod iscsi;
 mod loopdev;
 mod lsblk;
+mod lsscsi;
 mod lvm;
 mod mdraid;
 mod multipath;
@@ -95,6 +96,7 @@ impl ProbeAdapter for LinuxProbe {
         let mut result = ProbeResult::empty();
 
         collect_lsblk(&mut result);
+        collect_lsscsi(&mut result);
         collect_smartctl(&mut result);
         collect_blkid(&mut result);
         collect_parted(&mut result);
@@ -126,6 +128,75 @@ impl ProbeAdapter for LinuxProbe {
         collect_nvme(&mut result);
 
         Ok(result)
+    }
+}
+
+fn collect_lsscsi(result: &mut ProbeResult) {
+    let mut node_count = 0_usize;
+    let mut failures = Vec::new();
+    let mut unavailable = false;
+
+    for (label, args, normalizer) in [
+        (
+            "list",
+            &["-L", "-g", "-s"][..],
+            lsscsi::normalize_lsscsi_list_output as fn(&[u8]) -> Result<StorageGraph, ProbeError>,
+        ),
+        (
+            "transport",
+            &["-g", "-s", "-t", "-i", "-w"][..],
+            lsscsi::normalize_lsscsi_transport_output,
+        ),
+        (
+            "unit",
+            &["-g", "-s", "-u", "-i", "-w"][..],
+            lsscsi::normalize_lsscsi_unit_output,
+        ),
+    ] {
+        match run_report("lsscsi", args) {
+            Ok(output) => match normalizer(&output) {
+                Ok(graph) => {
+                    node_count += graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                }
+                Err(error) => failures.push(format!("{label}: {error}")),
+            },
+            Err(message) => {
+                if message.contains("not found") || message.contains("No such file") {
+                    unavailable = true;
+                }
+                failures.push(format!("{label}: {message}"));
+            }
+        }
+    }
+
+    if node_count > 0 {
+        result.reports.push(ProbeReport {
+            adapter: "lsscsi".to_string(),
+            status: if failures.is_empty() {
+                ProbeStatus::Available
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(format!(
+                "normalized {node_count} graph nodes from lsscsi output{}",
+                if failures.is_empty() {
+                    String::new()
+                } else {
+                    format!("; {} lsscsi probes failed", failures.len())
+                }
+            )),
+        });
+    } else if !failures.is_empty() {
+        result.reports.push(ProbeReport {
+            adapter: "lsscsi".to_string(),
+            status: if unavailable {
+                ProbeStatus::Unavailable
+            } else {
+                ProbeStatus::Partial
+            },
+            message: Some(format!("lsscsi probes failed: {}", failures.join("; "))),
+        });
     }
 }
 

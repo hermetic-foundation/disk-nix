@@ -50,6 +50,11 @@ The current probe layer normalizes:
 - `lsblk --json --bytes --output-all` for block devices, partitions,
   filesystems, identity, sector and I/O alignment, discard geometry, scheduler
   queue sizing, zoned-device limits, DAX/hotplug flags, usage, and mount hints
+- `lsscsi -L -g -s`, `lsscsi -g -s -t -i -w`, and
+  `lsscsi -g -s -u -i -w` for SCSI host/channel/target/LUN addresses, block
+  and generic devices, by-id and WWN aliases, transport, LU names, capacity
+  strings, queue state, SCSI level, timeout, and LUN-to-block-device
+  relationships
 - `smartctl -a -j` for discovered physical disks to add SMART health,
   model/firmware/serial/WWN identity, user capacity, logical/physical block
   size, rotation rate, form factor, SATA link speed, power-on history,
@@ -170,7 +175,8 @@ The current probe layer normalizes:
   CHAP method/user hints, session ids, current and persistent session portals,
   target portal group tag, interface identity, connection/session state,
   connection CID/local/peer addresses, negotiated transfer parameters, host
-  state, LUN SCSI coordinates, and attached disk state
+  state, LUN SCSI coordinates, and attached disk state, enriched with `lsscsi`
+  LUN identity and queue metadata when available
 - NFS server exports through `exportfs -v` and mount metadata through
   `nfsstat -m` for exported paths, clients, exportfs option state, server,
   export, alternate `target from source` records, protocol version, transport

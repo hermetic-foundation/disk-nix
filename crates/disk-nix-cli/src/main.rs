@@ -2551,6 +2551,27 @@ fn usage_details(node: &Node) -> String {
         ("vendor", "vendor"),
         ("transport", "transport"),
         ("rotational", "rotational"),
+        ("scsi.address", "scsi-address"),
+        ("scsi.host", "scsi-host"),
+        ("scsi.channel", "scsi-channel"),
+        ("scsi.target", "scsi-target"),
+        ("scsi.lun", "scsi-lun"),
+        ("scsi.peripheral-type", "scsi-type"),
+        ("scsi.vendor", "scsi-vendor"),
+        ("scsi.model", "scsi-model"),
+        ("scsi.revision", "scsi-revision"),
+        ("scsi.block-device", "scsi-block"),
+        ("scsi.generic-device", "scsi-generic"),
+        ("scsi.size", "scsi-size"),
+        ("scsi.transport", "scsi-transport"),
+        ("scsi.unit-name", "scsi-unit"),
+        ("scsi.by-id", "scsi-by-id"),
+        ("scsi.wwn", "scsi-wwn"),
+        ("scsi.state", "scsi-state"),
+        ("scsi.queue-depth", "scsi-queue-depth"),
+        ("scsi.queue-type", "scsi-queue-type"),
+        ("scsi.scsi-level", "scsi-level"),
+        ("scsi.timeout", "scsi-timeout"),
         ("smartctl.health.passed", "smart-health-passed"),
         ("smartctl.device-type", "smart-device-type"),
         ("smartctl.protocol", "smart-protocol"),
@@ -3341,6 +3362,27 @@ fn usage_details(node: &Node) -> String {
         ("f2fs.init-version", "f2fs-init-version"),
         ("f2fs.extension-count", "f2fs-extensions"),
         ("f2fs.hot-ext-count", "f2fs-hot-extensions"),
+        ("scsi.address", "scsi-address"),
+        ("scsi.host", "scsi-host"),
+        ("scsi.channel", "scsi-channel"),
+        ("scsi.target", "scsi-target"),
+        ("scsi.lun", "scsi-lun"),
+        ("scsi.peripheral-type", "scsi-type"),
+        ("scsi.vendor", "scsi-vendor"),
+        ("scsi.model", "scsi-model"),
+        ("scsi.revision", "scsi-revision"),
+        ("scsi.block-device", "scsi-block"),
+        ("scsi.generic-device", "scsi-generic"),
+        ("scsi.size", "scsi-size"),
+        ("scsi.transport", "scsi-transport"),
+        ("scsi.unit-name", "scsi-unit"),
+        ("scsi.by-id", "scsi-by-id"),
+        ("scsi.wwn", "scsi-wwn"),
+        ("scsi.state", "scsi-state"),
+        ("scsi.queue-depth", "scsi-queue-depth"),
+        ("scsi.queue-type", "scsi-queue-type"),
+        ("scsi.scsi-level", "scsi-level"),
+        ("scsi.timeout", "scsi-timeout"),
         ("bcachefs.external-uuid", "bcachefs-uuid"),
         ("bcachefs.internal-uuid", "bcachefs-internal"),
         ("bcachefs.magic-number", "bcachefs-magic"),
@@ -4132,6 +4174,11 @@ mod tests {
                 .with_property("smartctl.power-cycle-count", "12")
                 .with_property("smartctl.temperature-current-celsius", "31")
                 .with_property("smartctl.attribute.reallocated-sector-ct.raw", "0")
+                .with_property("scsi.address", "1:0:0:0")
+                .with_property("scsi.generic-device", "/dev/sg1")
+                .with_property("scsi.transport", "sata:5000c500a5a461dc")
+                .with_property("scsi.unit-name", "5000c500a5a461dc")
+                .with_property("scsi.queue-depth", "32")
                 .with_property("multipath.host-path", "2:0:0:1")
                 .with_property("major-minor", "8:16")
                 .with_property("multipath.path-flags", "ghost")
@@ -4209,6 +4256,10 @@ mod tests {
         assert!(
             output.contains("smart-power-cycles=12 smart-temperature-c=31 reallocated-sectors=0")
         );
+        assert!(output.contains(
+            "scsi-address=1:0:0:0 scsi-generic=/dev/sg1 scsi-transport=sata:5000c500a5a461dc"
+        ));
+        assert!(output.contains("scsi-unit=5000c500a5a461dc scsi-queue-depth=32"));
         assert!(output.contains(
             "host-path=2:0:0:1 major-minor=8:16 path-flags=ghost path-state=active ready running ghost"
         ));
@@ -5390,7 +5441,12 @@ mod tests {
                 "0",
             )
             .with_size_bytes(1_073_741_824)
-            .with_property("iscsi.attached-disk", "sdb"),
+            .with_property("iscsi.attached-disk", "sdb")
+            .with_property("scsi.address", "4:0:0:0")
+            .with_property("scsi.transport", "iscsi")
+            .with_property("scsi.generic-device", "/dev/sg2")
+            .with_property("scsi.state", "running")
+            .with_property("scsi.queue-depth", "64"),
         );
         graph.add_node(
             Node::new("block:/dev/sdb", NodeKind::PhysicalDisk, "/dev/sdb")
@@ -5452,6 +5508,8 @@ mod tests {
         assert!(output.contains("auth-method=CHAP"));
         assert!(output.contains("1.0 GiB"));
         assert!(output.contains("attached-disk=sdb"));
+        assert!(output.contains("scsi-address=4:0:0:0 scsi-generic=/dev/sg2"));
+        assert!(output.contains("scsi-transport=iscsi scsi-state=running scsi-queue-depth=64"));
     }
 
     #[test]

@@ -28,6 +28,7 @@ let
     exfatprogs
     f2fs-tools
     lvm2
+    lsscsi
     mdadm
     multipath-tools
     nfs-utils
@@ -998,6 +999,7 @@ in
           exfatprogs
           f2fs-tools
           lvm2
+          lsscsi
           mdadm
           multipath-tools
           nfs-utils
