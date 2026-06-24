@@ -191,8 +191,8 @@ The current probe layer normalizes:
   LUN identity and queue metadata when available
 - NFS server exports through `exportfs -v` and mount metadata through
   `nfsstat -m` for exported paths, clients, exportfs option state, server,
-  export, alternate `target from source` records, protocol version, transport
-  and mount transport, port/mount address, transfer sizes,
+  export, bracketed IPv6 NFS sources, alternate `target from source` records,
+  protocol version, transport and mount transport, port/mount address, transfer sizes,
   timeout/retransmit settings, local locking, lookup cache, FS-Cache,
   capability flags, transfer multipliers, directory transfer/block sizing,
   RPC security flavor identifiers, age, and mount options

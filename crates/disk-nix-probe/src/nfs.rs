@@ -178,11 +178,21 @@ fn parse_header(line: &str) -> Option<(String, String)> {
 }
 
 fn split_source(source: &str) -> (Option<String>, Option<String>) {
+    if let Some((server, export)) = split_bracketed_source(source) {
+        return (Some(server.to_string()), Some(export.to_string()));
+    }
+
     source
         .split_once(':')
         .map_or((None, Some(source.to_string())), |(server, export)| {
             (Some(server.to_string()), Some(export.to_string()))
         })
+}
+
+fn split_bracketed_source(source: &str) -> Option<(&str, &str)> {
+    let rest = source.strip_prefix('[')?;
+    let (server, export) = rest.split_once("]:")?;
+    (!server.is_empty() && !export.is_empty()).then_some((server, export))
 }
 
 fn parse_options(line: &str) -> Vec<(String, String)> {
@@ -340,6 +350,14 @@ storage.example:/export/home mounted on /home:
                     .iter()
                     .any(|property| property.key == "nfs.local-lock" && property.value == "all")
         }));
+    }
+
+    #[test]
+    fn splits_bracketed_ipv6_nfs_sources() {
+        let (server, export) = split_source("[2001:db8::10]:/srv/share");
+
+        assert_eq!(server.as_deref(), Some("2001:db8::10"));
+        assert_eq!(export.as_deref(), Some("/srv/share"));
     }
 
     #[test]
