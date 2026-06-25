@@ -495,15 +495,18 @@ filesystem data.
 iSCSI session apply plans render reviewed `iscsiadm` discovery, login, logout,
 and rescan commands from explicit target IQN and portal declarations. Prefer
 `operation = "login"`, `operation = "logout"`, and `operation = "rescan"` for
-session lifecycle; legacy session `create` and `destroy` still map to the same
-login/logout command plans. LUN apply plans model host-side
+session lifecycle; session rescan also captures host-visible LUN transport and
+size through `lsscsi -t -s`. Legacy session `create` and `destroy` still map to
+the same login/logout command plans. LUN apply plans model host-side
 `operation = "attach"`, `operation = "rescan"`, growth rescan, and
-`operation = "detach"`: attach, rescan, and grow refresh sessions, then rescan
-declared SCSI paths before refreshing multipath; detach deletes only declared
-stable path devices before refreshing multipath. Legacy LUN `create` and
-`destroy` still map to the same host-side command plans. Executable LUN attach,
-grow, rescan, and detach plans require declared stable paths through `device`,
-`path`, `devices`, `paths`, or `devicePaths`.
+`operation = "detach"`: attach, rescan, and grow refresh sessions, capture
+host-visible LUN transport and size through `lsscsi -t -s`, then rescan
+declared SCSI paths before refreshing multipath; detach captures the same LUN
+inventory before deleting only declared stable path devices and refreshing
+multipath. Legacy LUN `create` and `destroy` still map to the same host-side
+command plans. Executable LUN attach, grow, rescan, and detach plans require
+declared stable paths through `device`, `path`, `devices`, `paths`, or
+`devicePaths`.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain. Btrfs snapshot declarations with `readOnly = true` render
@@ -580,11 +583,14 @@ Loop-device refresh, rescan, and detach commands require `/dev/loop*` targets.
 Loop rescan is read-only inventory refresh; grow uses `losetup -c` only after
 backing size changes. Multipath map growth requires a concrete map target such
 as `mpatha` or `/dev/mapper/mpatha`; logical map names can declare that target
-through `target` or `device`.
+through `target` or `device`. Multipath grow and rescan plans capture
+host-visible backing path transport and size with `lsscsi -t -s` before map
+resize or reload.
 NVMe namespace create, rescan, grow, attach, and delete plans require a
 controller path such as `/dev/nvme0`; logical namespace names can declare it
-through `target`, `path`, or `device`. Delete plans detach the namespace first
-when controller metadata is present.
+through `target`, `path`, or `device`. Rescan, grow, attach, detach, and delete
+flows capture subsystem path state through `nvme list-subsys --output-format=json`. Delete plans detach the namespace first when controller
+metadata is present.
 ZFS pool apply plans render gated `zpool create` commands from a single
 `device` or an explicit `devices` vdev list, with declared pool `properties`
 rendered as create-time `-o key=value` options. They also render gated
