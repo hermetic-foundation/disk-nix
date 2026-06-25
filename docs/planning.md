@@ -524,7 +524,9 @@ Current-topology comparison suppresses destroy actions when the map is already
 absent and keeps present maps actionable with a warning that includes the WWID
 or dm map name when probe metadata reports it. It also suppresses path add when
 probed `Backs` edges show the path already feeds the map, and suppresses path
-removal when the path is already absent from the matched map.
+removal when the path is already absent from the matched map. Path add requests
+against an absent map remain actionable with a warning, because the target map
+must be reviewed or recreated before path membership can be confirmed.
 
 ZFS dataset and zvol `operation = "rescan"` actions are online read-only
 refreshes. Dataset rescan renders `zfs list -t filesystem`, `zfs get`, and

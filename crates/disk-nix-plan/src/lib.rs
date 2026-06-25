@@ -1635,6 +1635,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = multipath_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = multipath_path_add_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = multipath_path_remove_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -4411,6 +4414,29 @@ fn multipath_path_remove_absent_diagnostic(
         kind: TopologyDiagnosticKind::MultipathPathRemoveAlreadySatisfied,
         query: query.to_string(),
         message: format!("multipath map {query} is absent, so path {device} is already removed"),
+        current: None,
+    })
+}
+
+fn multipath_path_add_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::AddDevice
+        || action.context.collection.as_deref() != Some("multipathMaps")
+    {
+        return None;
+    }
+
+    let device = action.context.device.as_deref().unwrap_or("<unknown-path>");
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::MultipathPathAddRequired,
+        query: query.to_string(),
+        message: format!(
+            "multipath map {query} is absent, so path {device} cannot be confirmed attached; path add remains actionable after map review"
+        ),
         current: None,
     })
 }
@@ -24335,6 +24361,7 @@ mod tests {
                 },
                 "absent": {
                   "target": "/dev/mapper/absent",
+                  "addDevices": ["/dev/sdi"],
                   "removeDevices": ["/dev/sdf"]
                 },
                 "wrong-kind": {
@@ -24383,10 +24410,10 @@ mod tests {
             .as_ref()
             .expect("comparison should be present");
 
-        assert_eq!(comparison.summary.action_count, 7);
+        assert_eq!(comparison.summary.action_count, 8);
         assert_eq!(comparison.summary.already_satisfied_count, 3);
         assert_eq!(comparison.summary.suppressed_action_count, 3);
-        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.action_count, 5);
         for suppressed_id in [
             "multipathMaps:mpatha:add-device:/dev/sdb",
             "multipathMaps:mpatha:remove-device:/dev/sde",
@@ -24428,6 +24455,14 @@ mod tests {
                 && diagnostic
                     .message
                     .contains("map /dev/mapper/absent is absent")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "multipathMaps:absent:add-device:/dev/sdi"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::MultipathPathAddRequired
+                && diagnostic
+                    .message
+                    .contains("path /dev/sdi cannot be confirmed attached")
         }));
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "multipathMaps:wrong-kind:add-device:/dev/sdg"

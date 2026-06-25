@@ -645,6 +645,7 @@ files, backing-file create targets with different or unknown current size,
 still-mapped loop detach targets, present device-mapper removal targets,
 present multipath flush targets, absent LUN attach paths, visible LUN detach
 paths, present bcache detach targets, still-attached LVM cache origins, absent
+multipath path-add maps, absent
 NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
 destroy targets, non-normal VDO start modes, running VDO stop targets, present
 Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, present ZFS or Btrfs snapshot destroy targets, missing ZFS/Btrfs snapshot clone sources, missing or present ZFS/Btrfs snapshot rename sources, missing or present ZFS rollback snapshots, degraded or failed MD arrays,
@@ -1016,7 +1017,9 @@ current-topology probing, absent map flushes are suppressed as already
 satisfied and present maps remain actionable with a warning, including the
 current WWID or dm map name when available. Path add is suppressed when probed
 `Backs` edges show the path already feeds the map, and path removal is
-suppressed when the path is already absent from the matched map.
+suppressed when the path is already absent from the matched map. Path add
+against an absent map stays actionable with a warning so the map can be reviewed
+or recreated before membership changes run.
 NVMe namespace command plans render `nvme create-ns`, standalone
 `operation = "attach"` plans through `nvme attach-ns`, explicit
 `operation = "rescan"` plans through `nvme ns-rescan`, standalone

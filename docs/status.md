@@ -107,7 +107,7 @@ behavior across real storage stacks.
   targets, active swap teardown targets, active or
   unknown-state MD stop targets, absent MD member-add devices, still-attached MD
   member-removal devices, incomplete MD member replacements, degraded or failed
-  MD arrays, absent multipath path-add devices, still-attached multipath path
+  MD arrays, absent multipath path-add maps, still-attached multipath path
   removals, degraded ZFS pools,
   mount source mismatches, currently mounted unmount targets, published
   unexport targets, remount option differences, export client/option
