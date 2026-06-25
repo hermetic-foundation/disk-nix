@@ -2299,15 +2299,22 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
                 || action.id.starts_with("iscsiSessions:") =>
         {
             let is_rescan = action.operation == Operation::Rescan;
-            let mut commands = vec![command(
-                ["lsblk", "--json", "--bytes", "--output-all"],
-                false,
-                if is_rescan {
-                    "verify kernel block-device inventory after host rescan"
+            let mut commands = vec![
+                command(
+                    ["lsblk", "--json", "--bytes", "--output-all"],
+                    false,
+                    if is_rescan {
+                        "verify kernel block-device inventory after host rescan"
+                    } else {
+                        "verify kernel block-device capacity after host rescan"
+                    },
+                ),
+                lsscsi_lun_inventory_command(if is_rescan {
+                    "verify host-visible LUN transport and size after rescan"
                 } else {
-                    "verify kernel block-device capacity after host rescan"
-                },
-            )];
+                    "verify host-visible LUN transport and size after growth rescan"
+                }),
+            ];
             for device in lun_rescan_devices(action) {
                 commands.push(command_vec(
                     vec!["blockdev", "--getsize64", device.as_str()],
@@ -2350,11 +2357,16 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         Operation::Create | Operation::Attach
             if collection == Some("luns") || action.id.starts_with("luns:") =>
         {
-            let mut commands = vec![command(
-                ["lsblk", "--json", "--bytes", "--output-all"],
-                false,
-                "verify kernel block-device inventory after LUN attach",
-            )];
+            let mut commands = vec![
+                command(
+                    ["lsblk", "--json", "--bytes", "--output-all"],
+                    false,
+                    "verify kernel block-device inventory after LUN attach",
+                ),
+                lsscsi_lun_inventory_command(
+                    "verify attached LUN transport and size after host rescan",
+                ),
+            ];
             for device in lun_rescan_devices(action) {
                 commands.push(command_vec(
                     vec!["blockdev", "--getsize64", device.as_str()],
@@ -2379,11 +2391,16 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         Operation::Destroy | Operation::Detach
             if collection == Some("luns") || action.id.starts_with("luns:") =>
         {
-            let mut commands = vec![command(
-                ["lsblk", "--json", "--bytes", "--output-all"],
-                false,
-                "verify kernel block-device inventory after LUN detach",
-            )];
+            let mut commands = vec![
+                command(
+                    ["lsblk", "--json", "--bytes", "--output-all"],
+                    false,
+                    "verify kernel block-device inventory after LUN detach",
+                ),
+                lsscsi_lun_inventory_command(
+                    "verify remaining host-visible LUN transport and size after detach",
+                ),
+            ];
             for device in lun_rescan_devices(action) {
                 commands.push(command_vec(
                     vec!["test", "!", "-e", device.as_str()],
@@ -4547,6 +4564,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     true,
                     "rescan iSCSI sessions to refresh existing LUN paths",
                 ),
+                lsscsi_lun_inventory_command(
+                    "inspect host-visible LUN transport and size before per-device rescans",
+                ),
                 command(
                     ["disk-nix", "inspect", target],
                     false,
@@ -4594,6 +4614,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ["iscsiadm", "--mode", "session", "--rescan"],
                     true,
                     "rescan iSCSI sessions after target-side LUN growth",
+                ),
+                lsscsi_lun_inventory_command(
+                    "inspect host-visible LUN transport and size before growth rescans",
                 ),
                 command(
                     ["disk-nix", "inspect", target],
@@ -4644,6 +4667,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     ["iscsiadm", "--mode", "session", "--rescan"],
                     true,
                     "rescan iSCSI sessions after target-side LUN creation",
+                ),
+                lsscsi_lun_inventory_command(
+                    "inspect host-visible LUN transport and size after session rescan",
                 ),
                 command(
                     ["disk-nix", "inspect", target, "--json"],
@@ -7852,6 +7878,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 false,
                 "inspect LUN consumers before detaching reviewed SCSI paths",
             )];
+            commands.push(lsscsi_lun_inventory_command(
+                "inspect host-visible LUN transport and size before detaching paths",
+            ));
             if devices.is_empty() {
                 commands.push(command_with_readiness(
                     ["<scsi-delete-device>", "<lun-path>"],
@@ -10559,6 +10588,10 @@ fn lun_rescan_devices(action: &PlannedAction) -> Vec<String> {
     }
     devices.extend(action.context.devices.iter().cloned());
     devices.into_iter().collect()
+}
+
+fn lsscsi_lun_inventory_command(note: &str) -> ExecutionCommand {
+    command(["lsscsi", "-t", "-s"], false, note)
 }
 
 fn scsi_device_rescan_command(device: &str) -> ExecutionCommand {
@@ -22429,6 +22462,11 @@ mod tests {
             command.argv == ["iscsiadm", "--mode", "session", "--rescan"] && command.mutates
         }));
         assert!(report.command_plan[0].commands.iter().any(|command| {
+            command.argv == ["lsscsi", "-t", "-s"]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(report.command_plan[0].commands.iter().any(|command| {
             command.argv
                 == [
                     "sh",
@@ -22450,6 +22488,11 @@ mod tests {
                     "/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-0",
                 ]
                 && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(report.verification_plan[0].commands.iter().any(|command| {
+            command.argv == ["lsscsi", "-t", "-s"]
+                && !command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));
         assert!(report.verification_plan[0].commands.iter().any(|command| {
@@ -22500,6 +22543,9 @@ mod tests {
                 && step.commands.iter().any(|command| {
                     command.argv == ["iscsiadm", "--mode", "session", "--rescan"]
                         && command.mutates
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lsscsi", "-t", "-s"] && !command.mutates
                 })
                 && step.commands.iter().any(|command| {
                     command.argv
@@ -22660,6 +22706,10 @@ mod tests {
         assert!(report.command_summary.all_commands_ready());
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "luns:iqn.2026-06.example:storage/path:0:attach"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["lsscsi", "-t", "-s"] && !command.mutates)
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
@@ -22686,6 +22736,10 @@ mod tests {
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "luns:iqn.2026-06.example:storage/device-paths:2:detach"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["lsscsi", "-t", "-s"] && !command.mutates)
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [

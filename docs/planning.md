@@ -387,8 +387,9 @@ Examples:
   treated as data destruction. Legacy NFS export `create` and `destroy` still
   map to the same lifecycle paths.
 - LUN `operation = "attach"` means host-side attach for an existing target-side
-  LUN and is online when it rescans sessions, rescans declared stable paths, and
-  verifies path capacity.
+  LUN and is online when it rescans sessions, captures host-visible transport
+  and size through `lsscsi -t -s`, rescans declared stable paths, and verifies
+  path capacity.
   Legacy LUN `create` maps to the same host attach lifecycle.
   LUN `operation = "rescan"` is online and refreshes existing host-visible
   paths without implying target-side capacity growth.
@@ -398,7 +399,8 @@ Examples:
   array deletion, and remains offline-required. Legacy LUN `destroy` maps to
   the same detach lifecycle. When stable paths are declared through `device`,
   `path`, `devices`, `paths`, or `devicePaths`, apply plans render per-path SCSI
-  rescans or deletes in addition to broad iSCSI session and multipath refreshes.
+  rescans or deletes in addition to broad iSCSI session, `lsscsi`, and
+  multipath refreshes.
   Current-topology comparison suppresses attach actions only when the declared
   LUN path is already visible and suppresses detach actions only when the
   declared LUN path is already absent; opposite states stay actionable with a
