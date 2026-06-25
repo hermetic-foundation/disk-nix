@@ -588,9 +588,10 @@ size diagnostics, filesystem type conflicts, matching filesystem format types
 and swap format targets that still require destructive review, and
 already-satisfied property, size, or remount option checks. Mount actions are
 also compared with
-`mount.source` when the current graph has mountpoint data, unmount actions are
-suppressed when the mountpoint is absent, remount actions treat declared
-options as a required subset of current mount options, LVM
+`mount.source` when the current graph has mountpoint data, absent mountpoints
+stay actionable as mount-required work, unmount actions are suppressed when the
+mountpoint is absent, remount actions treat declared options as a required
+subset of current mount options, LVM
 activation and deactivation actions are compared with `lvm.active` where that
 metadata is available, LUKS open and close actions are compared with
 `cryptsetup.active`, LUKS label/subsystem/UUID property actions are reconciled
@@ -974,7 +975,8 @@ NFS client mount command plans render reviewed `operation = "mount"` commands,
 `operation = "unmount"` commands from `nfs.mounts`; legacy NFS mount `create`
 and `destroy` map to the same command plans. Missing sources or path-shaped
 mountpoints keep those commands non-ready. Logical NFS mount names can declare
-the concrete local path with `mountpoint`.
+the concrete local path with `mountpoint`. With current-topology probing,
+absent NFS mountpoints stay actionable as mount-required work.
 Local filesystem command plans render reviewed `operation = "mount"` commands,
 `mount -o remount,<options>` option-update commands, and
 `operation = "unmount"` commands from `filesystems`/NixOS `fileSystems`-style

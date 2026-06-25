@@ -708,6 +708,8 @@ assemble, Btrfs subvolume destroy, ZFS dataset/zvol destroy, ZFS pool import,
 LVM volume-group import/export, and set-property actions with no warning diagnostics are
 suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
+Absent mountpoints for mount actions remain actionable with mount-required
+diagnostics rather than generic missing-target diagnostics.
 
 ## Apply policy
 
@@ -780,7 +782,8 @@ inspection for `operation = "rescan"`, and `umount <mountpoint>` for reviewed
 `operation = "unmount"` actions. Legacy NFS mount `create` and `destroy` map to
 the same mount/unmount command plans. Missing sources or concrete mountpoint
 paths keep the command plan non-ready. Logical NFS mount names can declare the
-local mount path through `mountpoint`.
+local mount path through `mountpoint`. With current-topology comparison, absent
+NFS mountpoints remain actionable as mount-required work.
 Disk and partition `operation = "rescan"` actions are online refreshes that
 render `partprobe <disk>` plus `blockdev --rereadpt <disk>` and verify with
 `parted -lm <disk>`. They do not edit partition geometry; use `grow` or
@@ -809,7 +812,8 @@ reviewable `mount [-t <fsType>] [-o <options>] <device> <mountpoint>` and
 declarations. Mounts are online namespace changes; unmounts are offline-gated,
 non-destructive operations because they can interrupt services, sessions, bind
 mounts, and automount units. Missing devices or concrete mountpoint paths keep
-the command plan non-ready.
+the command plan non-ready. With current-topology comparison, absent
+mountpoints for mount actions remain actionable as mount-required work.
 LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
 for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
 destructive policy gates allow removal. LV grow and remove commands require

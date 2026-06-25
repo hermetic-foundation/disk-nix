@@ -74,6 +74,8 @@ behavior across real storage stacks.
   header metadata;
   absent NFS exports remain actionable as export-required work instead of
   generic missing-target diagnostics;
+  absent mountpoints for local and NFS mount actions remain actionable as
+  mount-required work instead of generic missing-target diagnostics;
   matching filesystem format types are reported without suppressing destructive
   format actions so policy and confirmation gates still apply;
   swap format targets report existing swap metadata or non-swap node kinds
