@@ -1212,7 +1212,7 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
         "iscsiadm" => Some("openiscsi"),
         "lsscsi" => Some("lsscsi"),
         "mdadm" => Some("mdadm"),
-        "multipath" => Some("multipath-tools"),
+        "multipath" | "multipathd" => Some("multipath-tools"),
         "mkfs.ntfs" | "ntfsfix" | "ntfsinfo" | "ntfslabel" => Some("ntfs3g"),
         "nvme" => Some("nvme-cli"),
         "parted" => Some("parted"),
@@ -22505,6 +22505,67 @@ mod tests {
                 .recovery_actions
                 .iter()
                 .any(|action| { action.kind == RecoveryActionKind::ResolveInputs })
+        );
+    }
+
+    #[test]
+    fn tool_requirements_map_multipathd_to_multipath_tools() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "multipathMaps": {
+                "mpatha": {
+                  "target": "mpatha",
+                  "addDevices": ["/dev/sdb"]
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let mut ran_commands = false;
+        let report = prepare_execution_with_runner_and_tool_checker(
+            &plan,
+            policy,
+            ExecutionMode::Execute,
+            |_| {
+                ran_commands = true;
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+            |tool| tool != "multipathd",
+        );
+
+        assert_eq!(report.status, ExecutionStatus::NotReady);
+        assert!(!ran_commands);
+        assert!(report.messages.iter().any(|message| {
+            message.contains("required tool(s) are not available") && message.contains("multipathd")
+        }));
+        let multipathd_requirement = report
+            .tool_requirements
+            .iter()
+            .find(|requirement| requirement.tool == "multipathd")
+            .expect("multipathd tool requirement is reported");
+        assert_eq!(
+            multipathd_requirement.availability,
+            ToolAvailability::Missing
+        );
+        assert_eq!(multipathd_requirement.command_count, 1);
+        assert_eq!(multipathd_requirement.mutating_count, 1);
+        assert!(
+            multipathd_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.multipath-tools"))
+        );
+        assert!(
+            multipathd_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("services.disk-nix.toolPackages"))
         );
     }
 
