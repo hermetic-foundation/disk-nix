@@ -649,7 +649,11 @@ absent LUN attach paths, visible LUN detach paths, present bcache detach
 targets, still-attached LVM cache origins, absent multipath path-add maps, absent
 NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
 destroy targets, non-normal VDO start modes, running VDO stop targets, present
-Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets, present ZFS or Btrfs snapshot destroy targets, missing ZFS/Btrfs snapshot clone sources, missing or present ZFS/Btrfs snapshot rename sources, missing or present ZFS rollback snapshots, degraded or failed MD arrays,
+Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets,
+absent ZFS dataset/zvol rename destinations, present ZFS or Btrfs snapshot
+destroy targets, missing ZFS/Btrfs snapshot clone sources, missing or present
+ZFS/Btrfs snapshot rename sources, missing or present ZFS rollback snapshots,
+degraded or failed MD arrays,
 degraded ZFS pools, mountpoints using a different source, currently mounted unmount targets,
 published unexport targets, export client/option differences, or known iSCSI
 targets without a logged-in session and logout targets that still have a

@@ -681,7 +681,8 @@ already-promoted objects without origin metadata are suppressed as satisfied.
 ZFS dataset and zvol rename reconciliation compares the old and new
 `pool/name` identities. Source-present renames remain actionable with current
 metadata, while source-absent and destination-present renames are suppressed as
-already reflected in topology.
+already reflected in topology. Source-absent and destination-absent renames
+stay actionable with ZFS metadata review warnings.
 Generic snapshot destroy reconciliation suppresses concrete ZFS snapshot names
 and absolute Btrfs snapshot paths only when they are already absent. Present
 snapshots stay actionable with warnings that include available ZFS

@@ -57,9 +57,10 @@ behavior across real storage stacks.
   rename sources whose destinations are also absent remain actionable as mapper
   review work, ZFS dataset/zvol promote when no clone origin remains, ZFS
   dataset/zvol rename when the destination already exists and the source is
-  absent, and property actions when the graph proves they are already satisfied
-  and no warning diagnostics are present, including VDO property declarations
-  reconciled
+  absent, ZFS dataset/zvol rename sources whose destinations are also absent
+  remain actionable as ZFS metadata review work, and property actions when the
+  graph proves they are already satisfied and no warning diagnostics are
+  present, including VDO property declarations reconciled
   against native `vdo.*` and LVM `lvm.vdo-*` metadata with boolean
   compression/deduplication normalization, and cache property declarations
   reconciled against bcache `bcache.*` and LVM cache `lvm.*` metadata with

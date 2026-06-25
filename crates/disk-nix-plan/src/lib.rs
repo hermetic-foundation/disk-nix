@@ -6031,17 +6031,29 @@ fn zfs_object_rename_absent_diagnostic(
         });
     }
 
-    let conflicting_destination = graph.find_nodes(destination).into_iter().next();
-    conflicting_destination.map(|node| TopologyDiagnostic {
+    if let Some(node) = graph.find_nodes(destination).into_iter().next() {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::ZfsObjectRenameRequired,
+            query: query.to_string(),
+            message: format!(
+                "ZFS {object_label} rename source {query} is missing, but destination {destination} matched current {} node {}; zfs rename remains actionable for review",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    Some(TopologyDiagnostic {
         action_id: action.id.clone(),
         level: TopologyDiagnosticLevel::Warning,
         kind: TopologyDiagnosticKind::ZfsObjectRenameRequired,
         query: query.to_string(),
         message: format!(
-            "ZFS {object_label} rename source {query} is missing, but destination {destination} matched current {} node {}; zfs rename remains actionable for review",
-            node.kind, node.name
+            "ZFS {object_label} rename source {query} is missing and destination {destination} is absent; zfs rename remains actionable after ZFS metadata review"
         ),
-        current: Some(current_node_summary(node)),
+        current: None,
     })
 }
 
@@ -22522,7 +22534,7 @@ mod tests {
         assert_eq!(comparison.summary.action_count, 5);
         assert_eq!(comparison.summary.already_satisfied_count, 2);
         assert_eq!(comparison.summary.suppressed_action_count, 2);
-        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(plan.actions.len(), 3);
         assert!(
             plan.actions
@@ -22565,7 +22577,11 @@ mod tests {
         }));
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "datasets:tank/missing-old:rename"
-                && diagnostic.kind == TopologyDiagnosticKind::Missing
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectRenameRequired
+                && diagnostic
+                    .message
+                    .contains("destination tank/missing-new is absent")
         }));
     }
 
