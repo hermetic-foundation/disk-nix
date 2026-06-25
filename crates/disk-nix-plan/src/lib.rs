@@ -334,6 +334,7 @@ pub enum TopologyDiagnosticKind {
     UnmountRequired,
     NfsExportAlreadySatisfied,
     NfsExportDiffers,
+    NfsExportRequired,
     NfsUnexportAlreadySatisfied,
     NfsUnexportRequired,
     PropertyAlreadySatisfied,
@@ -1637,6 +1638,9 @@ fn topology_diagnostics_for_action(
             return vec![diagnostic];
         }
         if let Some(diagnostic) = lun_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
+        if let Some(diagnostic) = nfs_export_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
         if let Some(diagnostic) = nfs_unexport_absent_diagnostic(action, &query) {
@@ -5098,6 +5102,32 @@ fn unmount_diagnostic(
         query: query.to_string(),
         message: format!("mountpoint {query} is currently mounted"),
         current: Some(current_node_summary(node)),
+    })
+}
+
+fn nfs_export_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Export
+        || action.context.collection.as_deref() != Some("exports")
+    {
+        return None;
+    }
+
+    let desired_client = action.context.client.as_deref().unwrap_or("<any-client>");
+    let options = action
+        .context
+        .options
+        .as_deref()
+        .filter(|options| !options.is_empty())
+        .unwrap_or("<default-options>");
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::NfsExportRequired,
+        query: query.to_string(),
+        message: format!(
+            "NFS export {query} is absent; export for {desired_client} with options {options} remains actionable"
+        ),
+        current: None,
     })
 }
 
@@ -18822,6 +18852,41 @@ mod tests {
             diagnostic.action_id == "filesystems:scratch:remount"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::MountOptionsDiffer
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_absent_nfs_export_actionable() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "exports": {
+                "/srv/share": {
+                  "operation": "export",
+                  "client": "192.0.2.0/24",
+                  "options": "rw,sync,no_subtree_check"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let plan = compare_plan_with_topology(plan, &StorageGraph::empty());
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "exports:/srv/share:export"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::NfsExportRequired
+                && diagnostic.message.contains("192.0.2.0/24")
+                && diagnostic.message.contains("rw,sync,no_subtree_check")
         }));
     }
 

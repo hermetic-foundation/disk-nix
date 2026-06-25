@@ -608,9 +608,10 @@ actions are compared with concrete absolute-path presence plus subvolume id,
 generation, parent, top-level, and UUID metadata, LUN attach/detach and NVMe
 namespace attach/detach actions are compared with concrete host-visible path
 matches, NFS export actions are compared with
-`nfs.export-client` and `nfs.export-option-*` properties, NFS unexport actions
-are suppressed when the export is absent, VDO destroy actions are compared
-with current VDO presence plus operating-mode, size, backing-device,
+`nfs.export-client` and `nfs.export-option-*` properties, absent NFS exports
+remain actionable as export work instead of generic missing targets, NFS
+unexport actions are suppressed when the export is absent, VDO destroy actions
+are compared with current VDO presence plus operating-mode, size, backing-device,
 write-policy, and LVM VDO utilization metadata, VDO start actions are compared
 with `vdo.operating-mode`, VDO stop actions are compared with
 explicitly stopped, not-running, or inactive `vdo.operating-mode` values, MD
@@ -964,7 +965,8 @@ the same command plans. `operation = "rescan"` renders read-only export
 inventory and graph probes. They also require a path-shaped local export target
 such as `/srv/share`; logical export names can declare it through `target` or
 `path`. With current-topology probing, already published exports are suppressed
-only when the client and requested option subset already match the graph.
+only when the client and requested option subset already match the graph;
+absent exports remain actionable with an export-required diagnostic.
 NFS client mount command plans render reviewed `operation = "mount"` commands,
 `mount -o remount,<options>` option-update commands, read-only
 `operation = "rescan"` mount inventory/stat probes, and

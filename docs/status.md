@@ -72,6 +72,8 @@ behavior across real storage stacks.
   against probed swap label and UUID metadata, and LUKS identity property
   declarations reconciled against probed LUKS label, subsystem, and UUID
   header metadata;
+  absent NFS exports remain actionable as export-required work instead of
+  generic missing-target diagnostics;
   matching filesystem format types are reported without suppressing destructive
   format actions so policy and confirmation gates still apply;
   swap format targets report existing swap metadata or non-swap node kinds

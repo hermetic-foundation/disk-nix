@@ -691,7 +691,10 @@ points both stay actionable with warning diagnostics; available points include
 snapshot metadata so reviewers can inspect usage, holds, and recursive rollback
 intent before policy-gated execution.
 NFS export reconciliation compares the declared client and options against
-`nfs.export-client` and `nfs.export-option-*` topology properties.
+`nfs.export-client` and `nfs.export-option-*` topology properties. Absent
+exports remain actionable as domain-specific export work rather than generic
+missing storage targets; matching exports are suppressed, and differing
+client/options stay actionable for review.
 iSCSI session reconciliation checks all matching target and session nodes so an
 active session is not hidden by a configured but disconnected target. Login
 actions are suppressed only when a logged-in session is present; logout actions
@@ -765,9 +768,10 @@ with unresolved-input markers when clients, options, or the local export path
 are missing. Logical export names can declare the local export path through
 `target` or `path`. Current-topology comparison suppresses export actions only
 when the probed export client and requested option subset already match, and it
-suppresses unexport actions only when the export is already absent. Published
-unexport targets remain actionable with a warning. Legacy export `create` and
-`destroy` map to the same commands.
+keeps absent exports actionable as planned export work. It suppresses unexport
+actions only when the export is already absent. Published unexport targets
+remain actionable with a warning. Legacy export `create` and `destroy` map to
+the same commands.
 NFS client mount command plans use
 `mount -t <nfs|nfs4> -o <options> <source> <mountpoint>` for reviewed
 `operation = "mount"` actions, `mount -o remount,<options> <mountpoint>` for
