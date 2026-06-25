@@ -4120,6 +4120,20 @@ fn usage_details(node: &Node) -> String {
         ("md.intent-bitmap", "bitmap"),
         ("md.persistence", "persistence"),
         ("md.bitmap", "bitmap-detail"),
+        ("md.mdstat-state", "mdstat-state"),
+        ("md.mdstat-level", "mdstat-level"),
+        ("md.mdstat-blocks", "mdstat-blocks"),
+        ("md.mdstat-superblock", "mdstat-superblock"),
+        ("md.mdstat-layout", "mdstat-layout"),
+        ("md.mdstat-chunk-size", "mdstat-chunk"),
+        ("md.mdstat-devices", "mdstat-devices"),
+        ("md.mdstat-health", "mdstat-health"),
+        ("md.mdstat-progress", "mdstat-progress"),
+        ("md.mdstat-progress-percent", "mdstat-progress-percent"),
+        ("md.mdstat-progress-blocks", "mdstat-progress-blocks"),
+        ("md.mdstat-finish", "mdstat-finish"),
+        ("md.mdstat-speed", "mdstat-speed"),
+        ("md.mdstat-bitmap", "mdstat-bitmap"),
         ("md.creation-time", "created"),
         ("md.update-time", "updated"),
         ("md.scan-metadata", "scan-metadata"),
@@ -4131,6 +4145,8 @@ fn usage_details(node: &Node) -> String {
         ("md.member-minor", "member-minor"),
         ("md.member-raid-device", "member-raid-device"),
         ("md.member-state", "member-state"),
+        ("md.mdstat-member-slot", "mdstat-member-slot"),
+        ("md.mdstat-member-flags", "mdstat-member-flags"),
         ("md.uuid", "md-uuid"),
         ("iscsi.target", "target"),
         ("iscsi.portal", "portal"),
@@ -8270,7 +8286,17 @@ mod tests {
                 .with_property("md.check-status", "10% complete")
                 .with_property("md.intent-bitmap", "Internal")
                 .with_property("md.persistence", "Superblock is persistent")
-                .with_property("md.bitmap", "0/8 pages [0KB], 65536KB chunk"),
+                .with_property("md.bitmap", "0/8 pages [0KB], 65536KB chunk")
+                .with_property("md.mdstat-state", "active")
+                .with_property("md.mdstat-level", "raid1")
+                .with_property("md.mdstat-devices", "2/1")
+                .with_property("md.mdstat-health", "U_")
+                .with_property("md.mdstat-progress", "recovery")
+                .with_property("md.mdstat-progress-percent", "20.0%")
+                .with_property("md.mdstat-progress-blocks", "209305/1046528")
+                .with_property("md.mdstat-finish", "1.2min")
+                .with_property("md.mdstat-speed", "12345K/sec")
+                .with_property("md.mdstat-bitmap", "0/8 pages [0KB], 65536KB chunk"),
         );
         graph.add_node(
             Node::new("md:/dev/md/root", NodeKind::MdRaid, "/dev/md/root")
@@ -8301,7 +8327,9 @@ mod tests {
                 .with_property("md.member-major", "8")
                 .with_property("md.member-minor", "17")
                 .with_property("md.member-raid-device", "1")
-                .with_property("md.member-state", "active sync"),
+                .with_property("md.member-state", "active sync")
+                .with_property("md.mdstat-member-slot", "1")
+                .with_property("md.mdstat-member-flags", "F"),
         );
         graph.add_edge(Edge::new(
             "block:/dev/sda1",
@@ -8342,6 +8370,12 @@ mod tests {
         assert!(output.contains(
             "persistence=Superblock is persistent bitmap-detail=0/8 pages [0KB], 65536KB chunk"
         ));
+        assert!(output.contains("mdstat-state=active mdstat-level=raid1"));
+        assert!(output.contains("mdstat-devices=2/1 mdstat-health=U_"));
+        assert!(output.contains("mdstat-progress=recovery mdstat-progress-percent=20.0%"));
+        assert!(output.contains("mdstat-progress-blocks=209305/1046528"));
+        assert!(output.contains("mdstat-finish=1.2min mdstat-speed=12345K/sec"));
+        assert!(output.contains("mdstat-bitmap=0/8 pages [0KB], 65536KB chunk"));
         assert!(output.contains("/dev/md/root"));
         assert!(output.contains("md-uuid=eeee:ffff:1111:2222"));
         assert!(output.contains("scan-metadata=1.2 scan-name=host:root"));
@@ -8356,6 +8390,7 @@ mod tests {
         assert!(
             output.contains("member-number=1 member-major=8 member-minor=17 member-raid-device=1")
         );
+        assert!(output.contains("mdstat-member-slot=1 mdstat-member-flags=F"));
     }
 
     #[test]

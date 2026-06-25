@@ -212,12 +212,15 @@ The current probe layer normalizes:
   local locking, lookup cache, FS-Cache, capability flags, transfer
   multipliers, directory transfer/block sizing, RPC security flavor
   identifiers, age, and mount options
-- MD RAID arrays through `mdadm --detail --scan`, `mdadm --examine --scan`,
-  and `mdadm --detail <array>` for scan-level array UUID, metadata version,
-  array name, spare count, member device hints, array level, state, size,
-  raid/total/array/active/working/failed/spare/degraded device counts, and
+- MD RAID arrays through `/proc/mdstat`, `mdadm --detail --scan`,
+  `mdadm --examine --scan`, and `mdadm --detail <array>` for scan-level array
+  UUID, metadata version, array name, spare count, member device hints, array
+  level, runtime state, size, mdstat device health, live recovery/resync/check
+  progress, finish and speed estimates, mdstat bitmap state,
+  raid/total/array/active/working/failed/spare/degraded device counts,
   preferred minor, consistency policy, rebuild/reshape/resync/check progress,
-  persistence, bitmap detail, member number, major/minor, raid-device, and state
+  persistence, bitmap detail, member number, major/minor, raid-device, mdstat
+  slot/flags, and member state
 - Multipath maps through `multipath -ll` for map name, WWID, dm device,
   vendor/product, raw size plus normalized byte capacity, map features,
   hardware handler, write-protect state, path-group policy/priority/status,

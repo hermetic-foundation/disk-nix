@@ -416,10 +416,11 @@ Use these commands for:
   metadata version, level, state, size, raid, total, array, active, working,
   failed, spare, and degraded device counts, event counters, chunk/layout
   details, preferred minor, consistency policy, rebuild, reshape, resync, and
-  check progress, intent bitmap, persistence, bitmap detail, timestamps, and
-  per-member number,
-  major/minor, raid-device, and state when `mdadm --detail --scan`,
-  `mdadm --examine --scan`, or
+  check progress, intent bitmap, persistence, bitmap detail, timestamps,
+  `/proc/mdstat` runtime state, device health strings, live recovery/resync
+  progress, finish and speed estimates, bitmap state, and per-member number,
+  major/minor, raid-device, slot, flags, and state when `/proc/mdstat`,
+  `mdadm --detail --scan`, `mdadm --examine --scan`, or
   `mdadm --detail` exposes them
 - `loop`: loop devices and backing files/devices, including backing path,
   backing inode, backing major/minor, offset, size limit, logical sector size,

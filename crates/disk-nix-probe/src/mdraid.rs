@@ -62,11 +62,49 @@ struct MdMember {
     state: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MdStatArray {
+    name: String,
+    state: Option<String>,
+    level: Option<String>,
+    members: Vec<MdStatMember>,
+    blocks: Option<String>,
+    superblock: Option<String>,
+    layout: Option<String>,
+    chunk_size: Option<String>,
+    device_count: Option<String>,
+    health: Option<String>,
+    progress: Option<String>,
+    progress_percent: Option<String>,
+    progress_blocks: Option<String>,
+    finish: Option<String>,
+    speed: Option<String>,
+    bitmap: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MdStatMember {
+    path: String,
+    slot: Option<String>,
+    flags: Option<String>,
+}
+
 pub fn arrays_from_scan(bytes: &[u8]) -> Result<Vec<String>, ProbeError> {
     let text = std::str::from_utf8(bytes).map_err(|error| {
         ProbeError::Adapter(format!("failed to read mdadm scan output: {error}"))
     })?;
     Ok(text.lines().filter_map(array_name_from_scan_line).collect())
+}
+
+pub fn normalize_mdstat(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
+    let arrays = parse_mdstat(bytes)?;
+    let mut graph = StorageGraph::empty();
+
+    for array in arrays {
+        add_mdstat_array(&mut graph, array);
+    }
+
+    Ok(graph)
 }
 
 pub fn normalize_md_scan(bytes: &[u8]) -> Result<StorageGraph, ProbeError> {
@@ -136,6 +174,218 @@ fn parse_scan_line(line: &str) -> Option<MdScanArray> {
     }
 
     Some(array)
+}
+
+fn parse_mdstat(bytes: &[u8]) -> Result<Vec<MdStatArray>, ProbeError> {
+    let text = std::str::from_utf8(bytes)
+        .map_err(|error| ProbeError::Adapter(format!("failed to read mdstat output: {error}")))?;
+    let mut arrays = Vec::new();
+    let mut current: Option<MdStatArray> = None;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.starts_with("Personalities") || trimmed.starts_with("unused devices:") {
+            continue;
+        }
+
+        if let Some((name, rest)) = trimmed
+            .split_once(':')
+            .filter(|(name, _)| looks_like_md_name(name.trim()))
+        {
+            if let Some(array) = current.take() {
+                arrays.push(array);
+            }
+            current = Some(parse_mdstat_array_header(name.trim(), rest.trim()));
+        } else if let Some(array) = &mut current {
+            parse_mdstat_detail_line(array, trimmed);
+        }
+    }
+
+    if let Some(array) = current {
+        arrays.push(array);
+    }
+
+    Ok(arrays)
+}
+
+fn looks_like_md_name(name: &str) -> bool {
+    name.starts_with("md")
+        && name[2..].chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '/')
+        })
+}
+
+fn parse_mdstat_array_header(name: &str, rest: &str) -> MdStatArray {
+    let mut parts = rest.split_whitespace();
+    let state = parts.next().map(ToOwned::to_owned);
+    let level = parts.next().map(ToOwned::to_owned);
+    let members = parts.filter_map(parse_mdstat_member).collect();
+
+    MdStatArray {
+        name: format!("/dev/{name}"),
+        state,
+        level,
+        members,
+        blocks: None,
+        superblock: None,
+        layout: None,
+        chunk_size: None,
+        device_count: None,
+        health: None,
+        progress: None,
+        progress_percent: None,
+        progress_blocks: None,
+        finish: None,
+        speed: None,
+        bitmap: None,
+    }
+}
+
+fn parse_mdstat_detail_line(array: &mut MdStatArray, line: &str) {
+    if line.starts_with('[') {
+        parse_mdstat_progress(array, line);
+    } else if let Some(bitmap) = line.strip_prefix("bitmap:") {
+        array.bitmap = Some(bitmap.trim().to_string());
+    } else {
+        parse_mdstat_size_line(array, line);
+    }
+}
+
+fn parse_mdstat_size_line(array: &mut MdStatArray, line: &str) {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    array.blocks = parts
+        .first()
+        .filter(|value| value.chars().all(|character| character.is_ascii_digit()))
+        .map(|value| (*value).to_string());
+
+    for window in parts.windows(2) {
+        match window {
+            ["super", value] => array.superblock = Some((*value).to_string()),
+            ["chunk", value] => array.chunk_size = Some((*value).to_string()),
+            _ => {}
+        }
+    }
+
+    for part in &parts {
+        if part.starts_with('[') && part.ends_with(']') && part.contains('/') {
+            array.device_count = Some(part.trim_matches(&['[', ']'][..]).to_string());
+        } else if part.starts_with('[')
+            && part.ends_with(']')
+            && part
+                .trim_matches(&['[', ']'][..])
+                .chars()
+                .all(|character| matches!(character, 'U' | '_'))
+        {
+            array.health = Some(part.trim_matches(&['[', ']'][..]).to_string());
+        } else if part.contains("layout") || part.starts_with("near=") || part.starts_with("far=") {
+            array.layout = Some((*part).to_string());
+        }
+    }
+}
+
+fn parse_mdstat_progress(array: &mut MdStatArray, line: &str) {
+    let without_bar = line
+        .split_once(']')
+        .map(|(_, rest)| rest.trim())
+        .unwrap_or(line);
+    let Some((operation, rest)) = without_bar.split_once('=') else {
+        return;
+    };
+    let operation = operation.trim();
+    if operation.is_empty() {
+        return;
+    }
+
+    array.progress = Some(operation.to_string());
+    let mut parts = rest.split_whitespace();
+    if let Some(percent) = parts.next() {
+        array.progress_percent = Some(percent.to_string());
+    }
+    if let Some(blocks) = parts.next() {
+        array.progress_blocks = Some(blocks.trim_matches(&['(', ')'][..]).to_string());
+    }
+    for part in parts {
+        if let Some(value) = part.strip_prefix("finish=") {
+            array.finish = Some(value.to_string());
+        } else if let Some(value) = part.strip_prefix("speed=") {
+            array.speed = Some(value.to_string());
+        }
+    }
+}
+
+fn parse_mdstat_member(token: &str) -> Option<MdStatMember> {
+    let (device, rest) = token.split_once('[')?;
+    let (slot, flags) = rest.split_once(']')?;
+    if device.is_empty() || slot.is_empty() {
+        return None;
+    }
+
+    Some(MdStatMember {
+        path: format!("/dev/{device}"),
+        slot: Some(slot.to_string()),
+        flags: flags
+            .strip_prefix('(')
+            .and_then(|value| value.strip_suffix(')'))
+            .map(ToOwned::to_owned)
+            .filter(|value| !value.is_empty()),
+    })
+}
+
+fn add_mdstat_array(graph: &mut StorageGraph, array: MdStatArray) {
+    let id = format!("md:{}", array.name);
+    let mut node =
+        Node::new(id.clone(), NodeKind::MdRaid, array.name.clone()).with_path(array.name);
+
+    if let Some(blocks) = array
+        .blocks
+        .as_deref()
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        node = node.with_size_bytes(blocks * 1024);
+    }
+
+    for (key, value) in [
+        ("md.mdstat-state", array.state),
+        ("md.mdstat-level", array.level),
+        ("md.mdstat-blocks", array.blocks),
+        ("md.mdstat-superblock", array.superblock),
+        ("md.mdstat-layout", array.layout),
+        ("md.mdstat-chunk-size", array.chunk_size),
+        ("md.mdstat-devices", array.device_count),
+        ("md.mdstat-health", array.health),
+        ("md.mdstat-progress", array.progress),
+        ("md.mdstat-progress-percent", array.progress_percent),
+        ("md.mdstat-progress-blocks", array.progress_blocks),
+        ("md.mdstat-finish", array.finish),
+        ("md.mdstat-speed", array.speed),
+        ("md.mdstat-bitmap", array.bitmap),
+    ] {
+        if let Some(value) = value {
+            node = node.with_property(key, value);
+        }
+    }
+
+    graph.add_node(node);
+
+    for member in array.members {
+        let member_id = format!("block:{}", member.path);
+        let mut member_node =
+            Node::new(member_id.clone(), NodeKind::Partition, member.path.clone())
+                .with_path(member.path);
+        for (key, value) in [
+            ("md.mdstat-member-slot", member.slot),
+            ("md.mdstat-member-flags", member.flags),
+        ] {
+            if let Some(value) = value {
+                member_node = member_node.with_property(key, value);
+            }
+        }
+        graph.add_node(member_node);
+        graph.add_edge(Edge::new(member_id, id.clone(), Relationship::MemberOf));
+    }
 }
 
 fn add_scan_array(graph: &mut StorageGraph, array: MdScanArray) {
@@ -400,6 +650,13 @@ mod tests {
     const SCAN: &[u8] = b"ARRAY /dev/md0 metadata=1.2 UUID=aaaa:bbbb:cccc:dddd name=host:0\n";
     const EXAMINE_SCAN: &[u8] =
         b"ARRAY /dev/md/root metadata=1.2 UUID=eeee:ffff:1111:2222 name=host:root spares=1 devices=/dev/sdc1,/dev/sdd1\n";
+    const MDSTAT: &[u8] = b"Personalities : [raid1] [raid10]\n\
+md0 : active raid1 sdb1[1](F) sda1[0]\n\
+      1046528 blocks super 1.2 [2/1] [U_]\n\
+      [====>................]  recovery = 20.0% (209305/1046528) finish=1.2min speed=12345K/sec\n\
+      bitmap: 0/8 pages [0KB], 65536KB chunk\n\
+\n\
+unused devices: <none>\n";
     const DETAIL: &[u8] = b"/dev/md0:\n\
            Version : 1.2\n\
      Creation Time : Tue Jun 23 10:15:00 2026\n\
@@ -467,6 +724,56 @@ mod tests {
                     property.key == "md.scan-devices" && property.value == "/dev/sdc1,/dev/sdd1"
                 })
         }));
+    }
+
+    #[test]
+    fn normalizes_mdstat_runtime_state() {
+        let graph = normalize_mdstat(MDSTAT).expect("mdstat should parse");
+        let array = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::MdRaid && node.name == "/dev/md0")
+            .expect("mdstat array exists");
+
+        assert_eq!(array.size_bytes, Some(1_071_644_672));
+        assert_property(array, "md.mdstat-state", "active");
+        assert_property(array, "md.mdstat-level", "raid1");
+        assert_property(array, "md.mdstat-devices", "2/1");
+        assert_property(array, "md.mdstat-health", "U_");
+        assert_property(array, "md.mdstat-progress", "recovery");
+        assert_property(array, "md.mdstat-progress-percent", "20.0%");
+        assert_property(array, "md.mdstat-progress-blocks", "209305/1046528");
+        assert_property(array, "md.mdstat-finish", "1.2min");
+        assert_property(array, "md.mdstat-speed", "12345K/sec");
+        assert_property(array, "md.mdstat-bitmap", "0/8 pages [0KB], 65536KB chunk");
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| edge.relationship == Relationship::MemberOf)
+                .count(),
+            2
+        );
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::Partition
+                && node.name == "/dev/sdb1"
+                && node.properties.iter().any(|property| {
+                    property.key == "md.mdstat-member-slot" && property.value == "1"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "md.mdstat-member-flags" && property.value == "F"
+                })
+        }));
+    }
+
+    fn assert_property(node: &Node, key: &str, value: &str) {
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == key && property.value == value),
+            "missing property {key}={value}; properties: {:?}",
+            node.properties
+        );
     }
 
     #[test]

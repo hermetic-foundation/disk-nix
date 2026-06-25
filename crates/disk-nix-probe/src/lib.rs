@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, process::Command};
+use std::{collections::BTreeSet, fs, process::Command};
 
 use disk_nix_model::StorageGraph;
 use serde::{Serialize, ser::SerializeStruct};
@@ -1590,6 +1590,37 @@ fn collect_multipath(result: &mut ProbeResult) {
 }
 
 fn collect_mdraid(result: &mut ProbeResult) {
+    match fs::read("/proc/mdstat") {
+        Ok(mdstat) => match mdraid::normalize_mdstat(&mdstat) {
+            Ok(graph) if !graph.nodes.is_empty() => {
+                let node_count = graph.nodes.len();
+                merge_graph(&mut result.graph, graph);
+                result.reports.push(ProbeReport {
+                    adapter: "mdstat".to_string(),
+                    status: ProbeStatus::Available,
+                    message: Some(format!(
+                        "normalized {node_count} graph nodes from /proc/mdstat"
+                    )),
+                });
+            }
+            Ok(_) => result.reports.push(ProbeReport {
+                adapter: "mdstat".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("no MD RAID arrays reported by /proc/mdstat".to_string()),
+            }),
+            Err(error) => result.reports.push(ProbeReport {
+                adapter: "mdstat".to_string(),
+                status: ProbeStatus::Failed,
+                message: Some(error.to_string()),
+            }),
+        },
+        Err(error) => result.reports.push(ProbeReport {
+            adapter: "mdstat".to_string(),
+            status: ProbeStatus::Partial,
+            message: Some(format!("failed to read /proc/mdstat: {error}")),
+        }),
+    }
+
     let scan = match run_report("mdadm", &["--detail", "--scan"]) {
         Ok(scan) => scan,
         Err(message) => {
@@ -2287,6 +2318,7 @@ fn adapter_tools(adapter: &str) -> Vec<&'static str> {
         "lsscsi" => vec!["lsscsi"],
         "lvm" => vec!["pvs", "vgs", "lvs"],
         "mdraid" => vec!["mdadm"],
+        "mdstat" => Vec::new(),
         "multipath" => vec!["multipath"],
         "nfs" | "nfs-exports" => vec!["findmnt", "exportfs", "nfsstat"],
         "ntfs" => vec!["ntfsinfo"],
@@ -2320,6 +2352,7 @@ fn adapter_nix_packages(adapter: &str) -> Vec<&'static str> {
         "iscsi" | "iscsi-nodes" => vec!["pkgs.openiscsi"],
         "lsscsi" => vec!["pkgs.lsscsi"],
         "mdraid" => vec!["pkgs.mdadm"],
+        "mdstat" => Vec::new(),
         "multipath" => vec!["pkgs.multipath-tools"],
         "nfs" | "nfs-exports" => vec!["pkgs.nfs-utils", "pkgs.util-linux"],
         "ntfs" => vec!["pkgs.ntfs3g"],
@@ -2344,7 +2377,7 @@ fn adapter_privilege_hint(adapter: &str) -> String {
         "iscsi" | "iscsi-nodes" => "iSCSI probing needs access to open-iscsi node and session state, usually under /etc/iscsi and /sys/class/iscsi_session".to_string(),
         "nvme" => "NVMe probing needs access to controller character devices and /sys/class/nvme metadata".to_string(),
         "multipath" => "multipath probing needs access to multipathd/device-mapper state and path devices".to_string(),
-        "mdraid" => "MD RAID probing needs access to /proc/mdstat, mdadm detail output, and member block devices".to_string(),
+        "mdraid" | "mdstat" => "MD RAID probing needs access to /proc/mdstat, mdadm detail output, and member block devices".to_string(),
         "vdo" | "vdostats" | "vdostats-verbose" => "VDO probing needs access to VDO management state and device-mapper-backed VDO volumes".to_string(),
         "smartctl" => "SMART probing often needs root or device-specific capabilities to read health and controller metadata".to_string(),
         "udev" => "udev probing needs permission to read udev database records for block devices".to_string(),
