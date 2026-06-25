@@ -102,8 +102,8 @@ behavior across real storage stacks.
   subvolume/qgroup create targets that match a different node kind,
   still-exported LVM volume-group imports, still-imported LVM volume-group
   exports, absent or inactive LUKS open targets, active LUKS close targets,
-  loop devices mapped to different backing files, backing-file create targets
-  with different
+  absent LUKS keyslot/token removal containers, loop devices mapped to
+  different backing files, backing-file create targets with different
   or unknown current size, still-mapped loop detach targets, absent LUN attach
   paths, visible LUN detach paths, absent NVMe namespace attach
   paths, visible NVMe namespace detach paths, absent, unknown, or below-target

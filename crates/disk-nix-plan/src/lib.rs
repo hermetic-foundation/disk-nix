@@ -3294,12 +3294,43 @@ fn luks_open_diagnostic(
 }
 
 fn luks_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
-    if action.context.collection.as_deref() != Some("luks.devices") {
-        return None;
-    }
-
-    match action.operation {
-        Operation::Open => {
+    match action.context.collection.as_deref() {
+        Some("luks.devices") => match action.operation {
+            Operation::Open => {
+                let backing = action
+                    .context
+                    .device
+                    .as_deref()
+                    .unwrap_or("<unspecified-backing-device>");
+                Some(TopologyDiagnostic {
+                    action_id: action.id.clone(),
+                    level: TopologyDiagnosticLevel::Warning,
+                    kind: TopologyDiagnosticKind::LuksOpenRequired,
+                    query: query.to_string(),
+                    message: format!(
+                        "LUKS mapper {query} is absent from current topology; opening backing device {backing} remains actionable"
+                    ),
+                    current: None,
+                })
+            }
+            Operation::Close => Some(TopologyDiagnostic {
+                action_id: action.id.clone(),
+                level: TopologyDiagnosticLevel::Info,
+                kind: TopologyDiagnosticKind::LuksCloseAlreadySatisfied,
+                query: query.to_string(),
+                message: format!("LUKS mapper {query} is already inactive or absent"),
+                current: None,
+            }),
+            _ => None,
+        },
+        Some("luksKeyslots")
+            if matches!(action.operation, Operation::Destroy | Operation::RemoveKey) =>
+        {
+            let key_slot = action
+                .context
+                .key_slot
+                .as_deref()
+                .unwrap_or("<unknown-slot>");
             let backing = action
                 .context
                 .device
@@ -3308,22 +3339,41 @@ fn luks_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<Topolog
             Some(TopologyDiagnostic {
                 action_id: action.id.clone(),
                 level: TopologyDiagnosticLevel::Warning,
-                kind: TopologyDiagnosticKind::LuksOpenRequired,
+                kind: TopologyDiagnosticKind::LuksKeyslotRemoveRequired,
                 query: query.to_string(),
                 message: format!(
-                    "LUKS mapper {query} is absent from current topology; opening backing device {backing} remains actionable"
+                    "LUKS container {query} is absent from current topology; keyslot {key_slot} removal on backing device {backing} remains actionable after header review"
                 ),
                 current: None,
             })
         }
-        Operation::Close => Some(TopologyDiagnostic {
-            action_id: action.id.clone(),
-            level: TopologyDiagnosticLevel::Info,
-            kind: TopologyDiagnosticKind::LuksCloseAlreadySatisfied,
-            query: query.to_string(),
-            message: format!("LUKS mapper {query} is already inactive or absent"),
-            current: None,
-        }),
+        Some("luksTokens")
+            if matches!(
+                action.operation,
+                Operation::Destroy | Operation::RemoveToken
+            ) =>
+        {
+            let token_id = action
+                .context
+                .token_id
+                .as_deref()
+                .unwrap_or("<unknown-token>");
+            let backing = action
+                .context
+                .device
+                .as_deref()
+                .unwrap_or("<unspecified-backing-device>");
+            Some(TopologyDiagnostic {
+                action_id: action.id.clone(),
+                level: TopologyDiagnosticLevel::Warning,
+                kind: TopologyDiagnosticKind::LuksTokenRemoveRequired,
+                query: query.to_string(),
+                message: format!(
+                    "LUKS container {query} is absent from current topology; token {token_id} removal on backing device {backing} remains actionable after header review"
+                ),
+                current: None,
+            })
+        }
         _ => None,
     }
 }
@@ -19811,6 +19861,15 @@ mod tests {
                     "keySlot": "2"
                   }
                 }
+              },
+              "luksTokens": {
+                "cryptroot:3": {
+                  "operation": "remove-token",
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "tokenId": "3"
+                  }
+                }
               }
             }"#,
         )
@@ -19825,11 +19884,26 @@ mod tests {
 
         assert_eq!(comparison.summary.already_satisfied_count, 0);
         assert_eq!(comparison.summary.suppressed_action_count, 0);
-        assert_eq!(comparison.summary.missing_count, 1);
-        assert_eq!(plan.actions.len(), 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 2);
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "lukskeyslots:cryptroot:2:remove-key"
-                && diagnostic.kind == TopologyDiagnosticKind::Missing
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LuksKeyslotRemoveRequired
+                && diagnostic.message.contains("keyslot 2 removal")
+                && diagnostic
+                    .message
+                    .contains("backing device /dev/disk/by-id/root-luks")
+                && diagnostic.query == "/dev/disk/by-id/root-luks"
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "lukstokens:cryptroot:3:remove-token"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LuksTokenRemoveRequired
+                && diagnostic.message.contains("token 3 removal")
+                && diagnostic
+                    .message
+                    .contains("backing device /dev/disk/by-id/root-luks")
                 && diagnostic.query == "/dev/disk/by-id/root-luks"
         }));
     }

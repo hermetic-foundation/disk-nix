@@ -630,7 +630,8 @@ device to the LUKS container and uses `cryptsetup.luks-keyslots` or
 `cryptsetup.luks-tokens` from `luksDump` metadata to suppress only removals
 whose slot or token id is already absent. Present slots and tokens remain
 actionable with warnings that include keyslot priority, cipher, PBKDF, token
-type, or token keyslot binding metadata when available.
+type, or token keyslot binding metadata when available. Missing LUKS containers
+for keyslot or token removals remain actionable with header review warnings.
 LVM cache detach reconciliation matches the origin LV and suppresses detach
 only when the current LV no longer reports cache or writecache metadata.
 Still-attached cache origins remain actionable with warnings that include cache

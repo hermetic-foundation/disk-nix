@@ -601,7 +601,9 @@ satisfied, LUKS
 label/subsystem/UUID property actions are reconciled
 against probed identity and `cryptsetup.luks-*` header metadata, and LUKS
 keyslot/token removal actions are compared with `cryptsetup.luks-keyslots` and
-`cryptsetup.luks-tokens` header metadata from the matched container. Loop-device
+`cryptsetup.luks-tokens` header metadata from the matched container; absent
+LUKS containers for keyslot/token removal remain actionable with header review
+warnings. Loop-device
 create/destroy actions are compared with
 `loop.back-file` mapping metadata, device-mapper destroy actions are compared
 with current mapper presence and `dm.open-count` metadata, multipath destroy
