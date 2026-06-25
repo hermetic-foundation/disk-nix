@@ -1205,8 +1205,8 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
         "cryptsetup" => Some("cryptsetup"),
         "dmsetup" | "fsadm" | "lvchange" | "lvconvert" | "lvcreate" | "lvextend" | "lvreduce"
         | "lvremove" | "lvrename" | "lvs" | "pvcreate" | "pvremove" | "pvresize" | "pvscan"
-        | "pvs" | "vgchange" | "vgcreate" | "vgexport" | "vgextend" | "vgimport" | "vgremove"
-        | "vgs" | "vgscan" => Some("lvm2"),
+        | "pvmove" | "pvs" | "vgchange" | "vgcreate" | "vgexport" | "vgextend" | "vgimport"
+        | "vgremove" | "vgrename" | "vgreduce" | "vgs" | "vgscan" => Some("lvm2"),
         "dumpe2fs" | "e2fsck" | "e2label" | "mkfs.ext2" | "mkfs.ext3" | "mkfs.ext4"
         | "resize2fs" | "tune2fs" => Some("e2fsprogs"),
         "exfatlabel" | "fsck.exfat" | "mkfs.exfat" => Some("exfatprogs"),
@@ -22787,9 +22787,12 @@ mod tests {
         for (tool, package) in [
             ("lsblk", "util-linux"),
             ("mkfs", "util-linux"),
+            ("pvmove", "lvm2"),
             ("vgchange", "lvm2"),
             ("vgexport", "lvm2"),
             ("vgimport", "lvm2"),
+            ("vgreduce", "lvm2"),
+            ("vgrename", "lvm2"),
             ("vgscan", "lvm2"),
         ] {
             assert_eq!(nix_package_for_tool(tool), Some(package));
