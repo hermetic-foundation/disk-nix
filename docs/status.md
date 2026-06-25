@@ -109,8 +109,9 @@ behavior across real storage stacks.
   paths, visible NVMe namespace detach paths, absent, unknown, or below-target
   VDO grow targets, absent or non-normal VDO start modes, running VDO stop
   targets, active swap teardown targets, active or
-  unknown-state MD stop targets, absent MD member-add devices, still-attached MD
-  member-removal devices, incomplete MD member replacements, degraded or failed
+  unknown-state MD stop targets, absent LVM cache origins, absent MD member-add
+  devices, still-attached MD member-removal devices, incomplete MD member
+  replacements, degraded or failed
   MD arrays, absent multipath path-add maps, still-attached multipath path
   removals, degraded ZFS pools,
   mount source mismatches, currently mounted unmount targets, published

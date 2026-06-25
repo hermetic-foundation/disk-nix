@@ -1626,6 +1626,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = lvm_rename_absent_diagnostic(action, graph, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = lvm_cache_detach_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = dm_map_rename_absent_diagnostic(action, graph, &query) {
             return vec![diagnostic];
         }
@@ -3217,6 +3220,36 @@ fn lvm_cache_detach_diagnostic(
         query: query.to_string(),
         message,
         current: Some(current_node_summary(node)),
+    })
+}
+
+fn lvm_cache_detach_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("lvmCaches")
+        || !matches!(
+            action.operation,
+            Operation::Destroy | Operation::RemoveDevice
+        )
+    {
+        return None;
+    }
+
+    let device = action
+        .context
+        .device
+        .as_deref()
+        .unwrap_or("<unknown-cache-device>");
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::LvmCacheDetachRequired,
+        query: query.to_string(),
+        message: format!(
+            "LVM cache origin {query} is absent from current topology; detach of cache device {device} remains actionable after LVM metadata review"
+        ),
+        current: None,
     })
 }
 
@@ -20688,11 +20721,16 @@ mod tests {
 
         assert_eq!(comparison.summary.already_satisfied_count, 0);
         assert_eq!(comparison.summary.suppressed_action_count, 0);
-        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(plan.actions.len(), 1);
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "lvmCaches:vg0/root:remove-device:vg0/root-cache"
-                && diagnostic.kind == TopologyDiagnosticKind::Missing
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmCacheDetachRequired
+                && diagnostic
+                    .message
+                    .contains("LVM cache origin vg0/root is absent")
+                && diagnostic.message.contains("cache device vg0/root-cache")
                 && diagnostic.query == "vg0/root"
         }));
     }

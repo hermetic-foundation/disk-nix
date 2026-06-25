@@ -635,7 +635,9 @@ for keyslot or token removals remain actionable with header review warnings.
 LVM cache detach reconciliation matches the origin LV and suppresses detach
 only when the current LV no longer reports cache or writecache metadata.
 Still-attached cache origins remain actionable with warnings that include cache
-pool, mode, policy, dirty blocks, and utilization when available.
+pool, mode, policy, dirty blocks, and utilization when available. Absent cache
+origins remain actionable with LVM metadata review warnings instead of generic
+missing-target diagnostics.
 LVM logical-volume, thin-pool, and volume-group rename reconciliation compares
 source and destination identities. Source-present renames remain actionable with
 current LVM metadata, destination-present renames are suppressed as already

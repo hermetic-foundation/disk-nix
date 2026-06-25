@@ -610,7 +610,8 @@ with current mapper presence and `dm.open-count` metadata, multipath destroy
 actions are compared with current map presence plus WWID or dm map metadata,
 bcache detach actions are compared with current bcache target presence,
 dirty-data, cache-mode, and cache-set metadata, LVM cache detach actions are
-compared with origin LV cache/writecache metadata, Btrfs subvolume destroy
+compared with origin LV cache/writecache metadata, and absent LVM cache origins
+remain actionable with metadata review warnings. Btrfs subvolume destroy
 actions are compared with concrete absolute-path presence plus subvolume id,
 generation, parent, top-level, and UUID metadata, LUN attach/detach and NVMe
 namespace attach/detach actions are compared with concrete host-visible path
@@ -648,9 +649,10 @@ still-mapped loop detach targets, present device-mapper removal targets,
 LVM rename sources whose destinations are also absent, device-mapper rename
 sources whose destinations are also absent, present multipath flush targets,
 absent LUN attach paths, visible LUN detach paths, present bcache detach
-targets, still-attached LVM cache origins, absent multipath path-add maps, absent
-NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
-destroy targets, non-normal VDO start modes, running VDO stop targets, present
+targets, still-attached or absent LVM cache origins, absent multipath path-add
+maps, absent NVMe namespace attach paths, visible NVMe namespace detach paths,
+present VDO destroy targets, non-normal VDO start modes, running VDO stop
+targets, present
 Btrfs subvolume destroy targets, present ZFS dataset/zvol destroy targets,
 absent ZFS dataset/zvol rename destinations, present ZFS or Btrfs snapshot
 destroy targets, missing ZFS/Btrfs snapshot clone sources, missing or present
