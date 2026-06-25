@@ -283,6 +283,8 @@ pub enum TopologyDiagnosticKind {
     LvmVgExportRequired,
     LvmVgImportAlreadySatisfied,
     LvmVgImportRequired,
+    LvmRenameAlreadySatisfied,
+    LvmRenameRequired,
     LvmCacheDetachAlreadySatisfied,
     LvmCacheDetachRequired,
     LuksCloseAlreadySatisfied,
@@ -865,6 +867,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
                         | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
+                        | TopologyDiagnosticKind::LvmRenameAlreadySatisfied
                         | TopologyDiagnosticKind::LvmCacheDetachAlreadySatisfied
                         | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
                         | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
@@ -1517,6 +1520,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
                     | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
+                    | TopologyDiagnosticKind::LvmRenameAlreadySatisfied
                     | TopologyDiagnosticKind::LvmCacheDetachAlreadySatisfied
                     | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
                     | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
@@ -1601,6 +1605,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = zfs_object_rename_absent_diagnostic(action, graph, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = lvm_rename_absent_diagnostic(action, graph, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = dm_map_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1668,6 +1675,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(lvm_vg_create_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_export_diagnostic(action, node, &query));
     diagnostics.extend(lvm_vg_import_diagnostic(action, node, &query));
+    diagnostics.extend(lvm_rename_present_diagnostic(action, node, &query));
     diagnostics.extend(lvm_cache_detach_diagnostic(action, node, &query));
     diagnostics.extend(luks_close_diagnostic(action, node, &query));
     diagnostics.extend(luks_open_diagnostic(action, node, &query));
@@ -2953,6 +2961,142 @@ fn lvm_vg_export_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn lvm_rename_absent_diagnostic(
+    action: &PlannedAction,
+    graph: &StorageGraph,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Rename {
+        return None;
+    }
+    let (expected_kind, label) = lvm_rename_expected_kind(action)?;
+    let destination = lvm_rename_destination(action, query)?;
+    let destination_matches = graph.find_nodes(&destination);
+    if let Some(node) = destination_matches
+        .iter()
+        .copied()
+        .find(|node| node.kind == expected_kind)
+    {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Info,
+            kind: TopologyDiagnosticKind::LvmRenameAlreadySatisfied,
+            query: query.to_string(),
+            message: format!(
+                "LVM {label} rename from {query} to {destination} is already reflected in current topology"
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    destination_matches
+        .first()
+        .copied()
+        .map(|node| TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::LvmRenameRequired,
+            query: query.to_string(),
+            message: format!(
+                "LVM {label} rename source {query} is missing, but destination {destination} matched current {} node {}; rename remains actionable for review",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        })
+}
+
+fn lvm_rename_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Rename {
+        return None;
+    }
+    let (expected_kind, label) = lvm_rename_expected_kind(action)?;
+    if node.kind != expected_kind {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::LvmRenameRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not an LVM {label}; rename remains actionable",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let destination =
+        lvm_rename_destination(action, query).unwrap_or_else(|| "<rename-target>".to_string());
+    let details = lvm_rename_details(node);
+    let message = if details.is_empty() {
+        format!(
+            "LVM {label} rename source {query} is present; rename to {destination} remains offline-required"
+        )
+    } else {
+        format!(
+            "LVM {label} rename source {query} is present with {}; rename to {destination} remains offline-required",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::LvmRenameRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn lvm_rename_expected_kind(action: &PlannedAction) -> Option<(NodeKind, &'static str)> {
+    match action.context.collection.as_deref() {
+        Some("volumes") => Some((NodeKind::LvmLogicalVolume, "logical volume")),
+        Some("thinPools") => Some((NodeKind::LvmThinPool, "thin pool")),
+        Some("volumeGroups") => Some((NodeKind::LvmVolumeGroup, "volume group")),
+        _ => None,
+    }
+}
+
+fn lvm_rename_destination(action: &PlannedAction, query: &str) -> Option<String> {
+    let rename_to = action.context.rename_to.as_deref()?;
+    match action.context.collection.as_deref() {
+        Some("volumes" | "thinPools") if !rename_to.contains('/') => query
+            .split_once('/')
+            .map(|(vg, _)| format!("{vg}/{rename_to}"))
+            .or_else(|| Some(rename_to.to_string())),
+        _ => Some(rename_to.to_string()),
+    }
+}
+
+fn lvm_rename_details(node: &Node) -> Vec<String> {
+    let mut details = Vec::new();
+    if let Some(size) = node.size_bytes {
+        details.push(format!("size {size} bytes"));
+    }
+    for (property, label) in [
+        ("lvm.vg-name", "vg"),
+        ("lvm.lv-role", "role"),
+        ("lvm.lv-layout", "layout"),
+        ("lvm.lv-active", "active"),
+        ("lvm.lv-attr", "attributes"),
+        ("lvm.pool", "pool"),
+        ("lvm.origin", "origin"),
+        ("lvm.data-percent", "data"),
+        ("lvm.metadata-percent", "metadata"),
+        ("lvm.vg-exported", "exported"),
+        ("lvm.vg-partial", "partial"),
+    ] {
+        if let Some(value) = property_value_from_node(node, property) {
+            details.push(format!("{label} {value}"));
+        }
+    }
+    details
 }
 
 fn lvm_cache_detach_diagnostic(
@@ -19414,6 +19558,159 @@ mod tests {
                 && diagnostic.kind == TopologyDiagnosticKind::LvmVolumeCreateRequired
                 && diagnostic.message.contains("not desired size 8GiB")
                 && diagnostic.message.contains("grow or shrink")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_lvm_rename_destinations() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg0/home-old": {
+                  "operation": "rename",
+                  "renameTo": "home-new"
+                },
+                "vg0/logs-old": {
+                  "operation": "rename",
+                  "renameTo": "vg0/logs-new"
+                },
+                "vg0/missing-old": {
+                  "operation": "rename",
+                  "renameTo": "vg0/missing-new"
+                }
+              },
+              "thinPools": {
+                "vg0/thin-old": {
+                  "operation": "rename",
+                  "renameTo": "thin-new"
+                },
+                "vg0/pool-old": {
+                  "operation": "rename",
+                  "renameTo": "vg0/pool-new"
+                }
+              },
+              "volumeGroups": {
+                "vg-old": {
+                  "operation": "rename",
+                  "renameTo": "vg-new"
+                },
+                "vg-archive-old": {
+                  "operation": "rename",
+                  "renameTo": "vg-archive-new"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "lvm-lv:vg0/home-old",
+                NodeKind::LvmLogicalVolume,
+                "vg0/home-old",
+            )
+            .with_size_bytes(8 * 1024 * 1024 * 1024)
+            .with_property("lvm.lv-active", "active"),
+        );
+        graph.add_node(Node::new(
+            "lvm-lv:vg0/logs-new",
+            NodeKind::LvmLogicalVolume,
+            "vg0/logs-new",
+        ));
+        graph.add_node(
+            Node::new(
+                "lvm-thin-pool:vg0/thin-old",
+                NodeKind::LvmThinPool,
+                "vg0/thin-old",
+            )
+            .with_property("lvm.data-percent", "12.5")
+            .with_property("lvm.metadata-percent", "2.0"),
+        );
+        graph.add_node(Node::new(
+            "lvm-thin-pool:vg0/pool-new",
+            NodeKind::LvmThinPool,
+            "vg0/pool-new",
+        ));
+        graph.add_node(
+            Node::new("lvm-vg:vg-old", NodeKind::LvmVolumeGroup, "vg-old")
+                .with_property("lvm.vg-partial", "complete"),
+        );
+        graph.add_node(Node::new(
+            "lvm-vg:vg-archive-new",
+            NodeKind::LvmVolumeGroup,
+            "vg-archive-new",
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 7);
+        assert_eq!(comparison.summary.already_satisfied_count, 3);
+        assert_eq!(comparison.summary.suppressed_action_count, 3);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(plan.actions.len(), 4);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "volumes:vg0/home-old:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "volumes:vg0/missing-old:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "thinpools:vg0/thin-old:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "volumegroups:vg-old:rename")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/logs-old:rename"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmRenameAlreadySatisfied
+                && diagnostic.message.contains("vg0/logs-new")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "thinpools:vg0/pool-old:rename"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmRenameAlreadySatisfied
+                && diagnostic.message.contains("vg0/pool-new")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumegroups:vg-archive-old:rename"
+                && diagnostic.kind == TopologyDiagnosticKind::LvmRenameAlreadySatisfied
+                && diagnostic.message.contains("vg-archive-new")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/home-old:rename"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmRenameRequired
+                && diagnostic.message.contains("rename to vg0/home-new")
+                && diagnostic.message.contains("active active")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "thinpools:vg0/thin-old:rename"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmRenameRequired
+                && diagnostic.message.contains("rename to vg0/thin-new")
+                && diagnostic.message.contains("data 12.5")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumegroups:vg-old:rename"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmRenameRequired
+                && diagnostic.message.contains("rename to vg-new")
+                && diagnostic.message.contains("partial complete")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/missing-old:rename"
+                && diagnostic.kind == TopologyDiagnosticKind::Missing
         }));
     }
 

@@ -1028,7 +1028,9 @@ for LV size, attributes, and dependent mappings. Current-topology probing
 suppresses `volumes` create actions when the matched LVM logical volume already
 exists and any declared desired size exactly matches; existing LVs with
 different or unknown size remain actionable with warnings that recommend grow
-or shrink lifecycle instead of recreating data.
+or shrink lifecycle instead of recreating data. LVM logical volume, thin-pool,
+and volume-group rename actions are suppressed when the old identity is absent
+and the new destination already exists with the expected LVM kind.
 LVM physical volume command plans render `pvcreate`, `pvresize`, explicit
 `operation = "rescan"` plans through `pvscan --cache`, and policy-gated
 `pvremove` for `physicalVolumes` lifecycle declarations. Create, grow, and

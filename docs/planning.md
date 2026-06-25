@@ -417,7 +417,8 @@ Examples:
   paths, LVM logical volumes/thin pools, and LVM volume groups. For ZFS
   datasets and zvols, current-topology comparison suppresses rename actions
   when the source no longer exists and the destination already exists with the
-  expected ZFS object kind.
+  expected ZFS object kind. LVM logical volume, thin-pool, and volume-group
+  rename reconciliation applies the same old-identity/new-identity check.
 - `operation = "promote"` is offline-required but non-destructive for ZFS
   clone datasets and zvols. It renders reviewed `zfs promote <clone>` commands
   after inspecting the clone origin. Current-topology comparison suppresses
@@ -815,7 +816,10 @@ point to grow or shrink lifecycle instead of recreate.
 LVM thin-pool command plans require canonical `vg/pool` targets for grow and
 remove operations, supplied by the declaration key, `target`, or `path`.
 Current-topology comparison applies the same create reconciliation to
-thin-pools, but only when the matched node is an LVM thin pool.
+thin-pools, but only when the matched node is an LVM thin pool. LVM logical
+volume and thin-pool rename reconciliation suppresses already-renamed objects
+when the old `vg/lv` or `vg/pool` source is absent and the new target exists;
+short rename targets are resolved within the original volume group.
 LVM volume group grow and add-device command plans use `vgextend <vg> <pv>`
 when a physical volume device is declared. Replacement plans render
 `vgextend <vg> <new-pv>`, `pvmove <old-pv> <new-pv>`, and
@@ -824,7 +828,8 @@ remain unresolved until the device to add, the source device, the replacement
 device, or the device to remove is declared explicitly.
 Volume group `operation = "rescan"` refreshes LVM metadata with
 `pvscan --cache`, `vgscan`, and `vgchange --refresh <vg>` without recreating
-the VG.
+the VG. Volume-group rename reconciliation suppresses already-renamed groups
+when the old VG name is absent and the new VG exists.
 LVM physical volume command plans use `pvcreate`, `pvresize`,
 `pvscan --cache`, and `pvremove` for `physicalVolumes` lifecycle declarations.
 Create, grow, and remove plans require a concrete path-shaped declaration key,

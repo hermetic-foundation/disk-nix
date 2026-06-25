@@ -49,10 +49,12 @@ behavior across real storage stacks.
   VDO start, VDO stop, MD create/assemble/stop/member add/member removal/member
   replacement, multipath path add/removal, ZFS pool create/import, ZFS
   dataset/zvol create, Btrfs subvolume create, Btrfs qgroup create, LVM
-  volume/thin-pool create, LVM volume-group create/import/export, ZFS
-  dataset/zvol promote when no clone origin remains, ZFS dataset/zvol rename
-  when the destination already exists and the source is absent, and property
-  actions when the graph proves they are already satisfied and no warning
+  volume/thin-pool create, LVM volume-group create/import/export, LVM
+  logical-volume/thin-pool/volume-group rename when the destination already
+  exists and the source is absent, ZFS dataset/zvol promote when no clone
+  origin remains, ZFS dataset/zvol rename when the destination already exists
+  and the source is absent, and property actions when the graph proves they
+  are already satisfied and no warning
   diagnostics are present, including VDO property declarations reconciled
   against native `vdo.*` and LVM `lvm.vdo-*` metadata with boolean
   compression/deduplication normalization, and cache property declarations
