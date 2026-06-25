@@ -414,7 +414,10 @@ Examples:
 - `operation = "rename"` is offline-required but non-destructive. It carries
   `renameTo`, `renameTarget`, or `newName` as the new reference and renders
   reviewed rename commands for ZFS datasets/zvols/snapshots, Btrfs subvolume
-  paths, LVM logical volumes/thin pools, and LVM volume groups.
+  paths, LVM logical volumes/thin pools, and LVM volume groups. For ZFS
+  datasets and zvols, current-topology comparison suppresses rename actions
+  when the source no longer exists and the destination already exists with the
+  expected ZFS object kind.
 - `operation = "promote"` is offline-required but non-destructive for ZFS
   clone datasets and zvols. It renders reviewed `zfs promote <clone>` commands
   after inspecting the clone origin. Current-topology comparison suppresses
@@ -658,6 +661,10 @@ status, origin, usage, volsize, or compression metadata.
 ZFS dataset and zvol promote reconciliation compares probed `zfs.origin`
 metadata. Clones with an origin remain actionable for reviewed promotion, while
 already-promoted objects without origin metadata are suppressed as satisfied.
+ZFS dataset and zvol rename reconciliation compares the old and new
+`pool/name` identities. Source-present renames remain actionable with current
+metadata, while source-absent and destination-present renames are suppressed as
+already reflected in topology.
 Generic snapshot destroy reconciliation suppresses concrete ZFS snapshot names
 and absolute Btrfs snapshot paths only when they are already absent. Present
 snapshots stay actionable with warnings that include available ZFS

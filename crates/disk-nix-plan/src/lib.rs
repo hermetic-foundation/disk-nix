@@ -356,6 +356,8 @@ pub enum TopologyDiagnosticKind {
     ZfsObjectDestroyRequired,
     ZfsObjectPromoteAlreadySatisfied,
     ZfsObjectPromoteRequired,
+    ZfsObjectRenameAlreadySatisfied,
+    ZfsObjectRenameRequired,
     ZfsPoolCreateAlreadySatisfied,
     ZfsPoolCreateRequired,
     ZfsPoolImportAlreadySatisfied,
@@ -894,6 +896,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsObjectPromoteAlreadySatisfied
+                        | TopologyDiagnosticKind::ZfsObjectRenameAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsPoolCreateAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
                 )
@@ -1474,6 +1477,7 @@ fn already_satisfied_action_ids(
                 | Operation::Stop
                 | Operation::Destroy
                 | Operation::Promote
+                | Operation::Rename
                 | Operation::RemoveDevice
                 | Operation::RemoveKey
                 | Operation::RemoveToken
@@ -1544,6 +1548,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsObjectPromoteAlreadySatisfied
+                    | TopologyDiagnosticKind::ZfsObjectRenameAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsPoolCreateAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
             );
@@ -1591,6 +1596,9 @@ fn topology_diagnostics_for_action(
             return vec![diagnostic];
         }
         if let Some(diagnostic) = zfs_object_destroy_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
+        if let Some(diagnostic) = zfs_object_rename_absent_diagnostic(action, graph, &query) {
             return vec![diagnostic];
         }
         if let Some(diagnostic) = dm_map_absent_diagnostic(action, &query) {
@@ -1713,6 +1721,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(zfs_object_create_present_diagnostic(action, node, &query));
     diagnostics.extend(zfs_object_destroy_present_diagnostic(action, node, &query));
     diagnostics.extend(zfs_object_promote_diagnostic(action, node, &query));
+    diagnostics.extend(zfs_object_rename_present_diagnostic(action, node, &query));
     diagnostics.extend(zfs_pool_create_diagnostic(action, node, &query));
     diagnostics.extend(zfs_pool_import_diagnostic(action, node, &query));
     diagnostics
@@ -5477,6 +5486,101 @@ fn zfs_object_promote_diagnostic(
         kind: TopologyDiagnosticKind::ZfsObjectPromoteAlreadySatisfied,
         query: query.to_string(),
         message: format!("ZFS {object_label} {query} no longer reports a clone origin"),
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn zfs_object_rename_absent_diagnostic(
+    action: &PlannedAction,
+    graph: &StorageGraph,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    let object_label = zfs_object_destroy_label(action)?;
+    if action.operation != Operation::Rename || !is_concrete_zfs_object_target(query) {
+        return None;
+    }
+
+    let destination = action.context.rename_to.as_deref()?;
+    let expected_kind = zfs_object_expected_kind(action)?;
+    let destination_node = graph
+        .find_nodes(destination)
+        .into_iter()
+        .find(|node| node.kind == expected_kind);
+    if let Some(node) = destination_node {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Info,
+            kind: TopologyDiagnosticKind::ZfsObjectRenameAlreadySatisfied,
+            query: query.to_string(),
+            message: format!(
+                "ZFS {object_label} rename from {query} to {destination} is already reflected in current topology"
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let conflicting_destination = graph.find_nodes(destination).into_iter().next();
+    conflicting_destination.map(|node| TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::ZfsObjectRenameRequired,
+        query: query.to_string(),
+        message: format!(
+            "ZFS {object_label} rename source {query} is missing, but destination {destination} matched current {} node {}; zfs rename remains actionable for review",
+            node.kind, node.name
+        ),
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn zfs_object_rename_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    let object_label = zfs_object_destroy_label(action)?;
+    if action.operation != Operation::Rename {
+        return None;
+    }
+
+    let expected_kind = zfs_object_expected_kind(action)?;
+    if node.kind != expected_kind {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::ZfsObjectRenameRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a ZFS {object_label}; zfs rename remains actionable",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let destination = action
+        .context
+        .rename_to
+        .as_deref()
+        .unwrap_or("<rename-target>");
+    let details = zfs_object_destroy_details(node);
+    let message = if details.is_empty() {
+        format!(
+            "ZFS {object_label} rename source {query} is present; rename to {destination} remains offline-required"
+        )
+    } else {
+        format!(
+            "ZFS {object_label} rename source {query} is present with {}; rename to {destination} remains offline-required",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::ZfsObjectRenameRequired,
+        query: query.to_string(),
+        message,
         current: Some(current_node_summary(node)),
     })
 }
@@ -21430,6 +21534,122 @@ mod tests {
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectPromoteRequired
                 && diagnostic.message.contains("tank/vm/root@clean")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_zfs_rename_destinations() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "datasets": {
+                "tank/home-old": {
+                  "operation": "rename",
+                  "renameTo": "tank/home-new"
+                },
+                "tank/logs-old": {
+                  "operation": "rename",
+                  "renameTo": "tank/logs-new"
+                },
+                "tank/missing-old": {
+                  "operation": "rename",
+                  "renameTo": "tank/missing-new"
+                }
+              },
+              "zvols": {
+                "tank/vm/root-old": {
+                  "operation": "rename",
+                  "renameTo": "tank/vm/root-new"
+                },
+                "tank/vm/data-old": {
+                  "operation": "rename",
+                  "renameTo": "tank/vm/data-new"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "zfs-dataset:tank/home-old",
+                NodeKind::ZfsDataset,
+                "tank/home-old",
+            )
+            .with_property("zfs.mountpoint", "/home-old")
+            .with_property("zfs.used", "10G"),
+        );
+        graph.add_node(
+            Node::new(
+                "zfs-dataset:tank/logs-new",
+                NodeKind::ZfsDataset,
+                "tank/logs-new",
+            )
+            .with_property("zfs.mountpoint", "/logs"),
+        );
+        graph.add_node(
+            Node::new("zvol:tank/vm/root-old", NodeKind::Zvol, "tank/vm/root-old")
+                .with_property("zfs.volsize", "80G")
+                .with_property("zfs.origin", "tank/vm/base@clean"),
+        );
+        graph.add_node(Node::new(
+            "zvol:tank/vm/data-new",
+            NodeKind::Zvol,
+            "tank/vm/data-new",
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 5);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(plan.actions.len(), 3);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "datasets:tank/home-old:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "datasets:tank/missing-old:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "zvols:tank/vm/root-old:rename")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/logs-old:rename"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectRenameAlreadySatisfied
+                && diagnostic.message.contains("tank/logs-new")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/data-old:rename"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectRenameAlreadySatisfied
+                && diagnostic.message.contains("tank/vm/data-new")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/home-old:rename"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectRenameRequired
+                && diagnostic.message.contains("rename to tank/home-new")
+                && diagnostic.message.contains("mountpoint /home-old")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/root-old:rename"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectRenameRequired
+                && diagnostic.message.contains("rename to tank/vm/root-new")
+                && diagnostic.message.contains("volsize 80G")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/missing-old:rename"
+                && diagnostic.kind == TopologyDiagnosticKind::Missing
         }));
     }
 

@@ -1127,8 +1127,11 @@ dataset, and destroy actions are suppressed only when the dataset is already
 absent. Existing non-dataset matches stay actionable for create with warnings;
 present datasets stay actionable for destroy with warnings that include
 mountpoint, quota, reservation, encryption, key status, origin, usage, or
-compression metadata when available. Dataset and zvol rename declarations render reviewed
-`zfs rename <old> <new>` commands from `operation = "rename"` plus `renameTo`.
+compression metadata when available. Dataset and zvol rename declarations render
+reviewed `zfs rename <old> <new>` commands from `operation = "rename"` plus
+`renameTo`. Current-topology probing suppresses rename actions when the old ZFS
+object is absent and the new dataset or zvol name already exists with the
+expected kind.
 ZFS clone promotion declarations render reviewed `zfs get origin <clone>`
 preflight checks and `zfs promote <clone>` commands from
 `operation = "promote"`. Current-topology probing suppresses promote actions
