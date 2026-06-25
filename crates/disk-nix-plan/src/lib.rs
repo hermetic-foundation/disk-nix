@@ -2255,6 +2255,11 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
             .or_else(|| property_value_from_node(node, property).map(str::to_string));
     }
 
+    if action.context.collection.as_deref() == Some("luksKeyslots") {
+        return current_luks_keyslot_property_value(action, node, property)
+            .or_else(|| property_value_from_node(node, property).map(str::to_string));
+    }
+
     if action.context.collection.as_deref() == Some("luks.devices") {
         return current_luks_property_value(property, node)
             .or_else(|| property_value_from_node(node, property).map(str::to_string));
@@ -2325,9 +2330,65 @@ fn comparable_property_value(action: &PlannedAction, property: &str, value: &str
             .unwrap_or_else(|| value.to_string()),
         Some("luks.devices") => normalize_luks_property_value(&normalized_property, value)
             .unwrap_or_else(|| value.to_string()),
+        Some("luksKeyslots") => normalize_luks_keyslot_property_value(&normalized_property, value)
+            .unwrap_or_else(|| value.to_string()),
         Some("btrfsQgroups") => normalize_btrfs_qgroup_property_value(&normalized_property, value)
             .unwrap_or_else(|| value.to_string()),
         _ => value.to_string(),
+    }
+}
+
+fn current_luks_keyslot_property_value(
+    action: &PlannedAction,
+    node: &Node,
+    property: &str,
+) -> Option<String> {
+    match luks_keyslot_property_kind(property)? {
+        LuksKeyslotPropertyKind::Priority => {
+            let key_slot = action.context.key_slot.as_deref().or_else(|| {
+                action
+                    .context
+                    .name
+                    .as_deref()
+                    .and_then(|name| name.rsplit_once(':').map(|(_, slot)| slot).or(Some(name)))
+                    .filter(|slot| slot.chars().all(|character| character.is_ascii_digit()))
+            })?;
+            property_value_from_node(
+                node,
+                &format!("cryptsetup.luks-keyslot-{key_slot}-priority"),
+            )
+            .or_else(|| property_value_from_node(node, property))
+            .map(str::to_string)
+        }
+        LuksKeyslotPropertyKind::KeyFile => None,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LuksKeyslotPropertyKind {
+    KeyFile,
+    Priority,
+}
+
+fn luks_keyslot_property_kind(property: &str) -> Option<LuksKeyslotPropertyKind> {
+    match normalize_storage_property_name(property).as_str() {
+        "keyfile"
+        | "key-file"
+        | "luks-keyfile"
+        | "luks-key-file"
+        | "cryptsetup-keyfile"
+        | "cryptsetup-key-file" => Some(LuksKeyslotPropertyKind::KeyFile),
+        "priority" | "luks-keyslot-priority" | "cryptsetup-luks-keyslot-priority" => {
+            Some(LuksKeyslotPropertyKind::Priority)
+        }
+        _ => None,
+    }
+}
+
+fn normalize_luks_keyslot_property_value(property: &str, value: &str) -> Option<String> {
+    match luks_keyslot_property_kind(property)? {
+        LuksKeyslotPropertyKind::KeyFile => Some(value.to_string()),
+        LuksKeyslotPropertyKind::Priority => Some(normalize_storage_property_name(value)),
     }
 }
 
@@ -8720,7 +8781,11 @@ fn classify_property_change(
         );
     }
 
-    if collection == "luksKeyslots" || collection == "luksTokens" {
+    if collection == "luksKeyslots" {
+        return classify_luks_keyslot_property_change(property, value);
+    }
+
+    if collection == "luksTokens" {
         return (
             RiskClass::OfflineRequired,
             Some(Advice {
@@ -8739,6 +8804,76 @@ fn classify_property_change(
     }
 
     (RiskClass::Safe, None)
+}
+
+fn classify_luks_keyslot_property_change(
+    property: &str,
+    value: &Value,
+) -> (RiskClass, Option<Advice>) {
+    match luks_keyslot_property_kind(property) {
+        Some(LuksKeyslotPropertyKind::KeyFile) => (
+            RiskClass::OfflineRequired,
+            Some(Advice {
+                summary: format!(
+                    "LUKS keyslot property {property} updates encrypted-container key material"
+                ),
+                alternatives: vec![
+                    "verify at least one independent recovery key before changing key material"
+                        .to_string(),
+                    "add and test replacement access before removing the old keyslot".to_string(),
+                    "back up the LUKS header before keyslot access changes".to_string(),
+                ],
+            }),
+        ),
+        Some(LuksKeyslotPropertyKind::Priority) => {
+            let normalized = normalize_storage_property_name(&property_value(value));
+            if matches!(normalized.as_str(), "prefer" | "normal" | "ignore") {
+                (
+                    RiskClass::OfflineRequired,
+                    Some(Advice {
+                        summary: format!(
+                            "LUKS keyslot property {property} updates keyslot priority metadata"
+                        ),
+                        alternatives: vec![
+                            "back up the LUKS header before changing keyslot metadata".to_string(),
+                            "verify another keyslot or recovery passphrase unlocks the device first"
+                                .to_string(),
+                            "use prefer, normal, or ignore for cryptsetup keyslot priority"
+                                .to_string(),
+                        ],
+                    }),
+                )
+            } else {
+                (
+                    RiskClass::Unsupported,
+                    Some(Advice {
+                        summary: format!(
+                            "LUKS keyslot priority value {} is not supported",
+                            property_value(value)
+                        ),
+                        alternatives: vec![
+                            "use prefer, normal, or ignore for LUKS keyslot priority".to_string(),
+                            "inspect cryptsetup luksDump output before changing keyslot metadata"
+                                .to_string(),
+                        ],
+                    }),
+                )
+            }
+        }
+        None => (
+            RiskClass::Unsupported,
+            Some(Advice {
+                summary: format!("LUKS keyslot property {property} is not mapped to a safe command"),
+                alternatives: vec![
+                    "use keyFile for reviewed key material rotation".to_string(),
+                    "use priority with prefer, normal, or ignore for keyslot priority metadata"
+                        .to_string(),
+                    "apply unsupported LUKS keyslot metadata changes manually after reviewing cryptsetup documentation"
+                        .to_string(),
+                ],
+            }),
+        ),
+    }
 }
 
 fn classify_vdo_property_change(property: &str, value: &Value) -> (RiskClass, Option<Advice>) {
@@ -16738,14 +16873,23 @@ mod tests {
                     "keySlot": "3",
                     "keyFile": "/run/keys/root-old"
                   }
+                },
+                "cryptroot:4": {
+                  "properties": {
+                    "priority": "prefer"
+                  },
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "keySlot": "4"
+                  }
                 }
               }
             }"#,
         )
         .expect("plan should parse");
 
-        assert_eq!(plan.summary.action_count, 3);
-        assert_eq!(plan.summary.offline_required_count, 2);
+        assert_eq!(plan.summary.action_count, 4);
+        assert_eq!(plan.summary.offline_required_count, 3);
         assert_eq!(plan.summary.potential_data_loss_count, 1);
         let create = plan
             .actions
@@ -16786,6 +16930,48 @@ mod tests {
             change.context.property_value.as_deref(),
             Some("/run/keys/root-rotated")
         );
+
+        let priority = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "luksKeyslots:cryptroot:4:set-property:priority")
+            .expect("LUKS keyslot priority action exists");
+        assert_eq!(priority.risk, RiskClass::OfflineRequired);
+        assert_eq!(priority.context.key_slot.as_deref(), Some("4"));
+        assert_eq!(priority.context.property_value.as_deref(), Some("prefer"));
+    }
+
+    #[test]
+    fn plan_rejects_unsupported_luks_keyslot_properties() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luksKeyslots": {
+                "cryptroot:1": {
+                  "properties": {
+                    "pbkdf": "argon2id",
+                    "priority": "urgent"
+                  },
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "keySlot": "1"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 2);
+        assert_eq!(plan.summary.unsupported_count, 2);
+        assert!(plan.actions.iter().all(|action| {
+            action.risk == RiskClass::Unsupported
+                && action.advice.as_ref().is_some_and(|advice| {
+                    advice
+                        .alternatives
+                        .iter()
+                        .any(|alternative| alternative.contains("keyslot"))
+                })
+        }));
     }
 
     #[test]
@@ -20060,6 +20246,73 @@ mod tests {
             diagnostic.action_id == "lukskeyslots:cryptroot:2:remove-key"
                 && diagnostic.kind == TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
                 && diagnostic.query == "/dev/disk/by-id/root-luks"
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_luks_keyslot_priority_properties() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luksKeyslots": {
+                "cryptroot:1": {
+                  "properties": {
+                    "priority": "prefer"
+                  },
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "keySlot": "1"
+                  }
+                },
+                "cryptroot:2": {
+                  "properties": {
+                    "priority": "ignore"
+                  },
+                  "device": "/dev/disk/by-id/root-luks",
+                  "metadata": {
+                    "keySlot": "2"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "block:/dev/disk/by-id/root-luks",
+                NodeKind::LuksContainer,
+                "root-luks",
+            )
+            .with_path("/dev/disk/by-id/root-luks")
+            .with_property("cryptsetup.luks-keyslots", "1,2")
+            .with_property("cryptsetup.luks-keyslot-1-priority", "prefer")
+            .with_property("cryptsetup.luks-keyslot-2-priority", "normal"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "luksKeyslots:cryptroot:2:set-property:priority")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luksKeyslots:cryptroot:1:set-property:priority"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luksKeyslots:cryptroot:2:set-property:priority"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic.message.contains("normal")
+                && diagnostic.message.contains("ignore")
         }));
     }
 

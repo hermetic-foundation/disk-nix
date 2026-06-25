@@ -709,6 +709,11 @@ Example lifecycle planning through NixOS options:
       device = "/dev/disk/by-id/root-luks";
       keySlot = "2";
     };
+    luksKeyslots."cryptroot:3" = {
+      device = "/dev/disk/by-id/root-luks";
+      keySlot = "3";
+      properties.priority = "prefer";
+    };
     luksTokens."cryptroot:0" = {
       operation = "import-token";
       device = "/dev/disk/by-id/root-luks";

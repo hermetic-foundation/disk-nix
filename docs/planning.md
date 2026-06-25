@@ -898,15 +898,19 @@ LUKS keyslot and token command plans use explicit `add-key`, `remove-key`,
 `cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and
 `cryptsetup token remove`. Legacy preserved `create` and `destroy` map to the
 same access-material command plans. `luksChangeKey` is used for key-file
-property updates. Executable keyslot add/change plans require a LUKS backing
-device and replacement key file; token imports require a token JSON file.
-Removal requires both the device and keyslot number or token id, and remains
-blocked by the potential-data-loss policy. Logical keyslot and token names can
-declare concrete slot/token ids with `keySlot`, `key-slot`, `slot`, `tokenId`,
-`token-id`, or `token`. With current-topology probing, already-absent
-keyslots/tokens are suppressed only after the backing container is matched and
-the specific id is missing from probed LUKS header metadata; still-present
-entries stay actionable.
+property updates, and keyslot `priority` updates render
+`cryptsetup config <device> --key-slot <slot> --priority <prefer|normal|ignore>`.
+Executable keyslot add/change plans require a LUKS backing device and
+replacement key file; keyslot priority updates require a LUKS backing device,
+slot number, and one of `prefer`, `normal`, or `ignore`; token imports require
+a token JSON file. Removal requires both the device and keyslot number or token
+id, and remains blocked by the potential-data-loss policy. Logical keyslot and
+token names can declare concrete slot/token ids with `keySlot`, `key-slot`,
+`slot`, `tokenId`, `token-id`, or `token`. With current-topology probing,
+already-absent keyslots/tokens are suppressed only after the backing container
+is matched and the specific id is missing from probed LUKS header metadata;
+still-present entries stay actionable. Keyslot priority property actions are
+suppressed when the probed keyslot already has the requested priority.
 LVM cache command plans use `lvconvert --type cache`, `lvconvert --uncache`,
 and `lvchange --cachemode` or `--cachepolicy` for `lvmCaches` lifecycle
 declarations. Executable attach plans require an origin `vg/lv` target and a

@@ -5717,12 +5717,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     action.context.property_value.as_deref(),
                 )
             } else if collection == Some("luksKeyslots") {
-                luks_change_key_command(
-                    luks_keyslot_device(action),
-                    luks_keyslot_id(action),
-                    action.context.key_file.as_deref(),
-                    action.context.property_value.as_deref(),
-                )
+                luks_keyslot_property_command(action, property)
             } else if collection == Some("luksTokens") {
                 luks_token_import_command(
                     luks_token_device(action),
@@ -12112,6 +12107,84 @@ fn luks_change_key_command(
     }
 }
 
+fn luks_keyslot_property_command(action: &PlannedAction, property: &str) -> ExecutionCommand {
+    match normalize_property_name(property).as_str() {
+        "keyfile"
+        | "key-file"
+        | "luks-keyfile"
+        | "luks-key-file"
+        | "cryptsetup-keyfile"
+        | "cryptsetup-key-file" => luks_change_key_command(
+            luks_keyslot_device(action),
+            luks_keyslot_id(action),
+            action.context.key_file.as_deref(),
+            action.context.property_value.as_deref(),
+        ),
+        "priority" | "luks-keyslot-priority" | "cryptsetup-luks-keyslot-priority" => {
+            luks_keyslot_priority_command(
+                luks_keyslot_device(action),
+                luks_keyslot_id(action),
+                action.context.property_value.as_deref(),
+            )
+        }
+        _ => command_vec_with_readiness(
+            vec![
+                "cryptsetup".to_string(),
+                "config".to_string(),
+                "<luks-device>".to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported LUKS keyslot property"],
+            "change LUKS keyslot metadata after selecting a supported property",
+        ),
+    }
+}
+
+fn luks_keyslot_priority_command(
+    device: Option<&str>,
+    key_slot: Option<&str>,
+    priority: Option<&str>,
+) -> ExecutionCommand {
+    let mut argv = vec![
+        "cryptsetup".to_string(),
+        "config".to_string(),
+        device.unwrap_or("<luks-device>").to_string(),
+        "--key-slot".to_string(),
+        key_slot.unwrap_or("<key-slot>").to_string(),
+        "--priority".to_string(),
+        priority.unwrap_or("<priority>").to_string(),
+    ];
+    let normalized_priority = priority.map(normalize_property_name);
+    let valid_priority = normalized_priority
+        .as_deref()
+        .is_some_and(|value| matches!(value, "prefer" | "normal" | "ignore"));
+    if let Some(normalized_priority) = normalized_priority {
+        if valid_priority {
+            if let Some(last) = argv.last_mut() {
+                *last = normalized_priority;
+            }
+        }
+    }
+
+    let missing = missing_luks_keyslot_priority_inputs(device, key_slot, priority, valid_priority);
+    if missing.is_empty() {
+        command_vec(
+            argv,
+            true,
+            "change LUKS keyslot priority metadata after header backup",
+        )
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "change LUKS keyslot priority after selecting device, slot, and priority",
+        )
+    }
+}
+
 fn luks_token_import_command(
     device: Option<&str>,
     token_id: Option<&str>,
@@ -12197,6 +12270,21 @@ fn missing_luks_keyslot_inputs(device: Option<&str>, key_slot: Option<&str>) -> 
     }
     if key_slot.is_none() {
         missing.push("LUKS keyslot number");
+    }
+    missing
+}
+
+fn missing_luks_keyslot_priority_inputs(
+    device: Option<&str>,
+    key_slot: Option<&str>,
+    priority: Option<&str>,
+    valid_priority: bool,
+) -> Vec<&'static str> {
+    let mut missing = missing_luks_keyslot_inputs(device, key_slot);
+    if priority.is_none() {
+        missing.push("LUKS keyslot priority");
+    } else if !valid_priority {
+        missing.push("LUKS keyslot priority prefer, normal, or ignore");
     }
     missing
 }
@@ -16887,6 +16975,15 @@ mod tests {
                       "keySlot": "3",
                       "keyFile": "/run/keys/root-old"
                     }
+                  },
+                  "cryptroot:4": {
+                    "properties": {
+                      "priority": "prefer"
+                    },
+                    "device": "/dev/disk/by-id/root-luks",
+                    "metadata": {
+                      "keySlot": "4"
+                    }
                   }
                 }
               },
@@ -16932,10 +17029,70 @@ mod tests {
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luksKeyslots:cryptroot:4:set-property:priority"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "config",
+                            "/dev/disk/by-id/root-luks",
+                            "--key-slot",
+                            "4",
+                            "--priority",
+                            "prefer",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "lukskeyslots:cryptroot:1:add-key"
                 && step.commands.iter().any(|command| {
                     command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
+                })
+        }));
+    }
+
+    #[test]
+    fn luks_keyslot_priority_reports_missing_inputs_for_execute_readiness() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "luksKeyslots": {
+                  "root-priority": {
+                    "properties": {
+                      "priority": "normal"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "luksKeyslots:root-priority:set-property:priority"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "cryptsetup",
+                            "config",
+                            "<luks-device>",
+                            "--key-slot",
+                            "<key-slot>",
+                            "--priority",
+                            "normal",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs
+                            == ["LUKS backing device", "LUKS keyslot number"]
                 })
         }));
     }

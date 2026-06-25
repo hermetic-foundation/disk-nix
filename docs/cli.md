@@ -1103,15 +1103,20 @@ LUKS keyslot and token command plans render explicit `operation = "add-key"`,
 policy-blocked `luksKillSlot`, `cryptsetup token import`, and policy-blocked
 `cryptsetup token remove` commands. Legacy preserved `create`/`destroy`
 declarations still map to the same access-material command plans.
-`luksChangeKey` is used for key-file property updates. Executable keyslot
-add/change plans require a LUKS backing device and new key file; token imports
-require a token JSON file; removal also requires a keyslot number or token id.
-Logical keyslot and token names can declare concrete slot/token ids with
-`keySlot`, `key-slot`, `slot`, `tokenId`, `token-id`, or `token`. With
-current-topology probing, removal is suppressed only when the matched LUKS
-container no longer lists the keyslot or token id; present entries stay
-actionable with warnings that include keyslot priority, cipher, PBKDF, token
-type, or token keyslot binding metadata when available.
+`luksChangeKey` is used for key-file property updates, and keyslot `priority`
+updates render
+`cryptsetup config <device> --key-slot <slot> --priority <prefer|normal|ignore>`.
+Executable keyslot add/change plans require a LUKS backing device and new key
+file; priority updates require a LUKS backing device, keyslot number, and one of
+`prefer`, `normal`, or `ignore`; token imports require a token JSON file;
+removal also requires a keyslot number or token id. Logical keyslot and token
+names can declare concrete slot/token ids with `keySlot`, `key-slot`, `slot`,
+`tokenId`, `token-id`, or `token`. With current-topology probing, removal is
+suppressed only when the matched LUKS container no longer lists the keyslot or
+token id; keyslot priority changes are suppressed when probed metadata already
+matches. Present entries stay actionable with warnings that include keyslot
+priority, cipher, PBKDF, token type, or token keyslot binding metadata when
+available.
 LVM thin-pool command plans render `lvcreate --type thin-pool`, `lvextend`,
 read-only `lvs` rescans, and policy-gated `lvremove` commands for `thinPools`
 lifecycle declarations, with separate unresolved-input markers for target form

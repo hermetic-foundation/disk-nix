@@ -134,6 +134,10 @@ behavior across real storage stacks.
   active swap priority when `/dev/zram*` metadata is available. Zram property
   declarations are offline-required generator-reconciliation requests rather
   than direct live mutation commands.
+- LUKS keyslot property updates distinguish key-file rotation from keyslot
+  priority metadata. Priority changes render `cryptsetup config` with
+  `prefer`, `normal`, or `ignore`, and current-topology reconciliation
+  suppresses the action when probed keyslot priority already matches.
 - NixOS assertions for duplicate active identities across mountpoints, swaps,
   LUKS mapper names, LUKS keyslot/token selectors, disk and partition targets,
   backing files, Btrfs subvolumes and qgroups, device-mapper maps, MD RAID,
