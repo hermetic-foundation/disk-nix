@@ -103,11 +103,12 @@ Examples:
   because every dependent LUKS, LVM, VDO, multipath, filesystem, mount, or
   service consumer must move to the new mapper name together. Destroy plans are
   destructive and render `dmsetup remove` only after identity, dependency, and
-  status inspection. Current-topology comparison suppresses destroy actions
-  when the mapper is already absent and keeps present maps actionable with a
-  warning that includes `dm.open-count` when probe data reports it. Prefer
-  LUKS, LVM, VDO, multipath, or cache-specific teardown when another domain
-  owns the mapper.
+  status inspection. Current-topology comparison suppresses rename actions when
+  the old mapper is absent and the new mapper path exists, suppresses destroy
+  actions when the mapper is already absent, and keeps present maps actionable
+  with a warning that includes `dm.open-count` when probe data reports it.
+  Prefer LUKS, LVM, VDO, multipath, or cache-specific teardown when another
+  domain owns the mapper.
 - LUKS keyslot and token add/change operations are offline-required header
   updates. Keyslot or token removal is potential-data-loss because deleting the
   last usable unlock path can make encrypted data inaccessible.

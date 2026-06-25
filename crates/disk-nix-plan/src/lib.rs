@@ -271,6 +271,8 @@ pub enum TopologyDiagnosticKind {
     LunDetachRequired,
     DmMapDestroyAlreadySatisfied,
     DmMapDestroyRequired,
+    DmMapRenameAlreadySatisfied,
+    DmMapRenameRequired,
     NvmeNamespaceAttachAlreadySatisfied,
     NvmeNamespaceAttachRequired,
     NvmeNamespaceDetachAlreadySatisfied,
@@ -857,6 +859,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                         | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
                         | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
+                        | TopologyDiagnosticKind::DmMapRenameAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                         | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
                         | TopologyDiagnosticKind::LunAttachAlreadySatisfied
@@ -1510,6 +1513,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
                     | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
                     | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
+                    | TopologyDiagnosticKind::DmMapRenameAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
                     | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
                     | TopologyDiagnosticKind::LunAttachAlreadySatisfied
@@ -1608,6 +1612,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = lvm_rename_absent_diagnostic(action, graph, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = dm_map_rename_absent_diagnostic(action, graph, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = dm_map_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -1696,6 +1703,7 @@ fn topology_diagnostics_for_action(
         action, node, &query,
     ));
     diagnostics.extend(btrfs_qgroup_create_present_diagnostic(action, node, &query));
+    diagnostics.extend(dm_map_rename_present_diagnostic(action, node, &query));
     diagnostics.extend(dm_map_present_diagnostic(action, node, &query));
     diagnostics.extend(multipath_present_diagnostic(action, node, &query));
     diagnostics.extend(multipath_path_add_diagnostic(action, node, graph, &query));
@@ -4124,6 +4132,131 @@ fn dm_map_present_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn dm_map_rename_absent_diagnostic(
+    action: &PlannedAction,
+    graph: &StorageGraph,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("dmMaps")
+        || action.operation != Operation::Rename
+    {
+        return None;
+    }
+
+    let destination = dm_map_rename_destination(action)?;
+    let destination_matches = graph.find_nodes(&destination);
+    if let Some(node) = destination_matches
+        .iter()
+        .copied()
+        .find(|node| node.kind == NodeKind::DeviceMapper)
+    {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Info,
+            kind: TopologyDiagnosticKind::DmMapRenameAlreadySatisfied,
+            query: query.to_string(),
+            message: format!(
+                "device-mapper rename from {query} to {destination} is already reflected in current topology"
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    destination_matches
+        .first()
+        .copied()
+        .map(|node| TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::DmMapRenameRequired,
+            query: query.to_string(),
+            message: format!(
+                "device-mapper rename source {query} is missing, but destination {destination} matched current {} node {}; rename remains actionable for review",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        })
+}
+
+fn dm_map_rename_present_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("dmMaps")
+        || action.operation != Operation::Rename
+    {
+        return None;
+    }
+
+    if node.kind != NodeKind::DeviceMapper {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::DmMapRenameRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a device-mapper map; rename remains actionable",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    let destination =
+        dm_map_rename_destination(action).unwrap_or_else(|| "<new-dm-map-name>".to_string());
+    let details = dm_map_details(node);
+    let message = if details.is_empty() {
+        format!(
+            "device-mapper rename source {query} is present; rename to {destination} remains offline-required"
+        )
+    } else {
+        format!(
+            "device-mapper rename source {query} is present with {}; rename to {destination} remains offline-required",
+            details.join(", ")
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::DmMapRenameRequired,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn dm_map_rename_destination(action: &PlannedAction) -> Option<String> {
+    let rename_to = action.context.rename_to.as_deref()?;
+    if rename_to.starts_with("/dev/mapper/") || rename_to.starts_with("/dev/dm-") {
+        Some(rename_to.to_string())
+    } else if !rename_to.is_empty() && !rename_to.contains('/') {
+        Some(format!("/dev/mapper/{rename_to}"))
+    } else {
+        None
+    }
+}
+
+fn dm_map_details(node: &Node) -> Vec<String> {
+    [
+        ("dm.name", "name"),
+        ("dm.uuid", "uuid"),
+        ("dm.major", "major"),
+        ("dm.minor", "minor"),
+        ("dm.open-count", "open count"),
+        ("dm.segments", "segments"),
+        ("dm.events", "events"),
+        ("dm.table", "table"),
+        ("dm.status", "status"),
+    ]
+    .into_iter()
+    .filter_map(|(property, label)| {
+        property_value_from_node(node, property).map(|value| format!("{label} {value}"))
+    })
+    .collect()
 }
 
 fn multipath_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
@@ -23598,6 +23731,85 @@ mod tests {
                 && diagnostic
                     .message
                     .contains("still present with open count 2")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_dm_map_rename_destinations() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "dmMaps": {
+                "cryptswap": {
+                  "operation": "rename",
+                  "target": "/dev/mapper/cryptswap",
+                  "renameTo": "cryptswap-retired"
+                },
+                "cryptold": {
+                  "operation": "rename",
+                  "target": "/dev/mapper/cryptold",
+                  "renameTo": "/dev/mapper/cryptnew"
+                },
+                "missing": {
+                  "operation": "rename",
+                  "target": "/dev/mapper/missing",
+                  "renameTo": "missing-new"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("dm:cryptswap", NodeKind::DeviceMapper, "cryptswap")
+                .with_path("/dev/mapper/cryptswap")
+                .with_property("dm.open-count", "1")
+                .with_property("dm.uuid", "CRYPT-LUKS2-root"),
+        );
+        graph.add_node(
+            Node::new("dm:cryptnew", NodeKind::DeviceMapper, "cryptnew")
+                .with_path("/dev/mapper/cryptnew")
+                .with_property("dm.open-count", "0"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(plan.actions.len(), 2);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "dmmaps:cryptswap:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "dmmaps:missing:rename")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "dmmaps:cryptold:rename"
+                && diagnostic.kind == TopologyDiagnosticKind::DmMapRenameAlreadySatisfied
+                && diagnostic.message.contains("/dev/mapper/cryptnew")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "dmmaps:cryptswap:rename"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::DmMapRenameRequired
+                && diagnostic
+                    .message
+                    .contains("rename to /dev/mapper/cryptswap-retired")
+                && diagnostic.message.contains("open count 1")
+                && diagnostic.message.contains("uuid CRYPT-LUKS2-root")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "dmmaps:missing:rename"
+                && diagnostic.kind == TopologyDiagnosticKind::Missing
         }));
     }
 

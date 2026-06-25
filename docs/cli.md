@@ -773,9 +773,10 @@ declared. `operation = "rename"` renders `dmsetup rename` with an
 offline-required policy gate because dependent consumers must move to the new
 mapper name. `operation = "destroy"` or `destroy = true` renders destructive
 `dmsetup remove` after identity, dependency, and status inspection. With
-current-topology probing, absent mapper removals are suppressed as already
-satisfied and present maps remain actionable with a warning, including the
-current `dm.open-count` when available. Use domain-specific LUKS, LVM, VDO,
+current-topology probing, mapper renames are suppressed when the old mapper is
+absent and the new mapper path exists, absent mapper removals are suppressed as
+already satisfied, and present maps remain actionable with a warning, including
+the current `dm.open-count` when available. Use domain-specific LUKS, LVM, VDO,
 multipath, or cache teardown when those layers own the mapper.
 Btrfs filesystem device-removal plans use Btrfs allocation inspection and
 domain-specific `btrfs device remove` rendering, but the mutating command is
