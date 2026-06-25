@@ -1196,8 +1196,9 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
     match tool {
         "bcache" | "make-bcache" => Some("bcache-tools"),
         "bcachefs" | "mkfs.bcachefs" => Some("bcachefs-tools"),
-        "blkid" | "blockdev" | "findmnt" | "losetup" | "mount" | "partprobe" | "swaplabel"
-        | "swapoff" | "swapon" | "umount" | "wipefs" | "zramctl" => Some("util-linux"),
+        "blkid" | "blockdev" | "fallocate" | "findmnt" | "fstrim" | "losetup" | "mkswap"
+        | "mount" | "partprobe" | "swaplabel" | "swapoff" | "swapon" | "umount" | "wipefs"
+        | "zramctl" => Some("util-linux"),
         "cat" | "du" | "mv" | "stat" | "test" | "truncate" => Some("coreutils"),
         "sh" => Some("bash"),
         "btrfs" | "mkfs.btrfs" => Some("btrfs-progs"),
@@ -22698,6 +22699,86 @@ mod tests {
                 .iter()
                 .any(|hint| hint.contains("services.disk-nix.toolPackages"))
         );
+    }
+
+    #[test]
+    fn tool_requirements_map_util_linux_storage_helpers() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "scratch": {
+                    "mountpoint": "/scratch",
+                    "fsType": "xfs",
+                    "operation": "trim"
+                  }
+                },
+                "swaps": {
+                  "primary": {
+                    "device": "/dev/disk/by-label/swap",
+                    "preserveData": false
+                  },
+                  "scratch": {
+                    "device": "/swapfile",
+                    "operation": "grow",
+                    "desiredSize": "16GiB"
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowFormat": true,
+                "allowOffline": true,
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let mut ran_commands = false;
+        let report = prepare_execution_with_runner_and_tool_checker(
+            &plan,
+            policy,
+            ExecutionMode::Execute,
+            |_| {
+                ran_commands = true;
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+            |tool| !matches!(tool, "fallocate" | "fstrim" | "mkswap"),
+        );
+
+        assert_eq!(report.status, ExecutionStatus::NotReady);
+        assert!(!ran_commands);
+        for tool in ["fallocate", "fstrim", "mkswap"] {
+            assert!(report.messages.iter().any(|message| {
+                message.contains("required tool(s) are not available") && message.contains(tool)
+            }));
+            let requirement = report
+                .tool_requirements
+                .iter()
+                .find(|requirement| requirement.tool == tool)
+                .unwrap_or_else(|| panic!("{tool} tool requirement is reported"));
+            assert_eq!(requirement.availability, ToolAvailability::Missing);
+            assert!(
+                requirement
+                    .remediation
+                    .iter()
+                    .any(|hint| hint.contains("pkgs.util-linux")),
+                "{tool} should suggest pkgs.util-linux"
+            );
+            assert!(
+                requirement
+                    .remediation
+                    .iter()
+                    .any(|hint| hint.contains("services.disk-nix.toolPackages")),
+                "{tool} should include the NixOS module toolPackages hint"
+            );
+        }
     }
 
     #[test]
