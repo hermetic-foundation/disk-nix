@@ -188,12 +188,14 @@ The current probe layer normalizes:
   relationships, concrete snapshot-to-parent subvolume lineage where both
   sides are discovered, and qgroup hierarchy plus
   referenced/exclusive usage and limits
-- bcache sysfs metadata through `/sys/block/*/bcache` for backing devices,
-  cache devices, explicit backing-device metadata, cache sets, mode,
-  running/state, dirty data, available cache percentage, discard, I/O error
-  counters, written/metadata-written accounting, replacement policy, priority
-  stats, congestion thresholds, writeback delay/running/metadata/rate tuning
-  settings, and cache relationships
+- bcache sysfs metadata through `/sys/block/*/bcache` and linked
+  `/sys/fs/bcache/<set>` cache-set directories for backing devices, cache
+  devices, explicit backing-device metadata, cache sets, mode, running/state,
+  dirty data, available cache percentage, discard, I/O error counters,
+  written/metadata-written accounting, replacement policy, priority stats,
+  congestion thresholds, writeback delay/running/metadata/rate tuning settings,
+  cache-set average key size, root usage, journal delay, error thresholds, and
+  cache relationships
 - iSCSI configured nodes through `iscsiadm -m node -P 1` and active sessions
   through `iscsiadm -m session -P 3` for configured target IQNs, node portals,
   parsed portal address/port/TPGT fields, startup, interface, leading-login,

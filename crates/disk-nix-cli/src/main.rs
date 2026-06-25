@@ -4484,6 +4484,25 @@ fn usage_details(node: &Node) -> String {
         ("bcache.kind", "kind"),
         ("bcache.backing-device", "backing-device"),
         ("bcache.set-uuid", "set-uuid"),
+        ("bcache.set-average-key-size", "set-average-key-size"),
+        ("bcache.set-btree-cache-size", "set-btree-cache-size"),
+        (
+            "bcache.set-cache-available-percent",
+            "set-available-percent",
+        ),
+        ("bcache.set-congested", "set-congested"),
+        (
+            "bcache.set-congested-read-threshold-us",
+            "set-congested-read-us",
+        ),
+        (
+            "bcache.set-congested-write-threshold-us",
+            "set-congested-write-us",
+        ),
+        ("bcache.set-io-error-halflife", "set-io-error-halflife"),
+        ("bcache.set-io-error-limit", "set-io-error-limit"),
+        ("bcache.set-journal-delay-ms", "set-journal-delay-ms"),
+        ("bcache.set-root-usage-percent", "set-root-usage-percent"),
         ("bcache.label", "label"),
         ("bcache.state", "state"),
         ("bcache.running", "running"),
@@ -7870,6 +7889,8 @@ mod tests {
                 .with_property("bcache.kind", "cache-set")
                 .with_property("bcache.backing-device", "/dev/sdb1")
                 .with_property("bcache.set-uuid", "cache-set-uuid")
+                .with_property("bcache.set-average-key-size", "16.0k")
+                .with_property("bcache.set-root-usage-percent", "3")
                 .with_property("bcache.state", "clean")
                 .with_property("bcache.running", "1")
                 .with_property("bcache.cache-available-percent", "78")
@@ -7922,6 +7943,7 @@ mod tests {
         assert!(output.contains("writeback"));
         assert!(output.contains("lru"));
         assert!(output.contains("backing-device=/dev/sdb1"));
+        assert!(output.contains("set-average-key-size=16.0k set-root-usage-percent=3"));
         assert!(output.contains("dirty=64.0M"));
         assert!(output.contains("running=1 available-percent=78"));
         assert!(output.contains("io-errors=0 metadata-written=128.0M"));

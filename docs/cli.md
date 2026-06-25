@@ -379,6 +379,7 @@ Use these commands for:
   policy, dirty/writeback data, LVM cache block totals, dirty blocks,
   hit/miss and promotion/demotion counters, writecache total/free/block-size/
   error counters, backing device, cache-set identity, state/running flags,
+  cache-set average key size, root usage, journal delay, error thresholds,
   available cache percentage, discard, I/O errors,
   written/metadata-written accounting, priority stats, congestion thresholds,
   writeback-rate tuning, and vdev state

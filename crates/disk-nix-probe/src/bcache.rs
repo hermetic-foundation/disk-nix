@@ -18,6 +18,7 @@ pub struct BcacheDevice {
     pub role: BcacheRole,
     pub backing_device: Option<String>,
     pub set_uuid: Option<String>,
+    pub set_properties: Vec<(String, String)>,
     pub properties: Vec<(String, String)>,
 }
 
@@ -76,8 +77,9 @@ fn read_device(name: &str, bcache_dir: &Path) -> BcacheDevice {
     } else {
         BcacheRole::Cache
     };
-    let set_uuid =
-        read_trimmed(bcache_dir.join("set_uuid")).or_else(|| cache_set_from_link(bcache_dir));
+    let cache_set_dir = cache_set_dir_from_link(bcache_dir);
+    let set_uuid = read_trimmed(bcache_dir.join("set_uuid"))
+        .or_else(|| cache_set_dir.as_deref().and_then(cache_set_uuid_from_path));
     let backing_device = read_trimmed(bcache_dir.join("backing_dev_name"));
     let mut properties = Vec::new();
 
@@ -125,6 +127,10 @@ fn read_device(name: &str, bcache_dir: &Path) -> BcacheDevice {
         role,
         backing_device,
         set_uuid,
+        set_properties: cache_set_dir
+            .as_deref()
+            .map(read_cache_set_properties)
+            .unwrap_or_default(),
         properties,
     }
 }
@@ -164,10 +170,12 @@ fn add_device(graph: &mut StorageGraph, device: &BcacheDevice) {
 
     if let Some(set_uuid) = &device.set_uuid {
         let set_id = format!("bcache-set:{set_uuid}");
-        graph.add_node(
-            Node::new(set_id.clone(), NodeKind::CacheDevice, set_uuid.clone())
-                .with_property("bcache.kind", "cache-set"),
-        );
+        let mut set_node = Node::new(set_id.clone(), NodeKind::CacheDevice, set_uuid.clone())
+            .with_property("bcache.kind", "cache-set");
+        for (key, value) in &device.set_properties {
+            set_node = set_node.with_property(key.clone(), value.clone());
+        }
+        graph.add_node(set_node);
         graph.add_edge(Edge::new(
             set_id.clone(),
             id.clone(),
@@ -194,11 +202,39 @@ fn dev_path(name: &str) -> String {
     }
 }
 
-fn cache_set_from_link(bcache_dir: &Path) -> Option<String> {
+fn cache_set_dir_from_link(bcache_dir: &Path) -> Option<PathBuf> {
     let target = fs::read_link(bcache_dir.join("cache")).ok()?;
-    target
-        .file_name()
+    Some(if target.is_absolute() {
+        target
+    } else {
+        bcache_dir.join(target)
+    })
+}
+
+fn cache_set_uuid_from_path(path: &Path) -> Option<String> {
+    path.file_name()
         .map(|value| value.to_string_lossy().into_owned())
+}
+
+fn read_cache_set_properties(cache_set_dir: &Path) -> Vec<(String, String)> {
+    let mut properties = Vec::new();
+    for key in [
+        "average_key_size",
+        "btree_cache_size",
+        "cache_available_percent",
+        "congested",
+        "congested_read_threshold_us",
+        "congested_write_threshold_us",
+        "io_error_halflife",
+        "io_error_limit",
+        "journal_delay_ms",
+        "root_usage_percent",
+    ] {
+        if let Some(value) = read_trimmed(cache_set_dir.join(key)) {
+            properties.push((format!("bcache.set-{}", key.replace('_', "-")), value));
+        }
+    }
+    properties
 }
 
 fn read_trimmed(path: impl Into<PathBuf>) -> Option<String> {
@@ -223,6 +259,13 @@ mod tests {
                     role: BcacheRole::Backing,
                     backing_device: Some("sdb1".to_string()),
                     set_uuid: Some("cache-set-uuid".to_string()),
+                    set_properties: vec![
+                        (
+                            "bcache.set-average-key-size".to_string(),
+                            "16.0k".to_string(),
+                        ),
+                        ("bcache.set-root-usage-percent".to_string(), "3".to_string()),
+                    ],
                     properties: vec![
                         (
                             "bcache.cache-available-percent".to_string(),
@@ -257,6 +300,7 @@ mod tests {
                     role: BcacheRole::Cache,
                     backing_device: None,
                     set_uuid: Some("cache-set-uuid".to_string()),
+                    set_properties: Vec::new(),
                     properties: vec![
                         ("bcache.label".to_string(), "fast-cache".to_string()),
                         ("bcache.discard".to_string(), "true".to_string()),
@@ -321,6 +365,15 @@ mod tests {
                 && edge.to.0 == "bcache-set:cache-set-uuid"
                 && edge.relationship == Relationship::MemberOf
         }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.id.0 == "bcache-set:cache-set-uuid"
+                && node.properties.iter().any(|property| {
+                    property.key == "bcache.set-average-key-size" && property.value == "16.0k"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "bcache.set-root-usage-percent" && property.value == "3"
+                })
+        }));
     }
 
     #[test]
@@ -329,7 +382,9 @@ mod tests {
             std::env::temp_dir().join(format!("disk-nix-bcache-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let bcache_dir = root.join("bcache0").join("bcache");
+        let cache_set_dir = root.join("cache-set-uuid");
         fs::create_dir_all(&bcache_dir).expect("fixture directory can be created");
+        fs::create_dir_all(&cache_set_dir).expect("cache set fixture directory can be created");
         for (name, value) in [
             ("uuid", "backing-uuid"),
             ("block_size", "512"),
@@ -342,6 +397,17 @@ mod tests {
         ] {
             fs::write(bcache_dir.join(name), value).expect("fixture field can be written");
         }
+        for (name, value) in [
+            ("average_key_size", "16.0k"),
+            ("journal_delay_ms", "100"),
+            ("root_usage_percent", "3"),
+        ] {
+            fs::write(cache_set_dir.join(name), value)
+                .expect("cache set fixture field can be written");
+        }
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("../../cache-set-uuid", bcache_dir.join("cache"))
+            .expect("cache set fixture link can be created");
 
         let snapshot = read_sysfs_snapshot(&root).expect("fixture sysfs snapshot parses");
         let _ = fs::remove_dir_all(&root);
@@ -368,6 +434,20 @@ mod tests {
                     .any(|(property, actual)| property == key && actual == value),
                 "missing {key}={value:?} in {:?}",
                 device.properties
+            );
+        }
+        for (key, value) in [
+            ("bcache.set-average-key-size", "16.0k"),
+            ("bcache.set-journal-delay-ms", "100"),
+            ("bcache.set-root-usage-percent", "3"),
+        ] {
+            assert!(
+                device
+                    .set_properties
+                    .iter()
+                    .any(|(property, actual)| property == key && actual == value),
+                "missing {key}={value:?} in {:?}",
+                device.set_properties
             );
         }
     }
