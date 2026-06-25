@@ -1198,6 +1198,7 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
         "bcachefs" | "mkfs.bcachefs" => Some("bcachefs-tools"),
         "blkid" | "blockdev" | "findmnt" | "losetup" | "mount" | "partprobe" | "swaplabel"
         | "swapoff" | "swapon" | "umount" | "wipefs" | "zramctl" => Some("util-linux"),
+        "cat" | "du" | "mv" | "stat" | "test" | "truncate" => Some("coreutils"),
         "sh" => Some("bash"),
         "btrfs" | "mkfs.btrfs" => Some("btrfs-progs"),
         "cryptsetup" => Some("cryptsetup"),
@@ -1218,7 +1219,6 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
         "nvme" => Some("nvme-cli"),
         "parted" => Some("parted"),
         "smartctl" => Some("smartmontools"),
-        "truncate" => Some("coreutils"),
         "vdo" | "vdostats" => Some("vdo"),
         "mkfs.xfs" | "xfs_admin" | "xfs_growfs" | "xfs_info" | "xfs_repair" => Some("xfsprogs"),
         "zfs" | "zpool" => Some("zfs"),
@@ -1233,6 +1233,7 @@ fn disk_nix_default_tool_package(package: &str) -> bool {
             | "bcache-tools"
             | "bcachefs-tools"
             | "btrfs-progs"
+            | "coreutils"
             | "cryptsetup"
             | "dosfstools"
             | "e2fsprogs"
@@ -22630,6 +22631,69 @@ mod tests {
         );
         assert!(
             shell_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("services.disk-nix.toolPackages"))
+        );
+    }
+
+    #[test]
+    fn tool_requirements_map_coreutils_commands_to_coreutils() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "backingFiles": {
+                  "/var/lib/images/root.img": {
+                    "operation": "grow",
+                    "desiredSize": "16GiB"
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let mut ran_commands = false;
+        let report = prepare_execution_with_runner_and_tool_checker(
+            &plan,
+            policy,
+            ExecutionMode::Execute,
+            |_| {
+                ran_commands = true;
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+            |tool| tool != "stat",
+        );
+
+        assert_eq!(report.status, ExecutionStatus::NotReady);
+        assert!(!ran_commands);
+        assert!(report.messages.iter().any(|message| {
+            message.contains("required tool(s) are not available") && message.contains("stat")
+        }));
+        let stat_requirement = report
+            .tool_requirements
+            .iter()
+            .find(|requirement| requirement.tool == "stat")
+            .expect("stat tool requirement is reported");
+        assert_eq!(stat_requirement.availability, ToolAvailability::Missing);
+        assert_eq!(stat_requirement.command_count, 2);
+        assert_eq!(stat_requirement.mutating_count, 0);
+        assert!(
+            stat_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.coreutils"))
+        );
+        assert!(
+            stat_requirement
                 .remediation
                 .iter()
                 .any(|hint| hint.contains("services.disk-nix.toolPackages"))

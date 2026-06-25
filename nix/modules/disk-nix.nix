@@ -28,6 +28,7 @@ let
     bcachefs-tools
     bcache-tools
     btrfs-progs
+    coreutils
     cryptsetup
     dosfstools
     e2fsprogs
@@ -1509,6 +1510,7 @@ in
           bcachefs-tools
           bcache-tools
           btrfs-progs
+          coreutils
           cryptsetup
           dosfstools
           e2fsprogs
