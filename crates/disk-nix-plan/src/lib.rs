@@ -1604,6 +1604,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = vdo_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = vdo_grow_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = zfs_object_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -5519,6 +5522,30 @@ fn vdo_grow_diagnostic(
         query: query.to_string(),
         message,
         current: Some(current_node_summary(node)),
+    })
+}
+
+fn vdo_grow_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.operation != Operation::Grow
+        || action.context.collection.as_deref() != Some("vdoVolumes")
+    {
+        return None;
+    }
+
+    let desired = action
+        .context
+        .desired_size
+        .as_deref()
+        .unwrap_or("<unspecified-size>");
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::VdoGrowRequired,
+        query: query.to_string(),
+        message: format!(
+            "VDO volume {query} is absent from current topology; grow to {desired} requires an existing VDO volume"
+        ),
+        current: None,
     })
 }
 
@@ -20807,6 +20834,42 @@ mod tests {
                 && diagnostic
                     .message
                     .contains("current logical size is unknown")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_keeps_absent_vdo_grow_actionable() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "operation": "grow",
+                  "desiredSize": "4TiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let plan = compare_plan_with_topology(plan, &StorageGraph::empty());
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 1);
+        assert_eq!(comparison.summary.already_satisfied_count, 0);
+        assert_eq!(comparison.summary.suppressed_action_count, 0);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:archive:grow"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::VdoGrowRequired
+                && diagnostic.message.contains("grow to 4TiB")
+                && diagnostic
+                    .message
+                    .contains("requires an existing VDO volume")
         }));
     }
 

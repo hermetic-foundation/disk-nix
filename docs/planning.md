@@ -223,10 +223,10 @@ Examples:
   metadata or match another current node kind, without suppressing the
   destructive create. It suppresses VDO grow when current byte size or
   VDO logical-size metadata already satisfies `desiredSize`, and keeps
-  below-target or unknown current sizes actionable. VDO destroy actions are
-  suppressed only when the volume is already absent; present targets remain
-  actionable with warnings that include operating mode, size, backing-device,
-  write-policy, or LVM VDO utilization metadata when available. Property
+  below-target, unknown, or absent current targets actionable. VDO destroy
+  actions are suppressed only when the volume is already absent; present
+  targets remain actionable with warnings that include operating mode, size,
+  backing-device, write-policy, or LVM VDO utilization metadata when available. Property
   comparison maps declared VDO write policy, compression, and deduplication
   fields onto native `vdo.write-policy`, `vdo.compression`,
   `vdo.deduplication`, and LVM `lvm.vdo-*` metadata when available. Boolean
@@ -638,11 +638,11 @@ states stay actionable with a warning.
 VDO create reconciliation warns when the target already has VDO metadata or
 matches another current node kind. VDO grow reconciliation suppresses growth
 when current byte size or VDO logical-size metadata already satisfies
-`desiredSize`; below-target or unknown current sizes stay actionable. VDO
-destroy reconciliation suppresses removal only when the VDO volume is already
-absent. Present VDO removal targets stay actionable with warnings that include
-available operating-mode, size, backing-device, write-policy, and LVM VDO
-utilization metadata. VDO start/stop
+`desiredSize`; below-target, unknown, or absent current targets stay
+actionable with VDO grow diagnostics. VDO destroy reconciliation suppresses
+removal only when the VDO volume is already absent. Present VDO removal
+targets stay actionable with warnings that include available operating-mode,
+size, backing-device, write-policy, and LVM VDO utilization metadata. VDO start/stop
 reconciliation uses
 `vdo.operating-mode` topology metadata to suppress start actions only when the
 volume is already in `normal` mode and stop actions only when the mode
