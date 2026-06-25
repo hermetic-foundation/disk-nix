@@ -351,10 +351,11 @@ Use these commands for:
   logical/physical size, mode, configured and active write policy, index/cache
   sizing, data-reduction settings, and block
   accounting, loop backing/offset/read-only/direct-I/O settings, and bcache
-  role/cache-set/tuning details such as label, state, running flag, available
-  cache percentage, cache mode, discard, I/O errors, written/metadata-written
-  accounting, readahead, sequential cutoff, priority stats, writeback delay,
-  and writeback rate when probes expose them
+  role/cache-set/tuning details such as UUID, label, state, running flag,
+  block/bucket sizing, btree cache size, available cache percentage, cache mode,
+  discard, cache read races, I/O errors, written/metadata-written accounting,
+  readahead, sequential cutoff, priority stats, writeback delay, and writeback
+  rate when probes expose them
 - `dm`: device-mapper maps, including dm name/UUID, major/minor numbers,
   open and segment counters, table target payloads, live status target
   payloads, sanitized dm-crypt table fields, cache/thin/snapshot status
@@ -463,9 +464,10 @@ Use these commands for:
   transfer-size details when probes expose them
 - `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
 - `usage`: nodes with size, used, free, allocated, utilization, or selected
-  metadata detail data, including bcache role/backing-device/set/state, cache mode,
-  replacement policy, available cache percentage, dirty data, I/O errors,
-  writeback percentage, `blkid` signature
+  metadata detail data, including bcache role/backing-device/set/state, UUID,
+  cache mode, replacement policy, block/bucket sizing, available cache
+  percentage, dirty data, cache read races, I/O errors, writeback percentage,
+  `blkid` signature
   details, ext superblock state, block/inode geometry, RAID layout hints,
   reservation, mount/check, and journal details, LVM layout, health,
   thin/cache/writecache

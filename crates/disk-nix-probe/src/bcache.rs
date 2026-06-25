@@ -82,9 +82,13 @@ fn read_device(name: &str, bcache_dir: &Path) -> BcacheDevice {
     let mut properties = Vec::new();
 
     for key in [
+        "block_size",
+        "btree_cache_size",
+        "bucket_size",
         "cache_available_percent",
         "cache_mode",
         "cache_replacement_policy",
+        "cache_read_races",
         "congested_read_threshold_us",
         "congested_write_threshold_us",
         "discard",
@@ -97,6 +101,7 @@ fn read_device(name: &str, bcache_dir: &Path) -> BcacheDevice {
         "running",
         "sequential_cutoff",
         "state",
+        "uuid",
         "written",
         "writeback_delay",
         "writeback_metadata",
@@ -316,5 +321,54 @@ mod tests {
                 && edge.to.0 == "bcache-set:cache-set-uuid"
                 && edge.relationship == Relationship::MemberOf
         }));
+    }
+
+    #[test]
+    fn reads_bcache_identity_and_sizing_sysfs_fields() {
+        let root =
+            std::env::temp_dir().join(format!("disk-nix-bcache-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let bcache_dir = root.join("bcache0").join("bcache");
+        fs::create_dir_all(&bcache_dir).expect("fixture directory can be created");
+        for (name, value) in [
+            ("uuid", "backing-uuid"),
+            ("block_size", "512"),
+            ("bucket_size", "1024"),
+            ("btree_cache_size", "128k"),
+            ("cache_read_races", "0"),
+            ("cache_mode", "writethrough"),
+            ("backing_dev_name", "sdc1"),
+            ("set_uuid", "cache-set-uuid"),
+        ] {
+            fs::write(bcache_dir.join(name), value).expect("fixture field can be written");
+        }
+
+        let snapshot = read_sysfs_snapshot(&root).expect("fixture sysfs snapshot parses");
+        let _ = fs::remove_dir_all(&root);
+
+        let device = snapshot
+            .devices
+            .iter()
+            .find(|device| device.name == "bcache0")
+            .expect("bcache device was discovered");
+        assert_eq!(device.backing_device.as_deref(), Some("sdc1"));
+        assert_eq!(device.set_uuid.as_deref(), Some("cache-set-uuid"));
+        for (key, value) in [
+            ("bcache.uuid", "backing-uuid"),
+            ("bcache.block-size", "512"),
+            ("bcache.bucket-size", "1024"),
+            ("bcache.btree-cache-size", "128k"),
+            ("bcache.cache-read-races", "0"),
+            ("bcache.cache-mode", "writethrough"),
+        ] {
+            assert!(
+                device
+                    .properties
+                    .iter()
+                    .any(|(property, actual)| property == key && actual == value),
+                "missing {key}={value:?} in {:?}",
+                device.properties
+            );
+        }
     }
 }

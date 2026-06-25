@@ -64,9 +64,11 @@ behavior across real storage stacks.
   against native `vdo.*` and LVM `lvm.vdo-*` metadata with boolean
   compression/deduplication normalization, and cache property declarations
   reconciled against bcache `bcache.*` and LVM cache `lvm.*` metadata with
-  cache-mode spelling normalization, Btrfs qgroup referenced/exclusive limit
-  declarations reconciled against probed `btrfs.max-*` metadata with
-  unlimited-value normalization, and ZFS pool/dataset/zvol property
+  cache-mode spelling normalization, bcache probes include UUID, block/bucket
+  sizing, btree cache size, and cache read race counters when sysfs exposes
+  them, Btrfs qgroup referenced/exclusive limit declarations reconciled against
+  probed `btrfs.max-*` metadata with unlimited-value normalization, and ZFS
+  pool/dataset/zvol property
   declarations reconciled against probed `zfs.*` and pool-scoped `zfs.pool-*`
   metadata with common on/off normalization, ZFS snapshot hold/release
   declarations reconciled against probed hold tag metadata,
