@@ -948,8 +948,10 @@ targets. Rescan reads `losetup --json --list` and graph state without changing
 capacity; grow uses `losetup -c` after backing size changes.
 Multipath map growth and path replacement preflight require a concrete map
 target such as `mpatha` or `/dev/mapper/mpatha`, either as the declaration name
-or through explicit `target`/`device` fields. Replacement renders separate path
-add and delete steps so each command can be reviewed independently.
+or through explicit `target`/`device` fields. Growth and rescan plans capture
+host-visible SCSI path transport and size with `lsscsi -t -s` before map reload
+or resize. Replacement renders separate path add and delete steps so each
+command can be reviewed independently.
 ZFS pool device removal renders reviewed `zpool remove <pool> <device>` steps
 when the pool layout supports evacuation. LVM volume group device removal
 renders reviewed `pvmove <pv>` then `vgreduce <vg> <pv>` steps so allocated

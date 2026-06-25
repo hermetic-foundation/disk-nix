@@ -5146,6 +5146,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         target,
                         "inspect multipath map paths and size before growth",
                     ),
+                    lsscsi_lun_inventory_command(
+                        "inspect host-visible SCSI path transport and size before multipath growth",
+                    ),
                     multipath_resize_command(target),
                     command(
                         ["multipath", "-r"],
@@ -5166,12 +5169,18 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             (
                 vec![
                     multipath_list_command(target, "inspect multipath map paths before rescan"),
+                    lsscsi_lun_inventory_command(
+                        "inspect host-visible SCSI path transport and size before multipath rescan",
+                    ),
                     command(
                         ["multipath", "-r"],
                         true,
                         "reload multipath maps after refreshed backing paths",
                     ),
                     multipath_list_command(target, "verify multipath map paths after rescan"),
+                    lsscsi_lun_inventory_command(
+                        "verify host-visible SCSI path transport and size after multipath rescan",
+                    ),
                 ],
                 vec![
                     "rescan backing SCSI or iSCSI paths before reloading the map".to_string(),
@@ -20137,6 +20146,10 @@ mod tests {
                 && step
                     .commands
                     .iter()
+                    .any(|command| command.argv == ["lsscsi", "-t", "-s"] && !command.mutates)
+                && step
+                    .commands
+                    .iter()
                     .any(|command| command.argv == ["multipath", "-r"] && command.mutates)
                 && step
                     .commands
@@ -20210,6 +20223,10 @@ mod tests {
                 && step
                     .commands
                     .iter()
+                    .any(|command| command.argv == ["lsscsi", "-t", "-s"] && !command.mutates)
+                && step
+                    .commands
+                    .iter()
                     .any(|command| command.argv == ["multipath", "-ll", "/dev/mapper/mpatha"])
         }));
         assert!(report.command_plan.iter().any(|step| {
@@ -20240,6 +20257,10 @@ mod tests {
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "multipathmaps:inventory:rescan"
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["lsscsi", "-t", "-s"] && !command.mutates)
                 && step
                     .commands
                     .iter()

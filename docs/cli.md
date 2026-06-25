@@ -1025,7 +1025,10 @@ NVMe namespace attach/detach as host lifecycle operations, distinct from
 target-side LUN provisioning or destructive namespace deletion.
 Multipath map command plans render reviewed path add, remove, replacement,
 growth, map flush, and `operation = "rescan"` lifecycle actions. Rescan
-inspects the reviewed map with `multipath -ll`, reloads maps with `multipath -r`, and verifies the map again. `operation = "destroy"` or `destroy = true`
+inspects the reviewed map with `multipath -ll`, captures host-visible SCSI path
+transport and size with `lsscsi -t -s`, reloads maps with `multipath -r`, and
+verifies the map again. Growth captures the same `lsscsi` inventory before
+`multipathd resize map`. `operation = "destroy"` or `destroy = true`
 renders offline-gated `multipath -f <map>` after map inspection; missing
 stable map targets keep map-specific commands non-ready. With
 current-topology probing, absent map flushes are suppressed as already
