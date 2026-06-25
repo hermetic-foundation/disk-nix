@@ -766,19 +766,22 @@ concrete domains such as ZFS rollback points, LVM snapshot merges, VG device
 migration, cache detach, and host-side LUN detach; it does not run rollback
 commands automatically.
 Cache command plans include bcache-aware sysfs updates for existing cache-set
-attachment, cache-mode property changes, read-only rescans, dirty-data checks,
-and replacement steps that remain non-ready until the replacement cache device,
-concrete `/dev/bcache*` target, and new cache-set UUID are declared. Once
-`cacheSetUuid` is declared, replacement renders `make-bcache --cset-uuid`,
-detach, and attach steps without guessing generated identity. Current-topology
-comparison maps declared bcache `cacheMode`/`cachePolicy` aliases onto
-`bcache.cache-mode` and `bcache.cache-policy` metadata, with cache-mode value
-normalization for dashed spellings. bcache sysfs
-operations require a concrete `/dev/bcache*` target; logical cache declaration
-names become ready when `target`, `path`, or `device` declares the backing
-bcache device path. Current-topology comparison keeps logical cache names
-actionable as missing unless the graph can match them, so a logical name is not
-treated as absent proof for detach.
+attachment, cache-mode property changes, `bcache.set-*` cache-set tuning
+updates, read-only rescans, dirty-data checks, and replacement steps that remain
+non-ready until the replacement cache device, concrete `/dev/bcache*` target,
+and new cache-set UUID are declared. Once `cacheSetUuid` is declared,
+replacement renders `make-bcache --cset-uuid`, detach, and attach steps without
+guessing generated identity. Current-topology comparison maps declared bcache
+`cacheMode`/`cachePolicy` aliases and cache-set tuning properties onto
+`bcache.cache-mode`, `bcache.cache-policy`, and `bcache.set-*` metadata, with
+cache-mode value normalization for dashed spellings. bcache device sysfs
+operations require a concrete `/dev/bcache*` target; cache-set sysfs property
+updates require `cacheSetUuid`, `cache-set-uuid`, or equivalent metadata so the
+plan can write `/sys/fs/bcache/<set>/<field>`. Logical cache declaration names
+become ready when `target`, `path`, or `device` declares the backing bcache
+device path. Current-topology comparison keeps logical cache names actionable as
+missing unless the graph can match them, so a logical name is not treated as
+absent proof for detach.
 Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
 detach operations. Logical loop declaration names can supply that target with
 `target` or `path`; `device` remains the backing file or block device for

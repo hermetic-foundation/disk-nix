@@ -279,12 +279,14 @@ dirty-data, and replacement review steps instead of a generic cache
 placeholder. bcache replacement renders deterministic `make-bcache --cset-uuid`,
 detach, and attach steps when `cacheSetUuid` is declared. bcache rescan reads
 state, cache mode, dirty-data, and graph inventory without changing attachment.
-Current-topology probing reconciles `cacheMode` and `cachePolicy` aliases
-against bcache `bcache.*` and LVM cache `lvm.*` metadata, normalizing dashed
-cache-mode spellings before suppressing already-satisfied property changes.
-bcache sysfs commands require a concrete
-`/dev/bcache*` target; logical cache names become ready when `target`, `path`,
-or `device` declares the backing bcache device path.
+Current-topology probing reconciles `cacheMode`, `cachePolicy`, and
+`bcache.set-*` cache-set tuning aliases against bcache `bcache.*` and LVM cache
+`lvm.*` metadata, normalizing dashed cache-mode spellings before suppressing
+already-satisfied property changes. bcache device sysfs commands require a
+concrete `/dev/bcache*` target; cache-set sysfs property updates require a
+declared `cacheSetUuid`, `cache-set-uuid`, or equivalent metadata field.
+Logical cache names become ready when `target`, `path`, or `device` declares
+the backing bcache device path.
 Loop-device create, grow, rescan, and detach plans require a `/dev/loop*`
 target; logical loop names can declare it through `target` or `path`, while
 `device` remains the backing file or block device for create plans.

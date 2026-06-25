@@ -5734,7 +5734,13 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         .or(action.context.token_file.as_deref()),
                 )
             } else {
-                set_property_command(collection, target, property, &property_assignment)
+                set_property_command(
+                    collection,
+                    target,
+                    property,
+                    &property_assignment,
+                    action.context.cache_set_uuid.as_deref(),
+                )
             };
             let inspect_target = if collection == Some("snapshots") {
                 action.context.name.as_deref().unwrap_or(target)
@@ -9363,6 +9369,7 @@ fn set_property_command(
     target: &str,
     property: &str,
     assignment: &str,
+    cache_set_uuid: Option<&str>,
 ) -> ExecutionCommand {
     match collection {
         Some("pools") => command(
@@ -9389,7 +9396,7 @@ fn set_property_command(
         Some("lvmCaches") => {
             lvm_cache_property_command(lvm_volume_target_path(Some(target)), property, assignment)
         }
-        Some("caches") => bcache_property_command(target, property, assignment),
+        Some("caches") => bcache_property_command(target, property, assignment, cache_set_uuid),
         Some("vdoVolumes") => vdo_property_command(target, property, assignment),
         _ => command_with_readiness(
             ["<set-property-tool>", target, property],
@@ -10522,7 +10529,12 @@ fn bcache_replace_command(
     }
 }
 
-fn bcache_property_command(target: &str, property: &str, assignment: &str) -> ExecutionCommand {
+fn bcache_property_command(
+    target: &str,
+    property: &str,
+    assignment: &str,
+    cache_set_uuid: Option<&str>,
+) -> ExecutionCommand {
     let Some((_, value)) = assignment.split_once('=') else {
         return command_with_readiness(
             ["<cache-property-tool>", target, property],
@@ -10532,6 +10544,32 @@ fn bcache_property_command(target: &str, property: &str, assignment: &str) -> Ex
             "set a cache property after resolving the desired value",
         );
     };
+    if let Some(key) = bcache_cache_set_sysfs_key(property) {
+        let cache_set_arg = cache_set_uuid.unwrap_or("<cache-set-uuid>");
+        let argv = vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            "printf '%s\\n' \"$2\" > \"/sys/fs/bcache/$1/$3\"".to_string(),
+            "disk-nix-bcache-set-property".to_string(),
+            cache_set_arg.to_string(),
+            value.to_string(),
+            key,
+        ];
+        if cache_set_uuid.is_some() {
+            return command_vec(
+                argv,
+                true,
+                "set a bcache cache-set sysfs property on the target cache set",
+            );
+        }
+        return command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["cache-set UUID"],
+            "set a bcache cache-set property after selecting the cache-set UUID",
+        );
+    }
     if !is_bcache_target(target) {
         return command_vec_with_readiness(
             vec![
@@ -10601,6 +10639,33 @@ fn bcache_sysfs_key(property: &str) -> String {
         .strip_prefix("bcache.")
         .unwrap_or(property)
         .replace('-', "_")
+}
+
+fn bcache_cache_set_sysfs_key(property: &str) -> Option<String> {
+    let property = property.trim();
+    let normalized = normalize_property_name(property);
+    let known = match normalized.as_str() {
+        "setaveragekeysize" => Some("average_key_size"),
+        "setbtreecachesize" => Some("btree_cache_size"),
+        "setcacheavailablepercent" => Some("cache_available_percent"),
+        "setcongested" => Some("congested"),
+        "setcongestedreadthresholdus" => Some("congested_read_threshold_us"),
+        "setcongestedwritethresholdus" => Some("congested_write_threshold_us"),
+        "setioerrorhalflife" => Some("io_error_halflife"),
+        "setioerrorlimit" => Some("io_error_limit"),
+        "setjournaldelayms" => Some("journal_delay_ms"),
+        "setrootusagepercent" => Some("root_usage_percent"),
+        _ => None,
+    };
+    if let Some(property) = known {
+        return Some(property.to_string());
+    }
+    let property = property
+        .strip_prefix("bcache.set-")
+        .or_else(|| property.strip_prefix("bcache.set."))
+        .or_else(|| property.strip_prefix("set-"))
+        .or_else(|| property.strip_prefix("set_"))?;
+    Some(property.replace('-', "_"))
 }
 
 fn lun_rescan_devices(action: &PlannedAction) -> Vec<String> {
@@ -23580,7 +23645,8 @@ mod tests {
                     },
                     "cacheSetUuid": "11111111-2222-3333-4444-555555555555",
                     "properties": {
-                      "bcache.cache-mode": "writethrough"
+                      "bcache.cache-mode": "writethrough",
+                      "bcache.set-journal-delay-ms": "100"
                     }
                   }
                 }
@@ -23656,6 +23722,22 @@ mod tests {
                         "cache_mode",
                     ]
             })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:/dev/bcache0:set-property:bcache.set-journal-delay-ms"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "printf '%s\\n' \"$2\" > \"/sys/fs/bcache/$1/$3\"",
+                            "disk-nix-bcache-set-property",
+                            "11111111-2222-3333-4444-555555555555",
+                            "100",
+                            "journal_delay_ms",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
@@ -23775,8 +23857,10 @@ mod tests {
                     "operation": "rescan",
                     "addDevices": ["cache-set-uuid"],
                     "removeDevices": ["cache-set-uuid"],
+                    "cacheSetUuid": "cache-set-uuid",
                     "properties": {
-                      "bcache.cache-mode": "writethrough"
+                      "bcache.cache-mode": "writethrough",
+                      "bcache.set-journal-delay-ms": "100"
                     }
                   }
                 }
@@ -23822,6 +23906,22 @@ mod tests {
                             "/dev/bcache0",
                             "writethrough",
                             "cache_mode",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:cache0:set-property:bcache.set-journal-delay-ms"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "printf '%s\\n' \"$2\" > \"/sys/fs/bcache/$1/$3\"",
+                            "disk-nix-bcache-set-property",
+                            "cache-set-uuid",
+                            "100",
+                            "journal_delay_ms",
                         ]
                         && command.readiness == CommandReadiness::Ready
                 })
@@ -24177,7 +24277,8 @@ mod tests {
                     "addDevices": ["cache-set-uuid"],
                     "removeDevices": ["cache-set-uuid"],
                     "properties": {
-                      "bcache.cache-mode": "writethrough"
+                      "bcache.cache-mode": "writethrough",
+                      "bcache.set-journal-delay-ms": "100"
                     }
                   }
                 }
@@ -24226,6 +24327,23 @@ mod tests {
                         ]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["bcache device path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "caches:cache0:set-property:bcache.set-journal-delay-ms"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "printf '%s\\n' \"$2\" > \"/sys/fs/bcache/$1/$3\"",
+                            "disk-nix-bcache-set-property",
+                            "<cache-set-uuid>",
+                            "100",
+                            "journal_delay_ms",
+                        ]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["cache-set UUID"]
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {

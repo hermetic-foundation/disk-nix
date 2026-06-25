@@ -63,10 +63,12 @@ behavior across real storage stacks.
   present, including VDO property declarations reconciled
   against native `vdo.*` and LVM `lvm.vdo-*` metadata with boolean
   compression/deduplication normalization, and cache property declarations
-  reconciled against bcache `bcache.*` and LVM cache `lvm.*` metadata with
-  cache-mode spelling normalization, bcache probes include UUID, block/bucket
-  sizing, btree cache size, and cache read race counters when sysfs exposes
-  them, Btrfs qgroup referenced/exclusive limit declarations reconciled against
+  reconciled against bcache `bcache.*`, cache-set `bcache.set-*`, and LVM cache
+  `lvm.*` metadata with cache-mode spelling normalization, bcache cache-set
+  property plans render `/sys/fs/bcache/<set>` writes when `cacheSetUuid` is
+  declared, bcache probes include UUID, block/bucket sizing, btree cache size,
+  and cache read race counters when sysfs exposes them, Btrfs qgroup
+  referenced/exclusive limit declarations reconciled against
   probed `btrfs.max-*` metadata with unlimited-value normalization, and ZFS
   pool/dataset/zvol property
   declarations reconciled against probed `zfs.*` and pool-scoped `zfs.pool-*`

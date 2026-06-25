@@ -764,20 +764,24 @@ When an action context includes `desiredSize`, supported resize commands use
 that concrete target and no longer report `needs-desired-size`.
 Cache-layer command plans include bcache sysfs operations for attaching or
 detaching an existing cache-set UUID, rescanning status, changing cache mode,
-checking dirty data, and replacing cache media only when the replacement device
-and explicit `cacheSetUuid` are declared. bcache `operation = "rescan"` reads
-state, cache-mode, dirty-data, and modeled graph relationships without changing
-attachment. bcache sysfs operations require a concrete `/dev/bcache*` target;
-logical cache names can declare `target = "/dev/bcacheN"`,
+checking dirty data, updating `bcache.set-*` cache-set tuning fields, and
+replacing cache media only when the replacement device and explicit
+`cacheSetUuid` are declared. bcache `operation = "rescan"` reads state,
+cache-mode, dirty-data, and modeled graph relationships without changing
+attachment. bcache device sysfs operations require a concrete `/dev/bcache*`
+target; logical cache names can declare `target = "/dev/bcacheN"`,
 `path = "/dev/bcacheN"`, or `device = "/dev/bcacheN"` to make attach, detach,
-rescan, and property commands ready. Logical cache declarations without a
-concrete bcache device remain marked `needs-domain-implementation`. With
-current-topology probing, concrete absent bcache detach actions are suppressed
-as already satisfied, while present targets stay actionable with a warning that
-includes dirty data, cache mode, and cache-set UUID when available. Cache
-property comparison also reconciles declared `cacheMode`/`cachePolicy` aliases
-with bcache `bcache.*` and LVM cache `lvm.*` metadata, normalizing dashed
-cache-mode values before suppressing already-satisfied updates.
+rescan, replacement, and device-local property commands ready. Cache-set sysfs
+property updates require `cacheSetUuid`, `cache-set-uuid`, or equivalent
+metadata so commands can write `/sys/fs/bcache/<set>/<field>`. Logical cache
+declarations without concrete identities remain marked
+`needs-domain-implementation`. With current-topology probing, concrete absent
+bcache detach actions are suppressed as already satisfied, while present
+targets stay actionable with a warning that includes dirty data, cache mode,
+and cache-set UUID when available. Cache property comparison also reconciles
+declared `cacheMode`/`cachePolicy` aliases and `bcache.set-*` cache-set
+properties with bcache `bcache.*` and LVM cache `lvm.*` metadata, normalizing
+dashed cache-mode values before suppressing already-satisfied updates.
 Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
 detach operations. Logical loop declarations can supply that target with
 `target` or `path`; `device` is reserved for the backing file or block device
