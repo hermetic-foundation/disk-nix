@@ -90,9 +90,10 @@ The current probe layer normalizes:
 - `ntfsinfo -m` for NTFS device and volume identity, serial, state, version,
   sector and cluster sizing, index block size, MFT record size, MFT
   zone/location metadata, and allocated size
-- `dump.exfat`, `exfatlabel`, and `tune.exfat` for exFAT GUID/serial,
-  tool version, volume length, FAT offset/length, cluster heap offset, total,
-  used, and free cluster counts, root cluster, sector sizing, and cluster sizing
+- `dump.exfat`, `exfatlabel`, and `tune.exfat` for exFAT label metadata,
+  GUID/serial, tool version, volume length, FAT offset/length, cluster heap
+  offset, total, used, and free cluster counts, root cluster, sector sizing,
+  and cluster sizing
 - `dump.f2fs` for F2FS volume identity, UUID, user/valid block counts,
   valid node/inode counts, checkpoint/SIT/NAT/SSA segment layout,
   section/zone geometry, log sizing, version metadata, and overprovisioning
@@ -158,9 +159,9 @@ The current probe layer normalizes:
   output for operating mode, recovery percentage, configured and active write
   policy, version/release metadata, detailed VDO block/accounting metadata, and
   byte-normalized data, overhead, and logical block accounting
-- exFAT metadata through `tune.exfat` and `dump.exfat` for volume label, GUID,
-  serial, volume length, FAT/cluster offsets, cluster counts, sector sizing,
-  allocated capacity, and free-space estimates
+- exFAT metadata through `tune.exfat` and `dump.exfat` for visible volume
+  labels, GUID, serial, volume length, FAT/cluster offsets, cluster counts,
+  sector sizing, allocated capacity, and free-space estimates
 - ZFS `zpool list -H -p`, `zpool get -H`, `zpool status -P`,
   `zfs list -H -p`, and per-snapshot `zfs holds -H` output for pool size,
   allocated/free usage, capacity, dedup ratio, fragmentation, health,

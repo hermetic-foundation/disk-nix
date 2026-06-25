@@ -4301,6 +4301,7 @@ fn usage_details(node: &Node) -> String {
         ("ext.checksum-type", "checksum-type"),
         ("ext.checksum", "checksum"),
         ("exfat.guid", "guid"),
+        ("exfat.volume-label", "exfat-label"),
         ("exfat.exfatprogs-version", "exfatprogs"),
         ("exfat.volume-serial", "serial"),
         ("exfat.volume-length-sectors", "sectors"),
@@ -5916,6 +5917,7 @@ mod tests {
 
         let exfat = Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
             .with_property("exfat.guid", "01234567-89ab-cdef-0123-456789abcdef")
+            .with_property("exfat.volume-label", "SHARED")
             .with_property("exfat.exfatprogs-version", "1.2.4")
             .with_property("exfat.volume-serial", "0x6eef953b")
             .with_property("exfat.volume-length-sectors", "3203072")
@@ -5931,7 +5933,7 @@ mod tests {
             .with_property("exfat.bytes-per-cluster", "32768");
         assert_eq!(
             usage_details(&exfat),
-            "guid=01234567-89ab-cdef-0123-456789abcdef exfatprogs=1.2.4 serial=0x6eef953b sectors=3203072 fat-offset=2048 fat-length=448 cluster-heap-offset=4096 clusters=49984 used-clusters=48960 free-clusters=1024 root-cluster=4 sector-bytes=512 sectors-per-cluster=64 cluster-bytes=32768"
+            "guid=01234567-89ab-cdef-0123-456789abcdef exfat-label=SHARED exfatprogs=1.2.4 serial=0x6eef953b sectors=3203072 fat-offset=2048 fat-length=448 cluster-heap-offset=4096 clusters=49984 used-clusters=48960 free-clusters=1024 root-cluster=4 sector-bytes=512 sectors-per-cluster=64 cluster-bytes=32768"
         );
 
         let ntfs = Node::new("fs:/dev/sda1", NodeKind::Filesystem, "ntfs")
@@ -6361,6 +6363,7 @@ mod tests {
         graph.add_node(
             Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
                 .with_property("exfat.guid", "01234567-89ab-cdef-0123-456789abcdef")
+                .with_property("exfat.volume-label", "SHARED")
                 .with_property("exfat.exfatprogs-version", "1.2.4")
                 .with_property("exfat.volume-serial", "0x6eef953b")
                 .with_property("exfat.volume-length-sectors", "3203072")
@@ -6479,7 +6482,7 @@ mod tests {
         assert!(output.contains("journal-size=1024M"));
         assert!(output.contains("checksum-type=crc32c checksum=0x12345678"));
         assert!(output.contains(
-            "guid=01234567-89ab-cdef-0123-456789abcdef exfatprogs=1.2.4 serial=0x6eef953b sectors=3203072"
+            "guid=01234567-89ab-cdef-0123-456789abcdef exfat-label=SHARED exfatprogs=1.2.4 serial=0x6eef953b sectors=3203072"
         ));
         assert!(output.contains("fat-offset=2048 fat-length=448 cluster-heap-offset=4096"));
         assert!(

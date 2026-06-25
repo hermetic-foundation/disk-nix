@@ -15,6 +15,9 @@ pub fn normalize_exfat_metadata(
         Some(bytes) => parse_dump_exfat(bytes)?,
         None => BTreeMap::new(),
     };
+    let label_value = label
+        .and_then(output_line)
+        .filter(|value| !value.is_empty());
     let serial_value = serial
         .and_then(output_line)
         .or_else(|| dump_fields.get("Volume Serial").cloned());
@@ -27,9 +30,7 @@ pub fn normalize_exfat_metadata(
     let identity = Identity {
         uuid: normalized_serial(serial_value.as_deref()),
         partuuid: None,
-        label: label
-            .and_then(output_line)
-            .filter(|value| !value.is_empty()),
+        label: label_value.clone(),
         serial: normalized_serial(serial_value.as_deref()),
         wwn: None,
     };
@@ -48,6 +49,10 @@ pub fn normalize_exfat_metadata(
 
     if let Some(guid) = guid.and_then(output_line).filter(|value| !value.is_empty()) {
         filesystem = filesystem.with_property("exfat.guid", guid);
+    }
+
+    if let Some(label) = label_value {
+        filesystem = filesystem.with_property("exfat.volume-label", label);
     }
 
     if let Some(cluster_size) = cluster_size(&dump_fields) {
@@ -266,6 +271,9 @@ Sectors per Cluster:                    64
         );
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "exfat.guid" && property.value == "01234567-89ab-cdef-0123-456789abcdef"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "exfat.volume-label" && property.value == "SHARED"
         }));
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "exfat.cluster-count" && property.value == "49984"

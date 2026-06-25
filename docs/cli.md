@@ -51,9 +51,10 @@ namespace feature/capacity counters, controller capabilities/capacity, sector
 size, capacity, usage, and SMART/health telemetry from
 `nvme list --output-format=json`, `nvme id-ns -o json`,
 `nvme id-ctrl -o json`, and `nvme smart-log -o json` when available.
-exFAT probing uses `tune.exfat` and `dump.exfat` when available to add label,
-GUID, serial, tool version, sector, cluster, size, used-cluster, and free-space
-metadata beyond generic `blkid` fields. NTFS probing uses `ntfsinfo -m` when
+exFAT probing uses `tune.exfat` and `dump.exfat` when available to add visible
+label metadata, GUID, serial, tool version, sector, cluster, size,
+used-cluster, and free-space metadata beyond generic `blkid` fields. NTFS
+probing uses `ntfsinfo -m` when
 available to add device/volume state, volume name/version, serial,
 sector/cluster sizing, index block size, MFT record size, MFT zone/location
 metadata, and allocated size. F2FS probing uses
@@ -281,8 +282,8 @@ Use these commands for:
 - `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
   bcachefs filesystems, ZFS datasets/snapshots, and NFS exports, with selected
   filesystem metadata details such as `blkid` version/block-size/usage, exFAT
-  GUID/serial, volume length, FAT and cluster-heap layout, root cluster, and
-  raw plus derived cluster geometry, NTFS volume identity, version, cluster
+  label, GUID/serial, volume length, FAT and cluster-heap layout, root cluster,
+  and raw plus derived cluster geometry, NTFS volume identity, version, cluster
   sizing, MFT record and zone/location metadata, F2FS block usage, valid
   inode/node counts, segment layout, section/zone geometry, log sizing, version,
   and overprovisioning metadata, XFS source, allocation-group, inode, data,
