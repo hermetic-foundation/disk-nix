@@ -43,6 +43,14 @@ pub fn normalize_ntfsinfo(device: &str, bytes: &[u8]) -> Result<StorageGraph, Pr
 
     for (property, value) in [
         (
+            "ntfs.device-name",
+            fields.field("Volume Information", "Name of device"),
+        ),
+        (
+            "ntfs.device-state",
+            fields.field("Volume Information", "Device state"),
+        ),
+        (
             "ntfs.volume-name",
             fields
                 .field("Volume Information", "Volume Name")
@@ -76,6 +84,26 @@ pub fn normalize_ntfsinfo(device: &str, bytes: &[u8]) -> Result<StorageGraph, Pr
         (
             "ntfs.mft-record-size",
             fields.field("MFT Information", "MFT Record Size"),
+        ),
+        (
+            "ntfs.mft-zone-multiplier",
+            fields.field("MFT Information", "MFT Zone Multiplier"),
+        ),
+        (
+            "ntfs.mft-zone-start",
+            fields.field("MFT Information", "MFT Zone Start"),
+        ),
+        (
+            "ntfs.mft-zone-end",
+            fields.field("MFT Information", "MFT Zone End"),
+        ),
+        (
+            "ntfs.mft-data-position",
+            fields.field("MFT Information", "MFT Data Position"),
+        ),
+        (
+            "ntfs.mft-lcn",
+            fields.field("MFT Information", "LCN of Data Attribute for FILE_MFT"),
         ),
         (
             "ntfs.index-block-size",
@@ -222,6 +250,10 @@ Volume Information
 MFT Information
 	MFT Record Size: 1024
 	MFT Zone Multiplier: 0
+	MFT Zone Start: 786432
+	MFT Zone End: 819200
+	MFT Data Position: 786944
+	LCN of Data Attribute for FILE_MFT: 4
 	Volume Serial Number: 01234567-89abcdef
 "#;
 
@@ -261,6 +293,35 @@ MFT Information
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ntfs.mft-record-size" && property.value == "1024"
         }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ntfs.device-name" && property.value == "/dev/sda1"
+        }));
+        assert!(
+            filesystem
+                .properties
+                .iter()
+                .any(|property| { property.key == "ntfs.device-state" && property.value == "11" })
+        );
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ntfs.mft-zone-multiplier" && property.value == "0"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ntfs.mft-zone-start" && property.value == "786432"
+        }));
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ntfs.mft-zone-end" && property.value == "819200"
+            })
+        );
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ntfs.mft-data-position" && property.value == "786944"
+        }));
+        assert!(
+            filesystem
+                .properties
+                .iter()
+                .any(|property| { property.key == "ntfs.mft-lcn" && property.value == "4" })
+        );
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ntfs.volume-serial" && property.value == "01234567-89abcdef"
         }));

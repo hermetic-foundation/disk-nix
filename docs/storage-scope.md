@@ -87,8 +87,9 @@ The current probe layer normalizes:
   inode size, sector size, metadata feature flags such as reflink, bigtime,
   finobt, sparse, and rmapbt, data allocation parameters, naming format, log
   type/geometry, and realtime type plus extent/block counters
-- `ntfsinfo -m` for NTFS volume identity, serial, state, version, sector and
-  cluster sizing, index block size, MFT record size, and allocated size
+- `ntfsinfo -m` for NTFS device and volume identity, serial, state, version,
+  sector and cluster sizing, index block size, MFT record size, MFT
+  zone/location metadata, and allocated size
 - `dump.exfat`, `exfatlabel`, and `tune.exfat` for exFAT GUID/serial,
   tool version, volume length, FAT offset/length, cluster heap offset, total,
   used, and free cluster counts, root cluster, sector sizing, and cluster sizing

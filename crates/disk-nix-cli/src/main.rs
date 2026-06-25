@@ -4319,6 +4319,8 @@ fn usage_details(node: &Node) -> String {
         ("exfat.bytes-per-cluster", "cluster-bytes"),
         ("exfat.sector-size-bits", "sector-bits"),
         ("exfat.sector-per-cluster-bits", "cluster-bits"),
+        ("ntfs.device-name", "ntfs-device"),
+        ("ntfs.device-state", "ntfs-device-state"),
         ("ntfs.volume-name", "ntfs-name"),
         ("ntfs.volume-state", "ntfs-state"),
         ("ntfs.volume-serial", "ntfs-serial"),
@@ -4329,6 +4331,11 @@ fn usage_details(node: &Node) -> String {
         ("ntfs.volume-size-clusters", "ntfs-clusters"),
         ("ntfs.index-block-size", "ntfs-index-block"),
         ("ntfs.mft-record-size", "ntfs-mft-record"),
+        ("ntfs.mft-zone-multiplier", "ntfs-mft-zone-multiplier"),
+        ("ntfs.mft-zone-start", "ntfs-mft-zone-start"),
+        ("ntfs.mft-zone-end", "ntfs-mft-zone-end"),
+        ("ntfs.mft-data-position", "ntfs-mft-data-position"),
+        ("ntfs.mft-lcn", "ntfs-mft-lcn"),
         ("f2fs.filesystem-uuid", "f2fs-uuid"),
         ("f2fs.filesystem-volume-name", "f2fs-name"),
         ("f2fs.block-size", "f2fs-block-size"),
@@ -5928,16 +5935,23 @@ mod tests {
         );
 
         let ntfs = Node::new("fs:/dev/sda1", NodeKind::Filesystem, "ntfs")
+            .with_property("ntfs.device-name", "/dev/sda1")
+            .with_property("ntfs.device-state", "11")
             .with_property("ntfs.volume-name", "Windows")
             .with_property("ntfs.volume-serial", "01234567-89abcdef")
             .with_property("ntfs.version", "3.1")
             .with_property("ntfs.sector-size", "512")
             .with_property("ntfs.cluster-size", "4096")
             .with_property("ntfs.volume-size-clusters", "262144")
-            .with_property("ntfs.mft-record-size", "1024");
+            .with_property("ntfs.mft-record-size", "1024")
+            .with_property("ntfs.mft-zone-multiplier", "0")
+            .with_property("ntfs.mft-zone-start", "786432")
+            .with_property("ntfs.mft-zone-end", "819200")
+            .with_property("ntfs.mft-data-position", "786944")
+            .with_property("ntfs.mft-lcn", "4");
         assert_eq!(
             usage_details(&ntfs),
-            "ntfs-name=Windows ntfs-serial=01234567-89abcdef ntfs-version=3.1 ntfs-sector=512 ntfs-cluster=4096 ntfs-clusters=262144 ntfs-mft-record=1024"
+            "ntfs-device=/dev/sda1 ntfs-device-state=11 ntfs-name=Windows ntfs-serial=01234567-89abcdef ntfs-version=3.1 ntfs-sector=512 ntfs-cluster=4096 ntfs-clusters=262144 ntfs-mft-record=1024 ntfs-mft-zone-multiplier=0 ntfs-mft-zone-start=786432 ntfs-mft-zone-end=819200 ntfs-mft-data-position=786944 ntfs-mft-lcn=4"
         );
 
         let f2fs = Node::new("fs:/dev/sdb2", NodeKind::Filesystem, "f2fs")
@@ -6376,11 +6390,18 @@ mod tests {
         );
         graph.add_node(
             Node::new("fs:/dev/sda1", NodeKind::Filesystem, "ntfs")
+                .with_property("ntfs.device-name", "/dev/sda1")
+                .with_property("ntfs.device-state", "11")
                 .with_property("ntfs.volume-name", "Windows")
                 .with_property("ntfs.volume-serial", "01234567-89abcdef")
                 .with_property("ntfs.version", "3.1")
                 .with_property("ntfs.cluster-size", "4096")
-                .with_property("ntfs.mft-record-size", "1024"),
+                .with_property("ntfs.mft-record-size", "1024")
+                .with_property("ntfs.mft-zone-multiplier", "0")
+                .with_property("ntfs.mft-zone-start", "786432")
+                .with_property("ntfs.mft-zone-end", "819200")
+                .with_property("ntfs.mft-data-position", "786944")
+                .with_property("ntfs.mft-lcn", "4"),
         );
         graph.add_node(
             Node::new("fs:/dev/sdb2", NodeKind::Filesystem, "f2fs")
@@ -6473,9 +6494,12 @@ mod tests {
         ));
         assert!(
             output.contains(
-                "ntfs-name=Windows ntfs-serial=01234567-89abcdef ntfs-version=3.1 ntfs-cluster=4096 ntfs-mft-record=1024"
+                "ntfs-device=/dev/sda1 ntfs-device-state=11 ntfs-name=Windows ntfs-serial=01234567-89abcdef ntfs-version=3.1 ntfs-cluster=4096 ntfs-mft-record=1024"
             )
         );
+        assert!(output.contains(
+            "ntfs-mft-zone-multiplier=0 ntfs-mft-zone-start=786432 ntfs-mft-zone-end=819200 ntfs-mft-data-position=786944 ntfs-mft-lcn=4"
+        ));
         assert!(output.contains(
             "f2fs-name=mobile f2fs-block-size=4096 f2fs-blocks=262144 f2fs-user-blocks=245760 f2fs-valid-blocks=65536"
         ));

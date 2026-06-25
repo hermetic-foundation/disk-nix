@@ -54,8 +54,9 @@ size, capacity, usage, and SMART/health telemetry from
 exFAT probing uses `tune.exfat` and `dump.exfat` when available to add label,
 GUID, serial, tool version, sector, cluster, size, used-cluster, and free-space
 metadata beyond generic `blkid` fields. NTFS probing uses `ntfsinfo -m` when
-available to add volume name/state/version, serial, sector/cluster sizing,
-index block size, MFT record size, and allocated size. F2FS probing uses
+available to add device/volume state, volume name/version, serial,
+sector/cluster sizing, index block size, MFT record size, MFT zone/location
+metadata, and allocated size. F2FS probing uses
 `dump.f2fs` when available to add volume name, UUID, user/valid block counts,
 checkpoint/SIT/NAT/SSA segment layout, section/zone geometry, log sizing,
 version metadata, overprovisioning, and computed usage. bcachefs probing uses
@@ -282,10 +283,11 @@ Use these commands for:
   filesystem metadata details such as `blkid` version/block-size/usage, exFAT
   GUID/serial, volume length, FAT and cluster-heap layout, root cluster, and
   raw plus derived cluster geometry, NTFS volume identity, version, cluster
-  sizing, and MFT record sizing, F2FS block usage, valid inode/node counts, segment layout,
-  section/zone geometry, log sizing, version, and overprovisioning metadata,
-  XFS source, allocation-group, inode, data, naming format, log type/sizing,
-  realtime type/geometry, and metadata feature details,
+  sizing, MFT record and zone/location metadata, F2FS block usage, valid
+  inode/node counts, segment layout, section/zone geometry, log sizing, version,
+  and overprovisioning metadata, XFS source, allocation-group, inode, data,
+  naming format, log type/sizing, realtime type/geometry, and metadata feature
+  details,
   bcachefs external/internal UUID, superblock magic, version/upgrade state,
   member-device, mounted usage, and filesystem/member data-type byte
   accounting, Btrfs Data/Metadata/System allocation profiles and byte counts,
