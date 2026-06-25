@@ -4058,6 +4058,20 @@ fn usage_details(node: &Node) -> String {
         ("cryptsetup.luks-keyslot-0-time-cost", "keyslot-0-time"),
         ("cryptsetup.luks-keyslot-0-memory", "keyslot-0-memory"),
         ("cryptsetup.luks-keyslot-0-threads", "keyslot-0-threads"),
+        ("cryptsetup.luks-keyslot-0-salt", "keyslot-0-salt"),
+        (
+            "cryptsetup.luks-keyslot-0-af-stripes",
+            "keyslot-0-af-stripes",
+        ),
+        (
+            "cryptsetup.luks-keyslot-0-area-offset",
+            "keyslot-0-area-offset",
+        ),
+        (
+            "cryptsetup.luks-keyslot-0-area-length",
+            "keyslot-0-area-length",
+        ),
+        ("cryptsetup.luks-keyslot-0-digest-id", "keyslot-0-digest"),
         ("cryptsetup.luks-keyslot-1-type", "keyslot-1"),
         ("cryptsetup.luks-keyslot-1-priority", "keyslot-1-priority"),
         ("cryptsetup.luks-keyslot-1-cipher", "keyslot-1-cipher"),
@@ -4069,10 +4083,36 @@ fn usage_details(node: &Node) -> String {
         ("cryptsetup.luks-keyslot-1-time-cost", "keyslot-1-time"),
         ("cryptsetup.luks-keyslot-1-memory", "keyslot-1-memory"),
         ("cryptsetup.luks-keyslot-1-threads", "keyslot-1-threads"),
+        ("cryptsetup.luks-keyslot-1-salt", "keyslot-1-salt"),
+        (
+            "cryptsetup.luks-keyslot-1-af-stripes",
+            "keyslot-1-af-stripes",
+        ),
+        (
+            "cryptsetup.luks-keyslot-1-area-offset",
+            "keyslot-1-area-offset",
+        ),
+        (
+            "cryptsetup.luks-keyslot-1-area-length",
+            "keyslot-1-area-length",
+        ),
+        ("cryptsetup.luks-keyslot-1-digest-id", "keyslot-1-digest"),
         ("cryptsetup.luks-token-0-type", "token-0"),
         ("cryptsetup.luks-token-0-keyslot", "token-0-keyslot"),
         ("cryptsetup.luks-token-1-type", "token-1"),
         ("cryptsetup.luks-token-1-keyslot", "token-1-keyslot"),
+        ("cryptsetup.luks-digest-count", "digests"),
+        ("cryptsetup.luks-digests", "digest-ids"),
+        ("cryptsetup.luks-digest-0-type", "digest-0"),
+        ("cryptsetup.luks-digest-0-hash", "digest-0-hash"),
+        ("cryptsetup.luks-digest-0-iterations", "digest-0-iterations"),
+        ("cryptsetup.luks-digest-0-salt", "digest-0-salt"),
+        ("cryptsetup.luks-digest-0-digest", "digest-0-digest"),
+        ("cryptsetup.luks-digest-1-type", "digest-1"),
+        ("cryptsetup.luks-digest-1-hash", "digest-1-hash"),
+        ("cryptsetup.luks-digest-1-iterations", "digest-1-iterations"),
+        ("cryptsetup.luks-digest-1-salt", "digest-1-salt"),
+        ("cryptsetup.luks-digest-1-digest", "digest-1-digest"),
         ("cryptsetup.luks-data-cipher", "data-cipher"),
         ("cryptsetup.luks-data-offset", "data-offset"),
         ("cryptsetup.luks-data-length", "data-length"),
@@ -7758,10 +7798,22 @@ mod tests {
             .with_property("cryptsetup.luks-keyslot-0-time-cost", "4")
             .with_property("cryptsetup.luks-keyslot-0-memory", "1048576")
             .with_property("cryptsetup.luks-keyslot-0-threads", "4")
+            .with_property("cryptsetup.luks-keyslot-0-salt", "00 11 22 33")
+            .with_property("cryptsetup.luks-keyslot-0-af-stripes", "4000")
+            .with_property("cryptsetup.luks-keyslot-0-area-offset", "32768 [bytes]")
+            .with_property("cryptsetup.luks-keyslot-0-area-length", "258048 [bytes]")
+            .with_property("cryptsetup.luks-keyslot-0-digest-id", "0")
             .with_property("cryptsetup.luks-keyslot-1-type", "luks2")
             .with_property("cryptsetup.luks-keyslot-1-priority", "ignored")
             .with_property("cryptsetup.luks-token-0-type", "systemd-tpm2")
-            .with_property("cryptsetup.luks-token-0-keyslot", "0"),
+            .with_property("cryptsetup.luks-token-0-keyslot", "0")
+            .with_property("cryptsetup.luks-digest-count", "1")
+            .with_property("cryptsetup.luks-digests", "0")
+            .with_property("cryptsetup.luks-digest-0-type", "pbkdf2")
+            .with_property("cryptsetup.luks-digest-0-hash", "sha256")
+            .with_property("cryptsetup.luks-digest-0-iterations", "1000")
+            .with_property("cryptsetup.luks-digest-0-salt", "aa bb cc dd")
+            .with_property("cryptsetup.luks-digest-0-digest", "ee ff 00 11"),
         );
 
         let mut output = Vec::new();
@@ -7784,9 +7836,16 @@ mod tests {
         assert!(output.contains(
             "keyslot-0-cipher-key=512 bits keyslot-0-pbkdf=argon2id keyslot-0-time=4 keyslot-0-memory=1048576 keyslot-0-threads=4"
         ));
+        assert!(output.contains("keyslot-0-salt=00 11 22 33 keyslot-0-af-stripes=4000"));
+        assert!(output.contains(
+            "keyslot-0-area-offset=32768 [bytes] keyslot-0-area-length=258048 [bytes] keyslot-0-digest=0"
+        ));
         assert!(output.contains(
             "keyslot-1=luks2 keyslot-1-priority=ignored token-0=systemd-tpm2 token-0-keyslot=0"
         ));
+        assert!(output.contains("digests=1 digest-ids=0 digest-0=pbkdf2"));
+        assert!(output.contains("digest-0-hash=sha256 digest-0-iterations=1000"));
+        assert!(output.contains("digest-0-salt=aa bb cc dd digest-0-digest=ee ff 00 11"));
     }
 
     #[test]

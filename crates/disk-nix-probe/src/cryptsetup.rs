@@ -21,6 +21,7 @@ struct LuksDump {
     label: Option<String>,
     keyslots: Vec<String>,
     tokens: Vec<String>,
+    digests: Vec<String>,
     properties: Vec<(String, String)>,
 }
 
@@ -100,11 +101,13 @@ fn parse_luks_dump(device_path: &str, bytes: &[u8]) -> Result<LuksDump, ProbeErr
         label: None,
         keyslots: Vec::new(),
         tokens: Vec::new(),
+        digests: Vec::new(),
         properties: Vec::new(),
     };
     let mut section: Option<&str> = None;
     let mut current_keyslot: Option<String> = None;
     let mut current_token: Option<String> = None;
+    let mut current_digest: Option<String> = None;
 
     for line in text.lines() {
         let trimmed = line.trim();
@@ -116,12 +119,14 @@ fn parse_luks_dump(device_path: &str, bytes: &[u8]) -> Result<LuksDump, ProbeErr
             section = Some(trimmed.trim_end_matches(':'));
             current_keyslot = None;
             current_token = None;
+            current_digest = None;
             continue;
         }
 
         match section {
             Some("Keyslots") => parse_keyslot_line(trimmed, &mut dump, &mut current_keyslot),
             Some("Tokens") => parse_token_line(trimmed, &mut dump, &mut current_token),
+            Some("Digests") => parse_digest_line(trimmed, &mut dump, &mut current_digest),
             Some("Data segments") => parse_data_segment_line(trimmed, &mut dump),
             _ => parse_luks_header_line(trimmed, &mut dump),
         }
@@ -143,6 +148,16 @@ fn parse_luks_dump(device_path: &str, bytes: &[u8]) -> Result<LuksDump, ProbeErr
         dump.properties.push((
             "cryptsetup.luks-token-count".to_string(),
             dump.tokens.len().to_string(),
+        ));
+    }
+    if !dump.digests.is_empty() {
+        dump.properties.push((
+            "cryptsetup.luks-digests".to_string(),
+            dump.digests.join(","),
+        ));
+        dump.properties.push((
+            "cryptsetup.luks-digest-count".to_string(),
+            dump.digests.len().to_string(),
         ));
     }
 
@@ -206,12 +221,12 @@ fn parse_keyslot_line(line: &str, dump: &mut LuksDump, current_keyslot: &mut Opt
         return;
     };
     match key {
-        "Priority" | "Cipher" | "Cipher key" | "PBKDF" | "Time cost" | "Memory" | "Threads" => {
-            dump.properties.push((
-                format!("cryptsetup.luks-keyslot-{slot}-{}", normalize_key(key)),
-                value.to_string(),
-            ));
-        }
+        "Key" | "Priority" | "Cipher" | "Cipher key" | "PBKDF" | "Time cost" | "Memory"
+        | "Threads" | "Salt" | "AF stripes" | "Area offset" | "Area length" | "Digest ID"
+        | "Hash" => dump.properties.push((
+            format!("cryptsetup.luks-keyslot-{slot}-{}", normalize_key(key)),
+            value.to_string(),
+        )),
         _ => {}
     }
 }
@@ -238,6 +253,32 @@ fn parse_token_line(line: &str, dump: &mut LuksDump, current_token: &mut Option<
             format!("cryptsetup.luks-token-{token}-{}", normalize_key(key)),
             value.to_string(),
         ));
+    }
+}
+
+fn parse_digest_line(line: &str, dump: &mut LuksDump, current_digest: &mut Option<String>) {
+    if let Some((digest, kind)) = numbered_section_item(line) {
+        dump.digests.push(digest.to_string());
+        dump.properties.push((
+            format!("cryptsetup.luks-digest-{digest}-type"),
+            kind.to_string(),
+        ));
+        *current_digest = Some(digest.to_string());
+        return;
+    }
+
+    let Some(digest) = current_digest.as_deref() else {
+        return;
+    };
+    let Some((key, value)) = split_luks_key_value(line) else {
+        return;
+    };
+    match key {
+        "Hash" | "Iterations" | "Salt" | "Digest" => dump.properties.push((
+            format!("cryptsetup.luks-digest-{digest}-{}", normalize_key(key)),
+            value.to_string(),
+        )),
+        _ => {}
     }
 }
 
@@ -435,12 +476,24 @@ Keyslots:
         Time cost:  4
         Memory:     1048576
         Threads:    4
+        Salt:       00 11 22 33
+        AF stripes: 4000
+        Area offset:32768 [bytes]
+        Area length:258048 [bytes]
+        Digest ID:  0
   1: luks2
         Priority:   ignored
 
 Tokens:
   0: systemd-tpm2
         Keyslot:    0
+
+Digests:
+  0: pbkdf2
+        Hash:       sha256
+        Iterations: 1000
+        Salt:       aa bb cc dd
+        Digest:     ee ff 00 11
 "#;
 
     #[test]
@@ -493,6 +546,32 @@ Tokens:
         }));
         assert!(container.properties.iter().any(|property| {
             property.key == "cryptsetup.luks-keyslot-0-pbkdf" && property.value == "argon2id"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-keyslot-0-af-stripes" && property.value == "4000"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-keyslot-0-area-offset"
+                && property.value == "32768 [bytes]"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-keyslot-0-area-length"
+                && property.value == "258048 [bytes]"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-keyslot-0-digest-id" && property.value == "0"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-digest-count" && property.value == "1"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-digest-0-type" && property.value == "pbkdf2"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-digest-0-hash" && property.value == "sha256"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-digest-0-iterations" && property.value == "1000"
         }));
         assert!(container.properties.iter().any(|property| {
             property.key == "cryptsetup.luks-data-sector" && property.value == "4096 [bytes]"
