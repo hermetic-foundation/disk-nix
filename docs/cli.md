@@ -846,7 +846,11 @@ destructive and review-gated.
 Plain zram declarations render read-only `zramctl`, `swapon --show`, and
 `disk-nix zram` commands for compressed swap size, algorithm, memory use, and
 activation review. Explicit zram `operation = "rescan"` uses the same inventory
-path as a named refresh action.
+path as a named refresh action. With current-topology probing, declared zram
+algorithm, stream count, disk size, memory limit, compression ratio, and swap
+priority properties are compared against discovered `/dev/zram*` and active
+swap metadata; already-satisfied generated-state updates are suppressed, while
+drift remains actionable for NixOS `zramSwap` reconciliation.
 LUKS `operation = "open"` command plans render `cryptsetup open` for preserved
 existing containers. With current-topology probing, active mappers are
 suppressed from the actionable plan, inactive matched or absent mappers remain

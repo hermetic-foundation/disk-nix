@@ -1579,7 +1579,10 @@ fn topology_diagnostics_for_action(
         return Vec::new();
     };
 
-    let matches = graph.find_nodes(&query);
+    let mut matches = graph.find_nodes(&query);
+    if matches.is_empty() && action.context.collection.as_deref() == Some("zram") {
+        matches = zram_topology_nodes(graph);
+    }
     if matches.is_empty() {
         if let Some(diagnostic) = bcache_absent_diagnostic(action, &query) {
             return vec![diagnostic];
@@ -1684,7 +1687,7 @@ fn topology_diagnostics_for_action(
         }];
     }
 
-    let node = matches[0];
+    let node = preferred_topology_node(action, &matches);
     let mut diagnostics = vec![TopologyDiagnostic {
         action_id: action.id.clone(),
         level: TopologyDiagnosticLevel::Info,
@@ -1842,6 +1845,42 @@ fn topology_query(action: &PlannedAction) -> Option<String> {
         .clone()
         .or_else(|| action.context.name.clone())
         .or_else(|| action.context.device.clone())
+}
+
+fn zram_topology_nodes(graph: &StorageGraph) -> Vec<&Node> {
+    graph
+        .nodes
+        .iter()
+        .filter(|node| {
+            node.kind == NodeKind::ZramDevice
+                || node
+                    .path
+                    .as_deref()
+                    .is_some_and(|path| path.starts_with("/dev/zram"))
+                || node
+                    .properties
+                    .iter()
+                    .any(|property| property.key.starts_with("zram."))
+        })
+        .collect()
+}
+
+fn preferred_topology_node<'a>(action: &PlannedAction, matches: &'a [&'a Node]) -> &'a Node {
+    if action.context.collection.as_deref() == Some("zram")
+        && action.operation == Operation::SetProperty
+    {
+        if let Some(property) = action.context.property.as_deref() {
+            if let Some(node) = matches
+                .iter()
+                .copied()
+                .find(|node| current_property_value(action, node, property).is_some())
+            {
+                return node;
+            }
+        }
+    }
+
+    matches[0]
 }
 
 fn current_node_summary(node: &Node) -> CurrentNodeSummary {
@@ -2211,6 +2250,11 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
             .or_else(|| property_value_from_node(node, property).map(str::to_string));
     }
 
+    if action.context.collection.as_deref() == Some("zram") {
+        return current_zram_property_value(property, node)
+            .or_else(|| property_value_from_node(node, property).map(str::to_string));
+    }
+
     if action.context.collection.as_deref() == Some("luks.devices") {
         return current_luks_property_value(property, node)
             .or_else(|| property_value_from_node(node, property).map(str::to_string));
@@ -2276,6 +2320,8 @@ fn comparable_property_value(action: &PlannedAction, property: &str, value: &str
                 .unwrap_or_else(|| value.to_string())
         }
         Some("swaps") => normalize_swap_property_value(&normalized_property, value)
+            .unwrap_or_else(|| value.to_string()),
+        Some("zram") => normalize_zram_property_value(&normalized_property, value)
             .unwrap_or_else(|| value.to_string()),
         Some("luks.devices") => normalize_luks_property_value(&normalized_property, value)
             .unwrap_or_else(|| value.to_string()),
@@ -2431,6 +2477,90 @@ fn normalize_swap_priority(value: &str) -> Option<String> {
         .parse::<i32>()
         .ok()
         .map(|priority| priority.to_string())
+}
+
+fn current_zram_property_value(property: &str, node: &Node) -> Option<String> {
+    match zram_property_kind(property)? {
+        ZramPropertyKind::Algorithm => property_value_from_node(node, "zram.algorithm")
+            .or_else(|| property_value_from_node(node, "zram.compression-algorithm"))
+            .map(str::to_string),
+        ZramPropertyKind::Streams => {
+            property_value_from_node(node, "zram.streams").and_then(normalize_integer_property)
+        }
+        ZramPropertyKind::DiskSize => property_value_from_node(node, "zram.disksize")
+            .or_else(|| property_value_from_node(node, "zram.disk-size"))
+            .and_then(normalize_integer_property),
+        ZramPropertyKind::MemoryLimit => {
+            property_value_from_node(node, "zram.memory-limit").and_then(normalize_integer_property)
+        }
+        ZramPropertyKind::CompressionRatio => {
+            property_value_from_node(node, "zram.compression-ratio")
+                .or_else(|| property_value_from_node(node, "zram.ratio"))
+                .map(|value| normalize_decimal_property(value))
+        }
+        ZramPropertyKind::Priority => {
+            property_value_from_node(node, "swap.priority").and_then(normalize_swap_priority)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ZramPropertyKind {
+    Algorithm,
+    Streams,
+    DiskSize,
+    MemoryLimit,
+    CompressionRatio,
+    Priority,
+}
+
+fn zram_property_kind(property: &str) -> Option<ZramPropertyKind> {
+    match normalize_storage_property_name(property).as_str() {
+        "algorithm" | "zram-algorithm" | "compression-algorithm" => {
+            Some(ZramPropertyKind::Algorithm)
+        }
+        "streams" | "zram-streams" => Some(ZramPropertyKind::Streams),
+        "disksize" | "disk-size" | "zram-disksize" | "zram-disk-size" => {
+            Some(ZramPropertyKind::DiskSize)
+        }
+        "memorylimit" | "memory-limit" | "zram-memory-limit" => Some(ZramPropertyKind::MemoryLimit),
+        "compressionratio"
+        | "compression-ratio"
+        | "compression-ratio-target"
+        | "zram-compression-ratio"
+        | "zram-compression-ratio-target"
+        | "ratio"
+        | "zram-ratio" => Some(ZramPropertyKind::CompressionRatio),
+        "priority" | "zram-priority" | "swap-priority" => Some(ZramPropertyKind::Priority),
+        _ => None,
+    }
+}
+
+fn normalize_zram_property_value(property: &str, value: &str) -> Option<String> {
+    match zram_property_kind(property)? {
+        ZramPropertyKind::Algorithm => Some(normalize_storage_property_name(value)),
+        ZramPropertyKind::Streams | ZramPropertyKind::DiskSize | ZramPropertyKind::MemoryLimit => {
+            normalize_integer_property(value)
+        }
+        ZramPropertyKind::CompressionRatio => Some(normalize_decimal_property(value)),
+        ZramPropertyKind::Priority => normalize_swap_priority(value),
+    }
+}
+
+fn normalize_integer_property(value: &str) -> Option<String> {
+    value
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .map(|number| number.to_string())
+}
+
+fn normalize_decimal_property(value: &str) -> String {
+    value
+        .trim()
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_string()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16444,6 +16574,65 @@ mod tests {
                 .alternatives
                 .iter()
                 .any(|alternative| alternative.contains("zramSwap"))
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_zram_property_aliases() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "zram": {
+                "enable": true,
+                "properties": {
+                  "algorithm": "zstd",
+                  "zram.compression-ratio-target": "2.0",
+                  "priority": "20"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("block:/dev/zram0", NodeKind::ZramDevice, "/dev/zram0")
+                .with_path("/dev/zram0")
+                .with_property("zram.algorithm", "zstd")
+                .with_property("zram.compression-ratio", "2.00")
+                .with_property("zram.swap", "true"),
+        );
+        graph.add_node(
+            Node::new("swap:/dev/zram0", NodeKind::Swap, "/dev/zram0")
+                .with_path("/dev/zram0")
+                .with_property("swap.priority", "10"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 4);
+        assert_eq!(comparison.summary.matched_count, 4);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "zram:set-property:priority" && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zram:set-property:algorithm"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zram:set-property:zram.compression-ratio-target"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zram:set-property:priority"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic.message.contains("is 10")
+                && diagnostic.message.contains("desired 20")
         }));
     }
 

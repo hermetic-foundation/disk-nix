@@ -170,11 +170,14 @@ Examples:
   suppress `mkswap`; destructive policy and confirmation gates still apply.
 - zram is modeled as generated compressed swap state rather than persistent
   backing storage. NixOS module declarations derive `zramSwap`, while plain
-  zram declarations render read-only `zramctl`, `swapon --show`, `disk-nix zram`, and graph inspection commands. Explicit `operation = "rescan"` uses
-  the same inventory refresh path. Algorithm, size, priority, and
-  writeback-device changes should be reviewed as generator configuration
-  changes because active `/dev/zram*` devices may need swapoff/setup
-  coordination to take effect.
+  zram declarations render read-only `zramctl`, `swapon --show`,
+  `disk-nix zram`, and graph inspection commands. Explicit `operation = "rescan"` uses the same inventory refresh path. Current-topology comparison
+  maps declared algorithm, stream count, disk size, memory limit, compression
+  ratio, and priority properties onto discovered `/dev/zram*` plus active swap
+  metadata before suppressing already-satisfied generated-state updates.
+  Algorithm, size, priority, and writeback-device changes should be reviewed as
+  generator configuration changes because active `/dev/zram*` devices may need
+  swapoff/setup coordination to take effect.
 - LUKS `operation = "open"` opens an existing encrypted container as a mapper
   and is offline-required. Legacy `operation = "create"` with preserved data
   remains accepted for the same preserved open flow. LUKS `operation = "close"`

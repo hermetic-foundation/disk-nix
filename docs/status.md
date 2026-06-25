@@ -129,6 +129,9 @@ behavior across real storage stacks.
   network-storage identities, iSCSI settings, and storage service enablement.
   Module-managed apply and validate services can emit review scripts, JSON
   reports, and invocation-bound receipt files.
+- Current-topology reconciliation for generated zram properties, including
+  algorithm, stream count, disk size, memory limit, compression ratio, and
+  active swap priority when `/dev/zram*` metadata is available.
 - NixOS assertions for duplicate active identities across mountpoints, swaps,
   LUKS mapper names, LUKS keyslot/token selectors, disk and partition targets,
   backing files, Btrfs subvolumes and qgroups, device-mapper maps, MD RAID,

@@ -113,6 +113,9 @@ Typed zram declarations are modeled separately from persistent swap devices.
 `services.disk-nix.zram.enable = true` emits `spec.zram` for inventory and
 lifecycle context, and derives NixOS `zramSwap` so `/dev/zram*` devices are
 created by the upstream generator instead of being added to `swapDevices`.
+Current-topology comparison reconciles declared zram algorithm, stream count,
+disk size, memory limit, compression ratio, and priority against discovered
+`/dev/zram*` plus active swap metadata.
 Typed NFS client mounts also keep `unmount` and legacy destroy operations in
 the generated disk-nix spec while filtering them out of the derived NixOS
 `fileSystems` entries. `operation = "mount"` and `operation = "remount"` stay
