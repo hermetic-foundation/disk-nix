@@ -9607,6 +9607,54 @@ fn swap_property_command(
             ["swap target path", "swap UUID"],
             "set the swap UUID after resolving target and UUID",
         ),
+        ("priority" | "swap.priority", Some(target), Some(value))
+            if value.parse::<i32>().is_ok() =>
+        {
+            command_vec(
+                vec![
+                    "sh".to_string(),
+                    "-c".to_string(),
+                    format!(
+                        "swapoff {} && swapon --priority {} {}",
+                        shell_quote(target),
+                        shell_quote(value),
+                        shell_quote(target)
+                    ),
+                ],
+                true,
+                "reactivate the reviewed swap target with the requested priority",
+            )
+        }
+        ("priority" | "swap.priority", None, Some(value)) if value.parse::<i32>().is_ok() => {
+            command_with_readiness(
+                ["swapon", "--priority", value, "<swap>"],
+                true,
+                CommandReadiness::NeedsDomainImplementation,
+                ["swap target path"],
+                "reactivate swap with the requested priority after resolving the target",
+            )
+        }
+        ("priority" | "swap.priority", Some(target), Some(_)) => command_with_readiness(
+            ["swapon", "--priority", "<priority>", target],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["integer swap priority"],
+            "reactivate swap after resolving an integer priority",
+        ),
+        ("priority" | "swap.priority", Some(target), None) => command_with_readiness(
+            ["swapon", "--priority", "<priority>", target],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["integer swap priority"],
+            "reactivate swap after resolving the requested priority",
+        ),
+        ("priority" | "swap.priority", None, _) => command_with_readiness(
+            ["swapon", "--priority", "<priority>", "<swap>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap target path", "integer swap priority"],
+            "reactivate swap after resolving target and priority",
+        ),
         _ => command_with_readiness(
             ["<swap-property-tool>", target.unwrap_or("<swap>"), property],
             true,
@@ -18077,12 +18125,14 @@ mod tests {
                     "device": "/dev/disk/by-label/swap-old",
                     "properties": {
                       "label": "swap-new",
-                      "swap.uuid": "01234567-89ab-cdef-0123-456789abcdef"
+                      "swap.uuid": "01234567-89ab-cdef-0123-456789abcdef",
+                      "priority": "10"
                     }
                   },
                   "logical": {
                     "properties": {
-                      "swap.label": "logical-swap"
+                      "swap.label": "logical-swap",
+                      "swap.priority": "20"
                     }
                   }
                 }
@@ -18127,6 +18177,26 @@ mod tests {
             step.action_id == "swaps:logical:set-property:swap.label"
                 && step.commands.iter().any(|command| {
                     command.argv == ["swaplabel", "--label", "logical-swap", "<swap>"]
+                        && command.readiness == CommandReadiness::NeedsDomainImplementation
+                        && command.unresolved_inputs == ["swap target path"]
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:primary:set-property:priority"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "swapoff /dev/disk/by-label/swap-old && swapon --priority 10 /dev/disk/by-label/swap-old",
+                        ]
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "swaps:logical:set-property:swap.priority"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["swapon", "--priority", "20", "<swap>"]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["swap target path"]
                 })

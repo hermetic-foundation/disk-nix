@@ -828,9 +828,10 @@ Swap grow and format commands require a path-shaped target such as `/swapfile`
 or `/dev/disk/by-*`; logical swap names can declare it with `target`, `path`,
 or `device`. Swap label and UUID property updates render
 `swaplabel --label <label> <target>` and
-`swaplabel --uuid <uuid> <target>` and remain offline-required. Swap
-property comparison maps declared label and UUID aliases onto probed swap
-identity and signature metadata before suppressing already-satisfied updates.
+`swaplabel --uuid <uuid> <target>` and remain offline-required. Numeric priority
+updates render reviewed `swapoff <target> && swapon --priority <priority> <target>` reactivation commands. Swap property comparison maps declared label,
+UUID, and priority aliases onto probed swap identity and signature metadata
+before suppressing already-satisfied updates.
 Swap `operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
 inspection commands for activation,
 capacity, label, UUID, and backing-storage refresh.

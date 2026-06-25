@@ -161,7 +161,9 @@ Examples:
   and removes signature metadata with `wipefs --all`; prefer deactivation when
   the signature should remain available for later reactivation.
   Swap label and UUID property updates are offline-required because they mutate
-  swap signature identity used by mounts, resume paths, and automation.
+  swap signature identity used by mounts, resume paths, and automation. Numeric
+  priority updates are also offline-required because applying them reactivates
+  the swap target with `swapoff` followed by `swapon --priority`.
   Current-topology comparison reports swap format targets that already have swap
   metadata, including size, usage, priority, or type when probe data has it, and
   also warns when a format target matches another current node kind. It does not
@@ -921,14 +923,16 @@ detach, and delete flows require `namespaceId` plus `controllers` when
 attachment state is changed. Use `target` or `path` for the controller and
 `device` for the host-visible namespace path when the same declaration should
 also reconcile topology visibility.
-Swap grow, format, label, UUID, and rescan command plans require a path-shaped
-swap target from the declaration key, `target`, `path`, or `device`. Label and
-UUID updates render `swaplabel --label` and `swaplabel --uuid`;
+Swap grow, format, label, UUID, priority, and rescan command plans require a
+path-shaped swap target from the declaration key, `target`, `path`, or `device`.
+Label and UUID updates render `swaplabel --label` and `swaplabel --uuid`;
+priority updates render `swapoff` followed by `swapon --priority`;
 `operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
 inspection before any later grow or identity change. Current-topology comparison
-maps declared swap label and UUID properties onto probed identity and signature
-metadata before suppressing already-satisfied property updates. It warns when a
-swap format target already has swap metadata or matches another node kind,
+maps declared swap label, UUID, and priority properties onto probed identity,
+signature, and active swap metadata before suppressing already-satisfied
+property updates. It warns when a swap format target already has swap metadata
+or matches another node kind,
 while keeping the destructive `mkswap` action reviewable. MD RAID
 assemble, stop, create, grow, member add,
 replacement, and removal command plans require an explicit array path such as

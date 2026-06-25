@@ -2395,6 +2395,9 @@ fn current_swap_property_value(property: &str, node: &Node) -> Option<String> {
                 .or_else(|| property_value_from_node(node, "udev.id-fs-uuid"))
                 .map(str::to_string)
         }),
+        SwapPropertyKind::Priority => {
+            property_value_from_node(node, "swap.priority").and_then(normalize_swap_priority)
+        }
     }
 }
 
@@ -2402,12 +2405,14 @@ fn current_swap_property_value(property: &str, node: &Node) -> Option<String> {
 enum SwapPropertyKind {
     Label,
     Uuid,
+    Priority,
 }
 
 fn swap_property_kind(property: &str) -> Option<SwapPropertyKind> {
     match normalize_storage_property_name(property).as_str() {
         "label" | "swap-label" => Some(SwapPropertyKind::Label),
         "uuid" | "swap-uuid" => Some(SwapPropertyKind::Uuid),
+        "priority" | "swap-priority" => Some(SwapPropertyKind::Priority),
         _ => None,
     }
 }
@@ -2416,7 +2421,16 @@ fn normalize_swap_property_value(property: &str, value: &str) -> Option<String> 
     match swap_property_kind(property)? {
         SwapPropertyKind::Label => Some(value.to_string()),
         SwapPropertyKind::Uuid => Some(value.trim().to_ascii_lowercase()),
+        SwapPropertyKind::Priority => normalize_swap_priority(value),
     }
+}
+
+fn normalize_swap_priority(value: &str) -> Option<String> {
+    value
+        .trim()
+        .parse::<i32>()
+        .ok()
+        .map(|priority| priority.to_string())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7895,13 +7909,29 @@ fn classify_swap_property_change(property: &str) -> (RiskClass, Option<Advice>) 
             }),
         );
     }
+    if is_swap_priority_property(property) {
+        return (
+            RiskClass::OfflineRequired,
+            Some(Advice {
+                summary: "swap priority updates reactivate the reviewed swap target".to_string(),
+                alternatives: vec![
+                    "prefer changing NixOS swapDevices priority for steady-state configuration"
+                        .to_string(),
+                    "review memory pressure and hibernation/resume state before swapoff".to_string(),
+                    "use a temporary additional swap device before changing priority on busy systems"
+                        .to_string(),
+                ],
+            }),
+        );
+    }
 
     (
         RiskClass::Unsupported,
         Some(Advice {
             summary: format!("swap property {property} is not mapped to a safe command"),
             alternatives: vec![
-                "use label, swap.label, uuid, or swap.uuid for swap identity changes".to_string(),
+                "use label, swap.label, uuid, swap.uuid, priority, or swap.priority for supported swap changes"
+                    .to_string(),
                 "recreate the swap signature with preserveData=false only when overwriting metadata is intended"
                     .to_string(),
                 "apply unsupported swap changes manually after reviewing util-linux swap tools"
@@ -7913,6 +7943,10 @@ fn classify_swap_property_change(property: &str) -> (RiskClass, Option<Advice>) 
 
 fn is_swap_identity_property(property: &str) -> bool {
     matches!(property, "label" | "swap.label" | "uuid" | "swap.uuid")
+}
+
+fn is_swap_priority_property(property: &str) -> bool {
+    matches!(property, "priority" | "swap.priority")
 }
 
 fn add_zram_actions(actions: &mut Vec<PlannedAction>, zram: &Map<String, Value>) {
@@ -16268,8 +16302,8 @@ mod tests {
         .expect("plan should parse");
 
         assert_eq!(plan.summary.action_count, 4);
-        assert_eq!(plan.summary.offline_required_count, 2);
-        assert_eq!(plan.summary.unsupported_count, 1);
+        assert_eq!(plan.summary.offline_required_count, 3);
+        assert_eq!(plan.summary.unsupported_count, 0);
 
         let label = plan
             .actions
@@ -16296,17 +16330,17 @@ mod tests {
             Some("01234567-89ab-cdef-0123-456789abcdef")
         );
 
-        let unsupported = plan
+        let priority = plan
             .actions
             .iter()
             .find(|action| action.id == "swaps:primary:set-property:priority")
-            .expect("unsupported swap property action exists");
-        assert_eq!(unsupported.risk, RiskClass::Unsupported);
-        assert!(unsupported.advice.as_ref().is_some_and(|advice| {
+            .expect("swap priority property action exists");
+        assert_eq!(priority.risk, RiskClass::OfflineRequired);
+        assert!(priority.advice.as_ref().is_some_and(|advice| {
             advice
                 .alternatives
                 .iter()
-                .any(|alternative| alternative.contains("swap.label"))
+                .any(|alternative| alternative.contains("NixOS swapDevices priority"))
         }));
     }
 
@@ -18989,13 +19023,15 @@ mod tests {
                   "device": "/dev/disk/by-label/swap-old",
                   "properties": {
                     "label": "swap-new",
-                    "swap.uuid": "01234567-89AB-CDEF-0123-456789ABCDEF"
+                    "swap.uuid": "01234567-89AB-CDEF-0123-456789ABCDEF",
+                    "priority": "10"
                   }
                 },
                 "scratch": {
                   "device": "/dev/disk/by-label/scratch-swap",
                   "properties": {
-                    "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+                    "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                    "swap.priority": "20"
                   }
                 }
               }
@@ -19017,7 +19053,8 @@ mod tests {
                 serial: None,
                 wwn: None,
             })
-            .with_property("swap.active", "false"),
+            .with_property("swap.active", "false")
+            .with_property("swap.priority", "10"),
         );
         graph.add_node(
             Node::new(
@@ -19026,7 +19063,8 @@ mod tests {
                 "scratch-swap",
             )
             .with_path("/dev/disk/by-label/scratch-swap")
-            .with_property("swap.uuid", "ffffffff-1111-2222-3333-444444444444"),
+            .with_property("swap.uuid", "ffffffff-1111-2222-3333-444444444444")
+            .with_property("swap.priority", "5"),
         );
 
         let plan = compare_plan_with_topology(plan, &graph);
@@ -19035,11 +19073,11 @@ mod tests {
             .as_ref()
             .expect("comparison should be present");
 
-        assert_eq!(comparison.summary.action_count, 5);
-        assert_eq!(comparison.summary.matched_count, 5);
-        assert_eq!(comparison.summary.already_satisfied_count, 2);
-        assert_eq!(comparison.summary.suppressed_action_count, 2);
-        assert_eq!(plan.actions.len(), 3);
+        assert_eq!(comparison.summary.action_count, 7);
+        assert_eq!(comparison.summary.matched_count, 7);
+        assert_eq!(comparison.summary.already_satisfied_count, 3);
+        assert_eq!(comparison.summary.suppressed_action_count, 3);
+        assert_eq!(plan.actions.len(), 4);
         assert!(plan.actions.iter().any(|action| {
             action.id == "swaps:scratch:set-property:uuid"
                 && action.operation == Operation::SetProperty
@@ -19053,6 +19091,10 @@ mod tests {
                 && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
         }));
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:primary:set-property:priority"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "swaps:scratch:set-property:uuid"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
@@ -19062,6 +19104,13 @@ mod tests {
                 && diagnostic
                     .message
                     .contains("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "swaps:scratch:set-property:swap.priority"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+                && diagnostic.message.contains("is 5")
+                && diagnostic.message.contains("desired 20")
         }));
     }
 
