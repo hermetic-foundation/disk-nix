@@ -3053,10 +3053,8 @@ fn lvm_rename_absent_diagnostic(
         });
     }
 
-    destination_matches
-        .first()
-        .copied()
-        .map(|node| TopologyDiagnostic {
+    if let Some(node) = destination_matches.first().copied() {
+        return Some(TopologyDiagnostic {
             action_id: action.id.clone(),
             level: TopologyDiagnosticLevel::Warning,
             kind: TopologyDiagnosticKind::LvmRenameRequired,
@@ -3066,7 +3064,19 @@ fn lvm_rename_absent_diagnostic(
                 node.kind, node.name
             ),
             current: Some(current_node_summary(node)),
-        })
+        });
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::LvmRenameRequired,
+        query: query.to_string(),
+        message: format!(
+            "LVM {label} rename source {query} is missing and destination {destination} is absent; rename remains actionable after LVM metadata review"
+        ),
+        current: None,
+    })
 }
 
 fn lvm_rename_present_diagnostic(
@@ -20174,7 +20184,7 @@ mod tests {
         assert_eq!(comparison.summary.action_count, 7);
         assert_eq!(comparison.summary.already_satisfied_count, 3);
         assert_eq!(comparison.summary.suppressed_action_count, 3);
-        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(plan.actions.len(), 4);
         assert!(
             plan.actions
@@ -20234,7 +20244,11 @@ mod tests {
         }));
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "volumes:vg0/missing-old:rename"
-                && diagnostic.kind == TopologyDiagnosticKind::Missing
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmRenameRequired
+                && diagnostic
+                    .message
+                    .contains("destination vg0/missing-new is absent")
         }));
     }
 

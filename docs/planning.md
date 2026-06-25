@@ -635,6 +635,11 @@ LVM cache detach reconciliation matches the origin LV and suppresses detach
 only when the current LV no longer reports cache or writecache metadata.
 Still-attached cache origins remain actionable with warnings that include cache
 pool, mode, policy, dirty blocks, and utilization when available.
+LVM logical-volume, thin-pool, and volume-group rename reconciliation compares
+source and destination identities. Source-present renames remain actionable with
+current LVM metadata, destination-present renames are suppressed as already
+reflected in topology, and source-absent/destination-absent renames stay
+actionable with LVM review warnings.
 Loop-device create/destroy reconciliation uses `loop.back-file` topology
 metadata to suppress create actions only when the loop device already maps the
 declared backing file and suppress destroy/detach actions only when the loop
