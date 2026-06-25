@@ -4099,8 +4099,14 @@ fn usage_details(node: &Node) -> String {
         ("cryptsetup.luks-keyslot-1-digest-id", "keyslot-1-digest"),
         ("cryptsetup.luks-token-0-type", "token-0"),
         ("cryptsetup.luks-token-0-keyslot", "token-0-keyslot"),
+        ("cryptsetup.luks-token-0-keyslots", "token-0-keyslots"),
+        ("cryptsetup.luks-token-0-tpm2-pcrs", "token-0-tpm2-pcrs"),
+        ("cryptsetup.luks-token-0-tpm2-hash", "token-0-tpm2-hash"),
         ("cryptsetup.luks-token-1-type", "token-1"),
         ("cryptsetup.luks-token-1-keyslot", "token-1-keyslot"),
+        ("cryptsetup.luks-token-1-keyslots", "token-1-keyslots"),
+        ("cryptsetup.luks-token-1-tpm2-pcrs", "token-1-tpm2-pcrs"),
+        ("cryptsetup.luks-token-1-tpm2-hash", "token-1-tpm2-hash"),
         ("cryptsetup.luks-digest-count", "digests"),
         ("cryptsetup.luks-digests", "digest-ids"),
         ("cryptsetup.luks-digest-0-type", "digest-0"),
@@ -7807,6 +7813,9 @@ mod tests {
             .with_property("cryptsetup.luks-keyslot-1-priority", "ignored")
             .with_property("cryptsetup.luks-token-0-type", "systemd-tpm2")
             .with_property("cryptsetup.luks-token-0-keyslot", "0")
+            .with_property("cryptsetup.luks-token-0-keyslots", "0")
+            .with_property("cryptsetup.luks-token-0-tpm2-pcrs", "0+7")
+            .with_property("cryptsetup.luks-token-0-tpm2-hash", "sha256")
             .with_property("cryptsetup.luks-digest-count", "1")
             .with_property("cryptsetup.luks-digests", "0")
             .with_property("cryptsetup.luks-digest-0-type", "pbkdf2")
@@ -7843,6 +7852,9 @@ mod tests {
         assert!(output.contains(
             "keyslot-1=luks2 keyslot-1-priority=ignored token-0=systemd-tpm2 token-0-keyslot=0"
         ));
+        assert!(
+            output.contains("token-0-keyslots=0 token-0-tpm2-pcrs=0+7 token-0-tpm2-hash=sha256")
+        );
         assert!(output.contains("digests=1 digest-ids=0 digest-0=pbkdf2"));
         assert!(output.contains("digest-0-hash=sha256 digest-0-iterations=1000"));
         assert!(output.contains("digest-0-salt=aa bb cc dd digest-0-digest=ee ff 00 11"));

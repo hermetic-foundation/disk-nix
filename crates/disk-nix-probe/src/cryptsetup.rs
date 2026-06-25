@@ -248,12 +248,10 @@ fn parse_token_line(line: &str, dump: &mut LuksDump, current_token: &mut Option<
     let Some((key, value)) = split_luks_key_value(line) else {
         return;
     };
-    if key == "Keyslot" {
-        dump.properties.push((
-            format!("cryptsetup.luks-token-{token}-{}", normalize_key(key)),
-            value.to_string(),
-        ));
-    }
+    dump.properties.push((
+        format!("cryptsetup.luks-token-{token}-{}", normalize_key(key)),
+        value.to_string(),
+    ));
 }
 
 fn parse_digest_line(line: &str, dump: &mut LuksDump, current_digest: &mut Option<String>) {
@@ -487,6 +485,9 @@ Keyslots:
 Tokens:
   0: systemd-tpm2
         Keyslot:    0
+        Keyslots:   0
+        TPM2 PCRs:  0+7
+        TPM2 Hash:  sha256
 
 Digests:
   0: pbkdf2
@@ -543,6 +544,15 @@ Digests:
         }));
         assert!(container.properties.iter().any(|property| {
             property.key == "cryptsetup.luks-token-0-keyslot" && property.value == "0"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-token-0-keyslots" && property.value == "0"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-token-0-tpm2-pcrs" && property.value == "0+7"
+        }));
+        assert!(container.properties.iter().any(|property| {
+            property.key == "cryptsetup.luks-token-0-tpm2-hash" && property.value == "sha256"
         }));
         assert!(container.properties.iter().any(|property| {
             property.key == "cryptsetup.luks-keyslot-0-pbkdf" && property.value == "argon2id"

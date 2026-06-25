@@ -130,7 +130,8 @@ The current probe layer normalizes:
   access mode; LUKS header metadata through `cryptsetup luksDump` for version,
   UUID, label, data segment, keyslot priority/cipher/PBKDF cost, keyslot salt,
   AF stripes, area offset/length, digest id, token type/keyslot binding
-  metadata, and digest type/hash/iteration/salt/digest metadata
+  metadata, token-specific metadata such as TPM PCR/hash hints, and digest
+  type/hash/iteration/salt/digest metadata
 - Device-mapper metadata through `dmsetup info`, `dmsetup deps`,
   `dmsetup table`, and `dmsetup status` for mapper names, UUIDs, major/minor
   numbers, open counts, segment/event counts, backing dependency edges, table

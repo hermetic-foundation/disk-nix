@@ -347,7 +347,8 @@ Use these commands for:
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
   counts, keyslot priorities/ciphers/PBKDF cost and keyslot area metadata,
   digest identifiers and digest hash/iteration metadata, token-to-keyslot
-  bindings, header area/epoch/flag details, data-segment cipher/offset/length
+  bindings, token metadata such as TPM PCR/hash hints, header area/epoch/flag
+  details, data-segment cipher/offset/length
   details, dm name/UUID, major/minor numbers, open/segment counters, mapper
   table targets, live target status, sanitized dm-crypt table details, parsed
   linear/striped/thin/cache/snapshot table fields, cache/thin-pool/snapshot
@@ -371,8 +372,8 @@ Use these commands for:
   active/in-use state, keyslot/token counts and ids, LUKS version, epoch,
   metadata/keyslot area sizes, flags, subsystem, keyslot priority/cipher/PBKDF
   details, keyslot area offsets/lengths, AF stripes, digest identifiers,
-  digest hash/iteration metadata, token-to-keyslot bindings, and data-segment
-  details
+  digest hash/iteration metadata, token-to-keyslot bindings, token metadata
+  such as TPM PCR/hash hints, and data-segment details
 - `cache`: bcache devices/cache sets, LVM cache/writecache metadata, bcachefs
   member-device cache accounting, and ZFS cache vdevs, including cache mode,
   policy, dirty/writeback data, LVM cache block totals, dirty blocks,
