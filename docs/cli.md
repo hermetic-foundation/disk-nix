@@ -435,8 +435,8 @@ Use these commands for:
   `/proc/swaps` exposes them
 - `zram`: generated compressed swap devices, including logical disk size,
   active data bytes, compressed bytes, total memory, memory limit, memory used,
-  compression algorithm, stream count, compression ratio, mountpoint, and swap
-  activation marker when `zramctl` exposes them
+  high-water memory use, compression algorithm, stream count, compression
+  ratio, mountpoint, and swap activation marker when `zramctl` exposes them
 - `iscsi`: configured iSCSI nodes, sessions, targets, and LUNs, including node
   portals, node startup policy, interface, leading-login, CHAP method/user
   hints, current and persistent session portals plus parsed portal

@@ -2359,7 +2359,7 @@ fn print_zram(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
     writeln!(
         output,
         "{:<22} {:<32} {:>12} {:>12} {:>12} {:>12} {:<10} {:<8} {:>12} {:<12} DETAILS",
-        "KIND", "NAME", "SIZE", "USED", "FREE", "ALLOC", "ALGO", "RATIO", "MEM-USED", "MOUNT"
+        "KIND", "NAME", "SIZE", "USED", "FREE", "ALLOC", "ALGO", "RATIO", "MEM-PEAK", "MOUNT"
     )?;
     for node in graph.nodes.iter().filter(|node| is_zram_node(node)) {
         let usage = node.usage.as_ref();
@@ -2374,7 +2374,9 @@ fn print_zram(output: &mut impl Write, graph: &StorageGraph) -> io::Result<()> {
             human_bytes(usage.and_then(|usage| usage.allocated_bytes)),
             property_value(node, "zram.algorithm").unwrap_or("-"),
             property_value(node, "zram.compression-ratio").unwrap_or("-"),
-            property_value(node, "zram.memory-used").unwrap_or("-"),
+            property_value(node, "zram.memory-peak")
+                .or_else(|| property_value(node, "zram.memory-used"))
+                .unwrap_or("-"),
             property_value(node, "zram.mountpoint").unwrap_or("-"),
             usage_details(node)
         )?;
@@ -3634,6 +3636,7 @@ fn usage_details(node: &Node) -> String {
         ("zram.total", "zram-total"),
         ("zram.memory-limit", "zram-memory-limit"),
         ("zram.memory-used", "zram-memory-used"),
+        ("zram.memory-peak", "zram-memory-peak"),
         ("zram.zero-pages", "zram-zero-pages"),
         ("zram.migrated", "zram-migrated"),
         ("zram.compression-ratio", "zram-ratio"),
@@ -8534,6 +8537,7 @@ mod tests {
                 .with_property("zram.compressed", "715827882")
                 .with_property("zram.total", "805306368")
                 .with_property("zram.memory-used", "900000000")
+                .with_property("zram.memory-peak", "900000000")
                 .with_property("zram.compression-ratio", "2.67")
                 .with_property("zram.mountpoint", "[SWAP]")
                 .with_property("zram.swap", "true"),
@@ -8560,7 +8564,9 @@ mod tests {
         assert!(output.contains("swap-active=true swap-type=file swap-priority=10"));
         assert!(output.contains("/dev/zram0"));
         assert!(output.contains("zram-algorithm=zstd zram-streams=8 zram-compressed=715827882"));
-        assert!(output.contains("zram-total=805306368 zram-memory-used=900000000"));
+        assert!(output.contains(
+            "zram-total=805306368 zram-memory-used=900000000 zram-memory-peak=900000000"
+        ));
         assert!(output.contains("zram-ratio=2.67 zram-mountpoint=[SWAP] zram-swap=true"));
         assert!(output.contains("0.0%"));
     }
@@ -8584,6 +8590,7 @@ mod tests {
                 .with_property("zram.total", "805306368")
                 .with_property("zram.memory-limit", "0")
                 .with_property("zram.memory-used", "900000000")
+                .with_property("zram.memory-peak", "900000000")
                 .with_property("zram.compression-ratio", "2.67")
                 .with_property("zram.mountpoint", "[SWAP]")
                 .with_property("zram.swap", "true"),
@@ -8600,7 +8607,7 @@ mod tests {
 
         assert!(output.contains("ALGO"));
         assert!(output.contains("RATIO"));
-        assert!(output.contains("MEM-USED"));
+        assert!(output.contains("MEM-PEAK"));
         assert!(output.contains("/dev/zram0"));
         assert!(output.contains("8.0 GiB"));
         assert!(output.contains("2.0 GiB"));
@@ -8611,6 +8618,7 @@ mod tests {
         assert!(output.contains("[SWAP]"));
         assert!(output.contains("zram-compressed=715827882"));
         assert!(output.contains("zram-memory-limit=0"));
+        assert!(output.contains("zram-memory-peak=900000000"));
         assert!(!output.contains("/dev/sda3"));
 
         let mut json = Vec::new();

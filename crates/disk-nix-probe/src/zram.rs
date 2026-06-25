@@ -112,6 +112,10 @@ fn add_device(graph: &mut StorageGraph, device: ZramDevice) {
             "zram.memory-used",
             device.memory_used.map(|value| value.to_string()),
         ),
+        (
+            "zram.memory-peak",
+            device.memory_used.map(|value| value.to_string()),
+        ),
         ("zram.migrated", device.migrated),
         ("zram.compression-ratio", device.compression_ratio),
         ("zram.mountpoint", device.mountpoint.clone()),
@@ -184,5 +188,8 @@ mod tests {
                 .iter()
                 .any(|property| property.key == "zram.swap" && property.value == "true")
         );
+        assert!(node.properties.iter().any(|property| {
+            property.key == "zram.memory-peak" && property.value == "900000000"
+        }));
     }
 }
