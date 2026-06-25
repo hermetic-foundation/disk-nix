@@ -13,8 +13,9 @@ storage stacks:
 - LVM PVs, VGs, LVs, thin pools, snapshots, cache, and VDO
 - Btrfs filesystems, devices, subvolumes, snapshots, qgroups, and usage
 - bcachefs filesystems, member devices, usage, and topology updates
-- ZFS pools, vdevs, datasets, zvols, snapshots, snapshot hold reference counts,
-  pool properties such as autotrim/autoexpand/cachefile, dataset and zvol
+- ZFS pools, vdevs, datasets, zvols, snapshots, snapshot hold tags and
+  reference counts, pool properties such as autotrim/autoexpand/cachefile,
+  dataset and zvol
   compression/dedup/checksum/copies/cache/sync/record-size/quota/reservation/encryption
   properties, POSIX metadata policy, and cache, log, and special vdevs
 - MD RAID, multipath, SCSI/LUN inventory, NVMe controllers/namespaces/health,
@@ -523,6 +524,9 @@ or subvolume.
 ZFS snapshot hold plans render safe `zfs hold <tag> <snapshot>` and
 `zfs release <tag> <snapshot>` updates from `hold` and `releaseHold`
 declarations so retention can be changed without deleting recovery points.
+Current-topology probing reads hold tags from `zfs holds -H` and suppresses
+hold declarations when the tag is already present or release declarations when
+the tag is already absent.
 Snapshot clone plans render reviewed `zfs clone <snapshot> <dataset>` commands
 for ZFS snapshots and `btrfs subvolume snapshot <snapshot-path> <clone-path>`
 for absolute Btrfs snapshot paths. Btrfs clone declarations with

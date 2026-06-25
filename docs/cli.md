@@ -314,8 +314,8 @@ Use these commands for:
   listsnapshots, multihost, status/action advisories, scan/error summaries,
   vdev roles and error counters, dataset compression, dedup, checksum, copies,
   sync, cache policy, record size, quota, reservation, encryption, key status,
-  POSIX metadata policy, snapshot user references, zvol volume size, origin,
-  and pool/dataset/snapshot child
+  POSIX metadata policy, snapshot user references and hold tags, zvol volume
+  size, origin, and pool/dataset/snapshot child
   relationships when `zpool` and `zfs` probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, bcachefs, ZFS, zvols,
   LUNs, and exports, including LVM origin/pool/data metadata, activation state,
@@ -335,7 +335,8 @@ Use these commands for:
 - `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
   source relationships, LVM origin/pool/data metadata, Btrfs subvolume IDs,
   generation, creation generation, parent IDs, top-level, parent UUIDs, and
-  received UUIDs, and ZFS user-reference, compression, and encryption details
+  received UUIDs, and ZFS user-reference, hold tag, compression, and encryption
+  details
 - `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
   RAID, multipath, and cache layers, including LUKS active/keyslot/token
   counts, keyslot priorities/ciphers/PBKDF cost metadata, token-to-keyslot
@@ -1190,6 +1191,9 @@ are suppressed; present snapshots stay actionable with warnings that include
 available ZFS user-reference/usage metadata or Btrfs subvolume metadata.
 ZFS snapshot retention declarations render safe `zfs hold <tag> <snapshot>`
 and `zfs release <tag> <snapshot>` commands from `hold` and `releaseHold`.
+With current-topology probing, existing hold tags suppress duplicate hold
+actions and absent hold tags suppress no-op release actions. Snapshot views
+surface probed ZFS hold tags in metadata details.
 Snapshot clone declarations render reviewed `zfs clone <snapshot> <dataset>`
 commands for ZFS snapshots and
 `btrfs subvolume snapshot <snapshot-path> <clone-path>` for absolute Btrfs

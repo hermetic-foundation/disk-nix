@@ -59,7 +59,8 @@ behavior across real storage stacks.
   declarations reconciled against probed `btrfs.max-*` metadata with
   unlimited-value normalization, and ZFS pool/dataset/zvol property
   declarations reconciled against probed `zfs.*` and pool-scoped `zfs.pool-*`
-  metadata with common on/off normalization,
+  metadata with common on/off normalization, ZFS snapshot hold/release
+  declarations reconciled against probed hold tag metadata,
   and filesystem identity property declarations reconciled against probed node
   identity plus filesystem label, UUID, FAT volume-ID, NTFS serial, and exFAT
   serial metadata aliases, swap identity property declarations reconciled

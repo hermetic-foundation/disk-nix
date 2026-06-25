@@ -160,14 +160,15 @@ The current probe layer normalizes:
 - exFAT metadata through `tune.exfat` and `dump.exfat` for volume label, GUID,
   serial, volume length, FAT/cluster offsets, cluster counts, sector sizing,
   allocated capacity, and free-space estimates
-- ZFS `zpool list -H -p`, `zpool get -H`, `zpool status -P`, and
-  `zfs list -H -p` output for pool size, allocated/free usage, capacity, dedup
-  ratio, fragmentation, health, status/action advisories, scan/error summaries,
-  pool properties such as altroot, ashift, autotrim, autoexpand, autoreplace,
-  bootfs, cachefile, comment, delegation, failmode, listsnapshots, and
-  multihost, vdev topology, data/log/cache/special/dedup roles, backing
-  devices, datasets, snapshots, zvols, mountpoints, clone origins, concrete
-  snapshot-to-dataset or snapshot-to-zvol lineage, and snapshot user-reference
+- ZFS `zpool list -H -p`, `zpool get -H`, `zpool status -P`,
+  `zfs list -H -p`, and per-snapshot `zfs holds -H` output for pool size,
+  allocated/free usage, capacity, dedup ratio, fragmentation, health,
+  status/action advisories, scan/error summaries, pool properties such as
+  altroot, ashift, autotrim, autoexpand, autoreplace, bootfs, cachefile,
+  comment, delegation, failmode, listsnapshots, and multihost, vdev topology,
+  data/log/cache/special/dedup roles, backing devices, datasets, snapshots,
+  zvols, mountpoints, clone origins, concrete snapshot-to-dataset or
+  snapshot-to-zvol lineage, snapshot hold tags, and snapshot user-reference
   counts that indicate active holds; ZFS dataset and zvol policy properties
   include compression, dedup, checksum, copies, sync, primary/secondary cache,
   record size, quota, reservation, encryption, key status, POSIX metadata

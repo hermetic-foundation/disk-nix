@@ -429,8 +429,11 @@ Examples:
   comparison suppresses already-absent concrete ZFS snapshots and absolute
   Btrfs snapshot paths; present snapshots stay actionable with warnings that
   include available ZFS user-reference/usage metadata or Btrfs subvolume
-  metadata. ZFS snapshot `hold` and `releaseHold` declarations are safe property actions that render
-  `zfs hold <tag> <snapshot>` and `zfs release <tag> <snapshot>`. ZFS snapshot
+  metadata. ZFS snapshot `hold` and `releaseHold` declarations are safe
+  property actions that render `zfs hold <tag> <snapshot>` and
+  `zfs release <tag> <snapshot>`. Current-topology comparison suppresses hold
+  declarations when `zfs holds -H` metadata already reports the tag and
+  suppresses release declarations when the tag is already absent. ZFS snapshot
   `operation = "rescan"` and absolute Btrfs snapshot rescan declarations are
   online read-only refreshes for snapshot metadata, holds, read-only state, and
   graph relationships. Snapshot declarations can use `name`, `snapshotName`, or
@@ -652,8 +655,11 @@ status, origin, usage, volsize, or compression metadata.
 Generic snapshot destroy reconciliation suppresses concrete ZFS snapshot names
 and absolute Btrfs snapshot paths only when they are already absent. Present
 snapshots stay actionable with warnings that include available ZFS
-user-reference, usage, compression, or encryption metadata, or Btrfs subvolume
-id, generation, parent, top-level, and UUID metadata.
+user-reference, hold tag, usage, compression, or encryption metadata, or Btrfs
+subvolume id, generation, parent, top-level, and UUID metadata.
+ZFS snapshot hold and release reconciliation compares requested tags against
+probed `zfs.holds` and `zfs.hold.<tag>` metadata so already-present holds and
+already-absent releases are treated as satisfied instead of reissued.
 Generic snapshot clone reconciliation compares the concrete source ZFS
 snapshot name or absolute Btrfs snapshot path before considering the clone
 destination. Missing clone sources stay actionable with warning diagnostics;
