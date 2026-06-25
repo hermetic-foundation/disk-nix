@@ -63,7 +63,10 @@ pub fn normalize_tune2fs(device: &str, bytes: &[u8]) -> Result<StorageGraph, Pro
 
 const PROPERTIES: &[(&str, &str)] = &[
     ("Filesystem state", "ext.state"),
+    ("Filesystem magic number", "ext.magic-number"),
+    ("Filesystem revision #", "ext.revision"),
     ("Errors behavior", "ext.errors-behavior"),
+    ("FS Error count", "ext.fs-error-count"),
     ("Filesystem OS type", "ext.os-type"),
     ("Inode count", "ext.inode-count"),
     ("Free inodes", "ext.free-inodes"),
@@ -101,6 +104,16 @@ const PROPERTIES: &[(&str, &str)] = &[
     ("Journal backup", "ext.journal-backup"),
     ("Journal features", "ext.journal-features"),
     ("Total journal size", "ext.journal-size"),
+    ("First error time", "ext.first-error-time"),
+    ("First error function", "ext.first-error-function"),
+    ("First error line #", "ext.first-error-line"),
+    ("First error inode #", "ext.first-error-inode"),
+    ("First error block #", "ext.first-error-block"),
+    ("Last error time", "ext.last-error-time"),
+    ("Last error function", "ext.last-error-function"),
+    ("Last error line #", "ext.last-error-line"),
+    ("Last error inode #", "ext.last-error-inode"),
+    ("Last error block #", "ext.last-error-block"),
     ("Checksum type", "ext.checksum-type"),
     ("Checksum", "ext.checksum"),
 ];
@@ -195,6 +208,7 @@ Directory Hash Seed:      11111111-2222-3333-4444-555555555555
 Default mount options:    user_xattr acl
 Filesystem state:         clean
 Errors behavior:          Continue
+FS Error count:           2
 Filesystem OS type:       Linux
 Inode count:              30531584
 Block count:              122096646
@@ -222,6 +236,16 @@ Inode size:               256
 Journal inode:            8
 Journal UUID:             99999999-aaaa-bbbb-cccc-dddddddddddd
 Total journal size:       1024M
+First error time:         Mon Jun 22 12:30:00 2026
+First error function:     ext4_lookup
+First error line #:       1234
+First error inode #:      42
+First error block #:      9001
+Last error time:          Mon Jun 22 12:45:00 2026
+Last error function:      ext4_journal_check_start
+Last error line #:        5678
+Last error inode #:       43
+Last error block #:       9002
 Checksum type:            crc32c
 Checksum:                 0x12345678
 "#;
@@ -252,6 +276,35 @@ Checksum:                 0x12345678
         }));
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ext.lifetime-writes" && property.value == "189 GB"
+        }));
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ext.magic-number" && property.value == "0xEF53"
+            })
+        );
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ext.revision" && property.value == "1 (dynamic)"
+            })
+        );
+        assert!(
+            filesystem
+                .properties
+                .iter()
+                .any(|property| { property.key == "ext.fs-error-count" && property.value == "2" })
+        );
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ext.first-error-function" && property.value == "ext4_lookup"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ext.first-error-block" && property.value == "9001"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ext.last-error-function"
+                && property.value == "ext4_journal_check_start"
+        }));
+        assert!(filesystem.properties.iter().any(|property| {
+            property.key == "ext.last-error-block" && property.value == "9002"
         }));
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ext.overhead-clusters" && property.value == "123456"

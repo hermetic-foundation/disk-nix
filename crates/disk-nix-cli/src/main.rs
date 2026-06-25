@@ -4247,7 +4247,10 @@ fn usage_details(node: &Node) -> String {
         ("nfs.soft", "soft"),
         ("nfs.noresvport", "noresvport"),
         ("ext.state", "ext-state"),
+        ("ext.magic-number", "ext-magic"),
+        ("ext.revision", "ext-revision"),
         ("ext.errors-behavior", "errors"),
+        ("ext.fs-error-count", "fs-error-count"),
         ("ext.os-type", "os"),
         ("ext.block-count", "blocks"),
         ("ext.reserved-block-count", "reserved-blocks"),
@@ -4285,6 +4288,16 @@ fn usage_details(node: &Node) -> String {
         ("ext.journal-backup", "journal-backup"),
         ("ext.journal-features", "journal-features"),
         ("ext.journal-size", "journal-size"),
+        ("ext.first-error-time", "first-error-time"),
+        ("ext.first-error-function", "first-error-function"),
+        ("ext.first-error-line", "first-error-line"),
+        ("ext.first-error-inode", "first-error-inode"),
+        ("ext.first-error-block", "first-error-block"),
+        ("ext.last-error-time", "last-error-time"),
+        ("ext.last-error-function", "last-error-function"),
+        ("ext.last-error-line", "last-error-line"),
+        ("ext.last-error-inode", "last-error-inode"),
+        ("ext.last-error-block", "last-error-block"),
         ("ext.checksum-type", "checksum-type"),
         ("ext.checksum", "checksum"),
         ("exfat.guid", "guid"),
@@ -5833,7 +5846,10 @@ mod tests {
             .with_property("blkid.usage", "filesystem")
             .with_property("blkid.uuid-sub", "subvol-uuid")
             .with_property("ext.state", "clean")
+            .with_property("ext.magic-number", "0xEF53")
+            .with_property("ext.revision", "1 (dynamic)")
             .with_property("ext.errors-behavior", "Continue")
+            .with_property("ext.fs-error-count", "2")
             .with_property("ext.os-type", "Linux")
             .with_property("ext.block-count", "122096646")
             .with_property("ext.reserved-block-count", "6104832")
@@ -5874,11 +5890,21 @@ mod tests {
             .with_property("ext.journal-backup", "inode blocks")
             .with_property("ext.journal-features", "journal_incompat_revoke")
             .with_property("ext.journal-size", "1024M")
+            .with_property("ext.first-error-time", "Mon Jun 22 12:30:00 2026")
+            .with_property("ext.first-error-function", "ext4_lookup")
+            .with_property("ext.first-error-line", "1234")
+            .with_property("ext.first-error-inode", "42")
+            .with_property("ext.first-error-block", "9001")
+            .with_property("ext.last-error-time", "Mon Jun 22 12:45:00 2026")
+            .with_property("ext.last-error-function", "ext4_journal_check_start")
+            .with_property("ext.last-error-line", "5678")
+            .with_property("ext.last-error-inode", "43")
+            .with_property("ext.last-error-block", "9002")
             .with_property("ext.checksum-type", "crc32c")
             .with_property("ext.checksum", "0x12345678");
         assert_eq!(
             usage_details(&ext),
-            "fstype=ext4 version=1.0 blkid-block-size=4096 usage=filesystem uuid-sub=subvol-uuid ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197 first-block=0 block-size=4096 fragment-size=4096 blocks-per-group=32768 fragments-per-group=32768 inodes=30531584 free-inodes=27187554 inodes-per-group=8192 raid-stride=128 raid-stripe-width=256 features=has_journal extent metadata_csum flags=signed_directory_hash dir-hash=half_md4 dir-hash-seed=11111111-2222-3333-4444-555555555555 default-mount=user_xattr acl created=Mon Jan 01 00:00:00 2024 last-mounted=Mon Jun 22 12:00:00 2026 last-written=Mon Jun 22 12:00:00 2026 mount-count=12 max-mount-count=-1 last-checked=Mon Jan 01 00:00:00 2024 check-interval=0 (<none>) lifetime-writes=189 GB reserved-uid=0 (user root) reserved-gid=0 (group root) first-inode=11 inode-size=256 journal-inode=8 journal-uuid=99999999-aaaa-bbbb-cccc-dddddddddddd journal-backup=inode blocks journal-features=journal_incompat_revoke journal-size=1024M checksum-type=crc32c checksum=0x12345678"
+            "fstype=ext4 version=1.0 blkid-block-size=4096 usage=filesystem uuid-sub=subvol-uuid ext-state=clean ext-magic=0xEF53 ext-revision=1 (dynamic) errors=Continue fs-error-count=2 os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197 first-block=0 block-size=4096 fragment-size=4096 blocks-per-group=32768 fragments-per-group=32768 inodes=30531584 free-inodes=27187554 inodes-per-group=8192 raid-stride=128 raid-stripe-width=256 features=has_journal extent metadata_csum flags=signed_directory_hash dir-hash=half_md4 dir-hash-seed=11111111-2222-3333-4444-555555555555 default-mount=user_xattr acl created=Mon Jan 01 00:00:00 2024 last-mounted=Mon Jun 22 12:00:00 2026 last-written=Mon Jun 22 12:00:00 2026 mount-count=12 max-mount-count=-1 last-checked=Mon Jan 01 00:00:00 2024 check-interval=0 (<none>) lifetime-writes=189 GB reserved-uid=0 (user root) reserved-gid=0 (group root) first-inode=11 inode-size=256 journal-inode=8 journal-uuid=99999999-aaaa-bbbb-cccc-dddddddddddd journal-backup=inode blocks journal-features=journal_incompat_revoke journal-size=1024M first-error-time=Mon Jun 22 12:30:00 2026 first-error-function=ext4_lookup first-error-line=1234 first-error-inode=42 first-error-block=9001 last-error-time=Mon Jun 22 12:45:00 2026 last-error-function=ext4_journal_check_start last-error-line=5678 last-error-inode=43 last-error-block=9002 checksum-type=crc32c checksum=0x12345678"
         );
 
         let exfat = Node::new("fs:/dev/sdb1", NodeKind::Filesystem, "exfat")
@@ -6279,7 +6305,10 @@ mod tests {
             Node::new("fs:/dev/sda2", NodeKind::Filesystem, "ext4")
                 .with_property("filesystem.type", "ext4")
                 .with_property("ext.state", "clean")
+                .with_property("ext.magic-number", "0xEF53")
+                .with_property("ext.revision", "1 (dynamic)")
                 .with_property("ext.errors-behavior", "Continue")
+                .with_property("ext.fs-error-count", "2")
                 .with_property("ext.os-type", "Linux")
                 .with_property("ext.block-count", "122096646")
                 .with_property("ext.reserved-block-count", "6104832")
@@ -6308,6 +6337,10 @@ mod tests {
                 .with_property("ext.journal-inode", "8")
                 .with_property("ext.journal-uuid", "99999999-aaaa-bbbb-cccc-dddddddddddd")
                 .with_property("ext.journal-size", "1024M")
+                .with_property("ext.first-error-function", "ext4_lookup")
+                .with_property("ext.first-error-block", "9001")
+                .with_property("ext.last-error-function", "ext4_journal_check_start")
+                .with_property("ext.last-error-block", "9002")
                 .with_property("ext.checksum-type", "crc32c")
                 .with_property("ext.checksum", "0x12345678"),
         );
@@ -6407,7 +6440,10 @@ mod tests {
         ));
         assert!(output.contains("xfs-realtime-type=none xfs-realtime-blocks=0"));
         assert!(output.contains(
-            "fstype=ext4 ext-state=clean errors=Continue os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197 first-block=0"
+            "fstype=ext4 ext-state=clean ext-magic=0xEF53 ext-revision=1 (dynamic) errors=Continue fs-error-count=2 os=Linux blocks=122096646 reserved-blocks=6104832 overhead-clusters=123456 free-blocks=73328197 first-block=0"
+        ));
+        assert!(output.contains(
+            "first-error-function=ext4_lookup first-error-block=9001 last-error-function=ext4_journal_check_start last-error-block=9002"
         ));
         assert!(output.contains(
             "block-size=4096 blocks-per-group=32768 inodes=30531584 free-inodes=27187554 inodes-per-group=8192 raid-stride=128 raid-stripe-width=256"
@@ -6419,7 +6455,8 @@ mod tests {
         assert!(output.contains(
             "mount-count=12 max-mount-count=-1 check-interval=0 (<none>) inode-size=256 journal-inode=8 journal-uuid=99999999-aaaa-bbbb-cccc-dddddddddddd"
         ));
-        assert!(output.contains("journal-size=1024M checksum-type=crc32c checksum=0x12345678"));
+        assert!(output.contains("journal-size=1024M"));
+        assert!(output.contains("checksum-type=crc32c checksum=0x12345678"));
         assert!(output.contains(
             "guid=01234567-89ab-cdef-0123-456789abcdef exfatprogs=1.2.4 serial=0x6eef953b sectors=3203072"
         ));

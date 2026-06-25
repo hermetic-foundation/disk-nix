@@ -292,8 +292,8 @@ Use these commands for:
   and ext state/features, reserved and overhead block accounting, block/inode
   group geometry, first-block and RAID stride/stripe layout hints, mount/check
   counters, timestamps, directory hash settings, default mount options,
-  lifetime writes, journal identity, and checksum metadata when probes expose
-  them
+  lifetime writes, journal identity, first/last filesystem error telemetry, and
+  checksum metadata when probes expose them
 - `complex-filesystems`: Btrfs, bcachefs, and ZFS pools, vdevs, datasets,
   zvols, subvolumes, snapshots, qgroups, and member devices, including size,
   used/free capacity, utilization, backing/member counts, allocation profiles,

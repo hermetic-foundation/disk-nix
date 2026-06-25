@@ -81,8 +81,8 @@ The current probe layer normalizes:
   filesystem state, reservation and overhead accounting, block/inode group
   geometry, first-block and RAID stride/stripe layout hints, mount/check
   counters, timestamps, directory hash settings, default mount options, journal
-  identity/metadata, checksum metadata, UUIDs, labels, and computed
-  capacity/usage where device access is permitted
+  identity/metadata, first/last filesystem error telemetry, checksum metadata,
+  UUIDs, labels, and computed capacity/usage where device access is permitted
 - `xfs_info` for mounted XFS filesystem geometry, allocation group layout,
   inode size, sector size, metadata feature flags such as reflink, bigtime,
   finobt, sparse, and rmapbt, data allocation parameters, naming format, log
