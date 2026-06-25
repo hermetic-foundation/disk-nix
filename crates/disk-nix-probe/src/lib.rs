@@ -2026,7 +2026,14 @@ fn collect_zfs(result: &mut ProbeResult) {
 
     match (zpool_list, zpool_get, zfs_list, zpool_status) {
         (Ok(zpool_list), Ok(zpool_get), Ok(zfs_list), Ok(zpool_status)) => {
-            match zfs::normalize_zfs(&zpool_list, &zpool_get, &zfs_list, &zpool_status) {
+            let zfs_holds = collect_zfs_holds(&zfs_list);
+            match zfs::normalize_zfs(
+                &zpool_list,
+                &zpool_get,
+                &zfs_list,
+                &zfs_holds,
+                &zpool_status,
+            ) {
                 Ok(graph) => {
                     let node_count = graph.nodes.len();
                     merge_graph(&mut result.graph, graph);
@@ -2060,6 +2067,29 @@ fn collect_zfs(result: &mut ProbeResult) {
             });
         }
     }
+}
+
+fn collect_zfs_holds(zfs_list: &[u8]) -> Vec<u8> {
+    let Ok(text) = std::str::from_utf8(zfs_list) else {
+        return Vec::new();
+    };
+    let mut output = Vec::new();
+    for snapshot in text.lines().filter_map(zfs_snapshot_name_from_list_line) {
+        if let Ok(mut holds) = run_report("zfs", &["holds", "-H", snapshot]) {
+            if !holds.ends_with(b"\n") {
+                holds.push(b'\n');
+            }
+            output.extend(holds);
+        }
+    }
+    output
+}
+
+fn zfs_snapshot_name_from_list_line(line: &str) -> Option<&str> {
+    let mut fields = line.split('\t');
+    let name = fields.next()?;
+    let kind = fields.next()?;
+    (kind == "snapshot").then_some(name)
 }
 
 fn collect_lvm(result: &mut ProbeResult) {

@@ -4455,6 +4455,7 @@ fn usage_details(node: &Node) -> String {
         ("zfs.checksum-errors", "checksum-errors"),
         ("zfs.origin", "origin"),
         ("zfs.userrefs", "userrefs"),
+        ("zfs.holds", "holds"),
         ("zfs.compression", "compression"),
         ("zfs.quota", "quota"),
         ("zfs.reservation", "reservation"),
@@ -5759,7 +5760,8 @@ mod tests {
             "tank/home@daily",
         )
         .with_property("zfs.userrefs", "2");
-        assert_eq!(usage_details(&snapshot), "userrefs=2");
+        let snapshot = snapshot.with_property("zfs.holds", "disk-nix-retain");
+        assert_eq!(usage_details(&snapshot), "userrefs=2 holds=disk-nix-retain");
 
         let dataset = Node::new("zfs-dataset:tank/home", NodeKind::ZfsDataset, "tank/home")
             .with_property("zfs.compression", "zstd")
@@ -7506,6 +7508,7 @@ mod tests {
             )
             .with_size_bytes(1_073_741_824)
             .with_property("zfs.userrefs", "2")
+            .with_property("zfs.holds", "disk-nix-retain")
             .with_property("zfs.compression", "zstd")
             .with_property("zfs.encryption", "aes-256-gcm")
             .with_property("zfs.keystatus", "available")
@@ -7546,7 +7549,7 @@ mod tests {
         assert!(output.contains("tank/home"));
         assert!(
             output
-                .contains("userrefs=2 compression=zstd encryption=aes-256-gcm keystatus=available")
+                .contains("userrefs=2 holds=disk-nix-retain compression=zstd encryption=aes-256-gcm keystatus=available")
         );
         assert!(output.contains("checksum=sha512 copies=2"));
         assert!(output.contains("data=12.50 origin=root pool=thinpool"));

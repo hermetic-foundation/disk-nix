@@ -8,6 +8,7 @@ pub fn normalize_zfs(
     zpool_list: &[u8],
     zpool_get: &[u8],
     zfs_list: &[u8],
+    zfs_holds: &[u8],
     zpool_status: &[u8],
 ) -> Result<StorageGraph, ProbeError> {
     let mut graph = StorageGraph::empty();
@@ -22,6 +23,9 @@ pub fn normalize_zfs(
     let dataset_kinds = dataset_kinds(&datasets);
     for dataset in datasets {
         add_dataset(&mut graph, dataset, &dataset_kinds);
+    }
+    for hold in parse_zfs_holds(zfs_holds)? {
+        add_snapshot_hold(&mut graph, hold);
     }
     for pool in parse_zpool_status(zpool_status)? {
         add_status_pool(&mut graph, pool);
@@ -78,6 +82,13 @@ struct ZfsRow {
     snapdir: Option<String>,
     acltype: Option<String>,
     xattr: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ZfsHold {
+    snapshot: String,
+    tag: String,
+    timestamp: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -333,6 +344,30 @@ fn parse_datasets(bytes: &[u8]) -> Result<Vec<ZfsRow>, ProbeError> {
     Ok(rows)
 }
 
+fn parse_zfs_holds(bytes: &[u8]) -> Result<Vec<ZfsHold>, ProbeError> {
+    let text = std::str::from_utf8(bytes).map_err(|error| {
+        ProbeError::Adapter(format!("failed to read zfs holds output: {error}"))
+    })?;
+    let mut holds = Vec::new();
+
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let fields: Vec<&str> = line.split('\t').collect();
+        if fields.len() < 2 {
+            return Err(ProbeError::Adapter(format!(
+                "zfs holds row has {} fields, expected at least 2: {line}",
+                fields.len()
+            )));
+        }
+        holds.push(ZfsHold {
+            snapshot: fields[0].to_string(),
+            tag: fields[1].to_string(),
+            timestamp: fields.get(2).and_then(|value| nonempty_dash(value)),
+        });
+    }
+
+    Ok(holds)
+}
+
 fn add_pool(graph: &mut StorageGraph, pool: ZpoolRow) {
     let mut node = Node::new(pool_id(&pool.name), NodeKind::ZfsPool, pool.name);
 
@@ -558,6 +593,22 @@ fn add_dataset(
     graph.add_node(node);
 }
 
+fn add_snapshot_hold(graph: &mut StorageGraph, hold: ZfsHold) {
+    let tag_key = normalize_property_suffix(&hold.tag);
+    let node = Node::new(
+        dataset_id(&hold.snapshot, NodeKind::ZfsSnapshot),
+        NodeKind::ZfsSnapshot,
+        hold.snapshot,
+    )
+    .with_property("zfs.holds", hold.tag.clone())
+    .with_property(
+        format!("zfs.hold.{tag_key}"),
+        hold.timestamp.unwrap_or_else(|| "present".to_string()),
+    )
+    .with_property(format!("zfs.hold-tag.{tag_key}"), hold.tag);
+    graph.add_node(node);
+}
+
 fn dataset_kind(kind: &str) -> NodeKind {
     match kind {
         "filesystem" => NodeKind::ZfsDataset,
@@ -598,6 +649,21 @@ fn nonempty_dash(value: &str) -> Option<String> {
     (!value.is_empty() && value != "-").then(|| value.to_string())
 }
 
+fn normalize_property_suffix(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| match character {
+            'A'..='Z' => character.to_ascii_lowercase(),
+            'a'..='z' | '0'..='9' => character,
+            _ => '-',
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
 #[cfg(test)]
 mod tests {
     use disk_nix_model::{NodeKind, Relationship};
@@ -622,6 +688,8 @@ tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\tzstd\t1073741824\t268435456\t
 tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\tzstd\t-\t-\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
 tank/vm\tvolume\t50\t950\t50\t-\t-\t-\tlz4\t-\t-\toff\t-\t85899345920\t-\ton\tfletcher4\t1\tstandard\tall\tnone\toff\toff\thidden\toff\ton\n\
 tank/vm@clean\tsnapshot\t5\t-\t5\t-\t-\t1\tlz4\t-\t-\toff\t-\t-\t-\ton\tfletcher4\t1\tstandard\tall\tnone\toff\toff\thidden\toff\ton\n";
+    const ZFS_HOLDS: &[u8] = b"tank/home@daily\tdisk-nix-retain\tWed Jun 24 18:00 2026\n\
+tank/home@daily\tbackup-job\tWed Jun 24 18:01 2026\n";
     const ZPOOL_STATUS: &[u8] = br#"
   pool: tank
  state: ONLINE
@@ -657,8 +725,8 @@ errors: No known data errors
 
     #[test]
     fn normalizes_zfs_pool_datasets_snapshots_and_zvols() {
-        let graph =
-            normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, ZPOOL_STATUS).expect("fixture should parse");
+        let graph = normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, ZFS_HOLDS, ZPOOL_STATUS)
+            .expect("fixture should parse");
 
         assert!(
             graph
@@ -736,6 +804,18 @@ errors: No known data errors
                 .properties
                 .iter()
                 .any(|property| property.key == "zfs.userrefs" && property.value == "2")
+        );
+        assert!(snapshot.properties.iter().any(|property| {
+            property.key == "zfs.holds" && property.value == "disk-nix-retain"
+        }));
+        assert!(snapshot.properties.iter().any(|property| {
+            property.key == "zfs.hold.disk-nix-retain" && property.value == "Wed Jun 24 18:00 2026"
+        }));
+        assert!(
+            snapshot
+                .properties
+                .iter()
+                .any(|property| property.key == "zfs.hold.backup-job")
         );
         let dataset = graph
             .nodes
@@ -825,7 +905,7 @@ errors: No known data errors
 
     #[test]
     fn normalizes_zpool_status_advisory_fields() {
-        let graph = normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, DEGRADED_ZPOOL_STATUS)
+        let graph = normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, ZFS_HOLDS, DEGRADED_ZPOOL_STATUS)
             .expect("fixture should parse");
         let pool = graph
             .nodes

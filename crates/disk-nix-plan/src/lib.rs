@@ -1698,6 +1698,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(swap_active_diagnostic(action, node, &query));
     diagnostics.extend(swap_format_present_diagnostic(action, node, &query));
     diagnostics.extend(luks_format_present_diagnostic(action, node, &query));
+    diagnostics.extend(snapshot_hold_diagnostic(action, node, &query));
     diagnostics.extend(property_diagnostic(action, node, &query));
     diagnostics.extend(vdo_create_present_diagnostic(action, node, &query));
     diagnostics.extend(vdo_destroy_present_diagnostic(action, node, &query));
@@ -1736,7 +1737,11 @@ fn topology_query(action: &PlannedAction) -> Option<String> {
     if action.context.collection.as_deref() == Some("snapshots")
         && matches!(
             action.operation,
-            Operation::Clone | Operation::Destroy | Operation::Rename | Operation::Rollback
+            Operation::Clone
+                | Operation::Destroy
+                | Operation::Rename
+                | Operation::Rollback
+                | Operation::SetProperty
         )
     {
         return action
@@ -3532,6 +3537,63 @@ fn snapshot_rename_present_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn snapshot_hold_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("snapshots")
+        || action.operation != Operation::SetProperty
+        || node.kind != NodeKind::ZfsSnapshot
+    {
+        return None;
+    }
+
+    let property = action.context.property.as_deref()?;
+    let tag = action.context.property_value.as_deref()?;
+    let release = matches!(property, "zfs.releaseHold" | "releaseHold" | "release-hold");
+    if !release && !matches!(property, "zfs.hold" | "hold" | "holdTag") {
+        return None;
+    }
+
+    let present = zfs_snapshot_has_hold(node, tag);
+    let already_satisfied = if release { !present } else { present };
+    let (level, kind, message) = if already_satisfied {
+        let action = if release { "released" } else { "held" };
+        (
+            TopologyDiagnosticLevel::Info,
+            TopologyDiagnosticKind::PropertyAlreadySatisfied,
+            format!("ZFS snapshot {query} is already {action} for tag {tag}"),
+        )
+    } else {
+        let expectation = if release { "present" } else { "absent" };
+        (
+            TopologyDiagnosticLevel::Warning,
+            TopologyDiagnosticKind::PropertyDiffers,
+            format!("ZFS snapshot {query} hold tag {tag} is {expectation}"),
+        )
+    };
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level,
+        kind,
+        query: query.to_string(),
+        message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn zfs_snapshot_has_hold(node: &Node, tag: &str) -> bool {
+    let tag_key = normalize_storage_property_name(tag);
+    let tag_property = format!("zfs.hold.{tag_key}");
+    property_value_from_node(node, &tag_property).is_some()
+        || node.properties.iter().any(|property| {
+            property.key == "zfs.holds"
+                && property.value.split(',').any(|value| value.trim() == tag)
+        })
 }
 
 fn snapshot_rollback_absent_diagnostic(
@@ -21818,6 +21880,99 @@ mod tests {
                 && diagnostic.message.contains("used 10M")
                 && diagnostic.message.contains("referenced 1G")
                 && diagnostic.message.contains("user references 2")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_zfs_snapshot_holds() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@daily": {
+                  "target": "tank/home",
+                  "hold": "disk-nix-retain"
+                },
+                "tank/home@weekly": {
+                  "target": "tank/home",
+                  "hold": "missing-retain"
+                },
+                "tank/home@old": {
+                  "target": "tank/home",
+                  "releaseHold": "expired-retain"
+                },
+                "tank/home@stale": {
+                  "target": "tank/home",
+                  "releaseHold": "still-held"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "zfs-snapshot:tank/home@daily",
+                NodeKind::ZfsSnapshot,
+                "tank/home@daily",
+            )
+            .with_property("zfs.holds", "disk-nix-retain")
+            .with_property("zfs.hold.disk-nix-retain", "Wed Jun 24 18:00 2026"),
+        );
+        graph.add_node(Node::new(
+            "zfs-snapshot:tank/home@weekly",
+            NodeKind::ZfsSnapshot,
+            "tank/home@weekly",
+        ));
+        graph.add_node(Node::new(
+            "zfs-snapshot:tank/home@old",
+            NodeKind::ZfsSnapshot,
+            "tank/home@old",
+        ));
+        graph.add_node(
+            Node::new(
+                "zfs-snapshot:tank/home@stale",
+                NodeKind::ZfsSnapshot,
+                "tank/home@stale",
+            )
+            .with_property("zfs.hold.still-held", "Wed Jun 24 17:00 2026"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 4);
+        assert_eq!(comparison.summary.matched_count, 4);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.actions.len(), 2);
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "snapshot:tank/home@weekly:hold:missing-retain"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(plan.actions.iter().any(|action| {
+            action.id == "snapshot:tank/home@stale:release-hold:still-held"
+                && action.operation == Operation::SetProperty
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@daily:hold:disk-nix-retain"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@old:release-hold:expired-retain"
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@weekly:hold:missing-retain"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "snapshot:tank/home@stale:release-hold:still-held"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::PropertyDiffers
         }));
     }
 
