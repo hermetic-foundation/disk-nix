@@ -1196,16 +1196,17 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
     match tool {
         "bcache" | "make-bcache" => Some("bcache-tools"),
         "bcachefs" | "mkfs.bcachefs" => Some("bcachefs-tools"),
-        "blkid" | "blockdev" | "fallocate" | "findmnt" | "fstrim" | "losetup" | "mkswap"
-        | "mount" | "partprobe" | "swaplabel" | "swapoff" | "swapon" | "umount" | "wipefs"
-        | "zramctl" => Some("util-linux"),
+        "blkid" | "blockdev" | "fallocate" | "findmnt" | "fstrim" | "losetup" | "lsblk"
+        | "mkfs" | "mkswap" | "mount" | "partprobe" | "swaplabel" | "swapoff" | "swapon"
+        | "umount" | "wipefs" | "zramctl" => Some("util-linux"),
         "cat" | "du" | "mv" | "stat" | "test" | "truncate" => Some("coreutils"),
         "sh" => Some("bash"),
         "btrfs" | "mkfs.btrfs" => Some("btrfs-progs"),
         "cryptsetup" => Some("cryptsetup"),
         "dmsetup" | "fsadm" | "lvchange" | "lvconvert" | "lvcreate" | "lvextend" | "lvreduce"
         | "lvremove" | "lvrename" | "lvs" | "pvcreate" | "pvremove" | "pvresize" | "pvscan"
-        | "pvs" | "vgcreate" | "vgextend" | "vgremove" | "vgs" => Some("lvm2"),
+        | "pvs" | "vgchange" | "vgcreate" | "vgexport" | "vgextend" | "vgimport" | "vgremove"
+        | "vgs" | "vgscan" => Some("lvm2"),
         "dumpe2fs" | "e2fsck" | "e2label" | "mkfs.ext2" | "mkfs.ext3" | "mkfs.ext4"
         | "resize2fs" | "tune2fs" => Some("e2fsprogs"),
         "exfatlabel" | "fsck.exfat" | "mkfs.exfat" => Some("exfatprogs"),
@@ -22777,6 +22778,24 @@ mod tests {
                     .iter()
                     .any(|hint| hint.contains("services.disk-nix.toolPackages")),
                 "{tool} should include the NixOS module toolPackages hint"
+            );
+        }
+    }
+
+    #[test]
+    fn tool_requirements_map_inventory_and_lvm_helpers() {
+        for (tool, package) in [
+            ("lsblk", "util-linux"),
+            ("mkfs", "util-linux"),
+            ("vgchange", "lvm2"),
+            ("vgexport", "lvm2"),
+            ("vgimport", "lvm2"),
+            ("vgscan", "lvm2"),
+        ] {
+            assert_eq!(nix_package_for_tool(tool), Some(package));
+            assert!(
+                disk_nix_default_tool_package(package),
+                "{package} should be recognized as a NixOS module default tool package"
             );
         }
     }
