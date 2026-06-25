@@ -201,7 +201,8 @@ active auto-login targets. It keeps lifecycle domains available in the same
 planner spec.
 Override `toolPackages` to pin alternate tool builds or trim unused domains;
 the default set includes the storage-domain tools plus bash shell wrappers,
-coreutils file helpers, and util-linux helpers used by generated apply plans.
+coreutils file helpers, cloud-utils `growpart`, and util-linux helpers used by
+generated apply plans.
 Explicit non-destroy
 `exports` declarations with `client` and `options` also derive NixOS NFS server
 export lines. When

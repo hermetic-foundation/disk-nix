@@ -1200,8 +1200,9 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
         | "mkfs" | "mkswap" | "mount" | "partprobe" | "swaplabel" | "swapoff" | "swapon"
         | "umount" | "wipefs" | "zramctl" => Some("util-linux"),
         "cat" | "du" | "mv" | "stat" | "test" | "truncate" => Some("coreutils"),
+        "growpart" => Some("cloud-utils"),
         "sh" => Some("bash"),
-        "btrfs" | "mkfs.btrfs" => Some("btrfs-progs"),
+        "btrfs" | "btrfstune" | "mkfs.btrfs" => Some("btrfs-progs"),
         "cryptsetup" => Some("cryptsetup"),
         "dmsetup" | "fsadm" | "lvchange" | "lvconvert" | "lvcreate" | "lvextend" | "lvreduce"
         | "lvremove" | "lvrename" | "lvs" | "pvcreate" | "pvremove" | "pvresize" | "pvscan"
@@ -1235,6 +1236,7 @@ fn disk_nix_default_tool_package(package: &str) -> bool {
             | "bcache-tools"
             | "bcachefs-tools"
             | "btrfs-progs"
+            | "cloud-utils"
             | "coreutils"
             | "cryptsetup"
             | "dosfstools"
@@ -22785,6 +22787,8 @@ mod tests {
     #[test]
     fn tool_requirements_map_inventory_and_lvm_helpers() {
         for (tool, package) in [
+            ("btrfstune", "btrfs-progs"),
+            ("growpart", "cloud-utils"),
             ("lsblk", "util-linux"),
             ("mkfs", "util-linux"),
             ("pvmove", "lvm2"),
