@@ -1617,6 +1617,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = zfs_object_rename_absent_diagnostic(action, graph, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = lvm_activation_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = lvm_rename_absent_diagnostic(action, graph, &query) {
             return vec![diagnostic];
         }
@@ -2710,6 +2713,37 @@ fn lvm_deactivate_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn lvm_activation_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if !is_lvm_activation_collection(action) {
+        return None;
+    }
+
+    match action.operation {
+        Operation::Activate => Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::LvmActivateRequired,
+            query: query.to_string(),
+            message: format!(
+                "LVM object {query} is absent from current topology; activation requires an existing LVM object"
+            ),
+            current: None,
+        }),
+        Operation::Deactivate => Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Info,
+            kind: TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied,
+            query: query.to_string(),
+            message: format!("LVM object {query} is already inactive or absent"),
+            current: None,
+        }),
+        _ => None,
+    }
 }
 
 fn lvm_volume_create_diagnostic(
@@ -19857,6 +19891,51 @@ mod tests {
             diagnostic.action_id == "volumes:vg0/archive:deactivate"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::LvmDeactivateRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_absent_lvm_activation_lifecycle() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg0/home": {
+                  "operation": "activate"
+                },
+                "vg0/archive": {
+                  "operation": "deactivate"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let plan = compare_plan_with_topology(plan, &StorageGraph::empty());
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "volumes:vg0/home:activate")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/home:activate"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LvmActivateRequired
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/archive:deactivate"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
+                && diagnostic.current.is_none()
         }));
     }
 

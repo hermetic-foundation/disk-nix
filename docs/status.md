@@ -72,6 +72,8 @@ behavior across real storage stacks.
   against probed swap label and UUID metadata, and LUKS identity property
   declarations reconciled against probed LUKS label, subsystem, and UUID
   header metadata;
+  absent LVM activation targets remain actionable while absent deactivation
+  targets are suppressed as already inactive;
   absent NFS exports remain actionable as export-required work instead of
   generic missing-target diagnostics;
   absent mountpoints for local and NFS mount actions remain actionable as
@@ -85,7 +87,7 @@ behavior across real storage stacks.
   LUKS format targets are matched by backing device and report existing header
   metadata or non-LUKS node kinds without suppressing destructive format
   actions;
-  inactive LVM activation targets, still-active LVM deactivation targets,
+  absent or inactive LVM activation targets, still-active LVM deactivation targets,
   physical-volume create targets without matching PV metadata or with duplicate
   or missing PV metadata, existing exported, partial, or missing-PV
   volume-group create targets, existing LVM volume, thin-pool, or ZFS zvol

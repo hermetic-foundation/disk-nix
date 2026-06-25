@@ -593,9 +593,11 @@ stay actionable as mount-required work, unmount actions are suppressed when the
 mountpoint is absent, remount actions treat declared options as a required
 subset of current mount options, LVM
 activation and deactivation actions are compared with `lvm.active` where that
-metadata is available, LUKS open and close actions are compared with
-`cryptsetup.active`, absent mapper opens stay actionable with LUKS warnings,
-absent mapper closes are suppressed as already satisfied, LUKS
+metadata is available, absent LVM activation targets stay actionable and absent
+deactivation targets are suppressed as already inactive, LUKS open and close
+actions are compared with `cryptsetup.active`, absent mapper opens stay
+actionable with LUKS warnings, absent mapper closes are suppressed as already
+satisfied, LUKS
 label/subsystem/UUID property actions are reconciled
 against probed identity and `cryptsetup.luks-*` header metadata, and LUKS
 keyslot/token removal actions are compared with `cryptsetup.luks-keyslots` and

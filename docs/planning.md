@@ -614,7 +614,9 @@ keeps currently mounted targets actionable with a warning.
 LVM activation/deactivation reconciliation uses `lvm.active` topology metadata
 to suppress already-active `volumes`, `thinPools`, and `lvmSnapshots`
 activation actions and already-inactive deactivation actions, and to warn when
-a matched LVM object is in the opposite state.
+a matched LVM object is in the opposite state. Absent activation targets remain
+actionable with an LVM warning, while absent deactivation targets are treated
+as already inactive.
 LUKS open/close reconciliation uses `cryptsetup.active` topology metadata to
 suppress mapper opens that are already active and mapper closes that are
 already inactive or absent; opposite-state mappers and absent mapper opens
