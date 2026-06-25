@@ -103,8 +103,8 @@ behavior across real storage stacks.
   or unknown current size, still-mapped loop detach targets, absent LUN attach
   paths, visible LUN detach paths, absent NVMe namespace attach
   paths, visible NVMe namespace detach paths, absent, unknown, or below-target
-  VDO grow targets, non-normal VDO start modes, running VDO stop targets,
-  active swap teardown targets, active or
+  VDO grow targets, absent or non-normal VDO start modes, running VDO stop
+  targets, active swap teardown targets, active or
   unknown-state MD stop targets, absent MD member-add devices, still-attached MD
   member-removal devices, incomplete MD member replacements, degraded or failed
   MD arrays, absent multipath path-add devices, still-attached multipath path

@@ -1611,6 +1611,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = vdo_grow_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = vdo_start_stop_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = zfs_object_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -5645,6 +5648,37 @@ fn vdo_grow_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<Top
         ),
         current: None,
     })
+}
+
+fn vdo_start_stop_absent_diagnostic(
+    action: &PlannedAction,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("vdoVolumes") {
+        return None;
+    }
+
+    match action.operation {
+        Operation::Start => Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::VdoStartRequired,
+            query: query.to_string(),
+            message: format!(
+                "VDO volume {query} is absent from current topology; start requires an existing VDO volume"
+            ),
+            current: None,
+        }),
+        Operation::Stop => Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Info,
+            kind: TopologyDiagnosticKind::VdoStopAlreadySatisfied,
+            query: query.to_string(),
+            message: format!("VDO volume {query} is already stopped or absent"),
+            current: None,
+        }),
+        _ => None,
+    }
 }
 
 fn vdo_logical_size(node: &Node) -> Option<(&str, u64)> {
@@ -20630,6 +20664,51 @@ mod tests {
             diagnostic.action_id == "vdovolumes:archive:start"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::VdoStartRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_absent_vdo_start_and_stop() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "operation": "start"
+                },
+                "old": {
+                  "operation": "stop"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let plan = compare_plan_with_topology(plan, &StorageGraph::empty());
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "vdovolumes:archive:start")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:archive:start"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::VdoStartRequired
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "vdovolumes:old:stop"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::VdoStopAlreadySatisfied
+                && diagnostic.current.is_none()
         }));
     }
 

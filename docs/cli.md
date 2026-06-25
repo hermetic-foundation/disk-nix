@@ -941,8 +941,9 @@ online `vdo growLogical` for `desiredSize`, explicit `vdo growPhysical` for
 existing volumes. With current-topology probing, `vdo start` actions are
 suppressed only when the current operating mode is already `normal`; `vdo stop`
 actions are suppressed only when the current operating mode explicitly reports
-stopped, not-running, or inactive; `vdo growLogical` actions are suppressed when
-current byte size or VDO logical-size metadata already satisfies `desiredSize`;
+stopped, not-running, or inactive, or when the volume is absent; absent starts
+remain actionable with VDO warnings; `vdo growLogical` actions are suppressed
+when current byte size or VDO logical-size metadata already satisfies `desiredSize`;
 below-target, unknown, or absent current targets stay actionable with VDO grow
 diagnostics. `vdo remove`/destroy actions are suppressed only when the VDO
 volume is already absent and otherwise warn with available operating-mode,

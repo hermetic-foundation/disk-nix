@@ -651,8 +651,9 @@ size, backing-device, write-policy, and LVM VDO utilization metadata. VDO start/
 reconciliation uses
 `vdo.operating-mode` topology metadata to suppress start actions only when the
 volume is already in `normal` mode and stop actions only when the mode
-explicitly reports stopped, not-running, or inactive; opposite states stay
-actionable with a warning. VDO property reconciliation compares declared
+explicitly reports stopped, not-running, or inactive, or when the volume is
+already absent; absent starts and opposite states stay actionable with a warning.
+VDO property reconciliation compares declared
 `writePolicy`, `compression`, and `deduplication` settings with native
 `vdo.*` metadata and LVM `lvm.vdo-*` metadata, including boolean normalization
 for compression and deduplication aliases, before deciding whether to suppress
