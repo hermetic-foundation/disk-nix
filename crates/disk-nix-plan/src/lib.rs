@@ -4253,10 +4253,8 @@ fn dm_map_rename_absent_diagnostic(
         });
     }
 
-    destination_matches
-        .first()
-        .copied()
-        .map(|node| TopologyDiagnostic {
+    if let Some(node) = destination_matches.first().copied() {
+        return Some(TopologyDiagnostic {
             action_id: action.id.clone(),
             level: TopologyDiagnosticLevel::Warning,
             kind: TopologyDiagnosticKind::DmMapRenameRequired,
@@ -4266,7 +4264,19 @@ fn dm_map_rename_absent_diagnostic(
                 node.kind, node.name
             ),
             current: Some(current_node_summary(node)),
-        })
+        });
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Warning,
+        kind: TopologyDiagnosticKind::DmMapRenameRequired,
+        query: query.to_string(),
+        message: format!(
+            "device-mapper rename source {query} is missing and destination {destination} is absent; rename remains actionable after mapper review"
+        ),
+        current: None,
+    })
 }
 
 fn dm_map_rename_present_diagnostic(
@@ -24242,7 +24252,7 @@ mod tests {
         assert_eq!(comparison.summary.action_count, 3);
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
-        assert_eq!(comparison.summary.missing_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(plan.actions.len(), 2);
         assert!(
             plan.actions
@@ -24271,7 +24281,11 @@ mod tests {
         }));
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "dmmaps:missing:rename"
-                && diagnostic.kind == TopologyDiagnosticKind::Missing
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::DmMapRenameRequired
+                && diagnostic
+                    .message
+                    .contains("destination /dev/mapper/missing-new is absent")
         }));
     }
 

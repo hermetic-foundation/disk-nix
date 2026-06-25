@@ -643,8 +643,9 @@ inactive LUKS open targets, active LUKS close targets, still-present LUKS
 keyslots/tokens selected for removal, loop devices mapped to different backing
 files, backing-file create targets with different or unknown current size,
 still-mapped loop detach targets, present device-mapper removal targets,
-present multipath flush targets, absent LUN attach paths, visible LUN detach
-paths, present bcache detach targets, still-attached LVM cache origins, absent
+device-mapper rename sources whose destinations are also absent, present
+multipath flush targets, absent LUN attach paths, visible LUN detach paths,
+present bcache detach targets, still-attached LVM cache origins, absent
 multipath path-add maps, absent
 NVMe namespace attach paths, visible NVMe namespace detach paths, present VDO
 destroy targets, non-normal VDO start modes, running VDO stop targets, present

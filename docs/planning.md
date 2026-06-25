@@ -104,9 +104,11 @@ Examples:
   service consumer must move to the new mapper name together. Destroy plans are
   destructive and render `dmsetup remove` only after identity, dependency, and
   status inspection. Current-topology comparison suppresses rename actions when
-  the old mapper is absent and the new mapper path exists, suppresses destroy
-  actions when the mapper is already absent, and keeps present maps actionable
-  with a warning that includes `dm.open-count` when probe data reports it.
+  the old mapper is absent and the new mapper path exists, keeps missing-source
+  rename actions actionable with a warning when the destination is also absent,
+  suppresses destroy actions when the mapper is already absent, and keeps
+  present maps actionable with a warning that includes `dm.open-count` when
+  probe data reports it.
   Prefer LUKS, LVM, VDO, multipath, or cache-specific teardown when another
   domain owns the mapper.
 - LUKS keyslot and token add/change operations are offline-required header
