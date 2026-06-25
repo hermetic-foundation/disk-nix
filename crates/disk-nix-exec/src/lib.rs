@@ -4733,6 +4733,9 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         true,
                         "rescan iSCSI sessions after target-side changes",
                     ),
+                    lsscsi_lun_inventory_command(
+                        "inspect host-visible LUN transport and size after session rescan",
+                    ),
                     command(
                         ["disk-nix", "inspect", target, "--json"],
                         false,
@@ -22568,6 +22571,10 @@ mod tests {
                 && step.commands.iter().any(|command| {
                     command.argv == ["iscsiadm", "--mode", "session", "--rescan"] && command.mutates
                 })
+                && step
+                    .commands
+                    .iter()
+                    .any(|command| command.argv == ["lsscsi", "-t", "-s"] && !command.mutates)
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "nvmenamespaces:/dev/nvme2:rescan"

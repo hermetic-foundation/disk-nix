@@ -1005,8 +1005,9 @@ allowed by policy.
 iSCSI session command plans use `target` or the lifecycle key as the target IQN
 and `portal` or `metadata.portal` for reviewed `operation = "login"` and
 `operation = "logout"` commands, plus `operation = "rescan"` for online session
-refresh. Legacy session `create` and `destroy` map to the same login/logout
-command plans. LUN command plans model host-side `operation = "attach"`,
+refresh with read-only `lsscsi -t -s` host LUN inventory. Legacy session
+`create` and `destroy` map to the same login/logout command plans. LUN command
+plans model host-side `operation = "attach"`,
 `operation = "rescan"`, growth rescan, and `operation = "detach"`: attach,
 rescan, and grow keep the broad `iscsiadm --mode session --rescan` step,
 capture host-visible LUN transport and size through `lsscsi -t -s`, add

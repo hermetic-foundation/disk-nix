@@ -386,6 +386,9 @@ Examples:
   offline-required because remote clients may need to be drained, but it is not
   treated as data destruction. Legacy NFS export `create` and `destroy` still
   map to the same lifecycle paths.
+- iSCSI session `operation = "rescan"` is online host refresh work: it asks
+  existing sessions to rescan target-side changes, then captures host-visible
+  LUN transport and size through `lsscsi -t -s` before graph inspection.
 - LUN `operation = "attach"` means host-side attach for an existing target-side
   LUN and is online when it rescans sessions, captures host-visible transport
   and size through `lsscsi -t -s`, rescans declared stable paths, and verifies
