@@ -1602,6 +1602,9 @@ fn topology_diagnostics_for_action(
         if let Some(diagnostic) = btrfs_qgroup_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
+        if let Some(diagnostic) = luks_absent_diagnostic(action, &query) {
+            return vec![diagnostic];
+        }
         if let Some(diagnostic) = vdo_destroy_absent_diagnostic(action, &query) {
             return vec![diagnostic];
         }
@@ -3238,6 +3241,41 @@ fn luks_open_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn luks_absent_diagnostic(action: &PlannedAction, query: &str) -> Option<TopologyDiagnostic> {
+    if action.context.collection.as_deref() != Some("luks.devices") {
+        return None;
+    }
+
+    match action.operation {
+        Operation::Open => {
+            let backing = action
+                .context
+                .device
+                .as_deref()
+                .unwrap_or("<unspecified-backing-device>");
+            Some(TopologyDiagnostic {
+                action_id: action.id.clone(),
+                level: TopologyDiagnosticLevel::Warning,
+                kind: TopologyDiagnosticKind::LuksOpenRequired,
+                query: query.to_string(),
+                message: format!(
+                    "LUKS mapper {query} is absent from current topology; opening backing device {backing} remains actionable"
+                ),
+                current: None,
+            })
+        }
+        Operation::Close => Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Info,
+            kind: TopologyDiagnosticKind::LuksCloseAlreadySatisfied,
+            query: query.to_string(),
+            message: format!("LUKS mapper {query} is already inactive or absent"),
+            current: None,
+        }),
+        _ => None,
+    }
 }
 
 fn luks_format_present_diagnostic(
@@ -19307,6 +19345,57 @@ mod tests {
             diagnostic.action_id == "luks.devices:cryptroot:open"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
                 && diagnostic.kind == TopologyDiagnosticKind::LuksOpenRequired
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_absent_luks_open_and_close() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "operation": "open",
+                    "device": "/dev/disk/by-partuuid/root",
+                    "target": "cryptroot"
+                  },
+                  "cryptold": {
+                    "operation": "close",
+                    "target": "cryptold"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let plan = compare_plan_with_topology(plan, &StorageGraph::empty());
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.already_satisfied_count, 1);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.missing_count, 0);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "luks.devices:cryptroot:open")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptroot:open"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::LuksOpenRequired
+                && diagnostic.message.contains("/dev/disk/by-partuuid/root")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptold:close"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::LuksCloseAlreadySatisfied
+                && diagnostic.current.is_none()
         }));
     }
 

@@ -76,6 +76,8 @@ behavior across real storage stacks.
   generic missing-target diagnostics;
   absent mountpoints for local and NFS mount actions remain actionable as
   mount-required work instead of generic missing-target diagnostics;
+  absent LUKS mapper opens remain actionable as LUKS open work while absent
+  mapper closes are suppressed as already satisfied;
   matching filesystem format types are reported without suppressing destructive
   format actions so policy and confirmation gates still apply;
   swap format targets report existing swap metadata or non-swap node kinds
@@ -93,8 +95,9 @@ behavior across real storage stacks.
   healthy, ZFS pool/dataset/zvol or Btrfs
   subvolume/qgroup create targets that match a different node kind,
   still-exported LVM volume-group imports, still-imported LVM volume-group
-  exports, inactive LUKS open targets, active LUKS close targets, loop devices
-  mapped to different backing files, backing-file create targets with different
+  exports, absent or inactive LUKS open targets, active LUKS close targets,
+  loop devices mapped to different backing files, backing-file create targets
+  with different
   or unknown current size, still-mapped loop detach targets, absent LUN attach
   paths, visible LUN detach paths, absent NVMe namespace attach
   paths, visible NVMe namespace detach paths, absent, unknown, or below-target

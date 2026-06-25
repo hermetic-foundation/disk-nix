@@ -594,7 +594,9 @@ mountpoint is absent, remount actions treat declared options as a required
 subset of current mount options, LVM
 activation and deactivation actions are compared with `lvm.active` where that
 metadata is available, LUKS open and close actions are compared with
-`cryptsetup.active`, LUKS label/subsystem/UUID property actions are reconciled
+`cryptsetup.active`, absent mapper opens stay actionable with LUKS warnings,
+absent mapper closes are suppressed as already satisfied, LUKS
+label/subsystem/UUID property actions are reconciled
 against probed identity and `cryptsetup.luks-*` header metadata, and LUKS
 keyslot/token removal actions are compared with `cryptsetup.luks-keyslots` and
 `cryptsetup.luks-tokens` header metadata from the matched container. Loop-device
@@ -815,9 +817,10 @@ activation review. Explicit zram `operation = "rescan"` uses the same inventory
 path as a named refresh action.
 LUKS `operation = "open"` command plans render `cryptsetup open` for preserved
 existing containers. With current-topology probing, active mappers are
-suppressed from the actionable plan and inactive matched mappers remain
-warnings. Legacy preserved `operation = "create"` still maps to the same open
-flow. LUKS `operation = "format"` and `preserveData = false` compare the
+suppressed from the actionable plan, inactive matched or absent mappers remain
+warnings, and absent mapper closes are suppressed as already satisfied. Legacy
+preserved `operation = "create"` still maps to the same open flow. LUKS
+`operation = "format"` and `preserveData = false` compare the
 declared backing `device` against current topology and report existing LUKS
 header metadata or other matched node kinds, but destructive format commands
 remain reviewable. `operation = "close"` plans render offline-policy-gated

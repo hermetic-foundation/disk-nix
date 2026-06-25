@@ -180,8 +180,10 @@ Examples:
   LUKS header metadata or non-LUKS matched nodes without suppressing the
   destructive format action. It suppresses `operation = "open"` only when
   `cryptsetup.active` proves the mapper is already active and suppresses
-  `operation = "close"` only when it proves the mapper is inactive. LUKS growth
-  and mapper close are offline-required because backing capacity, mapper state,
+  `operation = "close"` when it proves the mapper is inactive or when the
+  mapper is already absent. Absent mapper opens remain actionable with a
+  LUKS-specific warning. LUKS growth and mapper close are offline-required
+  because backing capacity, mapper state,
   and dependent
   consumers must be coordinated. LUKS header label, subsystem, and UUID
   property updates are offline-required identity metadata changes rendered
@@ -615,7 +617,8 @@ activation actions and already-inactive deactivation actions, and to warn when
 a matched LVM object is in the opposite state.
 LUKS open/close reconciliation uses `cryptsetup.active` topology metadata to
 suppress mapper opens that are already active and mapper closes that are
-already inactive; opposite-state mappers remain actionable with a warning.
+already inactive or absent; opposite-state mappers and absent mapper opens
+remain actionable with a warning.
 LUKS keyslot and token removal reconciliation matches the declared backing
 device to the LUKS container and uses `cryptsetup.luks-keyslots` or
 `cryptsetup.luks-tokens` from `luksDump` metadata to suppress only removals
