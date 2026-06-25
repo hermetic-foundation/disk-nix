@@ -908,8 +908,10 @@ explicit `operation = "rescan"` plans through `nvme ns-rescan`,
 `nvme detach-ns`, and `nvme delete-ns`. Create and delete are destructive
 controller namespace-management operations. Standalone attach is online;
 standalone detach is offline-required and preserves the namespace. Rescan is
-online and refreshes host namespace inventory. Grow is offline-required and
-means host namespace rescan after controller-side resize or replacement.
+online and refreshes host namespace inventory plus subsystem path state through
+`nvme list-subsys --output-format=json`. Grow is offline-required and means
+host namespace and subsystem path rescan after controller-side resize or
+replacement.
 Executable create plans require a `/dev/nvme*` controller path from the
 declaration key, `target`, `path`, or `device`, plus `desiredSize`; attach,
 detach, and delete flows require `namespaceId` plus `controllers` when

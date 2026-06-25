@@ -1037,9 +1037,12 @@ against an absent map stays actionable with a warning so the map can be reviewed
 or recreated before membership changes run.
 NVMe namespace command plans render `nvme create-ns`, standalone
 `operation = "attach"` plans through `nvme attach-ns`, explicit
-`operation = "rescan"` plans through `nvme ns-rescan`, standalone
-`operation = "detach"` plans through `nvme detach-ns`, and destructive
-delete plans through `nvme detach-ns` plus `nvme delete-ns`. Executable create
+`operation = "rescan"` plans through `nvme ns-rescan` with `nvme list-subsys`
+path inventory, standalone `operation = "detach"` plans through
+`nvme detach-ns`, and destructive delete plans through `nvme detach-ns` plus
+`nvme delete-ns`. Attach, detach, grow, rescan, and delete flows capture
+subsystem path state through `nvme list-subsys --output-format=json`.
+Executable create
 plans require a `/dev/nvme*` controller path from the declaration key,
 `target`, `path`, or `device`, plus `desiredSize`; attach, detach, and delete
 flows also require `namespaceId` plus `controllers` where attachment state is

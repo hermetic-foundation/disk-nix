@@ -5205,8 +5205,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         controller,
                         "inspect NVMe namespaces before rescan",
                     ),
+                    nvme_list_subsystems_command("inspect NVMe subsystem paths before rescan"),
                     nvme_namespace_rescan_command(controller),
                     nvme_list_namespaces_command(controller, "verify NVMe namespaces after rescan"),
+                    nvme_list_subsystems_command("verify NVMe subsystem paths after rescan"),
                 ],
                 vec![
                     "verify namespace inventory before exposing refreshed devices to consumers"
@@ -5221,8 +5223,10 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             (
                 vec![
                     nvme_list_namespaces_command(controller, "inspect NVMe namespaces before rescan"),
+                    nvme_list_subsystems_command("inspect NVMe subsystem paths before growth rescan"),
                     nvme_namespace_rescan_command(controller),
                     nvme_list_namespaces_command(controller, "verify NVMe namespaces after rescan"),
+                    nvme_list_subsystems_command("verify NVMe subsystem paths after growth rescan"),
                 ],
                 vec![
                     "perform controller-side namespace resize before host rescan".to_string(),
@@ -5242,12 +5246,14 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         controller,
                         "inspect NVMe namespace inventory before attach",
                     ),
+                    nvme_list_subsystems_command("inspect NVMe subsystem paths before attach"),
                     nvme_attach_namespace_command(controller, namespace_id, controllers),
                     nvme_namespace_rescan_command(controller),
                     nvme_list_namespaces_command(
                         controller,
                         "verify NVMe namespace inventory after attach",
                     ),
+                    nvme_list_subsystems_command("verify NVMe subsystem paths after attach"),
                 ],
                 vec![
                     "attach preserves the namespace and only changes controller visibility"
@@ -7457,9 +7463,11 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         controller,
                         "inspect NVMe namespace inventory before deletion",
                     ),
+                    nvme_list_subsystems_command("inspect NVMe subsystem paths before deletion"),
                     nvme_detach_namespace_command(controller, namespace_id, controllers),
                     nvme_delete_namespace_command(controller, namespace_id),
                     nvme_namespace_rescan_command(controller),
+                    nvme_list_subsystems_command("verify NVMe subsystem paths after deletion"),
                 ],
                 vec![
                     "detach namespace consumers and migrate data before delete-ns".to_string(),
@@ -7479,12 +7487,14 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         controller,
                         "inspect NVMe namespace inventory before detach",
                     ),
+                    nvme_list_subsystems_command("inspect NVMe subsystem paths before detach"),
                     nvme_detach_namespace_command(controller, namespace_id, controllers),
                     nvme_namespace_rescan_command(controller),
                     nvme_list_namespaces_command(
                         controller,
                         "verify NVMe namespace inventory after detach",
                     ),
+                    nvme_list_subsystems_command("verify NVMe subsystem paths after detach"),
                 ],
                 vec![
                     "detach removes controller access without deleting the namespace".to_string(),
@@ -13393,6 +13403,14 @@ fn nvme_list_namespaces_command(
             description,
         ),
     }
+}
+
+fn nvme_list_subsystems_command(description: &'static str) -> ExecutionCommand {
+    command(
+        ["nvme", "list-subsys", "--output-format=json"],
+        false,
+        description,
+    )
 }
 
 fn nvme_create_namespace_command(
@@ -22578,6 +22596,10 @@ mod tests {
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "nvmenamespaces:/dev/nvme2:rescan"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "list-subsys", "--output-format=json"]
+                        && !command.mutates
+                })
                 && step
                     .commands
                     .iter()
@@ -22835,12 +22857,22 @@ mod tests {
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "nvmenamespaces:/dev/nvme1:grow"
                 && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "list-subsys", "--output-format=json"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
                     command.argv == ["nvme", "ns-rescan", "/dev/nvme1"]
                         && command.readiness == CommandReadiness::Ready
                 })
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "nvmenamespaces:/dev/nvme2:attach"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "list-subsys", "--output-format=json"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
@@ -22862,6 +22894,11 @@ mod tests {
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "nvmenamespaces:/dev/nvme3:detach"
                 && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "list-subsys", "--output-format=json"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
                     command.argv
                         == [
                             "nvme",
@@ -22881,6 +22918,11 @@ mod tests {
         }));
         assert!(report.command_plan.iter().any(|step| {
             step.action_id == "nvmenamespaces:/dev/nvme4:destroy"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["nvme", "list-subsys", "--output-format=json"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
