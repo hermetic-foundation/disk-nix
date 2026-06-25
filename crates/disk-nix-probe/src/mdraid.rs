@@ -34,6 +34,7 @@ struct MdArray {
     failed_devices: Option<String>,
     spare_devices: Option<String>,
     degraded_devices: Option<String>,
+    preferred_minor: Option<String>,
     name_property: Option<String>,
     creation_time: Option<String>,
     update_time: Option<String>,
@@ -42,6 +43,7 @@ struct MdArray {
     layout: Option<String>,
     consistency_policy: Option<String>,
     rebuild_status: Option<String>,
+    reshape_status: Option<String>,
     resync_status: Option<String>,
     check_status: Option<String>,
     intent_bitmap: Option<String>,
@@ -182,6 +184,7 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
         failed_devices: None,
         spare_devices: None,
         degraded_devices: None,
+        preferred_minor: None,
         name_property: None,
         creation_time: None,
         update_time: None,
@@ -190,6 +193,7 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
         layout: None,
         consistency_policy: None,
         rebuild_status: None,
+        reshape_status: None,
         resync_status: None,
         check_status: None,
         intent_bitmap: None,
@@ -239,10 +243,14 @@ fn parse_detail(name: &str, bytes: &[u8]) -> Result<MdArray, ProbeError> {
             array.spare_devices = value_after_colon(trimmed);
         } else if trimmed.starts_with("Degraded Devices :") {
             array.degraded_devices = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Preferred Minor :") {
+            array.preferred_minor = value_after_colon(trimmed);
         } else if trimmed.starts_with("Consistency Policy :") {
             array.consistency_policy = value_after_colon(trimmed);
         } else if trimmed.starts_with("Rebuild Status :") {
             array.rebuild_status = value_after_colon(trimmed);
+        } else if trimmed.starts_with("Reshape Status :") {
+            array.reshape_status = value_after_colon(trimmed);
         } else if trimmed.starts_with("Resync Status :") {
             array.resync_status = value_after_colon(trimmed);
         } else if trimmed.starts_with("Check Status :") {
@@ -306,6 +314,7 @@ fn add_array(graph: &mut StorageGraph, array: MdArray) {
         ("md.failed-devices", array.failed_devices),
         ("md.spare-devices", array.spare_devices),
         ("md.degraded-devices", array.degraded_devices),
+        ("md.preferred-minor", array.preferred_minor),
         ("md.name", array.name_property),
         ("md.creation-time", array.creation_time),
         ("md.update-time", array.update_time),
@@ -314,6 +323,7 @@ fn add_array(graph: &mut StorageGraph, array: MdArray) {
         ("md.layout", array.layout),
         ("md.consistency-policy", array.consistency_policy),
         ("md.rebuild-status", array.rebuild_status),
+        ("md.reshape-status", array.reshape_status),
         ("md.resync-status", array.resync_status),
         ("md.check-status", array.check_status),
         ("md.intent-bitmap", array.intent_bitmap),
@@ -403,9 +413,11 @@ mod tests {
      Failed Devices : 0\n\
       Spare Devices : 1\n\
    Degraded Devices : 0\n\
+    Preferred Minor : 0\n\
               State : clean\n\
  Consistency Policy : bitmap\n\
     Rebuild Status : 42% complete\n\
+    Reshape Status : 25% complete\n\
       Resync Status : delayed\n\
        Check Status : 10% complete\n\
       Intent Bitmap : Internal\n\
@@ -506,11 +518,18 @@ mod tests {
                     .properties
                     .iter()
                     .any(|property| property.key == "md.degraded-devices" && property.value == "0")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "md.preferred-minor" && property.value == "0")
                 && node.properties.iter().any(|property| {
                     property.key == "md.consistency-policy" && property.value == "bitmap"
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "md.rebuild-status" && property.value == "42% complete"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "md.reshape-status" && property.value == "25% complete"
                 })
                 && node.properties.iter().any(|property| {
                     property.key == "md.resync-status" && property.value == "delayed"
