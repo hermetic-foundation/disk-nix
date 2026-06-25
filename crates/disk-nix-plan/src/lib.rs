@@ -354,6 +354,8 @@ pub enum TopologyDiagnosticKind {
     ZfsObjectCreateRequired,
     ZfsObjectDestroyAlreadySatisfied,
     ZfsObjectDestroyRequired,
+    ZfsObjectPromoteAlreadySatisfied,
+    ZfsObjectPromoteRequired,
     ZfsPoolCreateAlreadySatisfied,
     ZfsPoolCreateRequired,
     ZfsPoolImportAlreadySatisfied,
@@ -891,6 +893,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
                         | TopologyDiagnosticKind::VdoStopAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
+                        | TopologyDiagnosticKind::ZfsObjectPromoteAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsPoolCreateAlreadySatisfied
                         | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
                 )
@@ -1470,6 +1473,7 @@ fn already_satisfied_action_ids(
                 | Operation::Start
                 | Operation::Stop
                 | Operation::Destroy
+                | Operation::Promote
                 | Operation::RemoveDevice
                 | Operation::RemoveKey
                 | Operation::RemoveToken
@@ -1539,6 +1543,7 @@ fn already_satisfied_action_ids(
                     | TopologyDiagnosticKind::VdoStopAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
+                    | TopologyDiagnosticKind::ZfsObjectPromoteAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsPoolCreateAlreadySatisfied
                     | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
             );
@@ -1707,6 +1712,7 @@ fn topology_diagnostics_for_action(
     diagnostics.extend(vdo_stop_diagnostic(action, node, &query));
     diagnostics.extend(zfs_object_create_present_diagnostic(action, node, &query));
     diagnostics.extend(zfs_object_destroy_present_diagnostic(action, node, &query));
+    diagnostics.extend(zfs_object_promote_diagnostic(action, node, &query));
     diagnostics.extend(zfs_pool_create_diagnostic(action, node, &query));
     diagnostics.extend(zfs_pool_import_diagnostic(action, node, &query));
     diagnostics
@@ -5425,6 +5431,52 @@ fn zfs_object_destroy_present_diagnostic(
         kind: TopologyDiagnosticKind::ZfsObjectDestroyRequired,
         query: query.to_string(),
         message,
+        current: Some(current_node_summary(node)),
+    })
+}
+
+fn zfs_object_promote_diagnostic(
+    action: &PlannedAction,
+    node: &Node,
+    query: &str,
+) -> Option<TopologyDiagnostic> {
+    let object_label = zfs_object_destroy_label(action)?;
+    if action.operation != Operation::Promote {
+        return None;
+    }
+
+    let expected_kind = zfs_object_expected_kind(action)?;
+    if node.kind != expected_kind {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::ZfsObjectPromoteRequired,
+            query: query.to_string(),
+            message: format!(
+                "matched current {} node {}, but it is not a ZFS {object_label}; zfs promote remains actionable",
+                node.kind, node.name
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    if let Some(origin) = property_value_from_node(node, "zfs.origin") {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::ZfsObjectPromoteRequired,
+            query: query.to_string(),
+            message: format!("ZFS {object_label} {query} is still a clone of {origin}"),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
+    Some(TopologyDiagnostic {
+        action_id: action.id.clone(),
+        level: TopologyDiagnosticLevel::Info,
+        kind: TopologyDiagnosticKind::ZfsObjectPromoteAlreadySatisfied,
+        query: query.to_string(),
+        message: format!("ZFS {object_label} {query} no longer reports a clone origin"),
         current: Some(current_node_summary(node)),
     })
 }
@@ -21276,6 +21328,108 @@ mod tests {
                 && diagnostic.message.contains("volsize 80G")
                 && diagnostic.message.contains("origin tank/vm/base@clean")
                 && diagnostic.message.contains("compression zstd")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reconciles_zfs_promote_from_origin_metadata() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "datasets": {
+                "tank/home-review": {
+                  "operation": "promote"
+                },
+                "tank/home-promoted": {
+                  "operation": "promote"
+                }
+              },
+              "zvols": {
+                "tank/vm/root-review": {
+                  "operation": "promote"
+                },
+                "tank/vm/root-promoted": {
+                  "operation": "promote"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "zfs-dataset:tank/home-review",
+                NodeKind::ZfsDataset,
+                "tank/home-review",
+            )
+            .with_property("zfs.type", "filesystem")
+            .with_property("zfs.origin", "tank/home@before"),
+        );
+        graph.add_node(
+            Node::new(
+                "zfs-dataset:tank/home-promoted",
+                NodeKind::ZfsDataset,
+                "tank/home-promoted",
+            )
+            .with_property("zfs.type", "filesystem"),
+        );
+        graph.add_node(
+            Node::new(
+                "zvol:tank/vm/root-review",
+                NodeKind::Zvol,
+                "tank/vm/root-review",
+            )
+            .with_property("zfs.type", "volume")
+            .with_property("zfs.origin", "tank/vm/root@clean"),
+        );
+        graph.add_node(
+            Node::new(
+                "zvol:tank/vm/root-promoted",
+                NodeKind::Zvol,
+                "tank/vm/root-promoted",
+            )
+            .with_property("zfs.type", "volume"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 4);
+        assert_eq!(comparison.summary.matched_count, 4);
+        assert_eq!(comparison.summary.already_satisfied_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 2);
+        assert_eq!(plan.actions.len(), 2);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "datasets:tank/home-review:promote")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "zvols:tank/vm/root-review:promote")
+        );
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/home-promoted:promote"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectPromoteAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/root-promoted:promote"
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectPromoteAlreadySatisfied
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "datasets:tank/home-review:promote"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectPromoteRequired
+                && diagnostic.message.contains("tank/home@before")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "zvols:tank/vm/root-review:promote"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectPromoteRequired
+                && diagnostic.message.contains("tank/vm/root@clean")
         }));
     }
 

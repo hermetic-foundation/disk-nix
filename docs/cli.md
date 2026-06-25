@@ -1131,9 +1131,11 @@ compression metadata when available. Dataset and zvol rename declarations render
 `zfs rename <old> <new>` commands from `operation = "rename"` plus `renameTo`.
 ZFS clone promotion declarations render reviewed `zfs get origin <clone>`
 preflight checks and `zfs promote <clone>` commands from
-`operation = "promote"`. Dataset and zvol declarations may use logical
-attribute names when `target` or `path` supplies the concrete `pool/name` ZFS
-object.
+`operation = "promote"`. Current-topology probing suppresses promote actions
+when the matched dataset or zvol no longer reports `zfs.origin`; clones that
+still report an origin stay actionable with warnings. Dataset and zvol
+declarations may use logical attribute names when `target` or `path` supplies
+the concrete `pool/name` ZFS object.
 Zvol command plans render `zfs create -o key=value -V` for declared create-time
 properties, `zfs set volsize=...`, policy-gated `zfs destroy`, and
 read-only `operation = "rescan"` inventory/property probes plus

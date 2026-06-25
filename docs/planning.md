@@ -417,7 +417,10 @@ Examples:
   paths, LVM logical volumes/thin pools, and LVM volume groups.
 - `operation = "promote"` is offline-required but non-destructive for ZFS
   clone datasets and zvols. It renders reviewed `zfs promote <clone>` commands
-  after inspecting the clone origin.
+  after inspecting the clone origin. Current-topology comparison suppresses
+  promote actions when the matched dataset or zvol no longer reports a
+  `zfs.origin`; objects that still report an origin stay actionable with a
+  warning.
 - snapshot creation is reversible; snapshot rollback is potential data loss;
   snapshot destruction is destructive because it removes a recovery point.
   Generic snapshot names such as `pool/dataset@snap` map to ZFS snapshots;
@@ -652,6 +655,9 @@ ZFS dataset and zvol destroy reconciliation suppresses concrete `pool/name`
 targets only when they are already absent. Present targets stay actionable with
 warnings that include available mountpoint, quota, reservation, encryption, key
 status, origin, usage, volsize, or compression metadata.
+ZFS dataset and zvol promote reconciliation compares probed `zfs.origin`
+metadata. Clones with an origin remain actionable for reviewed promotion, while
+already-promoted objects without origin metadata are suppressed as satisfied.
 Generic snapshot destroy reconciliation suppresses concrete ZFS snapshot names
 and absolute Btrfs snapshot paths only when they are already absent. Present
 snapshots stay actionable with warnings that include available ZFS
