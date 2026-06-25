@@ -414,7 +414,7 @@ read-only inventory path. Current-topology probing compares declared zram
 algorithm, stream count, disk size, memory limit, compression ratio, and swap
 priority properties against discovered `/dev/zram*` and active swap metadata,
 suppressing already-satisfied generated-state updates while leaving drift
-actionable for NixOS `zramSwap` reconciliation.
+actionable for offline-required NixOS `zramSwap` reconciliation.
 LUKS open plans render reviewed `cryptsetup open` commands for preserved
 existing containers; close plans render offline-policy-gated `cryptsetup close`
 commands and verify the topology without erasing the backing LUKS header or

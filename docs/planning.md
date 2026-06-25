@@ -171,10 +171,12 @@ Examples:
 - zram is modeled as generated compressed swap state rather than persistent
   backing storage. NixOS module declarations derive `zramSwap`, while plain
   zram declarations render read-only `zramctl`, `swapon --show`,
-  `disk-nix zram`, and graph inspection commands. Explicit `operation = "rescan"` uses the same inventory refresh path. Current-topology comparison
-  maps declared algorithm, stream count, disk size, memory limit, compression
-  ratio, and priority properties onto discovered `/dev/zram*` plus active swap
-  metadata before suppressing already-satisfied generated-state updates.
+  `disk-nix zram`, and graph inspection commands. Explicit `operation = "rescan"` uses the same inventory refresh path. Zram property declarations are
+  offline-required generator-reconciliation requests, not direct live mutation
+  commands. Current-topology comparison maps declared algorithm, stream count,
+  disk size, memory limit, compression ratio, and priority properties onto
+  discovered `/dev/zram*` plus active swap metadata before suppressing
+  already-satisfied generated-state updates.
   Algorithm, size, priority, and writeback-device changes should be reviewed as
   generator configuration changes because active `/dev/zram*` devices may need
   swapoff/setup coordination to take effect.

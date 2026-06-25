@@ -8137,7 +8137,7 @@ fn add_zram_property_actions(
             id: format!("zram:set-property:{property}"),
             description: format!("set zram property {property}"),
             operation: Operation::SetProperty,
-            risk: RiskClass::Unsupported,
+            risk: RiskClass::OfflineRequired,
             destructive: false,
             context: ActionContext {
                 property: Some(property.to_string()),
@@ -14954,6 +14954,7 @@ mod tests {
         assert_eq!(plan.summary.action_count, 2);
         assert_eq!(plan.summary.destructive_count, 1);
         assert_eq!(plan.summary.potential_data_loss_count, 0);
+        assert_eq!(plan.summary.offline_required_count, 0);
         assert_eq!(plan.summary.unsupported_count, 1);
         assert!(plan.actions.iter().any(|action| {
             action.operation == Operation::Shrink
@@ -16549,7 +16550,8 @@ mod tests {
         .expect("plan should parse");
 
         assert_eq!(plan.summary.action_count, 2);
-        assert_eq!(plan.summary.unsupported_count, 1);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.unsupported_count, 0);
 
         let rescan = plan
             .actions
@@ -16567,7 +16569,7 @@ mod tests {
             .find(|action| action.id == "zram:set-property:zram.compression-ratio-target")
             .expect("zram property action exists");
         assert_eq!(property.operation, Operation::SetProperty);
-        assert_eq!(property.risk, RiskClass::Unsupported);
+        assert_eq!(property.risk, RiskClass::OfflineRequired);
         assert_eq!(property.context.property_value.as_deref(), Some("2.0"));
         assert!(property.advice.as_ref().is_some_and(|advice| {
             advice

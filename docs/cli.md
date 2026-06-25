@@ -850,7 +850,7 @@ path as a named refresh action. With current-topology probing, declared zram
 algorithm, stream count, disk size, memory limit, compression ratio, and swap
 priority properties are compared against discovered `/dev/zram*` and active
 swap metadata; already-satisfied generated-state updates are suppressed, while
-drift remains actionable for NixOS `zramSwap` reconciliation.
+drift remains actionable for offline-required NixOS `zramSwap` reconciliation.
 LUKS `operation = "open"` command plans render `cryptsetup open` for preserved
 existing containers. With current-topology probing, active mappers are
 suppressed from the actionable plan, inactive matched or absent mappers remain

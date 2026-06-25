@@ -131,7 +131,9 @@ behavior across real storage stacks.
   reports, and invocation-bound receipt files.
 - Current-topology reconciliation for generated zram properties, including
   algorithm, stream count, disk size, memory limit, compression ratio, and
-  active swap priority when `/dev/zram*` metadata is available.
+  active swap priority when `/dev/zram*` metadata is available. Zram property
+  declarations are offline-required generator-reconciliation requests rather
+  than direct live mutation commands.
 - NixOS assertions for duplicate active identities across mountpoints, swaps,
   LUKS mapper names, LUKS keyslot/token selectors, disk and partition targets,
   backing files, Btrfs subvolumes and qgroups, device-mapper maps, MD RAID,
