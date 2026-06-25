@@ -11,6 +11,7 @@ pub struct BtrfsReport {
     pub usage: Vec<u8>,
     pub subvolumes: Vec<u8>,
     pub qgroups: Vec<u8>,
+    pub device_stats: Vec<u8>,
 }
 
 pub fn normalize_btrfs_reports(reports: &[BtrfsReport]) -> Result<StorageGraph, ProbeError> {
@@ -36,6 +37,11 @@ struct BtrfsDevice {
     size_bytes: Option<u64>,
     used_bytes: Option<u64>,
     path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BtrfsDeviceStats {
+    counters: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,6 +90,7 @@ fn add_report(graph: &mut StorageGraph, report: &BtrfsReport) -> Result<(), Prob
     let usage = parse_filesystem_usage(&report.usage)?;
     let subvolumes = parse_subvolumes(&report.subvolumes)?;
     let qgroups = parse_qgroups(&report.qgroups)?;
+    let device_stats = parse_device_stats(&report.device_stats)?;
     let filesystem_id = show.uuid.as_ref().map_or_else(
         || format!("btrfs:{}", report.target),
         |uuid| format!("btrfs:{uuid}"),
@@ -149,7 +156,8 @@ fn add_report(graph: &mut StorageGraph, report: &BtrfsReport) -> Result<(), Prob
     ));
 
     for device in show.devices {
-        add_device(graph, &filesystem_id, device);
+        let stats = device_stats.get(&device.path);
+        add_device(graph, &filesystem_id, device, stats);
     }
 
     let subvolume_uuid_ids = subvolume_uuid_ids(&filesystem_id, &subvolumes);
@@ -163,7 +171,12 @@ fn add_report(graph: &mut StorageGraph, report: &BtrfsReport) -> Result<(), Prob
     Ok(())
 }
 
-fn add_device(graph: &mut StorageGraph, filesystem_id: &str, device: BtrfsDevice) {
+fn add_device(
+    graph: &mut StorageGraph,
+    filesystem_id: &str,
+    device: BtrfsDevice,
+    stats: Option<&BtrfsDeviceStats>,
+) {
     let block_id = format!("block:{}", device.path);
     let mut node = Node::new(block_id.clone(), NodeKind::Partition, device.path.clone())
         .with_path(device.path);
@@ -183,6 +196,11 @@ fn add_device(graph: &mut StorageGraph, filesystem_id: &str, device: BtrfsDevice
 
     if let Some(id) = device.id {
         node = node.with_property("btrfs.device-id", id);
+    }
+    if let Some(stats) = stats {
+        for (counter, value) in &stats.counters {
+            node = node.with_property(format!("btrfs.device-stat-{counter}"), value.clone());
+        }
     }
 
     graph.add_node(node);
@@ -351,6 +369,43 @@ fn parse_device_line(line: &str) -> Option<BtrfsDevice> {
         used_bytes,
         path,
     })
+}
+
+fn parse_device_stats(bytes: &[u8]) -> Result<BTreeMap<String, BtrfsDeviceStats>, ProbeError> {
+    let text = std::str::from_utf8(bytes).map_err(|error| {
+        ProbeError::Adapter(format!("failed to read btrfs device stats output: {error}"))
+    })?;
+    let mut stats = BTreeMap::<String, BtrfsDeviceStats>::new();
+
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let Some((device, value)) = line.split_once(char::is_whitespace) else {
+            continue;
+        };
+        let Some((path, counter)) = parse_device_stat_key(device) else {
+            continue;
+        };
+        let value = value.trim();
+        if value.is_empty() {
+            continue;
+        }
+
+        stats
+            .entry(path)
+            .or_insert_with(|| BtrfsDeviceStats {
+                counters: BTreeMap::new(),
+            })
+            .counters
+            .insert(counter, value.to_string());
+    }
+
+    Ok(stats)
+}
+
+fn parse_device_stat_key(value: &str) -> Option<(String, String)> {
+    let rest = value.strip_prefix('[')?;
+    let (path, counter) = rest.split_once("].")?;
+    let counter = counter.trim().replace('_', "-");
+    (!path.is_empty() && !counter.is_empty()).then(|| (path.to_string(), counter))
 }
 
 fn parse_filesystem_usage(bytes: &[u8]) -> Result<FilesystemUsage, ProbeError> {
@@ -567,6 +622,11 @@ ID 257 gen 11 cgen 8 parent 256 top level 5 uuid snap-1 parent_uuid subvol-root 
 0/5              8192         4096         none         none         -          0/256,0/257\n\
 0/256            4096         2048         none         none         0/5        -\n\
 0/257            1024         512          8192         none         0/5        -\n";
+    const DEVICE_STATS: &[u8] = b"[/dev/sdb1].write_io_errs    1\n\
+[/dev/sdb1].read_io_errs     2\n\
+[/dev/sdb1].flush_io_errs    3\n\
+[/dev/sdb1].corruption_errs  4\n\
+[/dev/sdb1].generation_errs  5\n";
 
     #[test]
     fn normalizes_btrfs_filesystem_devices_and_subvolumes() {
@@ -576,6 +636,7 @@ ID 257 gen 11 cgen 8 parent 256 top level 5 uuid snap-1 parent_uuid subvol-root 
             usage: USAGE_WITH_GROUPS.to_vec(),
             subvolumes: SUBVOLUMES.to_vec(),
             qgroups: QGROUPS.to_vec(),
+            device_stats: DEVICE_STATS.to_vec(),
         }])
         .expect("fixture should parse");
 
@@ -649,6 +710,25 @@ ID 257 gen 11 cgen 8 parent 256 top level 5 uuid snap-1 parent_uuid subvol-root 
                     .properties
                     .iter()
                     .any(|property| property.key == "btrfs.data-used" && property.value == "400")
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::Partition
+                && node.path.as_deref() == Some("/dev/sdb1")
+                && node.properties.iter().any(|property| {
+                    property.key == "btrfs.device-stat-write-io-errs" && property.value == "1"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "btrfs.device-stat-read-io-errs" && property.value == "2"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "btrfs.device-stat-flush-io-errs" && property.value == "3"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "btrfs.device-stat-corruption-errs" && property.value == "4"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "btrfs.device-stat-generation-errs" && property.value == "5"
+                })
         }));
         assert!(
             graph

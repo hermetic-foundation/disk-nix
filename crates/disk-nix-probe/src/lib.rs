@@ -1902,6 +1902,7 @@ fn collect_btrfs(result: &mut ProbeResult) {
             &["qgroup", "show", "--raw", "-reF", "-p", "-c", &target],
         )
         .unwrap_or_default();
+        let device_stats = run_report("btrfs", &["device", "stats", &target]).unwrap_or_default();
 
         match (show, usage, subvolumes) {
             (Ok(show), Ok(usage), Ok(subvolumes)) => reports.push(btrfs::BtrfsReport {
@@ -1910,6 +1911,7 @@ fn collect_btrfs(result: &mut ProbeResult) {
                 usage,
                 subvolumes,
                 qgroups,
+                device_stats,
             }),
             (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
                 result.reports.push(ProbeReport {

@@ -3879,6 +3879,11 @@ fn usage_details(node: &Node) -> String {
         ("btrfs.qgroup-children", "qgroup-children"),
         ("btrfs.mount-target", "mount-target"),
         ("btrfs.device-id", "device-id"),
+        ("btrfs.device-stat-write-io-errs", "write-io-errs"),
+        ("btrfs.device-stat-read-io-errs", "read-io-errs"),
+        ("btrfs.device-stat-flush-io-errs", "flush-io-errs"),
+        ("btrfs.device-stat-corruption-errs", "corruption-errs"),
+        ("btrfs.device-stat-generation-errs", "generation-errs"),
         ("btrfs.id", "subvol-id"),
         ("btrfs.generation", "generation"),
         ("btrfs.created-generation", "created-generation"),
@@ -6551,11 +6556,19 @@ mod tests {
     #[test]
     fn btrfs_table_includes_subvolume_qgroup_and_json_neighbors() {
         let mut graph = StorageGraph::empty();
-        graph.add_node(Node::new(
-            "block:/dev/nvme0n1p2",
-            NodeKind::Partition,
-            "/dev/nvme0n1p2",
-        ));
+        graph.add_node(
+            Node::new(
+                "block:/dev/nvme0n1p2",
+                NodeKind::Partition,
+                "/dev/nvme0n1p2",
+            )
+            .with_property("btrfs.device-id", "1")
+            .with_property("btrfs.device-stat-write-io-errs", "1")
+            .with_property("btrfs.device-stat-read-io-errs", "2")
+            .with_property("btrfs.device-stat-flush-io-errs", "3")
+            .with_property("btrfs.device-stat-corruption-errs", "4")
+            .with_property("btrfs.device-stat-generation-errs", "5"),
+        );
         graph.add_node(
             Node::new("btrfs:fs-uuid", NodeKind::BtrfsFilesystem, "/mnt/persist")
                 .with_size_bytes(536_870_912_000)
@@ -6620,6 +6633,9 @@ mod tests {
         assert!(output.contains("/mnt/persist"));
         assert!(output.contains("500.0 GiB"));
         assert!(output.contains("40.0%"));
+        assert!(output.contains("/dev/nvme0n1p2"));
+        assert!(output.contains("device-id=1 write-io-errs=1 read-io-errs=2"));
+        assert!(output.contains("flush-io-errs=3 corruption-errs=4 generation-errs=5"));
         assert!(output.contains("data-profile=single metadata-profile=DUP"));
         assert!(output.contains("@home"));
         assert!(output.contains("subvol-id=257 parent-id=5 top-level=5"));

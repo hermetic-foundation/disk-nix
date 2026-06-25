@@ -304,7 +304,8 @@ Use these commands for:
 - `btrfs`: Btrfs filesystems, subvolumes, snapshots, and qgroups, including
   size, used/free capacity, utilization, mount targets, backing relationships,
   allocation profiles, subvolume IDs/generations/parentage, snapshot UUID
-  lineage, and qgroup hierarchy and limits
+  lineage, qgroup hierarchy and limits, and member device write/read/flush I/O,
+  corruption, and generation error counters
 - `bcachefs`: bcachefs filesystems and member devices, including external and
   internal UUIDs, mount target, version/upgrade state, online reservation,
   member count, data-type accounting, member labels, member state, member free
