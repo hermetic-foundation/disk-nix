@@ -19,7 +19,7 @@ storage stacks:
   compression/dedup/checksum/copies/cache/sync/record-size/quota/reservation/encryption
   properties, POSIX metadata policy, and cache, log, and special vdevs
 - MD RAID, multipath, SCSI/LUN inventory, NVMe controllers/namespaces/health,
-  iSCSI sessions/targets/LUNs, and NFS
+  iSCSI sessions/targets/LUNs, SMART error/self-test logs, and NFS
 - safe lifecycle operations such as grow, replace, rebalance, filesystem checks,
   property updates, and migration advice
 

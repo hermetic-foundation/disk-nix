@@ -85,6 +85,14 @@ pub fn normalize_smartctl_json(path: &str, bytes: &[u8]) -> Result<StorageGraph,
             "smartctl.self-test-status",
         ),
         (
+            &["ata_smart_error_log", "summary", "count"][..],
+            "smartctl.error-log-summary-count",
+        ),
+        (
+            &["ata_smart_self_test_log", "standard", "count"][..],
+            "smartctl.self-test-log-count",
+        ),
+        (
             &["ata_smart_data", "capabilities", "error_logging_supported"][..],
             "smartctl.error-logging-supported",
         ),
@@ -256,6 +264,16 @@ mod tests {
   "ata_sct_capabilities": {
     "value": 61
   },
+  "ata_smart_error_log": {
+    "summary": {
+      "count": 3
+    }
+  },
+  "ata_smart_self_test_log": {
+    "standard": {
+      "count": 2
+    }
+  },
   "ata_smart_attributes": {
     "table": [
       {
@@ -295,6 +313,12 @@ mod tests {
         }));
         assert!(node.properties.iter().any(|property| {
             property.key == "smartctl.temperature-current-celsius" && property.value == "31"
+        }));
+        assert!(node.properties.iter().any(|property| {
+            property.key == "smartctl.error-log-summary-count" && property.value == "3"
+        }));
+        assert!(node.properties.iter().any(|property| {
+            property.key == "smartctl.self-test-log-count" && property.value == "2"
         }));
         assert!(node.properties.iter().any(|property| {
             property.key == "smartctl.attribute.reallocated-sector-ct.raw" && property.value == "0"

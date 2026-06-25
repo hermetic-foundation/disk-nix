@@ -58,9 +58,9 @@ The current probe layer normalizes:
 - `smartctl -a -j` for discovered physical disks to add SMART health,
   model/firmware/serial/WWN identity, user capacity, logical/physical block
   size, rotation rate, form factor, SATA link speed, power-on history,
-  temperature range, self-test/offline collection status, smartctl run
-  provenance, SCSI grown-defect counts, and ATA SMART raw/normalized/worst/
-  threshold/failure attributes
+  temperature range, self-test/offline collection status, ATA error-log and
+  self-test log counts, smartctl run provenance, SCSI grown-defect counts, and
+  ATA SMART raw/normalized/worst/threshold/failure attributes
 - `zramctl --bytes --raw --noheadings --output-all` for zram device size,
   uncompressed data, compressed data, allocator total, memory limit and peak
   usage, compression algorithm, stream count, zero pages, compaction migration,

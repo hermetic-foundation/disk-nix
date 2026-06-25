@@ -3351,6 +3351,8 @@ fn usage_details(node: &Node) -> String {
             "smart-offline-status",
         ),
         ("smartctl.self-test-status", "smart-self-test"),
+        ("smartctl.error-log-summary-count", "smart-error-log-count"),
+        ("smartctl.self-test-log-count", "smart-self-test-count"),
         ("smartctl.error-logging-supported", "smart-error-logging"),
         ("smartctl.gp-logging-supported", "smart-gp-logging"),
         ("smartctl.sct-capabilities", "smart-sct-capabilities"),
@@ -5504,6 +5506,8 @@ mod tests {
                     "was completed without error",
                 )
                 .with_property("smartctl.self-test-status", "completed without error")
+                .with_property("smartctl.error-log-summary-count", "3")
+                .with_property("smartctl.self-test-log-count", "2")
                 .with_property("smartctl.error-logging-supported", "true")
                 .with_property("smartctl.gp-logging-supported", "true")
                 .with_property("smartctl.sct-capabilities", "61")
@@ -5628,8 +5632,9 @@ mod tests {
             "smart-offline-status=was completed without error smart-self-test=completed without error"
         ));
         assert!(output.contains(
-            "smart-error-logging=true smart-gp-logging=true smart-sct-capabilities=61 smart-scsi-grown-defects=0"
+            "smart-error-log-count=3 smart-self-test-count=2 smart-error-logging=true smart-gp-logging=true"
         ));
+        assert!(output.contains("smart-sct-capabilities=61 smart-scsi-grown-defects=0"));
         assert!(output.contains(
             "reallocated-sectors=0 reallocated-value=100 reallocated-worst=100 reallocated-threshold=10 reallocated-failed=never"
         ));
