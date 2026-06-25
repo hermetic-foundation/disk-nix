@@ -99,6 +99,9 @@ struct ZpoolStatus {
     action: Option<String>,
     scan: Option<String>,
     errors: Option<String>,
+    read_errors: Option<String>,
+    write_errors: Option<String>,
+    checksum_errors: Option<String>,
     vdevs: Vec<ZpoolVdev>,
 }
 
@@ -170,6 +173,9 @@ fn parse_zpool_status(bytes: &[u8]) -> Result<Vec<ZpoolStatus>, ProbeError> {
                 action: None,
                 scan: None,
                 errors: None,
+                read_errors: None,
+                write_errors: None,
+                checksum_errors: None,
                 vdevs: Vec::new(),
             });
             in_config = false;
@@ -219,7 +225,11 @@ fn parse_zpool_status(bytes: &[u8]) -> Result<Vec<ZpoolStatus>, ProbeError> {
         let Some(vdev) = parse_vdev_line(&pool.name, &role, line, &mut stack) else {
             continue;
         };
-        if vdev.name != pool.name {
+        if vdev.name == pool.name {
+            pool.read_errors = vdev.read_errors;
+            pool.write_errors = vdev.write_errors;
+            pool.checksum_errors = vdev.checksum_errors;
+        } else {
             pool.vdevs.push(vdev);
         }
     }
@@ -434,6 +444,9 @@ fn add_status_pool(graph: &mut StorageGraph, pool: ZpoolStatus) {
         ("zfs.action", pool.action),
         ("zfs.scan", pool.scan),
         ("zfs.errors", pool.errors),
+        ("zfs.pool-read-errors", pool.read_errors),
+        ("zfs.pool-write-errors", pool.write_errors),
+        ("zfs.pool-checksum-errors", pool.checksum_errors),
     ] {
         if let Some(value) = value {
             node = node.with_property(key, value);
@@ -717,7 +730,7 @@ action: Replace the device using 'zpool replace'.
 config:
 
         NAME                                      STATE     READ WRITE CKSUM
-        tank                                      DEGRADED     0     0     0
+        tank                                      DEGRADED     4     5     6
           /dev/disk/by-id/disk-a-part1           ONLINE       0     0     0
 
 errors: No known data errors
@@ -929,6 +942,19 @@ errors: No known data errors
         }));
         assert!(pool.properties.iter().any(|property| {
             property.key == "zfs.errors" && property.value == "No known data errors"
+        }));
+        assert!(
+            pool.properties.iter().any(|property| {
+                property.key == "zfs.pool-read-errors" && property.value == "4"
+            })
+        );
+        assert!(
+            pool.properties.iter().any(|property| {
+                property.key == "zfs.pool-write-errors" && property.value == "5"
+            })
+        );
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.pool-checksum-errors" && property.value == "6"
         }));
     }
 }

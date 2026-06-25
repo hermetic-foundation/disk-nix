@@ -4450,6 +4450,9 @@ fn usage_details(node: &Node) -> String {
         ("zfs.action", "action"),
         ("zfs.scan", "scan"),
         ("zfs.errors", "errors"),
+        ("zfs.pool-read-errors", "pool-read-errors"),
+        ("zfs.pool-write-errors", "pool-write-errors"),
+        ("zfs.pool-checksum-errors", "pool-checksum-errors"),
         ("zfs.vdev-role", "vdev-role"),
         ("zfs.vdev-state", "vdev-state"),
         ("zfs.read-errors", "read-errors"),
@@ -6736,7 +6739,10 @@ mod tests {
                 .with_property("zfs.status", "some devices need attention")
                 .with_property("zfs.action", "replace the faulted device")
                 .with_property("zfs.scan", "scrub repaired 0B")
-                .with_property("zfs.errors", "No known data errors"),
+                .with_property("zfs.errors", "No known data errors")
+                .with_property("zfs.pool-read-errors", "3")
+                .with_property("zfs.pool-write-errors", "4")
+                .with_property("zfs.pool-checksum-errors", "5"),
         );
         graph.add_node(
             Node::new(
@@ -6838,7 +6844,7 @@ mod tests {
             "pool-ashift=12 pool-autotrim=on pool-autoexpand=off pool-cachefile=/etc/zfs/zpool.cache pool-failmode=wait"
         ));
         assert!(output.contains(
-            "status=some devices need attention action=replace the faulted device scan=scrub repaired 0B errors=No known data errors"
+            "status=some devices need attention action=replace the faulted device scan=scrub repaired 0B errors=No known data errors pool-read-errors=3 pool-write-errors=4 pool-checksum-errors=5"
         ));
         assert!(
             output

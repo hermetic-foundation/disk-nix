@@ -313,10 +313,11 @@ Use these commands for:
   health/state, capacity, dedup ratio, fragmentation, altroot, ashift,
   autotrim, autoexpand, autoreplace, bootfs, cachefile, delegation, failmode,
   listsnapshots, multihost, status/action advisories, scan/error summaries,
-  vdev roles and error counters, dataset compression, dedup, checksum, copies,
-  sync, cache policy, record size, quota, reservation, encryption, key status,
-  POSIX metadata policy, snapshot user references and hold tags, zvol volume
-  size, origin, and pool/dataset/snapshot child
+  pool aggregate READ/WRITE/CKSUM counters, vdev roles and error counters,
+  dataset compression, dedup, checksum, copies, sync, cache policy, record
+  size, quota, reservation, encryption, key status, POSIX metadata policy,
+  snapshot user references and hold tags, zvol volume size, origin, and
+  pool/dataset/snapshot child
   relationships when `zpool` and `zfs` probes expose them
 - `volumes`: logical storage objects such as LVM, Btrfs, bcachefs, ZFS, zvols,
   LUNs, and exports, including LVM origin/pool/data metadata, activation state,
