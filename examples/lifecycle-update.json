@@ -477,8 +477,10 @@
       "addDevices": [
         "cache-set-uuid"
       ],
+      "cacheSetUuid": "cache-set-uuid",
       "properties": {
-        "bcache.cache-mode": "writethrough"
+        "bcache.cache-mode": "writethrough",
+        "bcache.set-journal-delay-ms": "100"
       }
     }
   }

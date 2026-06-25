@@ -789,7 +789,9 @@ Example lifecycle planning through NixOS options:
       path = "/dev/bcache0";
       operation = "rescan";
       addDevices = [ "cache-set-uuid" ];
+      cacheSetUuid = "cache-set-uuid";
       properties."bcache.cache-mode" = "writethrough";
+      properties."bcache.set-journal-delay-ms" = "100";
     };
     nfs.mounts.shared = {
       source = "nas.example.com:/srv/shared";

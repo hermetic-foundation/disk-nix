@@ -1230,6 +1230,7 @@ fn spec_schema() -> serde_json::Value {
                     "cacheSetUuid": { "type": "string" },
                     "cacheSetUUID": { "type": "string" },
                     "cache-set-uuid": { "type": "string" },
+                    "cache_set_uuid": { "type": "string" },
                     "properties": {
                         "type": "object",
                         "additionalProperties": true

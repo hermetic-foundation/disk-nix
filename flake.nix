@@ -748,7 +748,9 @@
               caches."/dev/bcache0" = {
                 operation = "rescan";
                 addDevices = [ "cache-set-uuid" ];
+                cacheSetUuid = "cache-set-uuid";
                 properties."bcache.cache-mode" = "writethrough";
+                properties."bcache.set-journal-delay-ms" = "100";
               };
               snapshots."tank/home@before-upgrade" = {
                 target = "tank/home";
@@ -1552,6 +1554,10 @@
               and ."$defs".filesystem.properties.addDevices.type == "array"
               and ."$defs".filesystem.properties.removeDevices.type == "array"
               and ."$defs".filesystem.properties.replaceDevices.type == "object"
+              and ."$defs".lifecycleObject.properties.cacheSetUuid.type == "string"
+              and ."$defs".lifecycleObject.properties.cacheSetUUID.type == "string"
+              and ."$defs".lifecycleObject.properties."cache-set-uuid".type == "string"
+              and ."$defs".lifecycleObject.properties.cache_set_uuid.type == "string"
               and ."$defs".luksSpec.properties.devices["$ref"] == "#/$defs/lifecycleMap"
               and ."$defs".nfsSpec.properties.mounts["$ref"] == "#/$defs/nfsMountMap"
               and ."$defs".nfsMount.properties.source.type == "string"
@@ -1629,7 +1635,7 @@
 
             ${diskNix}/bin/disk-nix plan --spec ${./examples/lifecycle-update.json} --json > "$lifecyclePlan"
             jq -e '
-              .summary.actionCount == 104
+              .summary.actionCount == 105
               and (.dependencyOrder | length) == .summary.actionCount
               and (.dependencyOrder | any(.actionId == "datasets:tank/home:create" and (.unblocks | index("snapshot:tank/home@before-upgrade:create") != null)))
               and (.dependencyOrder | any(.actionId == "snapshot:tank/home@before-upgrade:create" and (.dependsOn | index("datasets:tank/home:create") != null)))
@@ -1726,6 +1732,7 @@
               and (.actions | any(.id == "caches:/dev/bcache0:add-device:cache-set-uuid" and .risk == "online"))
               and (.actions | any(.id == "caches:/dev/bcache0:rescan" and .risk == "online"))
               and (.actions | any(.id == "caches:/dev/bcache0:set-property:bcache.cache-mode" and .risk == "safe"))
+              and (.actions | any(.id == "caches:/dev/bcache0:set-property:bcache.set-journal-delay-ms" and .risk == "safe"))
               and (.actions | any(.id == "caches:tank/l2arc0:replace-device:/dev/disk/by-id/old-cache"))
             ' "$lifecyclePlan"
 
@@ -2097,8 +2104,10 @@
                     and .spec.multipathMaps.mpathOld.target == "mpath-old"
                     and .spec.caches."tank/l2arc0".cacheSetUuid == "11111111-2222-3333-4444-555555555555"
                     and (.spec.caches."/dev/bcache0".addDevices | index("cache-set-uuid") != null)
+                    and .spec.caches."/dev/bcache0".cacheSetUuid == "cache-set-uuid"
                     and .spec.caches."/dev/bcache0".operation == "rescan"
                     and .spec.caches."/dev/bcache0".properties."bcache.cache-mode" == "writethrough"
+                    and .spec.caches."/dev/bcache0".properties."bcache.set-journal-delay-ms" == "100"
                     and .spec.pools.vault.operation == "import"
                     and .spec.pools.vault.readOnly == true
                     and .spec.pools.archiveImport.readonly == true

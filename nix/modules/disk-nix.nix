@@ -191,7 +191,7 @@ let
         cacheSetUuid = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
-          description = "Explicit cache-set UUID for bcache replacement cache media created with make-bcache --cset-uuid.";
+          description = "Explicit bcache cache-set UUID for replacement cache media and cache-set-scoped sysfs property updates.";
           example = "11111111-2222-3333-4444-555555555555";
         };
 
@@ -226,7 +226,7 @@ let
         properties = lib.mkOption {
           type = lib.types.attrsOf json.type;
           default = { };
-          description = "Storage-specific properties to set on this object.";
+          description = "Storage-specific properties to set on this object, such as bcache.cache-mode or bcache.set-journal-delay-ms for cache-set tuning.";
           example = {
             autotrim = "on";
           };
@@ -2321,7 +2321,7 @@ in
     caches = lib.mkOption {
       type = lifecycleAttrs;
       default = { };
-      description = "Typed cache-layer lifecycle declarations emitted into the disk-nix planner spec. bcache command plans require a concrete /dev/bcache* target supplied by the declaration key, target, path, or device.";
+      description = "Typed cache-layer lifecycle declarations emitted into the disk-nix planner spec. bcache device sysfs command plans require a concrete /dev/bcache* target supplied by the declaration key, target, path, or device; cache-set-scoped bcache.set-* property updates require cacheSetUuid.";
     };
 
     snapshots = lib.mkOption {
