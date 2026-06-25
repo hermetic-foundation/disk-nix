@@ -24,6 +24,7 @@ let
     cfg.apply.mode == "activation" || cfg.apply.mode == "install" || cfg.apply.mode == "boot";
   applyRunsAtBoot = cfg.apply.mode == "boot";
   defaultToolPackages = with pkgs; [
+    bash
     bcachefs-tools
     bcache-tools
     btrfs-progs
@@ -1504,6 +1505,7 @@ in
       default = defaultToolPackages;
       defaultText = lib.literalExpression ''
         with pkgs; [
+          bash
           bcachefs-tools
           bcache-tools
           btrfs-progs

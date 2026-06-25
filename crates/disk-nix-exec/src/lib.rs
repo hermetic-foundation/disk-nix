@@ -1198,6 +1198,7 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
         "bcachefs" | "mkfs.bcachefs" => Some("bcachefs-tools"),
         "blkid" | "blockdev" | "findmnt" | "losetup" | "mount" | "partprobe" | "swaplabel"
         | "swapoff" | "swapon" | "umount" | "wipefs" | "zramctl" => Some("util-linux"),
+        "sh" => Some("bash"),
         "btrfs" | "mkfs.btrfs" => Some("btrfs-progs"),
         "cryptsetup" => Some("cryptsetup"),
         "dmsetup" | "fsadm" | "lvchange" | "lvconvert" | "lvcreate" | "lvextend" | "lvreduce"
@@ -1228,7 +1229,8 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
 fn disk_nix_default_tool_package(package: &str) -> bool {
     matches!(
         package,
-        "bcache-tools"
+        "bash"
+            | "bcache-tools"
             | "bcachefs-tools"
             | "btrfs-progs"
             | "cryptsetup"
@@ -22563,6 +22565,71 @@ mod tests {
         );
         assert!(
             multipathd_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("services.disk-nix.toolPackages"))
+        );
+    }
+
+    #[test]
+    fn tool_requirements_map_shell_wrappers_to_bash() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "swaps": {
+                  "primary": {
+                    "device": "/dev/disk/by-label/swap-old",
+                    "properties": {
+                      "priority": "10"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let mut ran_commands = false;
+        let report = prepare_execution_with_runner_and_tool_checker(
+            &plan,
+            policy,
+            ExecutionMode::Execute,
+            |_| {
+                ran_commands = true;
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+            |tool| tool != "sh",
+        );
+
+        assert_eq!(report.status, ExecutionStatus::NotReady);
+        assert!(!ran_commands);
+        assert!(report.messages.iter().any(|message| {
+            message.contains("required tool(s) are not available") && message.contains("sh")
+        }));
+        let shell_requirement = report
+            .tool_requirements
+            .iter()
+            .find(|requirement| requirement.tool == "sh")
+            .expect("sh tool requirement is reported");
+        assert_eq!(shell_requirement.availability, ToolAvailability::Missing);
+        assert_eq!(shell_requirement.command_count, 1);
+        assert_eq!(shell_requirement.mutating_count, 1);
+        assert!(
+            shell_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.bash"))
+        );
+        assert!(
+            shell_requirement
                 .remediation
                 .iter()
                 .any(|hint| hint.contains("services.disk-nix.toolPackages"))
