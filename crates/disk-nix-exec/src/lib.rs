@@ -622,6 +622,15 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 | Operation::Rescan
                 | Operation::Shrink,
             Some("volumes" | "thinPools" | "physicalVolumes")
+        ) | (
+            Operation::Clone
+                | Operation::Create
+                | Operation::Destroy
+                | Operation::Rename
+                | Operation::Rescan
+                | Operation::Rollback
+                | Operation::SetProperty,
+            Some("snapshots")
         )
     ) {
         return true;
@@ -797,6 +806,19 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
                 "inspect LVM origin, snapshot, and merge state before roll-forward",
             ));
         }
+        (
+            Operation::Clone
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Rename
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("snapshots"),
+            _,
+        ) => commands.extend(snapshot_recovery_inspection_commands(
+            step,
+            "inspect snapshot state before choosing roll-forward",
+        )),
         (
             Operation::RemoveDevice | Operation::ReplaceDevice,
             Some("volumeGroups"),
@@ -1026,6 +1048,19 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             "confirm the LVM snapshot and origin state before retrying merge rollback",
         )],
         (
+            Operation::Clone
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Rename
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("snapshots"),
+            _,
+        ) => snapshot_recovery_inspection_commands(
+            step,
+            "confirm snapshot state before rollback decisions",
+        ),
+        (
             Operation::RemoveDevice | Operation::ReplaceDevice,
             Some("volumeGroups"),
             Some(target),
@@ -1250,6 +1285,19 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             ));
         }
         (
+            Operation::Clone
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Rename
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("snapshots"),
+            _,
+        ) => commands.extend(snapshot_recovery_inspection_commands(
+            step,
+            "inspect snapshot state after the failed command",
+        )),
+        (
             Operation::Create | Operation::Destroy | Operation::Login | Operation::Logout,
             Some("iscsiSessions"),
             Some(target),
@@ -1441,6 +1489,22 @@ fn domain_recovery_notes(
                 "review newer snapshots, clones, mountpoints, shares, and dependent services before choosing rollback or roll-forward".to_string(),
             );
         }
+        (
+            Operation::Clone
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Rename
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("snapshots"),
+        ) => {
+            notes.push(
+                "for snapshot lifecycle changes, inspect source, target, hold tags, read-only state, and dependent clones before retrying".to_string(),
+            );
+            notes.push(
+                "prefer preserving or cloning recovery snapshots until retention, rollback, replication, and mount consumers are verified".to_string(),
+            );
+        }
         (Operation::Rollback, Some("lvmSnapshots")) => {
             notes.push(
                 "for LVM snapshot merge rollback, inspect origin activation and merge status before rerunning lvconvert --merge".to_string(),
@@ -1627,6 +1691,11 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
         Some("volumes" | "thinPools" | "physicalVolumes")
     ) {
         if let Some(target) = lvm_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if command_step_collection(step) == Some("snapshots") {
+        if let Some(target) = snapshot_target_from_step(step) {
             return Some(target);
         }
     }
@@ -1833,6 +1902,150 @@ fn lvm_target_from_step(step: &ExecutionStep) -> Option<&str> {
             "lvrename" => command.argv.get(1).map(String::as_str),
             "pvcreate" | "pvremove" | "pvresize" => command.argv.last().map(String::as_str),
             "pvscan" if command.argv.len() > 2 => command.argv.last().map(String::as_str),
+            _ => None,
+        }
+        .filter(|target| !target.starts_with('<'))
+    })
+}
+
+fn snapshot_recovery_inspection_commands(
+    step: &ExecutionStep,
+    note: &'static str,
+) -> Vec<ExecutionCommand> {
+    let mut commands = Vec::new();
+    if let Some(snapshot) = snapshot_target_from_step(step).or_else(|| {
+        step.action_id
+            .split(':')
+            .nth(1)
+            .filter(|target| !target.is_empty())
+    }) {
+        if is_zfs_snapshot_name(snapshot) {
+            commands.push(command(
+                ["zfs", "list", "-t", "snapshot", "-H", "-p", snapshot],
+                false,
+                note,
+            ));
+            commands.push(command(["zfs", "holds", snapshot], false, note));
+            if let Some(dataset) = zfs_snapshot_dataset(snapshot) {
+                commands.push(command(["zfs", "list", "-H", "-p", dataset], false, note));
+                commands.push(command_vec(
+                    [
+                        "zfs",
+                        "list",
+                        "-t",
+                        "snapshot",
+                        "-H",
+                        "-p",
+                        "-o",
+                        "name,creation,used,referenced,userrefs",
+                        "-r",
+                        dataset,
+                    ],
+                    false,
+                    note,
+                ));
+            }
+            commands.push(command(
+                ["disk-nix", "inspect", snapshot, "--json"],
+                false,
+                note,
+            ));
+        } else if snapshot.starts_with('/') {
+            commands.push(command(
+                ["btrfs", "subvolume", "show", snapshot],
+                false,
+                note,
+            ));
+            commands.push(command(
+                ["btrfs", "property", "get", "-ts", snapshot, "ro"],
+                false,
+                note,
+            ));
+            commands.push(command(
+                ["disk-nix", "inspect", snapshot, "--json"],
+                false,
+                note,
+            ));
+        } else {
+            commands.push(command(
+                ["disk-nix", "inspect", snapshot, "--json"],
+                false,
+                note,
+            ));
+        }
+    }
+    commands
+}
+
+fn snapshot_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        match tool {
+            "zfs" => match command.argv.get(1).map(String::as_str) {
+                Some("snapshot" | "destroy" | "rollback" | "holds") => {
+                    command.argv.last().map(String::as_str)
+                }
+                Some("clone" | "rename") => command.argv.get(2).map(String::as_str),
+                Some("hold" | "release") => command.argv.last().map(String::as_str),
+                Some("list")
+                    if command
+                        .argv
+                        .iter()
+                        .any(|arg| arg == "-t" || arg == "snapshot") =>
+                {
+                    command.argv.last().map(String::as_str)
+                }
+                _ => None,
+            },
+            "btrfs"
+                if command
+                    .argv
+                    .get(1..3)
+                    .is_some_and(|args| args == ["subvolume", "show"]) =>
+            {
+                command.argv.last().map(String::as_str)
+            }
+            "btrfs"
+                if command
+                    .argv
+                    .get(1..3)
+                    .is_some_and(|args| args == ["subvolume", "delete"]) =>
+            {
+                command.argv.last().map(String::as_str)
+            }
+            "btrfs"
+                if command
+                    .argv
+                    .get(1..3)
+                    .is_some_and(|args| args == ["subvolume", "snapshot"]) =>
+            {
+                command
+                    .argv
+                    .iter()
+                    .skip(3)
+                    .find(|arg| !arg.starts_with('-'))
+                    .map(String::as_str)
+            }
+            "btrfs"
+                if command
+                    .argv
+                    .get(1..3)
+                    .is_some_and(|args| args == ["property", "get"]) =>
+            {
+                command
+                    .argv
+                    .iter()
+                    .skip(3)
+                    .find(|arg| arg.starts_with('/'))
+                    .map(String::as_str)
+            }
+            "mv" => command.argv.iter().skip(1).find_map(|arg| {
+                if arg == "--" || arg.starts_with('-') {
+                    None
+                } else {
+                    Some(arg.as_str())
+                }
+            }),
             _ => None,
         }
         .filter(|target| !target.starts_with('<'))
@@ -24023,6 +24236,171 @@ mod tests {
                 .iter()
                 .any(|note| note.contains("read-only checks"))
         );
+    }
+
+    #[test]
+    fn failed_zfs_snapshot_clone_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "before-clone": {
+                  "name": "tank/home@before",
+                  "target": "tank/home",
+                  "cloneTo": "tank/home-review"
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_clone = ["zfs", "clone", "tank/home@before", "tank/home-review"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_clone,
+                status_code: Some(if argv == failed_clone { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_clone {
+                    "clone failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_clone)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("ZFS snapshot domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Clone"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "zfs",
+                    "list",
+                    "-t",
+                    "snapshot",
+                    "-H",
+                    "-p",
+                    "tank/home@before",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["zfs", "holds", "tank/home@before"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "zfs",
+                    "list",
+                    "-t",
+                    "snapshot",
+                    "-H",
+                    "-p",
+                    "-o",
+                    "name,creation,used,referenced,userrefs",
+                    "-r",
+                    "tank/home",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "tank/home@before", "--json"]
+                && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| { note.contains("snapshot lifecycle") && note.contains("hold tags") })
+        );
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("ZFS snapshot rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["zfs", "holds", "tank/home@before"] && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_btrfs_snapshot_clone_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "/mnt/persist/@home-before": {
+                  "target": "/mnt/persist/@home",
+                  "cloneTo": "/mnt/persist/@home-review",
+                  "readOnly": true
+                }
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_clone = [
+            "btrfs",
+            "subvolume",
+            "snapshot",
+            "-r",
+            "/mnt/persist/@home-before",
+            "/mnt/persist/@home-review",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_clone,
+                status_code: Some(if argv == failed_clone { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_clone {
+                    "clone failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_clone)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("Btrfs snapshot domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Clone"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["btrfs", "subvolume", "show", "/mnt/persist/@home-before"]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "btrfs",
+                    "property",
+                    "get",
+                    "-ts",
+                    "/mnt/persist/@home-before",
+                    "ro",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "/mnt/persist/@home-before", "--json"]
+                && !command.mutates
+        }));
     }
 
     #[test]
