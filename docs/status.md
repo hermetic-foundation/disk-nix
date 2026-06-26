@@ -165,7 +165,7 @@ behavior across real storage stacks.
   prove `partialExecutionRecovery`, failed-command receipts, roll-forward
   review, rollback review, snapshot-preservation, and domain-recovery
   reporting for a layered LVM-plus-filesystem apply failure, LVM grow failure,
-  XFS grow failure, Btrfs scrub failure, Btrfs rebalance failure, filesystem trim failure, filesystem check failure, filesystem repair failure, LUKS close failure, LUKS keyslot add failure, LUKS token import failure, LUKS keyslot remove failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
+  XFS grow failure, Btrfs scrub failure, Btrfs rebalance failure, filesystem trim failure, filesystem check failure, filesystem repair failure, LUKS close failure, LUKS keyslot add failure, LUKS token import failure, LUKS keyslot remove failure, LUKS token remove failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create, attach, detach, and destroy
   failures, Linux tgt create, attach, detach, and destroy failures, multipath
   resize and replacement failures, MD RAID member replacement failure, LUKS
@@ -238,7 +238,7 @@ placeholders until concrete adapters are added.
   LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
   target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt
   attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath
-  resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS keyslot add, LUKS token import, LUKS keyslot remove, partition grow, NFS
+  resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
   remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
   grow, VDO property, bcache property, and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply

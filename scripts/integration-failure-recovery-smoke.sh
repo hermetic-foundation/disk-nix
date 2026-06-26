@@ -3602,6 +3602,104 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$luks_keyslot_remove_receipt" >/dev/null
 
+luks_token_remove_tools="$tmpdir/fake-luks-token-remove-tools"
+mkdir -p "$luks_token_remove_tools"
+
+cat > "$luks_token_remove_tools/cryptsetup" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "token remove --token-id 9 /dev/disk/by-id/root-luks" ]]; then
+  echo "synthetic LUKS token remove failure for disk-nix recovery coverage" >&2
+  exit 88
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$luks_token_remove_tools/cryptsetup"
+
+luks_token_remove_spec="$tmpdir/luks-token-remove-spec.json"
+luks_token_remove_json="$tmpdir/luks-token-remove-apply.json"
+luks_token_remove_report="$tmpdir/luks-token-remove-report.json"
+luks_token_remove_receipt="$tmpdir/luks-token-remove-receipt.json"
+
+jq -n '{
+  luksTokens: {
+    rootRemove: {
+      operation: "remove-token",
+      device: "/dev/disk/by-id/root-luks",
+      token: "9"
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowPotentialDataLoss: true,
+    requireBackup: false,
+    requireConfirmation: false
+  }
+}' > "$luks_token_remove_spec"
+
+if PATH="$luks_token_remove_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$luks_token_remove_spec" \
+  --execute \
+  --report-out "$luks_token_remove_report" \
+  --receipt-out "$luks_token_remove_receipt" \
+  --json > "$luks_token_remove_json"; then
+  echo "expected synthetic LUKS token remove failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 88
+  and .executionResults[1].argv == ["cryptsetup", "token", "remove", "--token-id", "9", "/dev/disk/by-id/root-luks"]
+  and (.executionResults[1].stderr | contains("synthetic LUKS token remove failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "lukstokens:rootremove:remove-token"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["cryptsetup", "token", "remove", "--token-id", "9", "/dev/disk/by-id/root-luks"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["lukstokens:rootremove:remove-token"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/root-luks", "--json"]))
+    and (.notes | any(contains("LUKS changes")))
+    and (.notes | any(contains("tokens")))
+    and (.notes | any(contains("alternate unlock paths")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/root-luks", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/root-luks", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$luks_token_remove_json" >/dev/null
+
+cmp "$luks_token_remove_json" "$luks_token_remove_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "lukstokens:rootremove:remove-token"
+  and .report.partialExecutionRecovery.failedCommand == ["cryptsetup", "token", "remove", "--token-id", "9", "/dev/disk/by-id/root-luks"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$luks_token_remove_receipt" >/dev/null
+
 partition_grow_tools="$tmpdir/fake-partition-grow-tools"
 mkdir -p "$partition_grow_tools"
 
@@ -4575,4 +4673,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS keyslot add, LUKS token import, LUKS keyslot remove, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
