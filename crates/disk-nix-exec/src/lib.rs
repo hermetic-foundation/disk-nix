@@ -569,6 +569,8 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
         step.operation,
         Operation::Rollback
             | Operation::Shrink
+            | Operation::ReplaceDevice
+            | Operation::AddDevice
             | Operation::RemoveDevice
             | Operation::Destroy
             | Operation::Detach
@@ -776,6 +778,25 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
                 "inspect multipath maps before retrying LUN path changes",
             ));
         }
+        (
+            Operation::Stop
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::AddDevice,
+            Some("mdRaids"),
+            Some(target),
+        ) => {
+            commands.push(command_vec(
+                ["mdadm", "--detail", target],
+                false,
+                "inspect MD RAID array health before completing recovery",
+            ));
+            commands.push(command_vec(
+                ["cat", "/proc/mdstat"],
+                false,
+                "inspect MD RAID sync, recovery, or reshape progress before retrying",
+            ));
+        }
         _ => {}
     }
 
@@ -852,6 +873,25 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
                 ),
             ]
         }
+        (
+            Operation::Stop
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::AddDevice,
+            Some("mdRaids"),
+            Some(target),
+        ) => vec![
+            command_vec(
+                ["mdadm", "--detail", target],
+                false,
+                "confirm MD RAID array health before undoing or retrying member changes",
+            ),
+            command_vec(
+                ["cat", "/proc/mdstat"],
+                false,
+                "confirm sync, recovery, or reshape state before rollback decisions",
+            ),
+        ],
         _ => Vec::new(),
     }
 }
@@ -882,6 +922,25 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
                 ["lvs", "--reportformat", "json", target],
                 false,
                 "inspect LVM snapshot and merge state before deciding whether to retry",
+            ));
+        }
+        (
+            Operation::Stop
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::AddDevice,
+            Some("mdRaids"),
+            Some(target),
+        ) => {
+            commands.push(command(
+                ["mdadm", "--detail", target],
+                false,
+                "inspect MD RAID member, failed, spare, and recovery state before deciding whether to retry",
+            ));
+            commands.push(command(
+                ["cat", "/proc/mdstat"],
+                false,
+                "inspect MD RAID runtime recovery or reshape state after the failed command",
             ));
         }
         (_, _, Some(target)) => {
@@ -932,6 +991,20 @@ fn domain_recovery_notes(
                 "keep the origin, snapshot, and VG metadata backups intact until the merge outcome is verified".to_string(),
             );
         }
+        (
+            Operation::Stop
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::AddDevice,
+            Some("mdRaids"),
+        ) => {
+            notes.push(
+                "for MD RAID member changes, inspect mdadm detail and /proc/mdstat before retrying; do not remove old members until sync or replacement state is understood".to_string(),
+            );
+            notes.push(
+                "keep failed, old, and replacement devices attached until redundancy and array metadata are verified".to_string(),
+            );
+        }
         (Operation::RemoveDevice | Operation::Destroy | Operation::Detach, _) => {
             notes.push(
                 "verify consumers, redundancy, and metadata health before retrying teardown or device removal".to_string(),
@@ -961,10 +1034,37 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
 }
 
 fn command_step_target(step: &ExecutionStep) -> Option<&str> {
+    if command_step_collection(step) == Some("mdRaids") {
+        if let Some(target) = md_array_target_from_step(step) {
+            return Some(target);
+        }
+    }
     step.action_id
         .split(':')
         .nth(1)
         .filter(|target| !target.is_empty())
+}
+
+fn md_array_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        if command.argv.first().is_some_and(|arg| arg == "mdadm") {
+            if command
+                .argv
+                .get(1)
+                .is_some_and(|arg| arg == "--detail" || arg == "--stop")
+            {
+                return command.argv.get(2).map(String::as_str);
+            }
+            if command
+                .argv
+                .get(1)
+                .is_some_and(|arg| arg.starts_with("/dev/md"))
+            {
+                return command.argv.get(1).map(String::as_str);
+            }
+        }
+        None
+    })
 }
 
 fn failed_result_notes(result: &ExecutionCommandResult) -> Vec<String> {
@@ -23117,6 +23217,105 @@ mod tests {
                 .notes
                 .iter()
                 .any(|note| note.contains("read-only checks"))
+        );
+    }
+
+    #[test]
+    fn failed_md_member_replacement_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "mdRaids": {
+                "root": {
+                  "target": "/dev/md/root",
+                  "replaceDevices": {
+                    "/dev/disk/by-id/old-md-member": "/dev/disk/by-id/new-md-member"
+                  }
+                }
+              },
+              "apply": {
+                "allowDeviceReplacement": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_replace = [
+            "mdadm",
+            "/dev/md/root",
+            "--replace",
+            "/dev/disk/by-id/old-md-member",
+            "--with",
+            "/dev/disk/by-id/new-md-member",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_replace,
+                status_code: Some(if argv == failed_replace { 16 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_replace {
+                    "replacement failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success
+                && result.argv
+                    == [
+                        "mdadm",
+                        "/dev/md/root",
+                        "--replace",
+                        "/dev/disk/by-id/old-md-member",
+                        "--with",
+                        "/dev/disk/by-id/new-md-member",
+                    ]
+        }));
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("MD domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("ReplaceDevice"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["mdadm", "--detail", "/dev/md/root"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["cat", "/proc/mdstat"] && !command.mutates })
+        );
+        assert!(domain_recovery.notes.iter().any(|note| {
+            note.contains("MD RAID member changes") && note.contains("/proc/mdstat")
+        }));
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("MD roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["mdadm", "--detail", "/dev/md/root"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("MD rollback recovery review is reported");
+        assert!(
+            rollback
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["cat", "/proc/mdstat"] && !command.mutates })
+        );
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints)
         );
     }
 

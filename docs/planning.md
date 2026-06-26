@@ -774,8 +774,8 @@ and preserve-recovery-point advice, then add domain-specific recovery,
 current graph and adds domain inspection plus post-apply verification commands
 when they were rendered. Rollback review is intentionally read-only and covers
 concrete domains such as ZFS rollback points, LVM snapshot merges, VG device
-migration, cache detach, and host-side LUN detach; it does not run rollback
-commands automatically.
+migration, cache detach, MD RAID member replacement, and host-side LUN detach;
+it does not run rollback commands automatically.
 Cache command plans include bcache-aware sysfs updates for existing cache-set
 attachment, cache-mode property changes, `bcache.set-*` cache-set tuning
 updates, read-only rescans, dirty-data checks, and replacement steps that remain
