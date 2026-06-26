@@ -278,13 +278,13 @@ Update rules:
   variants, additional cache variants, additional NVMe namespace variants,
   additional LUN flows, property mutation across more supported domains, and
   failed-command recovery beyond the synthetic LVM-plus-filesystem, swap label,
-  device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, LVM VG
-  rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
-  namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
-  LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID
-  replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login,
-  LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property,
-  and LVM cache property paths.
+  device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot
+  clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace
+  grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,
+  target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD
+  RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI
+  login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache
+  property, and LVM cache property paths.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
   for multi-layer apply behavior on isolated disposable disks are still needed;
   the default VM suite now includes the synthetic failure-recovery harness.

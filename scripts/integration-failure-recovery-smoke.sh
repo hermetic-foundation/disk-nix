@@ -514,6 +514,97 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$btrfs_snapshot_clone_receipt" >/dev/null
 
+zfs_snapshot_clone_tools="$tmpdir/fake-zfs-snapshot-clone-tools"
+mkdir -p "$zfs_snapshot_clone_tools"
+
+cat > "$zfs_snapshot_clone_tools/zfs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "clone tank/home@before tank/home-review" ]]; then
+  echo "synthetic ZFS snapshot clone failure for disk-nix recovery coverage" >&2
+  exit 80
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$zfs_snapshot_clone_tools/zfs"
+
+zfs_snapshot_clone_spec="$tmpdir/zfs-snapshot-clone-spec.json"
+zfs_snapshot_clone_json="$tmpdir/zfs-snapshot-clone-apply.json"
+zfs_snapshot_clone_report="$tmpdir/zfs-snapshot-clone-report.json"
+zfs_snapshot_clone_receipt="$tmpdir/zfs-snapshot-clone-receipt.json"
+
+jq -n '{
+  snapshots: {
+    "before-clone": {
+      name: "tank/home@before",
+      target: "tank/home",
+      cloneTo: "tank/home-review"
+    }
+  }
+}' > "$zfs_snapshot_clone_spec"
+
+if PATH="$zfs_snapshot_clone_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$zfs_snapshot_clone_spec" \
+  --execute \
+  --report-out "$zfs_snapshot_clone_report" \
+  --receipt-out "$zfs_snapshot_clone_receipt" \
+  --json > "$zfs_snapshot_clone_json"; then
+  echo "expected synthetic ZFS snapshot clone failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "tank/home@before"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 80
+  and .executionResults[1].argv == ["zfs", "clone", "tank/home@before", "tank/home-review"]
+  and (.executionResults[1].stderr | contains("synthetic ZFS snapshot clone failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "snapshot:before-clone:clone:tank/home-review"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["zfs", "clone", "tank/home@before", "tank/home-review"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["snapshot:before-clone:clone:tank/home-review"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "tank/home@before"]))
+    and (.commands | any(.argv == ["zfs", "holds", "tank/home@before"]))
+    and (.commands | any(.argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "-o", "name,creation,used,referenced,userrefs", "-r", "tank/home"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "tank/home@before", "--json"]))
+    and (.notes | any(contains("snapshot lifecycle")))
+    and (.notes | any(contains("hold tags")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["zfs", "list", "-H", "-p", "tank/home-review"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["zfs", "holds", "tank/home@before"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$zfs_snapshot_clone_json" >/dev/null
+
+cmp "$zfs_snapshot_clone_json" "$zfs_snapshot_clone_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "snapshot:before-clone:clone:tank/home-review"
+  and .report.partialExecutionRecovery.failedCommand == ["zfs", "clone", "tank/home@before", "tank/home-review"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$zfs_snapshot_clone_receipt" >/dev/null
+
 lvm_vg_rename_tools="$tmpdir/fake-lvm-vg-rename-tools"
 mkdir -p "$lvm_vg_rename_tools"
 
@@ -2657,4 +2748,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
