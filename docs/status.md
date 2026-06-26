@@ -164,6 +164,8 @@ Probe adapters normalize storage data from `lsblk`, `blkid`, `udevadm`,
 bcachefs, ZFS, LVM, VDO, device-mapper, LUKS, loop, zram, SCSI, iSCSI, NFS, MD
 RAID, multipath, and NVMe tooling. See [storage-scope.md](storage-scope.md) for
 the detailed field-level coverage.
+See [feature-checklist.md](feature-checklist.md) for a checklist view of
+finished, partial, and desired features.
 
 ## Implemented lifecycle coverage
 

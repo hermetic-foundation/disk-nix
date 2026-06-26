@@ -34,6 +34,8 @@ storage graph.
 
 See [docs/status.md](docs/status.md) for the current feature-completeness
 status and remaining work.
+See [docs/feature-checklist.md](docs/feature-checklist.md) for a checklist of
+finished and desired features.
 See [docs/integration-tests.md](docs/integration-tests.md) for the opt-in
 host-backed integration harness.
 
