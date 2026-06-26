@@ -3212,6 +3212,109 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$luks_open_receipt" >/dev/null
 
+luks_format_tools="$tmpdir/fake-luks-format-tools"
+mkdir -p "$luks_format_tools"
+
+cat > "$luks_format_tools/cryptsetup" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "luksFormat /dev/disk/by-id/new-luks" ]]; then
+  echo "synthetic LUKS format failure for disk-nix recovery coverage" >&2
+  exit 90
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$luks_format_tools/cryptsetup"
+
+luks_format_spec="$tmpdir/luks-format-spec.json"
+luks_format_json="$tmpdir/luks-format-apply.json"
+luks_format_report="$tmpdir/luks-format-report.json"
+luks_format_receipt="$tmpdir/luks-format-receipt.json"
+
+jq -n '{
+  luks: {
+    devices: {
+      cryptnew: {
+        name: "cryptnew",
+        device: "/dev/disk/by-id/new-luks",
+        operation: "format"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowFormat: true,
+    allowDestructive: true,
+    requireBackup: false,
+    requireConfirmation: false
+  }
+}' > "$luks_format_spec"
+
+if PATH="$luks_format_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$luks_format_spec" \
+  --execute \
+  --report-out "$luks_format_report" \
+  --receipt-out "$luks_format_receipt" \
+  --json > "$luks_format_json"; then
+  echo "expected synthetic LUKS format failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 3
+  and .commandSummary.mutatingCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/dev/disk/by-id/new-luks"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 90
+  and .executionResults[1].argv == ["cryptsetup", "luksFormat", "/dev/disk/by-id/new-luks"]
+  and (.executionResults[1].stderr | contains("synthetic LUKS format failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "luks.devices:cryptnew:format"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["cryptsetup", "luksFormat", "/dev/disk/by-id/new-luks"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["luks.devices:cryptnew:format"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/new-luks"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/new-luks", "--json"]))
+    and (.commands | any(.argv == ["cryptsetup", "status", "cryptnew"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "cryptnew", "--json"]))
+    and (.notes | any(contains("LUKS changes")))
+    and (.notes | any(contains("alternate unlock paths")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/new-luks"]))
+    and (.commands | any(.argv == ["cryptsetup", "isLuks", "cryptnew"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/new-luks"]))
+    and (.commands | any(.argv == ["cryptsetup", "status", "cryptnew"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$luks_format_json" >/dev/null
+
+cmp "$luks_format_json" "$luks_format_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "luks.devices:cryptnew:format"
+  and .report.partialExecutionRecovery.failedCommand == ["cryptsetup", "luksFormat", "/dev/disk/by-id/new-luks"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$luks_format_receipt" >/dev/null
+
 luks_close_tools="$tmpdir/fake-luks-close-tools"
 mkdir -p "$luks_close_tools"
 
@@ -4772,4 +4875,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
