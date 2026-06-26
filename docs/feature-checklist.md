@@ -321,7 +321,8 @@ Update rules:
   target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST
   attach, target-side LUN SCST detach, target-side LUN SCST destroy,
   target-side LUN SCST grow, target-side LUN SCST property, target-side LUN
-  SCST rescan, host-side LUN rescan, multipath resize, multipath replace, LVM VG replacement, ZFS pool
+  SCST rescan, host-side LUN rescan, multipath resize, multipath add,
+  multipath remove, multipath flush, multipath replace, LVM VG replacement, ZFS pool
   replacement, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace,
   LUKS open, LUKS format, LUKS close, LUKS grow,
   LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove,

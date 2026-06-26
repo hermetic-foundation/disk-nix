@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for sixty-nine failed apply paths:
+fake storage tools ahead of `PATH` for seventy-two failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -207,6 +207,9 @@ fake storage tools ahead of `PATH` for sixty-nine failed apply paths:
 - a multipath map resize where fake `multipath -ll /dev/mapper/mpatha` and
   fake `lsscsi -t -s` succeed and fake
   `multipathd resize map /dev/mapper/mpatha` fails
+- multipath path add, path remove, and host map flush flows where fake
+  `multipath -ll /dev/mapper/mpatha` succeeds before fake `multipathd add`,
+  fake `multipathd del`, or fake `multipath -f /dev/mapper/mpatha` fails
 - a multipath path replacement where fake `multipath -ll /dev/mapper/mpatha`
   and fake `multipathd add path /dev/sdd` succeed and fake
   `multipathd del path /dev/sdc` fails
@@ -1006,7 +1009,7 @@ concrete property rendering, target-side LUN tgt property, target-side LUN tgt
 rescan, target-side LUN SCST create, target-side LUN SCST attach,
 target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST
 grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath
-resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
+resize, multipath add, multipath remove, multipath flush, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
 create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
