@@ -84,32 +84,37 @@ Update rules:
   options, and negotiated state.
 - [x] **Finished:** Loop devices, backing files, swap, zram, SMART telemetry,
   and network-storage identity views.
-- [ ] **Partial:** Real-world fixture coverage exists for many parser surfaces,
-  including a cross-adapter shared-storage fixture that combines iSCSI session
-  and node data, host-visible SCSI LUNs, and multipath paths, plus a
-  standalone open-iscsi fixture covering bracketed IPv6 portals, concise node
-  records, attached LUN disks, CHAP secret redaction, and iSER/RDMA session
-  transport over bracketed IPv6 portals, plus a
-  degraded-MD-with-LUKS fixture that combines recovering array state, failed
-  member metadata, active encrypted mapper status, and LUKS header metadata,
-  plus a clustered LVM over NVMe-oF fixture covering shared/clustered VG
-  metadata, sanlock lock hints, remote LV activity, NVMe fabrics paths, ANA
-  state, and namespace-to-controller edges, plus a Fibre Channel multipath
-  fixture covering FC transport WWPN pairs, SCSI unit names, ALUA path groups,
-  active/standby path state, failed path metadata, and multipath backing edges,
-  plus an NVMe/TCP multipath fixture covering native NVMe namespace paths,
-  live and reconnecting fabrics controllers, ANA optimized/inaccessible states,
-  failed path metadata, and multipath backing edges,
-  plus an NFS server/client fixture covering merged `findmnt`, `nfsstat`, and
-  `exportfs` state, negotiated Kerberos mount options, NFS export client policy,
-  IPv6 export selectors, mount usage, and source-to-mount edges,
-  plus a SAS enclosure fixture covering non-block SES enclosure records,
-  enclosure identifiers, SAS addresses, and attached disk LUN backing edges,
-  plus an LVM-backed VDO fixture that merges native VDO status, vdostats usage,
-  verbose VDO block counters, LVM VDO LV metadata, VDO segment policy, and
-  backing-pool dependency edges.
-  It still needs broader hardware, additional fabric variants, and clustered
-  storage samples from more real systems.
+- [x] **Finished:** Real-world shared-storage fixture combines iSCSI session
+  and node data, host-visible SCSI LUNs, and multipath paths.
+- [x] **Finished:** Standalone open-iscsi fixture covers bracketed IPv6
+  portals, concise node records, attached LUN disks, CHAP secret redaction, and
+  iSER/RDMA session transport over bracketed IPv6 portals.
+- [x] **Finished:** Degraded-MD-with-LUKS fixture covers recovering array
+  state, failed member metadata, active encrypted mapper status, and LUKS
+  header metadata.
+- [x] **Finished:** Clustered LVM over NVMe-oF fixture covers shared/clustered
+  VG metadata, sanlock lock hints, remote LV activity, NVMe fabrics paths, ANA
+  state, and namespace-to-controller edges.
+- [x] **Finished:** Fibre Channel multipath fixture covers FC transport WWPN pairs,
+  SCSI unit names, ALUA path groups, active/standby path state, failed path
+  metadata, and multipath backing edges.
+- [x] **Finished:** NVMe/TCP multipath fixture covers native NVMe namespace
+  paths, live and reconnecting fabrics controllers, ANA
+  optimized/inaccessible states, failed path metadata, and multipath backing
+  edges.
+- [x] **Finished:** NFS server/client fixture covers merged `findmnt`,
+  `nfsstat`, and `exportfs` state, negotiated Kerberos mount options, NFS
+  export client policy, IPv6 export selectors, mount usage, and source-to-mount
+  edges.
+- [x] **Finished:** SAS enclosure fixture covers non-block SES enclosure
+  records, enclosure identifiers, SAS addresses, and attached disk LUN backing
+  edges.
+- [x] **Finished:** LVM-backed VDO fixture merges native VDO status, vdostats
+  usage, verbose VDO block counters, LVM VDO LV metadata, VDO segment policy,
+  and backing-pool dependency edges.
+- [ ] **Partial:** Broader real-world fixture coverage still needs additional
+  hardware samples, additional fabric variants, and clustered storage samples
+  from more real systems.
 
 ## Planning and apply safety
 
@@ -142,8 +147,15 @@ Update rules:
   upper action ids, dependency directions, build/update pass,
   teardown/recovery pass, and split-plan recommendation; execution remains
   refused while conflicts are present.
-- [ ] **Desired:** Production-grade automatic rollback. Current reports provide
-  guidance; safe automated rollback remains intentionally unimplemented.
+- [x] **Finished:** Apply reports provide recovery guidance, current-topology
+  roll-forward review, read-only rollback precondition review, and recovery
+  point preservation actions.
+- [ ] **Desired:** Production-grade automatic rollback execution engine remains
+  intentionally unimplemented until rollback safety proofs and topology-specific
+  recipes are strong enough.
+- [ ] **Desired:** Automatic rollback must have per-domain safety gates,
+  idempotency checks, post-failure topology probes, and refusal behavior for
+  ambiguous or data-loss-prone states before it can be enabled.
 
 ## Lifecycle operations
 
@@ -183,31 +195,34 @@ Update rules:
   unsupported filesystem properties, unsupported Btrfs subvolume properties, and
   unsupported VDO property values are blocked or forced to manual review instead
   of being guessed.
-- [ ] **Partial:** Target-side LUN provisioning is modeled through
-  `targetLuns` create, grow, map, unmap, remove, rescan, and property handoff
-  actions. Linux LIO target-side create/map/unmap/rescan now renders concrete
-  `targetcli` inventory, backstore, target, LUN mapping, ACL, target removal,
-  reviewed backstore removal, and persistence commands; LIO grow requests now
-  include native target/backstore inventory, LIO write-cache property requests
-  render concrete reviewed
-  `targetcli ... set attribute emulate_write_cache=...` commands, and LIO grow
-  remains an explicit non-ready provider handoff. Linux tgt target-side
-  create/map/unmap/rescan now renders concrete `tgtadm` inventory, target,
-  logical-unit, initiator-address bind/unbind, and target removal commands when
-  the reviewed `targetId`/`tid`, `lun`, backing object, and ACL values are
-  declared; tgt grow requests now include native target inventory, tgt property
-  requests render concrete reviewed
-  `tgtadm --mode logicalunit --op update --name ... --value ...`
-  commands when `targetId`/`tid`, `lun`, property, and value are declared, and
-  tgt grow remains an explicit non-ready provider handoff. SCST target-side
-  create/map/unmap/remove/rescan/grow/property requests now render concrete
+- [x] **Finished:** `targetLuns` model create, grow, map, unmap, remove,
+  rescan, and property handoff actions.
+- [x] **Finished:** Linux LIO target-side create/map/unmap/rescan renders
+  concrete `targetcli` inventory, backstore, target, LUN mapping, ACL, target
+  removal, reviewed backstore removal, and persistence commands.
+- [x] **Finished:** LIO grow requests include native target/backstore
+  inventory, and LIO write-cache property requests render concrete reviewed
+  `targetcli ... set attribute emulate_write_cache=...` commands.
+- [x] **Finished:** Linux tgt target-side create/map/unmap/rescan renders
+  concrete `tgtadm` inventory, target, logical-unit, initiator-address
+  bind/unbind, and target removal commands when the reviewed `targetId`/`tid`,
+  `lun`, backing object, and ACL values are declared.
+- [x] **Finished:** Linux tgt grow requests include native target inventory,
+  and tgt property requests render concrete reviewed
+  `tgtadm --mode logicalunit --op update --name ... --value ...` commands when
+  `targetId`/`tid`, `lun`, property, and value are declared.
+- [x] **Finished:** SCST target-side
+  create/map/unmap/remove/rescan/grow/property requests render concrete
   reviewed `scstadmin` inventory, backing-device open/close, target, initiator
   group, initiator, LUN map/unmap, target enable/removal, `resync_dev`, LUN
   attribute, and persistence commands when the reviewed target IQN, backing
   object, LUN, optional group, and initiators are declared.
-  Provider handoffs carry declared `targetId`/`tid` and `lun` values. Other
-  array/provider adapters still use provider-labeled non-ready commands and
-  verification placeholders.
+- [x] **Finished:** Provider handoffs carry declared `targetId`/`tid` and
+  `lun` values.
+- [ ] **Partial:** LIO and tgt grow remain explicit non-ready provider handoffs
+  instead of fully native grow implementations.
+- [ ] **Partial:** Other target array/provider adapters still use
+  provider-labeled non-ready commands and verification placeholders.
 - [x] **Finished:** Multi-layer lifecycle groups such as LUN refresh,
   multipath refresh, partition growth, LUKS/LVM resize, and filesystem growth
   are exposed through graph-derived dependency ordering, reverse recovery edges,
@@ -260,7 +275,14 @@ Update rules:
   mutating command count, and fresh-topology review notes, alongside
   domain-specific recovery, roll-forward, rollback-precondition, verification,
   and recovery-point preservation actions.
-- [ ] **Desired:** Proven automatic rollback recipes per topology and domain.
+- [x] **Finished:** Failed apply reports include domain-specific recovery,
+  current-topology roll-forward review, read-only rollback-precondition
+  commands, verification actions, and recovery-point preservation actions.
+- [ ] **Desired:** Proven automatic rollback recipes still need per-topology
+  and per-domain execution recipes with fixtures or integration proof.
+- [ ] **Desired:** Automatic rollback recipes need negative tests proving
+  refusal when rollback points, topology, consumers, or data-loss risk are
+  ambiguous.
 
 ## NixOS integration
 
@@ -304,45 +326,40 @@ Update rules:
 - [x] **Finished:** Smoke harness coverage for loop devices, Btrfs, bcachefs,
   LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, NVMe, and synthetic
   failed-apply recovery.
-- [ ] **Partial:** Broader destructive and failure-path integration tests are
-  still needed for additional device replacement domains, broader degraded-array
-  variants, additional cache variants, additional NVMe namespace variants,
-  additional LUN flows, property mutation across more supported domains, and
-  failed-command recovery beyond the synthetic LVM-plus-filesystem, LVM grow,
-  LVM thin-pool create, LVM thin-pool grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement,
-  bcachefs replacement, filesystem trim, filesystem check,
-  filesystem repair, filesystem property, swap label, zram rescan, zram property inventory, loop rescan, backing-file rescan, backing-file grow, backing-file create, device-mapper rename,
-  ZFS dataset rename,
-  Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS pool
-  replacement, ZFS rollback, NVMe namespace create, NVMe namespace
-  grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,
-  target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO
-  detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with
-  concrete property rendering, target-side LUN LIO property, target-side LUN
-  LIO rescan, target-side LUN tgt create, target-side LUN tgt attach,
-  target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt
-  grow not-ready with concrete property rendering, target-side LUN tgt property,
-  target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST
-  attach, target-side LUN SCST detach, target-side LUN SCST destroy,
-  target-side LUN SCST grow, target-side LUN SCST property, target-side LUN
-  SCST rescan, host-side LUN rescan, multipath resize, multipath add,
-  multipath remove, multipath flush, multipath replace, LVM VG replacement, ZFS pool
-  replacement, MD RAID create, MD RAID assemble, MD RAID stop, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace,
-  LUKS open, LUKS format, LUKS close, LUKS grow,
-  LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove,
-  LUKS property, partition grow,
-  NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI
-  login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache
-  replacement, LVM cache rescan, VDO create,
-  VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO
-  remove, VDO property, bcache replacement, bcache property, bcache rescan, and
-  LVM cache property paths.
-- [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
-  are still needed; the default VM suite now includes the synthetic
-  failure-recovery harness and a disposable loop/LUKS/LVM/ext4 layered grow
-  harness that executes `resize2fs` through disk-nix after an LV extension,
-  then unmounts/deactivates the stack, executes a disk-nix LUKS close plan,
-  reopens the mapper, remounts the LV, and verifies sentinel data survived.
+- [x] **Finished:** Synthetic failed-command recovery covers layered
+  LVM-plus-filesystem, LVM grow, LVM thin-pool create/grow, XFS grow, Btrfs
+  scrub/rebalance/device replacement, bcachefs replacement, filesystem
+  trim/check/repair/property, swap label, zram rescan/property inventory, loop
+  rescan, backing-file rescan/grow/create, device-mapper rename, ZFS dataset
+  rename, Btrfs/ZFS snapshot clone, LVM VG rename/replacement, ZFS pool
+  replacement, and ZFS rollback paths.
+- [x] **Finished:** Synthetic failed-command recovery covers NVMe namespace
+  create/grow/attach/detach/delete, host-side LUN rescan, target-side LUN
+  LIO/tgt/SCST lifecycle/property/rescan paths, and multipath
+  add/remove/flush/resize/replace paths.
+- [x] **Finished:** Synthetic failed-command recovery covers MD RAID
+  create/assemble/stop/grow/add-member/remove-member/replace, LUKS
+  open/format/close/grow/keyslot/token/property, partition grow, NFS
+  remount/unmount/export/unexport, iSCSI logout/login/rescan, LVM cache
+  attach/detach/replacement/rescan/property, VDO lifecycle/property, and bcache
+  replacement/property/rescan paths.
+- [ ] **Partial:** Broader destructive/failure-path integration tests still
+  need additional real or VM-backed device replacement domains and broader
+  degraded-array variants beyond synthetic command failures.
+- [ ] **Partial:** Broader destructive/failure-path integration tests still
+  need additional cache variants, NVMe namespace variants, LUN flows, and
+  property mutation across more supported domains.
+- [ ] **Partial:** Broader destructive/failure-path integration tests still
+  need lab-host or VM-backed execution for more destructive apply behavior, not
+  only fake-tool synthetic command failures.
+- [x] **Finished:** Default VM suite includes the synthetic failure-recovery
+  harness.
+- [x] **Finished:** Disposable loop/LUKS/LVM/ext4 layered VM grow harness
+  executes `resize2fs` through disk-nix after an LV extension, then
+  unmounts/deactivates the stack, executes a disk-nix LUKS close plan, reopens
+  the mapper, remounts the LV, and verifies sentinel data survived.
+- [ ] **Partial:** Deeper destructive VM tests are still needed for broader
+  multi-domain mutation, failure, rollback-review, and recovery behavior.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
   checks for root privilege plus missing, failing, stderr-only, and empty-output
