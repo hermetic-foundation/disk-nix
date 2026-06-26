@@ -234,6 +234,100 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_grow_receipt" >/dev/null
 
+xfs_grow_tools="$tmpdir/fake-xfs-grow-tools"
+mkdir -p "$xfs_grow_tools"
+
+cat > "$xfs_grow_tools/findmnt" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$xfs_grow_tools/xfs_growfs" <<'EOF'
+#!/usr/bin/env bash
+echo "synthetic XFS grow failure for disk-nix recovery coverage" >&2
+exit 80
+EOF
+
+chmod +x "$xfs_grow_tools/findmnt" "$xfs_grow_tools/xfs_growfs"
+
+xfs_grow_spec="$tmpdir/xfs-grow-spec.json"
+xfs_grow_json="$tmpdir/xfs-grow-apply.json"
+xfs_grow_report="$tmpdir/xfs-grow-report.json"
+xfs_grow_receipt="$tmpdir/xfs-grow-receipt.json"
+
+jq -n '{
+  filesystems: {
+    root: {
+      mountpoint: "/",
+      fsType: "xfs",
+      resizePolicy: "grow-only"
+    }
+  },
+  apply: {
+    allowGrow: true
+  }
+}' > "$xfs_grow_spec"
+
+if PATH="$xfs_grow_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$xfs_grow_spec" \
+  --execute \
+  --report-out "$xfs_grow_report" \
+  --receipt-out "$xfs_grow_receipt" \
+  --json > "$xfs_grow_json"; then
+  echo "expected synthetic XFS grow failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 80
+  and .executionResults[1].argv == ["xfs_growfs", "/"]
+  and (.executionResults[1].stderr | contains("synthetic XFS grow failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "filesystem:root:grow"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["xfs_growfs", "/"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["filesystem:root:grow"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["findmnt", "--json", "--target", "/"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/", "--json"]))
+    and (.notes | any(contains("filesystem changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["findmnt", "--json", "--target", "/"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$xfs_grow_json" >/dev/null
+
+cmp "$xfs_grow_json" "$xfs_grow_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "filesystem:root:grow"
+  and .report.partialExecutionRecovery.failedCommand == ["xfs_growfs", "/"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$xfs_grow_receipt" >/dev/null
+
 swap_label_tools="$tmpdir/fake-swap-label-tools"
 mkdir -p "$swap_label_tools"
 
@@ -3577,4 +3671,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
