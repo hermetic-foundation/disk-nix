@@ -774,7 +774,7 @@ and preserve-recovery-point advice, then add domain-specific recovery,
 current graph and adds domain inspection plus post-apply verification commands
 when they were rendered. Rollback review is intentionally read-only and covers
 concrete domains such as ZFS rollback points, ZFS/Btrfs snapshot lifecycle
-changes, LVM snapshot merges, VG device migration, LVM volume/thin/PV changes,
+changes, LVM snapshot merges, VG device migration, LVM VG/volume/thin/PV changes,
 cache detach, LUKS mapper, header, keyslot, and token changes, MD RAID member
 replacement, NVMe namespace changes, iSCSI session login/logout, VDO lifecycle
 changes, multipath map changes, and host-side LUN detach; it does not run

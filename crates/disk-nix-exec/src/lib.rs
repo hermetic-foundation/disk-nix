@@ -623,6 +623,20 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 | Operation::Shrink,
             Some("volumes" | "thinPools" | "physicalVolumes")
         ) | (
+            Operation::Activate
+                | Operation::AddDevice
+                | Operation::Create
+                | Operation::Deactivate
+                | Operation::Destroy
+                | Operation::Export
+                | Operation::Grow
+                | Operation::Import
+                | Operation::RemoveDevice
+                | Operation::Rename
+                | Operation::ReplaceDevice
+                | Operation::Rescan,
+            Some("volumeGroups")
+        ) | (
             Operation::Clone
                 | Operation::Create
                 | Operation::Destroy
@@ -983,14 +997,19 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
         )),
         (
             Operation::Activate
+            | Operation::AddDevice
             | Operation::Create
             | Operation::Deactivate
             | Operation::Destroy
+            | Operation::Export
             | Operation::Grow
+            | Operation::Import
+            | Operation::RemoveDevice
             | Operation::Rename
+            | Operation::ReplaceDevice
             | Operation::Rescan
             | Operation::Shrink,
-            Some("volumes" | "thinPools" | "physicalVolumes"),
+            Some("volumes" | "thinPools" | "physicalVolumes" | "volumeGroups"),
             _,
         ) => commands.extend(lvm_recovery_inspection_commands(
             step,
@@ -1223,14 +1242,19 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
         }
         (
             Operation::Activate
+            | Operation::AddDevice
             | Operation::Create
             | Operation::Deactivate
             | Operation::Destroy
+            | Operation::Export
             | Operation::Grow
+            | Operation::Import
+            | Operation::RemoveDevice
             | Operation::Rename
+            | Operation::ReplaceDevice
             | Operation::Rescan
             | Operation::Shrink,
-            Some("volumes" | "thinPools" | "physicalVolumes"),
+            Some("volumes" | "thinPools" | "physicalVolumes" | "volumeGroups"),
             _,
         ) => lvm_recovery_inspection_commands(step, "confirm LVM state before rollback decisions"),
         (
@@ -1417,14 +1441,19 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
         )),
         (
             Operation::Activate
+            | Operation::AddDevice
             | Operation::Create
             | Operation::Deactivate
             | Operation::Destroy
+            | Operation::Export
             | Operation::Grow
+            | Operation::Import
+            | Operation::RemoveDevice
             | Operation::Rename
+            | Operation::ReplaceDevice
             | Operation::Rescan
             | Operation::Shrink,
-            Some("volumes" | "thinPools" | "physicalVolumes"),
+            Some("volumes" | "thinPools" | "physicalVolumes" | "volumeGroups"),
             _,
         ) => commands.extend(lvm_recovery_inspection_commands(
             step,
@@ -1601,17 +1630,22 @@ fn domain_recovery_notes(
         }
         (
             Operation::Activate
+            | Operation::AddDevice
             | Operation::Create
             | Operation::Deactivate
             | Operation::Destroy
+            | Operation::Export
             | Operation::Grow
+            | Operation::Import
+            | Operation::RemoveDevice
             | Operation::Rename
+            | Operation::ReplaceDevice
             | Operation::Rescan
             | Operation::Shrink,
-            Some("volumes" | "thinPools" | "physicalVolumes"),
+            Some("volumes" | "thinPools" | "physicalVolumes" | "volumeGroups"),
         ) => {
             notes.push(
-                "for LVM changes, inspect LV, PV, and VG metadata before retrying activation, resize, rename, create, or removal operations".to_string(),
+                "for LVM changes, inspect LV, PV, and VG metadata before retrying activation, resize, rename, import, export, create, or removal operations".to_string(),
             );
             notes.push(
                 "keep dependent filesystems, encryption layers, and services inactive until LVM metadata and activation state match the intended topology".to_string(),
@@ -1656,10 +1690,14 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
             "snapshot" => "snapshots",
             "filesystem" => "filesystems",
             "iscsisessions" => "iscsiSessions",
+            "lvmcaches" => "lvmCaches",
             "lukskeyslots" => "luksKeyslots",
             "lukstokens" => "luksTokens",
             "multipathmaps" => "multipathMaps",
             "nvmenamespaces" => "nvmeNamespaces",
+            "physicalvolumes" => "physicalVolumes",
+            "thinpools" => "thinPools",
+            "volumegroups" => "volumeGroups",
             "vdovolumes" => "vdoVolumes",
             other => other,
         })
@@ -1688,7 +1726,7 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     }
     if matches!(
         command_step_collection(step),
-        Some("volumes" | "thinPools" | "physicalVolumes")
+        Some("volumes" | "thinPools" | "physicalVolumes" | "volumeGroups")
     ) {
         if let Some(target) = lvm_target_from_step(step) {
             return Some(target);
@@ -1886,6 +1924,31 @@ fn lvm_recovery_inspection_commands(
             commands.push(command(["vgs", "--reportformat", "json"], false, note));
             commands.push(command(["pvs", "--reportformat", "json"], false, note));
         }
+        Some("volumeGroups") => {
+            if let Some(target) = lvm_target_from_step(step).or_else(|| {
+                step.action_id
+                    .split(':')
+                    .nth(1)
+                    .filter(|target| !target.is_empty())
+            }) {
+                commands.push(command(
+                    ["vgs", "--reportformat", "json", target],
+                    false,
+                    note,
+                ));
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            }
+            commands.push(command(["pvs", "--reportformat", "json"], false, note));
+            commands.push(command(
+                ["lvs", "--reportformat", "json", "-a"],
+                false,
+                note,
+            ));
+        }
         _ => {}
     }
     commands
@@ -1895,13 +1958,21 @@ fn lvm_target_from_step(step: &ExecutionStep) -> Option<&str> {
     step.commands.iter().find_map(|command| {
         let tool = command.argv.first()?.as_str();
         match tool {
-            "lvs" | "pvs" if command.argv.len() > 3 => command.argv.last().map(String::as_str),
+            "lvs" | "pvs" | "vgs" if command.argv.len() > 3 => {
+                command.argv.last().map(String::as_str)
+            }
             "lvchange" | "lvextend" | "lvremove" | "lvreduce" => {
                 command.argv.last().map(String::as_str)
             }
             "lvrename" => command.argv.get(1).map(String::as_str),
             "pvcreate" | "pvremove" | "pvresize" => command.argv.last().map(String::as_str),
             "pvscan" if command.argv.len() > 2 => command.argv.last().map(String::as_str),
+            "vgchange" | "vgexport" | "vgimport" | "vgremove" => {
+                command.argv.last().map(String::as_str)
+            }
+            "vgcreate" | "vgextend" | "vgreduce" | "vgrename" => {
+                command.argv.get(1).map(String::as_str)
+            }
             _ => None,
         }
         .filter(|target| !target.starts_with('<'))
@@ -25047,6 +25118,86 @@ mod tests {
             .expect("LVM rollback recovery review is reported");
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "vg0/root", "--json"] && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_lvm_volume_group_rename_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "volumeGroups": {
+                "vg-old": {
+                  "operation": "rename",
+                  "renameTo": "vg-new"
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_rename = ["vgrename", "vg-old", "vg-new"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_rename,
+                status_code: Some(if argv == failed_rename { 5 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_rename {
+                    "rename failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_rename)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("LVM VG domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Rename"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["vgs", "--reportformat", "json", "vg-old"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["pvs", "--reportformat", "json"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["lvs", "--reportformat", "json", "-a"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "vg-old", "--json"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("LVM changes") && note.contains("import, export"))
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("LVM VG roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["vgs", "--reportformat", "json", "vg-old"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("LVM VG rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "vg-old", "--json"] && !command.mutates
         }));
     }
 

@@ -208,7 +208,7 @@ manual-review guidance, or non-ready command plans instead of guessing.
   apply runs. Apply reports now expose generic recovery actions, targeted
   failed-action domain recovery guidance, current-topology roll-forward review,
   read-only rollback precondition review for concrete risky actions, and
-  ZFS/Btrfs snapshot lifecycle changes, LVM volume/thin/PV changes, LUKS
+  ZFS/Btrfs snapshot lifecycle changes, LVM VG/volume/thin/PV changes, LUKS
   mapper/header/keyslot/token changes, MD RAID member replacement, NVMe
   namespace, iSCSI session, VDO lifecycle, and multipath map recovery
   inspection, plus receipt files that bind reports to their invocation
