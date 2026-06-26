@@ -173,12 +173,16 @@ Update rules:
   `targetLuns` create, grow, map, unmap, remove, rescan, and property handoff
   actions. Linux LIO target-side create/map/unmap/rescan now renders concrete
   `targetcli` inventory, backstore, target, LUN mapping, ACL, target removal,
-  reviewed backstore removal, and persistence commands. Linux tgt target-side
-  create/map/unmap/rescan now renders concrete `tgtadm` inventory, target,
-  logical-unit, initiator-address bind/unbind, and target removal commands when
-  the reviewed `targetId`/`tid`, `lun`, backing object, and ACL values are
-  declared. Other array/provider adapters still use provider-labeled non-ready
-  commands and verification placeholders.
+  reviewed backstore removal, and persistence commands; LIO grow/property
+  requests now include native target/backstore inventory around an explicit
+  non-ready provider handoff. Linux tgt target-side create/map/unmap/rescan now
+  renders concrete `tgtadm` inventory, target, logical-unit, initiator-address
+  bind/unbind, and target removal commands when the reviewed `targetId`/`tid`,
+  `lun`, backing object, and ACL values are declared; tgt grow/property requests
+  now include native target inventory around the non-ready provider handoff.
+  Provider handoffs carry declared `targetId`/`tid` and `lun` values. Other
+  array/provider adapters still use provider-labeled non-ready commands and
+  verification placeholders.
 - [x] **Finished:** Multi-layer lifecycle groups such as LUN refresh,
   multipath refresh, partition growth, LUKS/LVM resize, and filesystem growth
   are exposed through graph-derived dependency ordering, reverse recovery edges,

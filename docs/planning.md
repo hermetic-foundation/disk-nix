@@ -434,15 +434,20 @@ Examples:
   `targetcli` inventory, backstore creation, target creation, LUN mapping,
   ACL mapping/unmapping, target removal, reviewed backstore removal, and
   `saveconfig` commands for Linux LIO targets when the target IQN, backing
-  object, LUN number, and initiators are declared. `provider = "tgt"` or
-  `"tgtadm"` renders concrete Linux tgt `tgtadm` inventory, target creation,
-  logical-unit creation/removal, initiator-address bind/unbind, and target
-  removal when `targetId`/`tid`, `lun`, backing object, and initiator-address
-  or `ALL` ACL values are declared. Missing tgt-specific inputs keep the
-  affected commands non-ready with explicit unresolved-input notes.
+  object, LUN number, and initiators are declared. LIO grow/property updates
+  render native target and backstore inventory around an explicit non-ready
+  provider handoff so operators can review the real targetcli state before
+  adapter-specific mutation. `provider = "tgt"` or `"tgtadm"` renders concrete
+  Linux tgt `tgtadm` inventory, target creation, logical-unit creation/removal,
+  initiator-address bind/unbind, and target removal when `targetId`/`tid`,
+  `lun`, backing object, and initiator-address or `ALL` ACL values are declared.
+  tgt grow/property updates likewise render native target inventory around the
+  non-ready provider handoff. Missing tgt-specific inputs keep the affected
+  commands non-ready with explicit unresolved-input notes.
   Other providers still emit non-ready `<target-lun-provider[:provider]>`
   handoff commands carrying the target identity, provider label, desired size,
-  backing object, portal, and initiators, plus read-only inventory verification
+  backing object, target id, LUN number, portal, and initiators, plus read-only
+  inventory verification
   placeholders. Host-side `luns`, `iscsiSessions`, and `multipathMaps` rescans
   should be staged after target-side verification.
   Current-topology comparison suppresses attach actions only when the declared

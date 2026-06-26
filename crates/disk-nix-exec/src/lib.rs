@@ -10870,6 +10870,8 @@ fn target_lun_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCom
                 | Operation::Detach
                 | Operation::Destroy
                 | Operation::Rescan
+                | Operation::Grow
+                | Operation::SetProperty
         )
     {
         return target_lun_lio_commands(action, target);
@@ -10882,6 +10884,8 @@ fn target_lun_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCom
                 | Operation::Detach
                 | Operation::Destroy
                 | Operation::Rescan
+                | Operation::Grow
+                | Operation::SetProperty
         )
     {
         return target_lun_tgt_commands(action, target);
@@ -11061,6 +11065,32 @@ fn target_lun_lio_commands(action: &PlannedAction, target: &str) -> Vec<Executio
             commands.push(target_lun_lio_saveconfig_command());
         }
         Operation::Rescan => {}
+        Operation::Grow => {
+            commands.push(target_lun_lio_backstore_inventory_command(
+                action,
+                &backstore,
+                "inspect the reviewed LIO backstore before target-side LUN growth handoff",
+            ));
+            commands.push(target_lun_provider_command(
+                action,
+                target,
+                "grow",
+                action.context.desired_size.as_deref(),
+            ));
+        }
+        Operation::SetProperty => {
+            commands.push(target_lun_lio_backstore_inventory_command(
+                action,
+                &backstore,
+                "inspect the reviewed LIO backstore before target-side LUN property handoff",
+            ));
+            commands.push(target_lun_provider_command(
+                action,
+                target,
+                "set-property",
+                action.context.desired_size.as_deref(),
+            ));
+        }
         _ => {}
     }
 
@@ -11091,6 +11121,33 @@ fn target_lun_lio_inventory_root_command(note: &str) -> ExecutionCommand {
             "ls".to_string(),
         ],
         false,
+        note,
+    )
+}
+
+fn target_lun_lio_backstore_inventory_command(
+    action: &PlannedAction,
+    backstore: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let (backstore_path, readiness, unresolved_inputs) = if action.context.device.is_some() {
+        (
+            format!("/backstores/block/{backstore}"),
+            CommandReadiness::Ready,
+            Vec::new(),
+        )
+    } else {
+        (
+            "/backstores/block/<backstore>".to_string(),
+            CommandReadiness::NeedsDomainImplementation,
+            vec!["LIO backstore name or backing device for inventory".to_string()],
+        )
+    };
+    command_vec_with_readiness(
+        vec!["targetcli".to_string(), backstore_path, "ls".to_string()],
+        false,
+        readiness,
+        unresolved_inputs,
         note,
     )
 }
@@ -11347,6 +11404,22 @@ fn target_lun_tgt_commands(action: &PlannedAction, target: &str) -> Vec<Executio
             ));
         }
         Operation::Rescan => {}
+        Operation::Grow => {
+            commands.push(target_lun_provider_command(
+                action,
+                target,
+                "grow",
+                action.context.desired_size.as_deref(),
+            ));
+        }
+        Operation::SetProperty => {
+            commands.push(target_lun_provider_command(
+                action,
+                target,
+                "set-property",
+                action.context.desired_size.as_deref(),
+            ));
+        }
         _ => {}
     }
     commands.push(target_lun_tgt_inventory_command(
@@ -11601,6 +11674,14 @@ fn target_lun_provider_command(
     if let Some(backing) = action.context.device.as_deref() {
         argv.push("--backing".to_string());
         argv.push(backing.to_string());
+    }
+    if let Some(target_id) = action.context.target_id.as_deref() {
+        argv.push("--target-id".to_string());
+        argv.push(target_id.to_string());
+    }
+    if let Some(lun) = action.context.lun.as_deref() {
+        argv.push("--lun".to_string());
+        argv.push(lun.to_string());
     }
     if let Some(portal) = action.context.portal.as_deref() {
         argv.push("--portal".to_string());
@@ -29440,6 +29521,111 @@ mod tests {
     }
 
     #[test]
+    fn target_lun_lio_grow_and_property_use_native_inventory_with_handoff() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:storage.root": {
+                    "operation": "grow",
+                    "provider": "lio",
+                    "source": "/dev/zvol/tank/root",
+                    "desiredSize": "4TiB",
+                    "lun": 7,
+                    "properties": {
+                      "lio.writeCache": "off"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 2);
+        assert!(!report.command_summary.all_commands_ready());
+
+        let grow = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:storage.root:grow")
+            .expect("LIO target-side LUN grow command plan exists");
+        assert!(grow.commands.iter().any(|command| {
+            command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(grow.commands.iter().any(|command| {
+            command.argv == ["targetcli", "/backstores/block/_dev_zvol_tank_root", "ls"]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(grow.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "<target-lun-provider:lio>",
+                    "grow-lun",
+                    "--target",
+                    "iqn.2026-06.example:storage.root",
+                    "--provider",
+                    "lio",
+                    "--size",
+                    "4TiB",
+                    "--backing",
+                    "/dev/zvol/tank/root",
+                    "--lun",
+                    "7",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command
+                    .unresolved_inputs
+                    .contains(&"lio target LUN provider implementation".to_string())
+        }));
+
+        let property = report
+            .command_plan
+            .iter()
+            .find(|step| {
+                step.action_id
+                    == "targetLuns:iqn.2026-06.example:storage.root:set-property:lio.writeCache"
+            })
+            .expect("LIO target-side LUN property command plan exists");
+        assert!(property.commands.iter().any(|command| {
+            command.argv == ["targetcli", "/backstores/block/_dev_zvol_tank_root", "ls"]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(property.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "<target-lun-provider:lio>",
+                    "set-lun-property",
+                    "--target",
+                    "iqn.2026-06.example:storage.root",
+                    "--provider",
+                    "lio",
+                    "--backing",
+                    "/dev/zvol/tank/root",
+                    "--lun",
+                    "7",
+                    "--property",
+                    "lio.writeCache",
+                    "--value",
+                    "off",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+        }));
+    }
+
+    #[test]
     fn failed_target_lun_lio_create_reports_domain_recovery_guidance() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
@@ -29827,6 +30013,113 @@ mod tests {
                 .iter()
                 .any(|hint| hint.contains("pkgs.tgt"))
         );
+    }
+
+    #[test]
+    fn target_lun_tgt_grow_and_property_use_native_inventory_with_handoff() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:tgt.root": {
+                    "operation": "grow",
+                    "provider": "tgt",
+                    "targetId": 42,
+                    "source": "/dev/zvol/tank/root",
+                    "desiredSize": "4TiB",
+                    "lun": 8,
+                    "properties": {
+                      "tgt.writeCache": "off"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 2);
+        assert!(!report.command_summary.all_commands_ready());
+
+        let grow = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:tgt.root:grow")
+            .expect("Linux tgt target-side LUN grow command plan exists");
+        assert!(grow.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42",
+                ]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(grow.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "<target-lun-provider:tgt>",
+                    "grow-lun",
+                    "--target",
+                    "iqn.2026-06.example:tgt.root",
+                    "--provider",
+                    "tgt",
+                    "--size",
+                    "4TiB",
+                    "--backing",
+                    "/dev/zvol/tank/root",
+                    "--target-id",
+                    "42",
+                    "--lun",
+                    "8",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+        }));
+
+        let property = report
+            .command_plan
+            .iter()
+            .find(|step| {
+                step.action_id
+                    == "targetLuns:iqn.2026-06.example:tgt.root:set-property:tgt.writeCache"
+            })
+            .expect("Linux tgt target-side LUN property command plan exists");
+        assert!(property.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42",
+                ]
+                && !command.mutates
+        }));
+        assert!(property.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "<target-lun-provider:tgt>",
+                    "set-lun-property",
+                    "--target",
+                    "iqn.2026-06.example:tgt.root",
+                    "--provider",
+                    "tgt",
+                    "--backing",
+                    "/dev/zvol/tank/root",
+                    "--target-id",
+                    "42",
+                    "--lun",
+                    "8",
+                    "--property",
+                    "tgt.writeCache",
+                    "--value",
+                    "off",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+        }));
     }
 
     #[test]

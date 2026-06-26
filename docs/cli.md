@@ -1114,14 +1114,18 @@ adapter. `provider = "lio"` renders concrete Linux LIO `targetcli` command
 plans for inventory, backstore creation, target creation, LUN mapping, ACL
 mapping/unmapping, target removal, reviewed backstore removal, and `saveconfig`
 when the target IQN, backing object, LUN number, and initiators are declared.
-`provider = "tgt"` or `"tgtadm"` renders concrete Linux tgt `tgtadm` command
-plans for target inventory, target creation/removal, logical-unit
-creation/removal, and initiator-address bind/unbind when `targetId` or `tid`,
-`lun`, backing object, and initiator-address or `ALL` ACL values are declared.
-Missing tgt-specific values leave only the affected commands non-ready with
+LIO grow/property updates add native target and backstore inventory around an
+explicit non-ready provider handoff. `provider = "tgt"` or `"tgtadm"` renders
+concrete Linux tgt `tgtadm` command plans for target inventory, target
+creation/removal, logical-unit creation/removal, and initiator-address
+bind/unbind when `targetId` or `tid`, `lun`, backing object, and
+initiator-address or `ALL` ACL values are declared. tgt grow/property updates
+add native target inventory around the non-ready provider handoff. Missing
+tgt-specific values leave only the affected commands non-ready with
 unresolved-input notes. Other providers render non-ready
 `<target-lun-provider[:provider]>` placeholders with reviewed target, provider
-label, size, backing object, portal, and initiator inputs until an adapter or
+label, size, backing object, target id, LUN number, portal, and initiator inputs
+until an adapter or
 reviewed runbook supplies concrete commands. Host-side `luns`,
 `iscsiSessions`, and `multipathMaps` rescans should follow target-side
 verification.

@@ -221,12 +221,15 @@ plans instead of guessing. Target-side LUN provisioning is modeled through
 `targetLuns`;
 `provider = "lio"` now renders concrete Linux LIO `targetcli` inventory,
 backstore, target, LUN mapping, ACL, target removal, reviewed backstore removal,
-and persistence commands. `provider = "tgt"` or `"tgtadm"` renders concrete
-Linux tgt `tgtadm` inventory, target creation/removal, logical-unit
-creation/removal, and initiator-address bind/unbind commands when the reviewed
-`targetId`/`tid`, `lun`, backing object, and ACL values are declared. Other
-providers still use provider-labeled handoff commands and verification
-placeholders until concrete adapters are added.
+and persistence commands; grow/property updates include native target/backstore
+inventory around an explicit non-ready provider handoff. `provider = "tgt"` or
+`"tgtadm"` renders concrete Linux tgt `tgtadm` inventory, target
+creation/removal, logical-unit creation/removal, and initiator-address
+bind/unbind commands when the reviewed `targetId`/`tid`, `lun`, backing object,
+and ACL values are declared; grow/property updates include native target
+inventory around the handoff. Other providers still use provider-labeled
+handoff commands and verification placeholders until concrete adapters are
+added.
 
 ## Remaining for feature complete
 
