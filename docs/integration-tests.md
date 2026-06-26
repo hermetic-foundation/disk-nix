@@ -239,12 +239,16 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
   reviewed origin LV and cache pool
 - an LVM cache detach where fake `lvs` succeeds and fake
   `lvconvert --uncache` fails for the reviewed origin LV
+- an LVM cache rescan where fake `lvs --reportformat json` fails for the
+  reviewed origin LV
 - a VDO logical grow where fake `vdo status --name archive` succeeds and fake
   `vdo growLogical --name archive --vdoLogicalSize 4TiB` fails
 - a VDO property mutation where fake `disk-nix inspect archive` succeeds and
   fake `vdo changeWritePolicy --name archive --writePolicy sync` fails
 - a bcache property mutation where fake `disk-nix inspect /dev/bcache1`
   succeeds and fake sysfs `cache_mode` update fails for `/dev/bcache1`
+- a bcache rescan where fake `disk-nix inspect /dev/bcache0` succeeds and fake
+  sysfs `state` read fails for `/dev/bcache0`
 - an LVM cache property mutation where fake `lvchange --cachemode` fails for a
   reviewed origin LV
 
@@ -915,6 +919,6 @@ concrete property rendering, target-side LUN tgt property, target-side LUN tgt
 rescan, multipath
 resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
-remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
-grow, VDO property, bcache property, and LVM cache property failed-command
+remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO
+grow, VDO property, bcache property, bcache rescan, and LVM cache property failed-command
 paths, and broader destructive apply behavior.

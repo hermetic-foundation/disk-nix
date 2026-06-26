@@ -312,8 +312,8 @@ Update rules:
   LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove,
   partition grow,
   NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM
-  cache detach, VDO grow, VDO property, bcache property, and LVM cache property
-  paths.
+  cache detach, LVM cache rescan, VDO grow, VDO property, bcache property,
+  bcache rescan, and LVM cache property paths.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
   are still needed; the default VM suite now includes the synthetic
   failure-recovery harness and a disposable loop/LUKS/LVM/ext4 layered grow

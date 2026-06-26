@@ -5273,6 +5273,94 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_detach_receipt" >/dev/null
 
+lvm_cache_rescan_tools="$tmpdir/fake-lvm-cache-rescan-tools"
+mkdir -p "$lvm_cache_rescan_tools"
+
+cat > "$lvm_cache_rescan_tools/lvs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == *"vg0/archive"* ]]; then
+  echo "synthetic lvm cache rescan failure for disk-nix recovery coverage" >&2
+  exit 92
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$lvm_cache_rescan_tools/lvs"
+
+lvm_cache_rescan_spec="$tmpdir/lvm-cache-rescan-spec.json"
+lvm_cache_rescan_json="$tmpdir/lvm-cache-rescan-apply.json"
+lvm_cache_rescan_report="$tmpdir/lvm-cache-rescan-report.json"
+lvm_cache_rescan_receipt="$tmpdir/lvm-cache-rescan-receipt.json"
+
+jq -n '{
+  lvmCaches: {
+    "vg0/archive": {
+      operation: "rescan"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$lvm_cache_rescan_spec"
+
+if PATH="$lvm_cache_rescan_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$lvm_cache_rescan_spec" \
+  --execute \
+  --report-out "$lvm_cache_rescan_report" \
+  --receipt-out "$lvm_cache_rescan_receipt" \
+  --json > "$lvm_cache_rescan_json"; then
+  echo "expected synthetic LVM cache rescan failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 1
+  and .executionResults[0].success == false
+  and .executionResults[0].statusCode == 92
+  and .executionResults[0].argv == ["lvs", "--reportformat", "json", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/archive"]
+  and (.executionResults[0].stderr | contains("synthetic lvm cache rescan failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "lvmcaches:vg0/archive:rescan"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["lvs", "--reportformat", "json", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/archive"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["lvmcaches:vg0/archive:rescan"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-a", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/archive"]))
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "vg0/archive", "--json"]))
+    and (.notes | any(contains("cache changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/archive"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-a", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/archive"]))
+  ))
+' "$lvm_cache_rescan_json" >/dev/null
+
+cmp "$lvm_cache_rescan_json" "$lvm_cache_rescan_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "lvmcaches:vg0/archive:rescan"
+  and .report.partialExecutionRecovery.failedCommand == ["lvs", "--reportformat", "json", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/archive"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$lvm_cache_rescan_receipt" >/dev/null
+
 vdo_grow_tools="$tmpdir/fake-vdo-grow-tools"
 mkdir -p "$vdo_grow_tools"
 
@@ -5575,6 +5663,112 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$bcache_property_receipt" >/dev/null
 
+bcache_rescan_tools="$tmpdir/fake-bcache-rescan-tools"
+mkdir -p "$bcache_rescan_tools"
+bcache_rescan_disk_nix="$(command -v "$disk_nix_bin")"
+bcache_rescan_real_sh="$(command -v sh)"
+
+cat > "$bcache_rescan_tools/sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "$bcache_rescan_real_sh" || "\${1:-}" == "/bin/sh" ]]; then
+  shift
+fi
+case "\$*" in
+*"command -v"*)
+  exit 0
+  ;;
+*"disk-nix-bcache-read /dev/bcache0 state"*)
+  echo "synthetic bcache rescan failure for disk-nix recovery coverage" >&2
+  exit 93
+  ;;
+esac
+exec "$bcache_rescan_real_sh" "\$@"
+EOF
+
+cat > "$bcache_rescan_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$bcache_rescan_disk_nix" "\$@"
+EOF
+
+chmod +x "$bcache_rescan_tools/sh" "$bcache_rescan_tools/disk-nix"
+
+bcache_rescan_spec="$tmpdir/bcache-rescan-spec.json"
+bcache_rescan_json="$tmpdir/bcache-rescan-apply.json"
+bcache_rescan_report="$tmpdir/bcache-rescan-report.json"
+bcache_rescan_receipt="$tmpdir/bcache-rescan-receipt.json"
+
+jq -n '{
+  caches: {
+    "/dev/bcache0": {
+      operation: "rescan"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$bcache_rescan_spec"
+
+if PATH="$bcache_rescan_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$bcache_rescan_spec" \
+  --execute \
+  --report-out "$bcache_rescan_report" \
+  --receipt-out "$bcache_rescan_receipt" \
+  --json > "$bcache_rescan_json"; then
+  echo "expected synthetic bcache rescan failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 4
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/dev/bcache0"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 93
+  and .executionResults[1].argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", "/dev/bcache0", "state"]
+  and (.executionResults[1].stderr | contains("synthetic bcache rescan failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "caches:/dev/bcache0:rescan"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", "/dev/bcache0", "state"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["caches:/dev/bcache0:rescan"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", "/dev/bcache0", "state"]))
+    and (.commands | any(.argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", "/dev/bcache0", "cache_mode"]))
+    and (.commands | any(.argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", "/dev/bcache0", "dirty_data"]))
+    and (.commands | any(.argv == ["disk-nix", "cache", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/bcache0", "--json"]))
+    and (.notes | any(contains("cache changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", "/dev/bcache0", "cache_mode"]))
+  ))
+' "$bcache_rescan_json" >/dev/null
+
+cmp "$bcache_rescan_json" "$bcache_rescan_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "caches:/dev/bcache0:rescan"
+  and .report.partialExecutionRecovery.failedCommand == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", "/dev/bcache0", "state"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$bcache_rescan_receipt" >/dev/null
+
 lvm_cache_tools="$tmpdir/fake-lvm-cache-tools"
 mkdir -p "$lvm_cache_tools"
 
@@ -5666,4 +5860,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO grow, VDO property, bcache property, bcache rescan, and LVM cache property failures"
