@@ -209,12 +209,16 @@ placeholders, but concrete array adapters remain future work.
   dependency directions. Grouped changes such as iSCSI LUN refresh, multipath,
   partition growth, LUKS/LVM resize, and filesystem growth still need
   recovery-aware ordering and stronger conflict resolution before execution.
-- More NixOS steady-state synthesis for lifecycle-managed resources after
-  mutation. The module now emits a `declarativeHandoff` index for mounts,
-  crypttab/LUKS, swap, NFS exports, iSCSI boot/session state, generated files,
-  and a reviewable `/etc/disk-nix/declarative-handoff.nix` Nix module snippet,
-  but automated editing of declarative NixOS configuration after successful
-  mutation is still not implemented.
+- Automated editing of declarative NixOS configuration after successful
+  mutation is still not implemented. The module now emits a
+  `declarativeHandoff` index for mounts, crypttab/LUKS, swap, NFS exports,
+  iSCSI boot/session state, generated files, and a reviewable
+  `/etc/disk-nix/declarative-handoff.nix` Nix module snippet. It also emits a
+  `lifecycleManaged` steady-state index for active disk-nix lifecycle
+  declarations across filesystems, swap, LUKS, NFS, LVM, VDO, dm, MD RAID,
+  multipath, ZFS, Btrfs, caches, LUNs, iSCSI sessions, disks, partitions, and
+  NVMe namespaces with stable identities, operations, and available target or
+  desired-size details for post-mutation review.
 - Deeper domain-specific recovery and rollback recipes for partially completed
   apply runs. Apply reports now expose generic recovery actions, targeted
   failed-action domain recovery guidance, current-topology roll-forward review,

@@ -79,6 +79,12 @@ network-storage identities for iSCSI session targets, host-side LUN paths, and
 NFS export path/client selectors, and native storage service flags for LVM, LVM
 thin, LVM VDO, MD RAID, multipath, ZFS extra pools, bcache, and NFS server
 support.
+It also includes `lifecycleManaged`, a domain-keyed index of active
+disk-nix-managed resources that are not teardown/export/logout/unmount style
+declarations. Each entry records the stable identity used for duplicate checks,
+the requested operation or action, and available target/path/device/mount/source,
+client, portal, and desired-size data so post-mutation review tooling can see
+which imperative lifecycle declarations still need declarative follow-up.
 It also includes `declarativeHandoff`, a compact index of native NixOS surfaces
 that should be checked or edited after successful imperative changes:
 `fileSystems` mountpoints, `swapDevices`, LUKS mapper names, NFS export

@@ -219,8 +219,12 @@ Update rules:
   `/etc/disk-nix/declarative-handoff.nix` Nix module snippet after evaluation,
   but automatic editing of the user's declarative NixOS configuration after
   successful imperative mutation is still not implemented.
-- [ ] **Partial:** More steady-state synthesis is needed for lifecycle-managed
-  resources after mutation.
+- [x] **Finished:** Steady-state synthesis for lifecycle-managed resources after
+  mutation. `/etc/disk-nix/steady-state.json` includes a `lifecycleManaged`
+  index for active disk-nix declarations across supported storage domains,
+  excluding teardown/export/logout/unmount style declarations and preserving
+  stable identities, operations, and available target or desired-size details
+  for post-mutation review.
 
 ## Testing and proof
 

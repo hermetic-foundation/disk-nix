@@ -3019,6 +3019,31 @@
                     and (.networkStorage.lunHostPaths | index("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3") == null)
                     and (.networkStorage.nfsExportSelectors | index("/srv/share 192.0.2.0/24") != null)
                     and (.networkStorage.nfsExportSelectors | index("/srv/old-share 192.0.2.55") == null)
+                    and .lifecycleManaged.filesystems."/mnt/local-mount".operation == "mount"
+                    and .lifecycleManaged.filesystems."/mnt/local-mount".identity == "/mnt/local-mount"
+                    and (.lifecycleManaged.filesystems | has("/mnt/local-unmount") | not)
+                    and .lifecycleManaged.swapDevices."/dev/disk/by-label/swap".operation == "format"
+                    and .lifecycleManaged.swapDevices."/dev/disk/by-label/swap".desiredSize == "8GiB"
+                    and (.lifecycleManaged.swapDevices | has("/dev/disk/by-label/destroyed-swap") | not)
+                    and .lifecycleManaged.physicalVolumes."/dev/disk/by-id/nvme-pv-grow".operation == "grow"
+                    and .lifecycleManaged.volumes."vg0/scratch".operation == "create"
+                    and .lifecycleManaged.volumes."vg0/scratch".desiredSize == "10GiB"
+                    and (.lifecycleManaged.volumes | has("vg0/archive") | not)
+                    and .lifecycleManaged.thinPools."vg0/thinpool".operation == "grow"
+                    and .lifecycleManaged.lvmCaches."vg0/root".operation == "create"
+                    and .lifecycleManaged.vdoVolumes.archive.operation == "grow"
+                    and .lifecycleManaged.vdoVolumes.archive.desiredSize == "4TiB"
+                    and (.lifecycleManaged.vdoVolumes | has("cold-archive") | not)
+                    and .lifecycleManaged.luksKeyslots."/dev/disk/by-id/root-luks keyslot 1".operation == "add-key"
+                    and (.lifecycleManaged.luksKeyslots | has("/dev/disk/by-id/root-luks keyslot 2") | not)
+                    and .lifecycleManaged.btrfsQgroups."0/257 /mnt/persist".identity == "0/257 /mnt/persist"
+                    and .lifecycleManaged.snapshots."tank/home@before-upgrade".operation == "create"
+                    and .lifecycleManaged.luns."/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0".operation == "grow"
+                    and (.lifecycleManaged.luns | has("/dev/disk/by-path/ip-192.0.2.11:3260-iscsi-iqn.2026-06.example:storage-lun-3") | not)
+                    and .lifecycleManaged.iscsiSessions."iqn.2026-06.example:storage.root".operation == "grow"
+                    and (.lifecycleManaged.iscsiSessions | has("iqn.2026-06.example:storage.logout") | not)
+                    and .lifecycleManaged.nfsExports."/srv/share 192.0.2.0/24".operation == "export"
+                    and (.lifecycleManaged.nfsExports | has("/srv/old-share 192.0.2.55") | not)
                     and .iscsi.openiscsi.enable == true
                     and .iscsi.openiscsi.discoverPortal == "192.0.2.10:3260"
                     and .iscsi.bootInitiator.enable == true

@@ -1137,6 +1137,71 @@ let
   activeNvmeNamespaceIdentities = lib.filter (identity: identity != null) (
     lib.mapAttrsToList nvmeNamespaceIdentity activeNvmeNamespaces
   );
+  lifecycleOperation =
+    object:
+    if (object.operation or null) != null then
+      object.operation
+    else if (object.action or null) != null then
+      object.action
+    else
+      "create";
+  lifecycleDesiredSize =
+    object:
+    if (object.desiredSize or null) != null then
+      object.desiredSize
+    else if (object.targetSize or null) != null then
+      object.targetSize
+    else
+      object.size or null;
+  lifecycleManagedEntry =
+    identity: object:
+    cleanSpecAttrs (
+      {
+        inherit identity;
+        operation = lifecycleOperation object;
+        desiredSize = lifecycleDesiredSize object;
+      }
+      // lib.optionalAttrs ((object.target or null) != null) {
+        inherit (object) target;
+      }
+      // lib.optionalAttrs ((object.path or null) != null) {
+        inherit (object) path;
+      }
+      // lib.optionalAttrs ((object.device or null) != null) {
+        inherit (object) device;
+      }
+      // lib.optionalAttrs ((object.mountpoint or null) != null) {
+        inherit (object) mountpoint;
+      }
+      // lib.optionalAttrs ((object.source or null) != null) {
+        inherit (object) source;
+      }
+      // lib.optionalAttrs ((object.client or null) != null) {
+        inherit (object) client;
+      }
+      // lib.optionalAttrs ((object.portal or null) != null) {
+        inherit (object) portal;
+      }
+    );
+  lifecycleManagedMap =
+    attrs: identityFn:
+    builtins.listToAttrs (
+      lib.filter (entry: entry != null) (
+        lib.mapAttrsToList (
+          name: object:
+          let
+            identity = identityFn name object;
+          in
+          if identity == null then
+            null
+          else
+            {
+              name = identity;
+              value = lifecycleManagedEntry identity object;
+            }
+        ) attrs
+      )
+    );
   activeCacheIdentities = lib.mapAttrsToList lifecycleIdentity activeCaches;
   numericString = value: builtins.match "[0-9]+" value != null;
   numericNameSuffix =
@@ -1309,6 +1374,12 @@ let
       ++ lun.devicePaths
     );
   activeLunHostPaths = lib.concatLists (lib.mapAttrsToList lunHostPaths activeLuns);
+  primaryLunHostPath =
+    name: lun:
+    let
+      paths = lunHostPaths name lun;
+    in
+    if paths != [ ] then builtins.head paths else lifecycleIdentity name lun;
   iscsiDiscoverPortal =
     if cfg.iscsi.discoverPortal != null then
       cfg.iscsi.discoverPortal
@@ -1374,6 +1445,18 @@ let
     in
     "${exportPath} ${export.client}"
   ) (lib.filterAttrs (_: export: export.client != null && !isDestroyLifecycle export) cfg.exports);
+  nfsExportSelector =
+    name: export:
+    let
+      exportPath =
+        if export.path != null then
+          export.path
+        else if export.target != null then
+          export.target
+        else
+          name;
+    in
+    if export.client != null then "${exportPath} ${export.client}" else null;
   supportedFilesystemTypes = lib.unique (
     (map (filesystem: filesystem.fsType) (lib.attrValues activeFilesystems))
     ++ (map (mount: mount.fsType) (lib.attrValues activeNfsMounts))
@@ -1537,6 +1620,41 @@ let
       iscsiSessionTargets = activeIscsiSessionIdentities;
       lunHostPaths = activeLunHostPaths;
       nfsExportSelectors = activeNfsExportSelectors;
+    };
+    lifecycleManaged = {
+      filesystems = lifecycleManagedMap activeFilesystems (_: filesystem: filesystem.mountpoint);
+      swapDevices = lifecycleManagedMap activeSwaps (_: swap: swapDevicePath swap);
+      luksDevices = lifecycleManagedMap activeLuksDevices (name: _: name);
+      nfsMounts = lifecycleManagedMap activeNfsMounts (_: mount: mount.mountpoint);
+      disks = lifecycleManagedMap activeDisks lifecyclePathTarget;
+      partitions = lifecycleManagedMap activePartitions partitionIdentity;
+      nvmeNamespaces = lifecycleManagedMap activeNvmeNamespaces nvmeNamespaceIdentity;
+      physicalVolumes = lifecycleManagedMap activePhysicalVolumes lifecyclePathTarget;
+      volumeGroups = lifecycleManagedMap activeVolumeGroups lifecycleIdentity;
+      volumes = lifecycleManagedMap activeVolumes lifecycleIdentity;
+      thinPools = lifecycleManagedMap activeThinPools lifecycleIdentity;
+      lvmSnapshots = lifecycleManagedMap activeLvmSnapshots lifecycleIdentity;
+      lvmCaches = lifecycleManagedMap activeLvmCaches lifecycleIdentity;
+      luksKeyslots = lifecycleManagedMap activeLuksKeyslots luksKeyslotIdentity;
+      luksTokens = lifecycleManagedMap activeLuksTokens luksTokenIdentity;
+      backingFiles = lifecycleManagedMap activeBackingFiles lifecyclePathTarget;
+      loopDevices = lifecycleManagedMap activeLoopDevices lifecyclePathTarget;
+      dmMaps = lifecycleManagedMap activeDmMaps lifecyclePathTarget;
+      mdRaids = lifecycleManagedMap activeMdRaids lifecyclePathTarget;
+      multipathMaps = lifecycleManagedMap activeMultipathMaps multipathMapIdentity;
+      vdoVolumes = lifecycleManagedMap activeVdoVolumes lifecycleIdentity;
+      pools = lifecycleManagedMap activePools lifecycleIdentity;
+      datasets = lifecycleManagedMap activeDatasets lifecycleIdentity;
+      zvols = lifecycleManagedMap activeZvols lifecycleIdentity;
+      btrfsSubvolumes = lifecycleManagedMap activeBtrfsSubvolumes lifecyclePathTarget;
+      btrfsQgroups = lifecycleManagedMap activeBtrfsQgroups btrfsQgroupSelector;
+      snapshots = lifecycleManagedMap activeSnapshots snapshotIdentity;
+      caches = lifecycleManagedMap activeCaches lifecycleIdentity;
+      luns = lifecycleManagedMap activeLuns primaryLunHostPath;
+      iscsiSessions = lifecycleManagedMap activeIscsiSessions iscsiSessionIdentity;
+      nfsExports = lifecycleManagedMap (lib.filterAttrs (
+        _: export: export.client != null && !isDestroyLifecycle export
+      ) cfg.exports) nfsExportSelector;
     };
     iscsi = {
       openiscsi = nativeOpenIscsi;
