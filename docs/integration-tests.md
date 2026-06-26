@@ -52,6 +52,12 @@ with `DISK_NIX_VM_HARNESSES=zfs` in a disposable guest that has working ZFS
 kernel support and a configured host ID. It is not part of the default VM suite
 until the flake VM test provisions that kernel support reliably.
 
+The NFS client harness is also packaged with the VM suite and can be selected
+explicitly with `DISK_NIX_VM_HARNESSES=nfs` when the guest can reach a
+disposable export supplied through `DISK_NIX_NFS_SOURCE`. It is not part of the
+default VM suite because the flake VM test does not yet provision a server
+export.
+
 ## Loop-backed smoke test
 
 The repository includes a root-only loop-backed smoke harness:
@@ -291,15 +297,55 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-zfs-smoke.sh
 ```
 
+## NFS client smoke test
+
+The repository also includes a root-only NFS client harness for lab exports:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_NFS_SOURCE=server.example.com:/srv/disk-nix-smoke \
+  nix run .#integration-nfs-smoke
+```
+
+When enabled, it:
+
+- creates a temporary mountpoint
+- mounts the NFS source from `DISK_NIX_NFS_SOURCE`
+- verifies `disk-nix inspect <mountpoint> --json` sees NFS topology
+- executes an `nfs.mounts.<mountpoint>.operation = "rescan"` apply plan
+- verifies the rendered `findmnt --json <mountpoint>` and
+  `nfsstat -m <mountpoint>` commands succeeded
+- executes an `nfs.mounts.<mountpoint>.operation = "remount"` apply plan
+- verifies the rendered `mount -o remount,<options> <mountpoint>` command
+  succeeded
+- unmounts the temporary client mount during cleanup
+
+This test does not provision an NFS server or export. It requires a disposable
+export provided by the operator because server behavior, export policy, network
+reachability, NFS version, and authentication vary by lab. The default
+filesystem type is `nfs4`, the default mount options are `vers=4.2`, and the
+default remount options reuse the mount options. Override them with
+`DISK_NIX_NFS_FSTYPE`, `DISK_NIX_NFS_MOUNT_OPTIONS`, and
+`DISK_NIX_NFS_REMOUNT_OPTIONS`.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_NFS_SOURCE=server.example.com:/srv/disk-nix-smoke \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-nfs-smoke.sh
+```
+
 ## Flake coverage
 
 `nix flake check` does not run destructive integration tests. It does validate
 that the loop smoke harnesses parse, remain opt-in, and still contain the
 expected loop, filesystem setup, resize, mount, Btrfs scrub, bcachefs format,
 bcachefs scrub, LUKS format, LUKS open, LUKS close, LVM create, LVM rescan, MD
-RAID create, MD RAID rescan, ZFS pool create, ZFS scrub, and VM orchestration
-guard steps. This keeps the harnesses available and packaged while preserving
-safe default checks.
+RAID create, MD RAID rescan, ZFS pool create, ZFS scrub, NFS mount, NFS rescan,
+NFS remount, and VM orchestration guard steps. This keeps the harnesses
+available and packaged while preserving safe default checks.
 
 ## Remaining integration coverage
 
@@ -308,6 +354,6 @@ integration paths. Feature completion still needs disposable VM or lab-host
 tests for broader LUKS format/grow/keyslot/token behavior, broader LVM
 LV/thin/cache/device-topology behavior, broader bcachefs multi-device and
 member-topology behavior, broader ZFS vdev/dataset/zvol/snapshot behavior,
-broader MD RAID grow/member-topology behavior, multipath, iSCSI, NFS, VDO,
-NVMe namespace operations, failure recovery, and broader destructive apply
-behavior.
+broader MD RAID grow/member-topology behavior, multipath, iSCSI, broader NFS
+server/export/unmount/failure behavior, VDO, NVMe namespace operations, failure
+recovery, and broader destructive apply behavior.

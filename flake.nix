@@ -157,6 +157,17 @@
           ];
           text = builtins.readFile ./scripts/integration-zfs-smoke.sh;
         };
+        integrationNfsSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-nfs-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.nfs-utils
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-nfs-smoke.sh;
+        };
         integrationVmSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-vm-smoke";
           runtimeInputs = [
@@ -167,6 +178,7 @@
             integrationLvmSmoke
             integrationMdraidSmoke
             integrationZfsSmoke
+            integrationNfsSmoke
             pkgs.systemd
           ];
           text = builtins.readFile ./scripts/integration-vm-smoke.sh;
@@ -1464,6 +1476,7 @@
           integration-lvm-smoke = integrationLvmSmoke;
           integration-mdraid-smoke = integrationMdraidSmoke;
           integration-zfs-smoke = integrationZfsSmoke;
+          integration-nfs-smoke = integrationNfsSmoke;
           integration-vm-smoke = integrationVmSmoke;
           integration-vm-test = integrationVmTest;
           integration-loop-smoke = integrationLoopSmoke;
@@ -1522,6 +1535,13 @@
             program = "${integrationZfsSmoke}/bin/disk-nix-integration-zfs-smoke";
             meta = {
               description = "Root-only ZFS loop-backed disk-nix smoke integration harness";
+            };
+          };
+          integration-nfs-smoke = {
+            type = "app";
+            program = "${integrationNfsSmoke}/bin/disk-nix-integration-nfs-smoke";
+            meta = {
+              description = "Root-only NFS client disk-nix smoke integration harness";
             };
           };
           integration-vm-smoke = {
@@ -1616,6 +1636,16 @@
             ${pkgs.gnugrep}/bin/grep -q 'zpool", "scrub"' ${./scripts/integration-zfs-smoke.sh}
             touch "$out"
           '';
+          integrationNfsSmoke = pkgs.runCommand "disk-nix-integration-nfs-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NFS_SOURCE ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'mount -t "$fs_type"' ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'findmnt", "--json"' ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'nfsstat", "-m"' ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'mount", "-o", ("remount,"' ${./scripts/integration-nfs-smoke.sh}
+            touch "$out"
+          '';
           integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vm-smoke.sh}
@@ -1625,6 +1655,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-bcachefs-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-mdraid-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-zfs-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-nfs-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
           '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''

@@ -60,6 +60,9 @@ run_harness() {
     zfs)
       disk-nix-integration-zfs-smoke
       ;;
+    nfs)
+      disk-nix-integration-nfs-smoke
+      ;;
     *)
       echo "unknown VM integration harness: $1" >&2
       exit 2
