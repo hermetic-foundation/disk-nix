@@ -281,8 +281,8 @@ Update rules:
   rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach,
   NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create,
   target-side LUN tgt create, multipath replace, MD RAID replace, iSCSI logout,
-  iSCSI login, LVM cache attach, LVM cache detach, VDO property, and LVM cache
-  property paths.
+  iSCSI login, LVM cache attach, LVM cache detach, VDO property, bcache
+  property, and LVM cache property paths.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
   for multi-layer apply behavior on isolated disposable disks are still needed;
   the default VM suite now includes the synthetic failure-recovery harness.

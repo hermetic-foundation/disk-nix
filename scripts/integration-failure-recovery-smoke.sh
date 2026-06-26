@@ -1556,6 +1556,115 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$vdo_property_receipt" >/dev/null
 
+bcache_property_tools="$tmpdir/fake-bcache-property-tools"
+mkdir -p "$bcache_property_tools"
+bcache_property_disk_nix="$(command -v "$disk_nix_bin")"
+bcache_property_real_sh="$(command -v sh)"
+
+cat > "$bcache_property_tools/sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "$bcache_property_real_sh" || "\${1:-}" == "/bin/sh" ]]; then
+  shift
+fi
+case "\$*" in
+*"command -v"*)
+  exit 0
+  ;;
+*"disk-nix-bcache-property /dev/bcache1 writearound cache_mode"*)
+  echo "synthetic bcache property failure for disk-nix recovery coverage" >&2
+  exit 78
+  ;;
+esac
+exec "$bcache_property_real_sh" "\$@"
+EOF
+
+cat > "$bcache_property_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$bcache_property_disk_nix" "\$@"
+EOF
+
+chmod +x "$bcache_property_tools/sh" "$bcache_property_tools/disk-nix"
+
+bcache_property_spec="$tmpdir/bcache-property-spec.json"
+bcache_property_json="$tmpdir/bcache-property-apply.json"
+bcache_property_report="$tmpdir/bcache-property-report.json"
+bcache_property_receipt="$tmpdir/bcache-property-receipt.json"
+
+jq -n '{
+  caches: {
+    "writeback-cache": {
+      path: "/dev/bcache1",
+      properties: {
+        "bcache.cache-mode": "writearound"
+      }
+    }
+  },
+  apply: {
+    allowPropertyChanges: true
+  }
+}' > "$bcache_property_spec"
+
+if PATH="$bcache_property_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$bcache_property_spec" \
+  --execute \
+  --report-out "$bcache_property_report" \
+  --receipt-out "$bcache_property_receipt" \
+  --json > "$bcache_property_json"; then
+  echo "expected synthetic bcache property failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/dev/bcache1"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 78
+  and .executionResults[1].argv == ["sh", "-c", "printf '\''%s\\n'\'' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"", "disk-nix-bcache-property", "/dev/bcache1", "writearound", "cache_mode"]
+  and (.executionResults[1].stderr | contains("synthetic bcache property failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "caches:writeback-cache:set-property:bcache.cache-mode"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["sh", "-c", "printf '\''%s\\n'\'' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"", "disk-nix-bcache-property", "/dev/bcache1", "writearound", "cache_mode"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["caches:writeback-cache:set-property:bcache.cache-mode"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", "/dev/bcache1", "state"]))
+    and (.commands | any(.argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", "/dev/bcache1", "dirty_data"]))
+    and (.commands | any(.argv == ["disk-nix", "cache", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/bcache1", "--json"]))
+    and (.notes | any(contains("cache changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", "/dev/bcache1", "cache_mode"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$bcache_property_json" >/dev/null
+
+cmp "$bcache_property_json" "$bcache_property_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "caches:writeback-cache:set-property:bcache.cache-mode"
+  and .report.partialExecutionRecovery.failedCommand == ["sh", "-c", "printf '\''%s\\n'\'' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"", "disk-nix-bcache-property", "/dev/bcache1", "writearound", "cache_mode"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$bcache_property_receipt" >/dev/null
+
 lvm_cache_tools="$tmpdir/fake-lvm-cache-tools"
 mkdir -p "$lvm_cache_tools"
 
@@ -1647,4 +1756,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property, bcache property, and LVM cache property failures"
