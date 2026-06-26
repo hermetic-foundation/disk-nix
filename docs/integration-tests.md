@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for fifty-eight failed apply paths:
+fake storage tools ahead of `PATH` for fifty-nine failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -266,6 +266,9 @@ fake storage tools ahead of `PATH` for fifty-eight failed apply paths:
   `vdostats --human-readable refreshArchive` fails
 - a VDO logical grow where fake `vdo status --name archive` succeeds and fake
   `vdo growLogical --name archive --vdoLogicalSize 4TiB` fails
+- a VDO physical grow where fake `vdo status --name archive-physical`
+  succeeds and fake `vdo growPhysical --name archive-physical` fails after the
+  reviewed backing-capacity check
 - a VDO start where fake `vdo status --name warmArchive` succeeds and fake
   `vdo start --name warmArchive` fails
 - a VDO stop where fake `vdo status --name coldArchive` succeeds and fake
@@ -445,6 +448,10 @@ The test verifies that the failed report and receipt preserve:
 - the failed `vdostats --human-readable refreshArchive` command and non-zero
   status after successful VDO status inspection, with generic read-only recovery
   actions
+- `partialExecutionRecovery.failedActionId` as
+  `vdovolumes:archive-physical:grow`
+- the failed `vdo growPhysical --name archive-physical` command and non-zero
+  status after successful VDO status inspection
 - `partialExecutionRecovery.failedActionId` as
   `vdoVolumes:archive:set-property:writePolicy`
 - the failed `vdo changeWritePolicy --name archive --writePolicy sync` command
@@ -955,7 +962,7 @@ vdev/dataset/zvol/snapshot behavior, broader MD RAID grow/member-topology and
 degraded-array variant behavior, broader multipath path
 add/remove/flush/grow/failure behavior,
 broader iSCSI LUN failure behavior, broader NFS server/export/unmount/failure
-behavior, broader VDO create/rescan/grow/start/stop/property/remove behavior,
+behavior, broader VDO create/rescan/logical-grow/physical-grow/start/stop/property/remove behavior,
 additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
@@ -972,5 +979,5 @@ rescan, multipath
 resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
-create, VDO rescan, VDO grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
+create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
 paths, and broader destructive apply behavior.
