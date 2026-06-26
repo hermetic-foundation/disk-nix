@@ -219,7 +219,10 @@ placeholders until concrete adapters are added.
   planned and suppressed action ids plus partially-suppressed group flags before
   commands are rendered. Grouping also normalizes NFS client sources back to
   exported paths and device-mapper consumers back to mapper names so export/mount
-  and dm/filesystem reconciliation are visible together.
+  and dm/filesystem reconciliation are visible together. Partially suppressed
+  groups now gate command rendering: dry-run reports remain reviewable, but
+  generated shell scripts and `apply --execute` are refused until the plan is
+  re-reviewed against fresh topology or split.
 - Runtime graph-path dependency ordering for multi-layer changes. The planner
   now applies coarse layer ordering and reports inferred dependency edges from
   declared identities and direct or multi-hop current-topology graph paths,

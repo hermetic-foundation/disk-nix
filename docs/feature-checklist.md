@@ -185,13 +185,14 @@ Update rules:
   visibility.
 - [x] **Finished:** Actionable warnings for unsafe or ambiguous current state
   instead of silent suppression.
-- [ ] **Partial:** Multi-action reconciliation now emits
+- [x] **Finished:** Multi-action reconciliation emits
   `topologyComparison.reconciliationGroups` with shared identities, planned
   action ids, suppressed action ids, counts, and partially-suppressed group
   flags before command rendering. Group identities now include NFS export/client
   mount relationships, device-mapper consumers, backing-file/loop relationships,
-  and host-visible LUN detach coverage, but more command-rendering gates are
-  still needed for complex grouped mutations.
+  and host-visible LUN detach coverage. Dry-run reports with partially
+  suppressed groups are not scriptable, and execute mode refuses them until the
+  plan is re-reviewed against fresh topology or split.
 - [ ] **Partial:** More cross-domain reconciliation is needed for grouped
   updates such as iSCSI LUN refresh, multipath refresh, partition growth,
   LUKS/LVM resize, and filesystem growth.

@@ -693,8 +693,11 @@ pool import, LVM cache detach, and property actions that have no warning diagnos
 `topologyComparison.reconciliationGroups` groups related actions that share a
 target, backing object, portal, path, mountpoint, or parent identity before
 suppression, records all action ids plus remaining planned and suppressed
-action ids, and marks `partiallySuppressed` when command rendering will proceed
-with only part of a related group; inactive LVM objects,
+action ids, and marks `partiallySuppressed` when only part of a related group
+remains actionable after current-topology suppression. Partially suppressed
+groups keep dry-run reports reviewable, but generated shell scripts and
+`apply --execute` are refused until the plan is refreshed against current
+topology or split into safer groups; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
 inactive LUKS open targets, active LUKS close targets, still-present LUKS
 keyslots/tokens selected for removal, loop devices mapped to different backing

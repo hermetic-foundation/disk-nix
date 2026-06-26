@@ -1992,6 +1992,10 @@ fn script_refusal_message(report: &ExecutionReport) -> String {
         report.topology_comparison.as_ref().map_or(0, |comparison| {
             comparison.summary.graph_dependency_conflict_count
         });
+    let partially_suppressed_group_count =
+        report.topology_comparison.as_ref().map_or(0, |comparison| {
+            comparison.summary.partially_suppressed_group_count
+        });
     let mut reasons = Vec::new();
     if !report.apply.can_execute() {
         reasons.push(format!(
@@ -2002,6 +2006,11 @@ fn script_refusal_message(report: &ExecutionReport) -> String {
     if graph_dependency_conflict_count > 0 {
         reasons.push(format!(
             "{graph_dependency_conflict_count} graph dependency conflict(s) require plan splitting or ordering review"
+        ));
+    }
+    if partially_suppressed_group_count > 0 {
+        reasons.push(format!(
+            "{partially_suppressed_group_count} partially suppressed reconciliation group(s) require fresh-topology review or plan splitting"
         ));
     }
     if !report.command_summary.all_commands_ready() {

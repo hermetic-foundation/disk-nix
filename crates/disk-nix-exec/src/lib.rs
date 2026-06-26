@@ -54,6 +54,8 @@ impl ExecutionReport {
         self.status == ExecutionStatus::DryRun
             && self.apply.can_execute()
             && graph_dependency_conflict_count(self.topology_comparison.as_ref()) == 0
+            && partially_suppressed_reconciliation_group_count(self.topology_comparison.as_ref())
+                == 0
     }
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
@@ -63,7 +65,9 @@ impl ExecutionReport {
     #[must_use]
     pub fn to_shell_script(&self) -> Option<String> {
         (self.apply.can_execute()
-            && graph_dependency_conflict_count(self.topology_comparison.as_ref()) == 0)
+            && graph_dependency_conflict_count(self.topology_comparison.as_ref()) == 0
+            && partially_suppressed_reconciliation_group_count(self.topology_comparison.as_ref())
+                == 0)
             .then(|| render_shell_script(self))
     }
 }
@@ -254,6 +258,8 @@ fn prepare_execution_with_runner_and_tool_checker(
     let verification_summary = summarize_verification_plan(&verification_plan);
     let tool_requirements =
         summarize_tool_requirements(&command_plan, &verification_plan, tool_exists);
+    let partially_suppressed_group_count =
+        partially_suppressed_reconciliation_group_count(topology_comparison.as_ref());
     if !apply.can_execute() {
         let blocked_count = apply.blocked_count;
         return attach_recovery_actions(ExecutionReport {
@@ -273,24 +279,32 @@ fn prepare_execution_with_runner_and_tool_checker(
     }
 
     match mode {
-        ExecutionMode::DryRun => attach_recovery_actions(ExecutionReport {
-            apply,
-            status: ExecutionStatus::DryRun,
-            topology_comparison,
-            command_summary,
-            tool_requirements,
-            verification_summary,
-            messages: vec![format!(
+        ExecutionMode::DryRun => {
+            let mut messages = vec![format!(
                 "dry run only: generated {} command plan step(s) and {} verification step(s), no storage commands were run",
                 command_plan.len(),
                 verification_plan.len()
-            )],
-            command_plan,
-            verification_plan,
-            execution_results: Vec::new(),
-            partial_execution_recovery: None,
-            recovery_actions: Vec::new(),
-        }),
+            )];
+            if partially_suppressed_group_count > 0 {
+                messages.push(format!(
+                    "dry run requires reconciliation review before execution: {partially_suppressed_group_count} partially suppressed reconciliation group(s) need fresh-topology review or plan splitting"
+                ));
+            }
+            attach_recovery_actions(ExecutionReport {
+                apply,
+                status: ExecutionStatus::DryRun,
+                topology_comparison,
+                command_summary,
+                tool_requirements,
+                verification_summary,
+                messages,
+                command_plan,
+                verification_plan,
+                execution_results: Vec::new(),
+                partial_execution_recovery: None,
+                recovery_actions: Vec::new(),
+            })
+        }
         ExecutionMode::Execute => {
             if !command_summary.all_commands_ready() {
                 return attach_recovery_actions(ExecutionReport {
@@ -328,6 +342,24 @@ fn prepare_execution_with_runner_and_tool_checker(
                     recovery_actions: Vec::new(),
                     messages: vec![format!(
                         "execute refused: current topology comparison reported {graph_dependency_conflict_count} graph dependency conflict(s); split the plan or review ordering before mutating storage"
+                    )],
+                });
+            }
+            if partially_suppressed_group_count > 0 {
+                return attach_recovery_actions(ExecutionReport {
+                    apply,
+                    status: ExecutionStatus::NotReady,
+                    topology_comparison,
+                    command_summary,
+                    tool_requirements,
+                    command_plan,
+                    verification_summary,
+                    verification_plan,
+                    execution_results: Vec::new(),
+                    partial_execution_recovery: None,
+                    recovery_actions: Vec::new(),
+                    messages: vec![format!(
+                        "execute refused: current topology comparison reported {partially_suppressed_group_count} partially suppressed reconciliation group(s); re-plan against fresh topology or split the grouped mutation before mutating storage"
                     )],
                 });
             }
@@ -399,6 +431,23 @@ fn missing_tools_message(tool_requirements: &[ToolRequirement]) -> Option<String
 fn graph_dependency_conflict_count(comparison: Option<&TopologyComparison>) -> usize {
     comparison.map_or(0, |comparison| {
         comparison.summary.graph_dependency_conflict_count
+    })
+}
+
+fn partially_suppressed_reconciliation_group_count(
+    comparison: Option<&TopologyComparison>,
+) -> usize {
+    comparison.map_or(0, |comparison| {
+        let summary_count = comparison.summary.partially_suppressed_group_count;
+        if summary_count > 0 {
+            summary_count
+        } else {
+            comparison
+                .reconciliation_groups
+                .iter()
+                .filter(|group| group.partially_suppressed)
+                .count()
+        }
     })
 }
 
@@ -544,18 +593,21 @@ fn not_ready_recovery_actions(report: &ExecutionReport) -> Vec<RecoveryAction> {
         .count();
     let graph_dependency_conflict_count =
         graph_dependency_conflict_count(report.topology_comparison.as_ref());
+    let partially_suppressed_group_count =
+        partially_suppressed_reconciliation_group_count(report.topology_comparison.as_ref());
     vec![
         RecoveryAction {
             kind: RecoveryActionKind::ResolveInputs,
             summary: "Resolve unresolved command inputs before requesting execution".to_string(),
             commands: Vec::new(),
             notes: vec![format!(
-                "{} command(s) need desired size, {} need domain command implementation, {} are manual-only, {} required tool(s) are missing, {} graph dependency conflict(s) need plan splitting or ordering review",
+                "{} command(s) need desired size, {} need domain command implementation, {} are manual-only, {} required tool(s) are missing, {} graph dependency conflict(s) need plan splitting or ordering review, {} partially suppressed reconciliation group(s) need fresh-topology review",
                 report.command_summary.needs_desired_size_count,
                 report.command_summary.needs_domain_implementation_count,
                 report.command_summary.manual_only_count,
                 missing_tool_count,
-                graph_dependency_conflict_count
+                graph_dependency_conflict_count,
+                partially_suppressed_group_count
             )],
         },
         RecoveryAction {
@@ -25605,6 +25657,92 @@ mod tests {
                     .notes
                     .iter()
                     .any(|note| note.contains("1 graph dependency conflict"))
+        }));
+    }
+
+    #[test]
+    fn execute_refuses_partially_suppressed_reconciliation_groups_before_running_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "exports": {
+                  "/srv/share": {
+                    "operation": "export",
+                    "client": "192.0.2.0/24",
+                    "options": "rw,sync,no_subtree_check"
+                  }
+                },
+                "nfs": {
+                  "mounts": {
+                    "/mnt/share": {
+                      "operation": "mount",
+                      "source": "nas.example.com:/srv/share",
+                      "fsType": "nfs4"
+                    }
+                  }
+                }
+              },
+              "apply": {}
+            }"#,
+        )
+        .expect("document parses");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "nfs-export:/srv/share:192.0.2.0/24",
+                NodeKind::NfsExport,
+                "/srv/share",
+            )
+            .with_property("nfs.export", "/srv/share")
+            .with_property("nfs.export-client", "192.0.2.0/24")
+            .with_property("nfs.exportfs", "true")
+            .with_property("nfs.export-option-rw", "true")
+            .with_property("nfs.export-option-sync", "true")
+            .with_property("nfs.export-option-no-subtree-check", "true"),
+        );
+        let plan = compare_plan_with_topology(plan, &graph);
+        let dry_run = prepare_execution(&plan, policy.clone(), ExecutionMode::DryRun);
+
+        assert_eq!(dry_run.status, ExecutionStatus::DryRun);
+        assert_eq!(
+            dry_run
+                .topology_comparison
+                .as_ref()
+                .map(|comparison| comparison.summary.partially_suppressed_group_count),
+            Some(1)
+        );
+        assert!(!dry_run.can_apply());
+        assert!(dry_run.to_shell_script().is_none());
+        assert!(dry_run.messages.iter().any(|message| {
+            message.contains("partially suppressed reconciliation group")
+                && message.contains("fresh-topology review")
+        }));
+
+        let mut ran_commands = false;
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |_| {
+            ran_commands = true;
+            CommandRunResult {
+                success: true,
+                status_code: Some(0),
+                stdout: String::new(),
+                stderr: String::new(),
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::NotReady);
+        assert!(!ran_commands);
+        assert!(report.execution_results.is_empty());
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.messages.iter().any(|message| {
+            message.contains("partially suppressed reconciliation group")
+                && message.contains("execute refused")
+        }));
+        assert!(report.recovery_actions.iter().any(|action| {
+            action.kind == RecoveryActionKind::ResolveInputs
+                && action
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("1 partially suppressed reconciliation group"))
         }));
     }
 
