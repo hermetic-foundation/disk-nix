@@ -79,6 +79,12 @@ network-storage identities for iSCSI session targets, host-side LUN paths, and
 NFS export path/client selectors, and native storage service flags for LVM, LVM
 thin, LVM VDO, MD RAID, multipath, ZFS extra pools, bcache, and NFS server
 support.
+It also includes `declarativeHandoff`, a compact index of native NixOS surfaces
+that should be checked or edited after successful imperative changes:
+`fileSystems` mountpoints, `swapDevices`, LUKS mapper names, NFS export
+selectors, iSCSI session targets, whether iSCSI boot is active, and generated
+artifact paths such as `/etc/disk-nix/spec.json`, `/etc/disk-nix/steady-state.json`,
+and configured apply script/report/receipt outputs.
 Planner and apply tooling can use it to compare imperative storage changes
 with the declarative steady state that NixOS will keep enforcing.
 

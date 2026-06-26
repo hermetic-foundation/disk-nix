@@ -2906,6 +2906,22 @@
                     and .iscsi.openiscsi.discoverPortal == "192.0.2.10:3260"
                     and .iscsi.bootInitiator.enable == true
                     and .iscsi.bootInitiator.discoverPortal == "192.0.2.10:3260"
+                    and (.declarativeHandoff.fileSystems | index("/mnt/local-mount") != null)
+                    and (.declarativeHandoff.fileSystems | index("/mnt/local-unmount") == null)
+                    and (.declarativeHandoff.swapDevices | index("/dev/disk/by-label/swap") != null)
+                    and (.declarativeHandoff.swapDevices | index("/dev/disk/by-label/destroyed-swap") == null)
+                    and (.declarativeHandoff.luksDevices | index("cryptroot") != null)
+                    and (.declarativeHandoff.luksDevices | index("cryptclosed") == null)
+                    and (.declarativeHandoff.nfsExports | index("/srv/share 192.0.2.0/24") != null)
+                    and (.declarativeHandoff.nfsExports | index("/srv/old-share 192.0.2.55") == null)
+                    and (.declarativeHandoff.iscsiSessions | index("iqn.2026-06.example:storage.root") != null)
+                    and (.declarativeHandoff.iscsiSessions | index("iqn.2026-06.example:storage.logout") == null)
+                    and .declarativeHandoff.iscsiBoot == true
+                    and (.declarativeHandoff.generatedFiles | index("/etc/disk-nix/spec.json") != null)
+                    and (.declarativeHandoff.generatedFiles | index("/etc/disk-nix/steady-state.json") != null)
+                    and (.declarativeHandoff.generatedFiles | index("/run/disk-nix/apply.sh") != null)
+                    and (.declarativeHandoff.generatedFiles | index("/run/disk-nix/apply-report.json") != null)
+                    and (.declarativeHandoff.generatedFiles | index("/run/disk-nix/apply-receipt.json") != null)
                     and .nativeServices.lvm == true
                     and .nativeServices.lvmThin == true
                     and .nativeServices.lvmVdo == true

@@ -1447,6 +1447,13 @@ let
       else
         iscsiDiscoverPortal;
   };
+  generatedArtifactPaths = [
+    "/etc/disk-nix/spec.json"
+    "/etc/disk-nix/steady-state.json"
+  ]
+  ++ lib.optional (cfg.apply.scriptOut != null) cfg.apply.scriptOut
+  ++ lib.optional (cfg.apply.reportOut != null) cfg.apply.reportOut
+  ++ lib.optional (cfg.apply.receiptOut != null) cfg.apply.receiptOut;
   steadyState = {
     version = 1;
     fileSystems = nativeFileSystems;
@@ -1490,6 +1497,15 @@ let
     iscsi = {
       openiscsi = nativeOpenIscsi;
       bootInitiator = nativeBootIscsi;
+    };
+    declarativeHandoff = {
+      fileSystems = lib.attrNames nativeFileSystems;
+      swapDevices = activeSwapDevicePaths;
+      luksDevices = lib.attrNames activeLuksDeviceConfig;
+      nfsExports = activeNfsExportSelectors;
+      iscsiSessions = activeIscsiSessionIdentities;
+      iscsiBoot = cfg.iscsi.boot.enable;
+      generatedFiles = generatedArtifactPaths;
     };
     nativeServices = {
       lvm = hasActiveLvm || hasActiveVdoVolumes;

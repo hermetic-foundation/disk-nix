@@ -123,6 +123,9 @@ changes include:
 - adding assertions for ambiguous identities
 - deriving additional steady-state NixOS options from existing active
   declarations
+- adding fields to `/etc/disk-nix/steady-state.json`, including
+  `declarativeHandoff` entries for native NixOS surfaces and generated
+  artifacts
 - adding read-only validation or report artifacts
 
 Incompatible option changes require migration notes and, where possible, module
