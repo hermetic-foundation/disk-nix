@@ -168,6 +168,16 @@
           ];
           text = builtins.readFile ./scripts/integration-nfs-smoke.sh;
         };
+        integrationVdoSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-vdo-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.vdo
+          ];
+          text = builtins.readFile ./scripts/integration-vdo-smoke.sh;
+        };
         integrationVmSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-vm-smoke";
           runtimeInputs = [
@@ -179,6 +189,7 @@
             integrationMdraidSmoke
             integrationZfsSmoke
             integrationNfsSmoke
+            integrationVdoSmoke
             pkgs.systemd
           ];
           text = builtins.readFile ./scripts/integration-vm-smoke.sh;
@@ -1477,6 +1488,7 @@
           integration-mdraid-smoke = integrationMdraidSmoke;
           integration-zfs-smoke = integrationZfsSmoke;
           integration-nfs-smoke = integrationNfsSmoke;
+          integration-vdo-smoke = integrationVdoSmoke;
           integration-vm-smoke = integrationVmSmoke;
           integration-vm-test = integrationVmTest;
           integration-loop-smoke = integrationLoopSmoke;
@@ -1542,6 +1554,13 @@
             program = "${integrationNfsSmoke}/bin/disk-nix-integration-nfs-smoke";
             meta = {
               description = "Root-only NFS client disk-nix smoke integration harness";
+            };
+          };
+          integration-vdo-smoke = {
+            type = "app";
+            program = "${integrationVdoSmoke}/bin/disk-nix-integration-vdo-smoke";
+            meta = {
+              description = "Root-only VDO disk-nix smoke integration harness";
             };
           };
           integration-vm-smoke = {
@@ -1646,6 +1665,16 @@
             ${pkgs.gnugrep}/bin/grep -q 'mount", "-o", ("remount,"' ${./scripts/integration-nfs-smoke.sh}
             touch "$out"
           '';
+          integrationVdoSmoke = pkgs.runCommand "disk-nix-integration-vdo-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-vdo-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vdo-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_VDO_NAME ${./scripts/integration-vdo-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'vdo status --name' ${./scripts/integration-vdo-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'vdostats --human-readable' ${./scripts/integration-vdo-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'vdo", "status", "--name"' ${./scripts/integration-vdo-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'vdostats", "--human-readable"' ${./scripts/integration-vdo-smoke.sh}
+            touch "$out"
+          '';
           integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vm-smoke.sh}
@@ -1656,6 +1685,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-mdraid-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-zfs-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-nfs-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-vdo-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
           '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''

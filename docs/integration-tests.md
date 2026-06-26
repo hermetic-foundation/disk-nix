@@ -58,6 +58,11 @@ disposable export supplied through `DISK_NIX_NFS_SOURCE`. It is not part of the
 default VM suite because the flake VM test does not yet provision a server
 export.
 
+The VDO harness is packaged with the VM suite and can be selected explicitly
+with `DISK_NIX_VM_HARNESSES=vdo` when the guest has an existing disposable VDO
+volume named by `DISK_NIX_VDO_NAME`. It is not part of the default VM suite
+because the flake VM test does not yet provision a VDO volume.
+
 ## Loop-backed smoke test
 
 The repository includes a root-only loop-backed smoke harness:
@@ -337,6 +342,40 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-nfs-smoke.sh
 ```
 
+## VDO smoke test
+
+The repository also includes a root-only VDO harness for existing lab volumes:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_VDO_NAME=archive \
+  nix run .#integration-vdo-smoke
+```
+
+When enabled, it:
+
+- verifies `vdo status --name <name>` can read the selected VDO volume
+- verifies `vdostats --human-readable <name>` can read runtime counters
+- verifies `disk-nix inspect <name> --json` sees VDO topology
+- executes a `vdoVolumes.<name>.operation = "rescan"` apply plan
+- verifies the rendered `vdo status --name <name>`,
+  `vdostats --human-readable <name>`, and `disk-nix inspect <name>` commands
+  succeeded
+- verifies the generated JSON report was written
+
+This test does not create, grow, start, stop, or remove a VDO volume. It still
+requires destructive opt-in because it reads real VDO management state and is
+intended for disposable lab hosts where the named volume can be safely probed.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_VDO_NAME=archive \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-vdo-smoke.sh
+```
+
 ## Flake coverage
 
 `nix flake check` does not run destructive integration tests. It does validate
@@ -344,8 +383,9 @@ that the loop smoke harnesses parse, remain opt-in, and still contain the
 expected loop, filesystem setup, resize, mount, Btrfs scrub, bcachefs format,
 bcachefs scrub, LUKS format, LUKS open, LUKS close, LVM create, LVM rescan, MD
 RAID create, MD RAID rescan, ZFS pool create, ZFS scrub, NFS mount, NFS rescan,
-NFS remount, and VM orchestration guard steps. This keeps the harnesses
-available and packaged while preserving safe default checks.
+NFS remount, VDO status, VDO stats, VDO rescan, and VM orchestration guard
+steps. This keeps the harnesses available and packaged while preserving safe
+default checks.
 
 ## Remaining integration coverage
 
@@ -355,5 +395,6 @@ tests for broader LUKS format/grow/keyslot/token behavior, broader LVM
 LV/thin/cache/device-topology behavior, broader bcachefs multi-device and
 member-topology behavior, broader ZFS vdev/dataset/zvol/snapshot behavior,
 broader MD RAID grow/member-topology behavior, multipath, iSCSI, broader NFS
-server/export/unmount/failure behavior, VDO, NVMe namespace operations, failure
-recovery, and broader destructive apply behavior.
+server/export/unmount/failure behavior, broader VDO create/grow/start/stop/
+property/remove behavior, NVMe namespace operations, failure recovery, and
+broader destructive apply behavior.

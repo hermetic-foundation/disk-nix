@@ -63,6 +63,9 @@ run_harness() {
     nfs)
       disk-nix-integration-nfs-smoke
       ;;
+    vdo)
+      disk-nix-integration-vdo-smoke
+      ;;
     *)
       echo "unknown VM integration harness: $1" >&2
       exit 2
