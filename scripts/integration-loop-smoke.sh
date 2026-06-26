@@ -19,7 +19,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" jq losetup mkfs.ext4 truncate; do
+for tool in "$disk_nix_bin" blockdev jq losetup mkfs.ext4 resize2fs truncate; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -40,6 +40,8 @@ trap cleanup EXIT
 backing="$tmpdir/disk-nix-loop-smoke.img"
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
+grow_spec="$tmpdir/grow-spec.json"
+grow_report="$tmpdir/grow-report.json"
 
 truncate --size 64M "$backing"
 loopdev="$(losetup --find --show "$backing")"
@@ -75,4 +77,40 @@ jq -e '
 
 cmp "$tmpdir/apply.json" "$report" >/dev/null
 
-echo "loop-backed integration smoke test passed for $loopdev"
+before_size="$(blockdev --getsize64 "$loopdev")"
+truncate --size 96M "$backing"
+losetup --set-capacity "$loopdev"
+after_size="$(blockdev --getsize64 "$loopdev")"
+if (( after_size <= before_size )); then
+  echo "loop device did not report growth after backing file resize" >&2
+  exit 1
+fi
+
+jq -n --arg loopdev "$loopdev" '{
+  version: 1,
+  filesystems: {
+    loopSmoke: {
+      device: $loopdev,
+      fsType: "ext4",
+      mountpoint: $loopdev,
+      resizePolicy: "grow-only"
+    }
+  }
+}' > "$grow_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$grow_spec" \
+  --execute \
+  --report-out "$grow_report" \
+  --json > "$tmpdir/grow-apply.json"
+
+jq -e --arg loopdev "$loopdev" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == "filesystem:loopSmoke:grow")
+    | .commands | any(.argv == ["resize2fs", $loopdev]))
+  and (.executionResults | any(.argv == ["resize2fs", $loopdev] and .success == true))
+' "$tmpdir/grow-apply.json" >/dev/null
+
+cmp "$tmpdir/grow-apply.json" "$grow_report" >/dev/null
+
+echo "loop-backed integration smoke test passed for $loopdev, including ext4 grow"

@@ -1395,7 +1395,9 @@
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'losetup --set-capacity' ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mkfs.ext4' ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'resize2fs' ${./scripts/integration-loop-smoke.sh}
             touch "$out"
           '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''

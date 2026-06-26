@@ -22,6 +22,8 @@ When enabled, it:
 - formats the temporary loop device with ext4
 - verifies `disk-nix inspect <loop> --json` can see the real loop node
 - executes a safe `loopDevices.<loop>.operation = "rescan"` apply plan
+- grows the temporary backing file, refreshes the loop device capacity, and
+  executes an ext4 `resizePolicy = "grow-only"` apply plan
 - verifies the generated JSON report was written and all executed commands
   succeeded
 - detaches the loop device and removes the backing file during cleanup
