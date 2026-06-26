@@ -207,6 +207,12 @@ iSCSI session portals can derive the regular open-iscsi discovery portal, while
 logout lifecycle declarations stay in the planner spec without being treated as
 active auto-login targets. It keeps lifecycle domains available in the same
 planner spec.
+The module also writes `/etc/disk-nix/steady-state.json` and
+`/etc/disk-nix/declarative-handoff.nix`. The JSON file is machine-readable
+inventory for automation. The Nix file is a reviewable module snippet derived
+from active steady-state surfaces; it is not imported automatically, and should
+be copied selectively into real NixOS configuration after successful imperative
+changes.
 Override `toolPackages` to pin alternate tool builds or trim unused domains;
 the default set includes the storage-domain tools plus bash shell wrappers,
 coreutils file helpers, cloud-utils `growpart`, and util-linux helpers used by

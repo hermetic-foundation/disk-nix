@@ -131,7 +131,9 @@ behavior across real storage stacks.
   network-storage identities, iSCSI settings, and storage service enablement.
   The steady-state inventory also includes a `declarativeHandoff` index for
   post-mutation review of native NixOS mount, swap, LUKS, NFS export, iSCSI,
-  and generated artifact surfaces.
+  and generated artifact surfaces, plus `/etc/disk-nix/declarative-handoff.nix`
+  as a reviewable Nix module snippet for copying steady-state declarations into
+  real NixOS configuration.
   Module-managed apply and validate services can emit review scripts, JSON
   reports, and invocation-bound receipt files.
 - Current-topology reconciliation for generated zram properties, including
@@ -205,9 +207,10 @@ manual-review guidance, or non-ready command plans instead of guessing.
   ordering and stronger conflict resolution before execution.
 - More NixOS steady-state synthesis for lifecycle-managed resources after
   mutation. The module now emits a `declarativeHandoff` index for mounts,
-  crypttab/LUKS, swap, NFS exports, iSCSI boot/session state, and generated
-  files, but automated editing of declarative NixOS configuration after
-  successful mutation is still not implemented.
+  crypttab/LUKS, swap, NFS exports, iSCSI boot/session state, generated files,
+  and a reviewable `/etc/disk-nix/declarative-handoff.nix` Nix module snippet,
+  but automated editing of declarative NixOS configuration after successful
+  mutation is still not implemented.
 - Deeper domain-specific recovery and rollback recipes for partially completed
   apply runs. Apply reports now expose generic recovery actions, targeted
   failed-action domain recovery guidance, current-topology roll-forward review,

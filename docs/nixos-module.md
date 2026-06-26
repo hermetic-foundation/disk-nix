@@ -84,9 +84,18 @@ that should be checked or edited after successful imperative changes:
 `fileSystems` mountpoints, `swapDevices`, LUKS mapper names, NFS export
 selectors, iSCSI session targets, whether iSCSI boot is active, and generated
 artifact paths such as `/etc/disk-nix/spec.json`, `/etc/disk-nix/steady-state.json`,
-and configured apply script/report/receipt outputs.
+`/etc/disk-nix/declarative-handoff.nix`, and configured apply
+script/report/receipt outputs.
 Planner and apply tooling can use it to compare imperative storage changes
 with the declarative steady state that NixOS will keep enforcing.
+
+The module also writes `/etc/disk-nix/declarative-handoff.nix`. This is a
+reviewable Nix module snippet containing the native steady-state declarations
+derived from active disk-nix options, including `fileSystems`, `swapDevices`,
+`zramSwap`, initrd LUKS devices, supported filesystems, NFS exports, iSCSI
+settings, and native storage service flags. It is intentionally not imported
+automatically. Operators should review it after successful imperative mutation
+and copy the relevant declarations into their real NixOS configuration.
 
 `toolPackages` defaults to the storage tools used by the probe and executor
 adapters, including bash shell wrappers, coreutils file helpers, Btrfs,

@@ -211,8 +211,10 @@ Update rules:
   storage domains.
 - [x] **Finished:** Service enablement and boot/initrd integration hints for
   supported storage declarations.
-- [ ] **Desired:** Automated editing or generation of declarative NixOS
-  configuration after successful imperative mutation.
+- [ ] **Partial:** The module generates a reviewable
+  `/etc/disk-nix/declarative-handoff.nix` Nix module snippet after evaluation,
+  but automatic editing of the user's declarative NixOS configuration after
+  successful imperative mutation is still not implemented.
 - [ ] **Partial:** More steady-state synthesis is needed for lifecycle-managed
   resources after mutation.
 
