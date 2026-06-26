@@ -93,12 +93,14 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for eight failed apply paths:
+fake storage tools ahead of `PATH` for nine failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
 - a ZFS snapshot rollback where fake `zfs list` succeeds and fake
   `zfs rollback tank/home@before` fails
+- an NVMe namespace create where fake `nvme list-ns` succeeds and fake
+  `nvme create-ns /dev/nvme0 --nsze-si 100G --ncap-si 100G` fails
 - an NVMe namespace destroy where fake `nvme detach-ns` succeeds and fake
   `nvme delete-ns /dev/nvme4 --namespace-id 9` fails
 - an iSCSI session logout where fake `iscsiadm --logout` fails for the reviewed
@@ -122,6 +124,10 @@ The test verifies that the failed report and receipt preserve:
 - `partialExecutionRecovery.failedActionId` as
   `snapshot:tank/home@before:rollback`
 - the failed `zfs rollback tank/home@before` command and non-zero status
+- `partialExecutionRecovery.failedActionId` as
+  `nvmenamespaces:/dev/nvme0:create`
+- the failed `nvme create-ns /dev/nvme0 --nsze-si 100G --ncap-si 100G` command
+  and non-zero status after namespace inventory inspection
 - `partialExecutionRecovery.failedActionId` as
   `nvmenamespaces:/dev/nvme4:destroy`
 - the failed `nvme delete-ns /dev/nvme4 --namespace-id 9` command and
@@ -606,8 +612,9 @@ broader MD RAID grow/member-topology behavior, broader multipath path
 add/remove/replace/flush/grow/failure behavior, broader iSCSI LUN failure
 behavior, broader NFS server/export/unmount/failure behavior, broader VDO
 create/grow/start/stop/property/remove behavior, NVMe namespace
-create/grow/attach/detach/delete/failure behavior, additional cache variant
-failure behavior, property mutation across more supported domains, recovery
-behavior beyond the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace
-delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM
-cache property failed-command paths, and broader destructive apply behavior.
+grow/attach/detach/delete/failure behavior, additional cache variant failure
+behavior, property mutation across more supported domains, recovery behavior
+beyond the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace create,
+NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache
+detach, and LVM cache property failed-command paths, and broader destructive
+apply behavior.

@@ -217,6 +217,99 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$rollback_receipt" >/dev/null
 
+nvme_create_tools="$tmpdir/fake-nvme-create-tools"
+mkdir -p "$nvme_create_tools"
+
+cat > "$nvme_create_tools/nvme" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "create-ns" ]]; then
+  echo "synthetic nvme namespace create failure for disk-nix recovery coverage" >&2
+  exit 81
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$nvme_create_tools/nvme"
+
+nvme_create_spec="$tmpdir/nvme-create-spec.json"
+nvme_create_json="$tmpdir/nvme-create-apply.json"
+nvme_create_report="$tmpdir/nvme-create-report.json"
+nvme_create_receipt="$tmpdir/nvme-create-receipt.json"
+
+jq -n '{
+  nvmeNamespaces: {
+    "/dev/nvme0": {
+      operation: "create",
+      desiredSize: "100G",
+      namespaceId: "4",
+      controllers: "0x1"
+    }
+  },
+  apply: {
+    allowDestructive: true,
+    allowOffline: true
+  }
+}' > "$nvme_create_spec"
+
+if PATH="$nvme_create_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$nvme_create_spec" \
+  --execute \
+  --report-out "$nvme_create_report" \
+  --receipt-out "$nvme_create_receipt" \
+  --json > "$nvme_create_json"; then
+  echo "expected synthetic NVMe namespace create failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 4
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["nvme", "list-ns", "/dev/nvme0", "--all", "--output-format=json"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 81
+  and .executionResults[1].argv == ["nvme", "create-ns", "/dev/nvme0", "--nsze-si", "100G", "--ncap-si", "100G"]
+  and (.executionResults[1].stderr | contains("synthetic nvme namespace create failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "nvmenamespaces:/dev/nvme0:create"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["nvme", "create-ns", "/dev/nvme0", "--nsze-si", "100G", "--ncap-si", "100G"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["nvmenamespaces:/dev/nvme0:create"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["nvme", "list-ns", "/dev/nvme0", "--all", "--output-format=json"]))
+    and (.commands | any(.argv == ["nvme", "list-subsys", "--output-format=json"]))
+    and (.notes | any(contains("NVMe namespace changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["nvme", "list-ns", "/dev/nvme0", "--all", "--output-format=json"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["nvme", "list-subsys", "--output-format=json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$nvme_create_json" >/dev/null
+
+cmp "$nvme_create_json" "$nvme_create_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "nvmenamespaces:/dev/nvme0:create"
+  and .report.partialExecutionRecovery.failedCommand == ["nvme", "create-ns", "/dev/nvme0", "--nsze-si", "100G", "--ncap-si", "100G"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$nvme_create_receipt" >/dev/null
+
 nvme_tools="$tmpdir/fake-nvme-tools"
 mkdir -p "$nvme_tools"
 
@@ -773,4 +866,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property failures"
