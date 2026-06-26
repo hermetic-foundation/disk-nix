@@ -2138,6 +2138,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'NVMe/TCP multipath fixture' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'nvme_tcp_multipath_fixture_preserves_native_path_state' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'uuid.aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'nfs_server_client_fixture_merges_mount_usage_and_export_policy' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'nfs.export-option-sec", "krb5p' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'SAS enclosure fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'non-block SES enclosure records' ${./docs/status.md}

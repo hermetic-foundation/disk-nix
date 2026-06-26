@@ -3158,6 +3158,116 @@ Device                         1K-blocks     Used Available Use% Space saving%
       }]
     }"#;
 
+    const NFS_SERVER_CLIENT_FINDMNT: &[u8] = br#"{
+      "filesystems": [
+        {
+          "target": "/mnt/projects",
+          "source": "nas01.example:/exports/projects",
+          "fstype": "nfs4",
+          "options": "rw,relatime,vers=4.2,sec=krb5p,proto=tcp,local_lock=none",
+          "size": 1099511627776,
+          "used": 274877906944,
+          "avail": 824633720832
+        }
+      ]
+    }"#;
+
+    const NFS_SERVER_CLIENT_NFSSTAT: &[u8] = br#"
+nas01.example:/exports/projects mounted on /mnt/projects:
+   Flags: rw,relatime,vers=4.2,rsize=1048576,wsize=1048576,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=krb5p,clientaddr=10.20.30.40,local_lock=none,addr=10.20.0.10,port=2049,mountaddr=10.20.0.10,mountvers=4,mountproto=tcp,lookupcache=positive,fsc
+   Caps: caps=0x3fffdf,wtmult=512,dtsize=32768,bsize=0
+   Sec: flavor=390003,pseudoflavor=390003
+   Age: 456
+"#;
+
+    const NFS_SERVER_CLIENT_EXPORTFS: &[u8] = br#"
+/exports/projects
+        10.20.0.0/16(rw,sync,no_subtree_check,sec=krb5p,root_squash)
+        [2001:db8:120::]/64(ro,sync,no_subtree_check,sec=sys,root_squash)
+"#;
+
+    #[test]
+    fn nfs_server_client_fixture_merges_mount_usage_and_export_policy() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            findmnt::normalize_findmnt_json(NFS_SERVER_CLIENT_FINDMNT)
+                .expect("NFS findmnt fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            nfs::normalize_nfsstat_mounts(NFS_SERVER_CLIENT_NFSSTAT)
+                .expect("NFS mount fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            nfs::normalize_exportfs_verbose(NFS_SERVER_CLIENT_EXPORTFS)
+                .expect("NFS export fixture should parse"),
+        );
+
+        let mount = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "mount:/mnt/projects")
+            .expect("NFS client mount should exist");
+        assert_eq!(mount.kind, NodeKind::NfsMount);
+        assert_eq!(mount.path.as_deref(), Some("/mnt/projects"));
+        assert_eq!(mount.size_bytes, Some(1_099_511_627_776));
+        assert_eq!(
+            mount.usage.as_ref().and_then(|usage| usage.used_bytes),
+            Some(274_877_906_944)
+        );
+        assert_eq!(
+            mount.usage.as_ref().and_then(|usage| usage.free_bytes),
+            Some(824_633_720_832)
+        );
+        assert_has_property(mount, "mount.source", "nas01.example:/exports/projects");
+        assert_has_property(mount, "mount.read-write", "true");
+        assert_has_property(mount, "nfs.source", "nas01.example:/exports/projects");
+        assert_has_property(mount, "nfs.server", "nas01.example");
+        assert_has_property(mount, "nfs.export", "/exports/projects");
+        assert_has_property(mount, "nfs.vers", "4.2");
+        assert_has_property(mount, "nfs.sec", "krb5p");
+        assert_has_property(mount, "nfs.clientaddr", "10.20.30.40");
+        assert_has_property(mount, "nfs.local-lock", "none");
+        assert_has_property(mount, "nfs.age", "456");
+
+        let mounted_export = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nfs-export:nas01.example:/exports/projects")
+            .expect("NFS source export should exist");
+        assert_eq!(mounted_export.kind, NodeKind::NfsExport);
+        assert_has_property(mounted_export, "nfs.server", "nas01.example");
+        assert_has_property(mounted_export, "nfs.export", "/exports/projects");
+
+        let subnet_export = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nfs-export:/exports/projects:10.20.0.0/16")
+            .expect("NFS exportfs subnet export should exist");
+        assert_eq!(subnet_export.kind, NodeKind::NfsExport);
+        assert_eq!(subnet_export.path.as_deref(), Some("/exports/projects"));
+        assert_has_property(subnet_export, "nfs.export-client", "10.20.0.0/16");
+        assert_has_property(subnet_export, "nfs.export-option-rw", "true");
+        assert_has_property(subnet_export, "nfs.export-option-sec", "krb5p");
+        assert_has_property(subnet_export, "nfs.export-option-root-squash", "true");
+
+        let ipv6_export = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nfs-export:/exports/projects:[2001:db8:120::]/64")
+            .expect("NFS exportfs IPv6 export should exist");
+        assert_has_property(ipv6_export, "nfs.export-client", "[2001:db8:120::]/64");
+        assert_has_property(ipv6_export, "nfs.export-option-ro", "true");
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "nfs-export:nas01.example:/exports/projects"
+                && edge.to.0 == "mount:/mnt/projects"
+                && edge.relationship == Relationship::MountedAt
+        }));
+    }
+
     #[test]
     fn shared_storage_fabric_fixture_links_iscsi_luns_and_multipath_paths() {
         let mut graph = StorageGraph::empty();
