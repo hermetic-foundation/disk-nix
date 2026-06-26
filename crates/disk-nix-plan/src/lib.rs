@@ -171,6 +171,10 @@ pub struct ActionDependencyOrder {
     pub depends_on: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unblocks: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recovery_depends_on: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recovery_unblocks: Vec<String>,
     pub notes: Vec<String>,
 }
 
@@ -1034,6 +1038,12 @@ fn dependency_order_for_actions_with_edges(
                     .cloned()
                     .unwrap_or_default(),
                 unblocks: edges.unblocks.get(&action.id).cloned().unwrap_or_default(),
+                recovery_depends_on: edges.unblocks.get(&action.id).cloned().unwrap_or_default(),
+                recovery_unblocks: edges
+                    .depends_on
+                    .get(&action.id)
+                    .cloned()
+                    .unwrap_or_default(),
                 notes: dependency_order_notes(action, direction, layer_rank, &edges),
             }
         })
@@ -1686,6 +1696,18 @@ fn dependency_order_notes(
                 graph_unblocks.join(", ")
             ));
         }
+    }
+    if let Some(recovery_depends_on) = edges.unblocks.get(&action.id) {
+        notes.push(format!(
+            "recovery review waits for dependent action(s): {}",
+            recovery_depends_on.join(", ")
+        ));
+    }
+    if let Some(recovery_unblocks) = edges.depends_on.get(&action.id) {
+        notes.push(format!(
+            "recovery review unblocks prerequisite action(s): {}",
+            recovery_unblocks.join(", ")
+        ));
     }
     notes
 }
@@ -15426,6 +15448,11 @@ mod tests {
             vec!["loopdevices:/dev/loop7:grow".to_string()]
         );
         assert_eq!(
+            backing.recovery_depends_on,
+            vec!["loopdevices:/dev/loop7:grow".to_string()]
+        );
+        assert!(backing.recovery_unblocks.is_empty());
+        assert_eq!(
             loop_device.depends_on,
             vec!["backingfiles:/var/lib/images/root.img:grow".to_string()]
         );
@@ -15434,16 +15461,33 @@ mod tests {
             vec!["filesystem:root:inspect".to_string()]
         );
         assert_eq!(
+            loop_device.recovery_depends_on,
+            vec!["filesystem:root:inspect".to_string()]
+        );
+        assert_eq!(
+            loop_device.recovery_unblocks,
+            vec!["backingfiles:/var/lib/images/root.img:grow".to_string()]
+        );
+        assert_eq!(
             filesystem.depends_on,
             vec!["loopdevices:/dev/loop7:grow".to_string()]
         );
         assert!(filesystem.unblocks.is_empty());
+        assert!(filesystem.recovery_depends_on.is_empty());
+        assert_eq!(
+            filesystem.recovery_unblocks,
+            vec!["loopdevices:/dev/loop7:grow".to_string()]
+        );
         assert!(
             loop_device
                 .notes
                 .iter()
                 .any(|note| note.contains("explicit dependency edge"))
         );
+        assert!(loop_device.notes.iter().any(|note| {
+            note.contains("recovery review waits for dependent action")
+                && note.contains("filesystem:root:inspect")
+        }));
     }
 
     #[test]
@@ -26540,8 +26584,23 @@ mod tests {
                 .depends_on
                 .contains(&"multipathmaps:mpatha:grow".to_string())
         );
+        assert!(filesystem.recovery_depends_on.is_empty());
+        assert!(
+            filesystem
+                .recovery_unblocks
+                .contains(&"volumes:vg0/root:grow".to_string())
+        );
+        assert!(
+            filesystem
+                .recovery_unblocks
+                .contains(&"luns:/dev/disk/by-path/ip-192.0.2.10-lun-0:grow".to_string())
+        );
         assert!(filesystem.notes.iter().any(|note| {
             note.contains("current topology graph path requires")
+                && note.contains("volumes:vg0/root:grow")
+        }));
+        assert!(filesystem.notes.iter().any(|note| {
+            note.contains("recovery review unblocks prerequisite action")
                 && note.contains("volumes:vg0/root:grow")
         }));
         let lun = plan
@@ -26559,6 +26618,8 @@ mod tests {
                 "volumes:vg0/root:grow".to_string(),
             ]
         );
+        assert_eq!(lun.recovery_depends_on, lun.unblocks);
+        assert!(lun.recovery_unblocks.is_empty());
         assert!(lun.notes.iter().any(|note| {
             note.contains("current topology graph path shows this action unblocks")
         }));
@@ -26629,8 +26690,17 @@ mod tests {
             luks.depends_on,
             vec!["filesystems:root:unmount".to_string()]
         );
+        assert!(luks.recovery_depends_on.is_empty());
+        assert_eq!(
+            luks.recovery_unblocks,
+            vec!["filesystems:root:unmount".to_string()]
+        );
         assert!(luks.notes.iter().any(|note| {
             note.contains("current topology graph path requires filesystems:root:unmount")
+        }));
+        assert!(luks.notes.iter().any(|note| {
+            note.contains("recovery review unblocks prerequisite action")
+                && note.contains("filesystems:root:unmount")
         }));
     }
 

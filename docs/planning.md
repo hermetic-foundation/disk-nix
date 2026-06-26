@@ -52,26 +52,28 @@ their declaration order. Plan JSON includes `dependencyOrder`, a
 machine-readable audit trail for that ordering with the action id,
 build/mutate/teardown phase, lower-first or upper-first direction, collection
 layer rank, inferred `dependsOn` and `unblocks` edges where declared identities
-tie adjacent layers together, and explanatory notes. This documents the current
-ordering rationale and gives automation explicit preflight edges for common
-layered changes. When current topology probing is enabled, matched graph paths
-also add dependency edges across direct and multi-hop storage relationships.
+tie adjacent layers together, reverse `recoveryDependsOn` and
+`recoveryUnblocks` edges for partial-failure review, and explanatory notes. This
+documents the current ordering rationale and gives automation explicit preflight
+and recovery-review edges for common layered changes. When current topology
+probing is enabled, matched graph paths also add dependency edges across direct
+and multi-hop storage relationships.
 Lower-to-upper paths such as LUN to multipath to partition to mapper to volume
 to filesystem are emitted in build/grow order, while teardown actions reverse
 the path so consumers are handled before backing layers. Each graph-derived
 action edge also appears as an informational `graph-dependency-order`
 diagnostic with the matched graph path, dependent action, prerequisite action,
-and lower-layer or consumer-first rationale. Mixed-direction actions on the
-same graph path are reported as warning `graph-dependency-conflict` diagnostics
-and counted as `graphDependencyConflictCount`. Topology comparison JSON also
-includes `graphDependencyConflictResolutions`, which names the conflicting
-path, lower and upper action ids, each dependency direction, a
+and lower-layer or consumer-first rationale. The recovery edges reverse those
+relationships so partial-failure review can walk from consumers back toward
+backing layers before retrying or rolling forward. Mixed-direction actions on
+the same graph path are reported as warning `graph-dependency-conflict`
+diagnostics and counted as `graphDependencyConflictCount`. Topology comparison
+JSON also includes `graphDependencyConflictResolutions`, which names the
+conflicting path, lower and upper action ids, each dependency direction, a
 `buildOrUpdatePass`, a `teardownOrRecoveryPass`, and a recommendation to split
 the work into reviewed passes. Apply dry-runs preserve those diagnostics and
 split-pass proposals for review, while `--execute` refuses to mutate storage
-until the conflict count is zero. This is still conservative: ambiguous
-current-state recovery and choosing between competing graph paths remain
-hardening work.
+until the conflict count is zero.
 
 Examples:
 

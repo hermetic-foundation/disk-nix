@@ -229,10 +229,11 @@ placeholders until concrete adapters are added.
   emits `graph-dependency-order` diagnostics for matched graph-derived action
   edges, warns when matched actions on the same graph path require mixed
   dependency directions, and emits `graphDependencyConflictResolutions` with
-  build/update and teardown/recovery split-pass proposals. Grouped changes such
-  as iSCSI LUN refresh, multipath, partition growth, LUKS/LVM resize, and
-  filesystem growth still need recovery-aware ordering before broad unattended
-  execution.
+  build/update and teardown/recovery split-pass proposals. Dependency-order
+  entries also include `recoveryDependsOn` and `recoveryUnblocks` reverse edges
+  so grouped changes such as iSCSI LUN refresh, multipath, partition growth,
+  LUKS/LVM resize, and filesystem growth have explicit partial-failure review
+  ordering.
 - Automated editing of declarative NixOS configuration after successful
   mutation is still not implemented. The module now emits a
   `declarativeHandoff` index for mounts, crypttab/LUKS, swap, NFS exports,

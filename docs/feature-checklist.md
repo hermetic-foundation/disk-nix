@@ -111,9 +111,10 @@ Update rules:
   phases.
 - [x] **Finished:** Inferred dependency edges from declared adjacent-layer
   identities and probed graph paths.
-- [ ] **Partial:** Runtime graph-path ordering has coarse phases and dependency
-  metadata plus graph-derived order diagnostics, but still needs recovery-aware
-  ordering for complex multi-layer mutations.
+- [x] **Finished:** Runtime graph-path ordering has coarse phases, dependency
+  metadata, graph-derived order diagnostics, and recovery-aware reverse
+  dependency edges (`recoveryDependsOn` and `recoveryUnblocks`) for complex
+  multi-layer mutations.
 - [x] **Finished:** Mixed-direction graph-path diagnostics include structured
   conflict resolution proposals. Topology comparison JSON reports
   `graphDependencyConflictResolutions` with the conflicting path, lower and

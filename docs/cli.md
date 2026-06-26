@@ -619,7 +619,9 @@ typed context, and optional advice with non-destructive alternatives.
 `dependencyOrder` explains the current planner ordering for every action,
 including build/mutate/teardown phase, lower-first or upper-first direction,
 collection layer rank, inferred `dependsOn` and `unblocks` edges, and ordering
-notes. It reflects the current coarse layer ordering plus conservative edges
+notes. It also includes reverse `recoveryDependsOn` and `recoveryUnblocks`
+edges so partial-failure review can walk from consumers back toward backing
+layers. It reflects the current coarse layer ordering plus conservative edges
 derived from declared action identities. When `--probe-current` is set, direct
 and multi-hop relationships in the probed storage graph also add dependency
 edges between matched planned actions, including lower-to-upper growth paths and
