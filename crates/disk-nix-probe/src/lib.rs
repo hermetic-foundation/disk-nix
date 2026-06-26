@@ -2664,6 +2664,73 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
   `- 3:0:0:1 sdc 8:32 active ready running faulty shaky
 "#;
 
+    const ENCRYPTED_DEGRADED_MDSTAT: &[u8] = br#"
+Personalities : [raid1]
+md127 : active raid1 nvme1n1p2[1](F) nvme0n1p2[0]
+      2097152 blocks super 1.2 [2/1] [U_]
+      [=>...................]  recovery = 8.5% (178257/2097152) finish=3.5min speed=15360K/sec
+      bitmap: 1/16 pages [4KB], 65536KB chunk
+
+unused devices: <none>
+"#;
+
+    const ENCRYPTED_DEGRADED_CRYPT_STATUS: &[u8] =
+        br#"/dev/mapper/cryptraid is active and is in use.
+  type:    LUKS2
+  cipher:  aes-xts-plain64
+  keysize: 512 bits
+  key location: keyring
+  device:  /dev/md127
+  sector size: 4096
+  offset:  32768 sectors
+  size:    4186112 sectors
+  mode:    read/write
+  UUID:    luks-raid-uuid
+"#;
+
+    const ENCRYPTED_DEGRADED_LUKS_DUMP: &[u8] = br#"
+LUKS header information
+Version:        2
+Epoch:          5
+Metadata area:  16384 [bytes]
+Keyslots area:  16744448 [bytes]
+UUID:           luks-raid-uuid
+Label:          encrypted-md-root
+Subsystem:      disk-nix-fixture
+Flags:          allow-discards
+
+Data segments:
+  0: crypt
+        offset: 32768 [bytes]
+        length: (whole device)
+        cipher: aes-xts-plain64
+        sector: 4096 [bytes]
+
+Keyslots:
+  0: luks2
+        Key:        512 bits
+        Priority:   normal
+        Cipher:     aes-xts-plain64
+        Cipher key: 512 bits
+        PBKDF:      argon2id
+        AF stripes: 4000
+        Area offset:32768 [bytes]
+        Area length:258048 [bytes]
+        Digest ID:  0
+
+Tokens:
+  0: systemd-tpm2
+        Keyslot:    0
+        Keyslots:   0
+        TPM2 PCRs:  0+7
+        TPM2 Hash:  sha256
+
+Digests:
+  0: pbkdf2
+        Hash:       sha256
+        Iterations: 1000
+"#;
+
     #[test]
     fn shared_storage_fabric_fixture_links_iscsi_luns_and_multipath_paths() {
         let mut graph = StorageGraph::empty();
@@ -2792,6 +2859,94 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
                 .iter()
                 .filter(|edge| {
                     edge.to.0 == "multipath:mpatha" && edge.relationship == Relationship::Backs
+                })
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn encrypted_degraded_array_fixture_links_mdraid_and_luks_metadata() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            mdraid::normalize_mdstat(ENCRYPTED_DEGRADED_MDSTAT)
+                .expect("degraded mdstat fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            cryptsetup::normalize_cryptsetup_status(
+                "/dev/mapper/cryptraid",
+                ENCRYPTED_DEGRADED_CRYPT_STATUS,
+            )
+            .expect("cryptsetup status fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            cryptsetup::normalize_luks_dump(
+                "/dev/disk/by-uuid/luks-raid-uuid",
+                ENCRYPTED_DEGRADED_LUKS_DUMP,
+            )
+            .expect("LUKS header fixture should parse"),
+        );
+
+        let array = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "md:/dev/md127")
+            .expect("degraded MD array should exist");
+        assert_eq!(array.kind, NodeKind::MdRaid);
+        assert_eq!(array.size_bytes, Some(2_147_483_648));
+        assert_has_property(array, "md.mdstat-level", "raid1");
+        assert_has_property(array, "md.mdstat-devices", "2/1");
+        assert_has_property(array, "md.mdstat-health", "U_");
+        assert_has_property(array, "md.mdstat-progress", "recovery");
+        assert_has_property(array, "md.mdstat-progress-percent", "8.5%");
+
+        let failed_member = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/nvme1n1p2")
+            .expect("failed MD member should exist");
+        assert_eq!(failed_member.kind, NodeKind::Partition);
+        assert_has_property(failed_member, "md.mdstat-member-flags", "F");
+
+        let mapper = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/mapper/cryptraid")
+            .expect("active LUKS mapper should exist");
+        assert_eq!(mapper.kind, NodeKind::LuksContainer);
+        assert_eq!(mapper.path.as_deref(), Some("/dev/mapper/cryptraid"));
+        assert_eq!(mapper.identity.uuid.as_deref(), Some("luks-raid-uuid"));
+        assert_eq!(mapper.size_bytes, Some(17_146_314_752));
+        assert_has_property(mapper, "cryptsetup.active", "true");
+        assert_has_property(mapper, "cryptsetup.in-use", "true");
+        assert_has_property(mapper, "cryptsetup.cipher", "aes-xts-plain64");
+
+        let header = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/disk/by-uuid/luks-raid-uuid")
+            .expect("LUKS header node on MD array should exist");
+        assert_eq!(header.kind, NodeKind::LuksContainer);
+        assert_eq!(header.identity.label.as_deref(), Some("encrypted-md-root"));
+        assert_has_property(header, "cryptsetup.luks-version", "2");
+        assert_has_property(header, "cryptsetup.luks-subsystem", "disk-nix-fixture");
+        assert_has_property(header, "cryptsetup.luks-keyslot-count", "1");
+        assert_has_property(header, "cryptsetup.luks-token-0-type", "systemd-tpm2");
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "block:/dev/md127"
+                && edge.to.0 == "block:/dev/mapper/cryptraid"
+                && edge.relationship == Relationship::Backs
+        }));
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to.0 == "md:/dev/md127" && edge.relationship == Relationship::MemberOf
                 })
                 .count(),
             2

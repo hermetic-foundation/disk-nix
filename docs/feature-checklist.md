@@ -86,9 +86,10 @@ Update rules:
   and network-storage identity views.
 - [ ] **Partial:** Real-world fixture coverage exists for many parser surfaces,
   including a cross-adapter shared-storage fixture that combines iSCSI session
-  and node data, host-visible SCSI LUNs, and multipath paths. It still needs
-  broader hardware, fabric variants, degraded arrays, encrypted stacks, and
-  clustered storage samples.
+  and node data, host-visible SCSI LUNs, and multipath paths, plus a
+  degraded-MD-with-LUKS fixture that combines recovering array state, failed
+  member metadata, active encrypted mapper status, and LUKS header metadata. It
+  still needs broader hardware, fabric variants, and clustered storage samples.
 
 ## Planning and apply safety
 
