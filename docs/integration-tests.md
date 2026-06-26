@@ -8,7 +8,18 @@ sandboxes cannot safely create privileged block devices.
 ## VM destructive suite
 
 The preferred destructive workflow is to run the smoke harnesses inside a
-disposable virtual machine:
+disposable virtual machine. The flake exposes an opt-in NixOS VM test that
+boots a guest and runs the suite inside it:
+
+```sh
+nix build .#integration-vm-test
+```
+
+This derivation is intentionally not part of default `nix flake check`; it runs
+QEMU and performs real storage mutations inside the guest.
+
+If you already have a disposable VM or lab guest, run the in-guest suite
+directly:
 
 ```sh
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \

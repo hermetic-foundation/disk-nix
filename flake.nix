@@ -147,6 +147,30 @@
           ];
           text = builtins.readFile ./scripts/integration-vm-smoke.sh;
         };
+        integrationVmTest = pkgs.testers.nixosTest {
+          name = "disk-nix-integration-vm-test";
+          nodes.machine =
+            { ... }:
+            {
+              system.stateVersion = "26.05";
+              virtualisation = {
+                diskSize = 4096;
+                memorySize = 2048;
+              };
+              boot.kernelModules = [
+                "loop"
+                "dm_mod"
+                "md_mod"
+                "raid1"
+              ];
+              environment.systemPackages = [ integrationVmSmoke ];
+            };
+          testScript = ''
+            machine.start()
+            machine.wait_for_unit("multi-user.target")
+            machine.succeed("DISK_NIX_INTEGRATION_DESTRUCTIVE=1 disk-nix-integration-vm-smoke")
+          '';
+        };
         nixosModuleTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -1414,6 +1438,7 @@
           integration-lvm-smoke = integrationLvmSmoke;
           integration-mdraid-smoke = integrationMdraidSmoke;
           integration-vm-smoke = integrationVmSmoke;
+          integration-vm-test = integrationVmTest;
           integration-loop-smoke = integrationLoopSmoke;
         };
 
