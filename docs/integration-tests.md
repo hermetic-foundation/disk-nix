@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for fifty-six failed apply paths:
+fake storage tools ahead of `PATH` for fifty-seven failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -258,6 +258,10 @@ fake storage tools ahead of `PATH` for fifty-six failed apply paths:
   through the reviewed `disk-nix-lvm-cache-replace` shell wrapper
 - an LVM cache rescan where fake `lvs --reportformat json` fails for the
   reviewed origin LV
+- a VDO create where fake `disk-nix inspect /dev/disk/by-id/vdo-backing`
+  succeeds and fake
+  `vdo create --name new-cache --device /dev/disk/by-id/vdo-backing --vdoLogicalSize 2TiB`
+  fails after the reviewed destructive gate is enabled
 - a VDO logical grow where fake `vdo status --name archive` succeeds and fake
   `vdo growLogical --name archive --vdoLogicalSize 4TiB` fails
 - a VDO start where fake `vdo status --name warmArchive` succeeds and fake
@@ -429,6 +433,11 @@ The test verifies that the failed report and receipt preserve:
   `lvmCaches:vg0/root:remove-device:vg0/root-cache`
 - the failed `lvconvert --uncache vg0/root` command and non-zero status after
   successful cache-state inspection
+- `partialExecutionRecovery.failedActionId` as
+  `vdovolumes:new-cache:create`
+- the failed
+  `vdo create --name new-cache --device /dev/disk/by-id/vdo-backing --vdoLogicalSize 2TiB`
+  command and non-zero status after backing-device inspection
 - `partialExecutionRecovery.failedActionId` as
   `vdoVolumes:archive:set-property:writePolicy`
 - the failed `vdo changeWritePolicy --name archive --writePolicy sync` command
@@ -956,5 +965,5 @@ rescan, multipath
 resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
-grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
+create, VDO grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
 paths, and broader destructive apply behavior.

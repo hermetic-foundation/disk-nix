@@ -6051,6 +6051,122 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_rescan_receipt" >/dev/null
 
+vdo_create_tools="$tmpdir/fake-vdo-create-tools"
+mkdir -p "$vdo_create_tools"
+vdo_create_disk_nix="$(command -v "$disk_nix_bin")"
+
+cat > "$vdo_create_tools/vdo" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "create" ]]; then
+  echo "synthetic VDO create failure for disk-nix recovery coverage" >&2
+  exit 90
+fi
+printf '{}\n'
+EOF
+
+cat > "$vdo_create_tools/vdostats" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$vdo_create_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$vdo_create_disk_nix" "\$@"
+EOF
+
+chmod +x "$vdo_create_tools/vdo" "$vdo_create_tools/vdostats" "$vdo_create_tools/disk-nix"
+
+vdo_create_spec="$tmpdir/vdo-create-spec.json"
+vdo_create_json="$tmpdir/vdo-create-apply.json"
+vdo_create_report="$tmpdir/vdo-create-report.json"
+vdo_create_receipt="$tmpdir/vdo-create-receipt.json"
+
+jq -n '{
+  vdoVolumes: {
+    "new-cache": {
+      operation: "create",
+      device: "/dev/disk/by-id/vdo-backing",
+      desiredSize: "2TiB"
+    }
+  },
+  apply: {
+    allowDestructive: true
+  }
+}' > "$vdo_create_spec"
+
+if PATH="$vdo_create_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$vdo_create_spec" \
+  --execute \
+  --report-out "$vdo_create_report" \
+  --receipt-out "$vdo_create_receipt" \
+  --json > "$vdo_create_json"; then
+  echo "expected synthetic VDO create failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 1
+  and .commandSummary.commandCount == 2
+  and .commandSummary.mutatingCount == 1
+  and .commandSummary.manualReviewCount == 1
+  and .commandSummary.readyCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "vdovolumes:new-cache:create"
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/dev/disk/by-id/vdo-backing"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 90
+  and .executionResults[1].actionId == "vdovolumes:new-cache:create"
+  and .executionResults[1].argv == ["vdo", "create", "--name", "new-cache", "--device", "/dev/disk/by-id/vdo-backing", "--vdoLogicalSize", "2TiB"]
+  and (.executionResults[1].stderr | contains("synthetic VDO create failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "vdovolumes:new-cache:create"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["vdo", "create", "--name", "new-cache", "--device", "/dev/disk/by-id/vdo-backing", "--vdoLogicalSize", "2TiB"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["vdovolumes:new-cache:create"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["vdo", "status", "--name", "new-cache"]))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "new-cache"]))
+    and (.commands | any(.argv == ["disk-nix", "vdo", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "probe-status", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "topology", "--json"]))
+    and (.notes | any(contains("VDO lifecycle changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "new-cache", "--json"]))
+    and (.commands | any(.argv == ["vdo", "status", "--name", "new-cache"]))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "new-cache"]))
+    and (.commands | any(.argv == ["disk-nix", "vdo", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["vdo", "status", "--name", "new-cache"]))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "new-cache"]))
+    and (.commands | any(.argv == ["disk-nix", "vdo", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$vdo_create_json" >/dev/null
+
+cmp "$vdo_create_json" "$vdo_create_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "vdovolumes:new-cache:create"
+  and .report.partialExecutionRecovery.failedCommand == ["vdo", "create", "--name", "new-cache", "--device", "/dev/disk/by-id/vdo-backing", "--vdoLogicalSize", "2TiB"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$vdo_create_receipt" >/dev/null
+
 vdo_grow_tools="$tmpdir/fake-vdo-grow-tools"
 mkdir -p "$vdo_grow_tools"
 
@@ -7018,4 +7134,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"

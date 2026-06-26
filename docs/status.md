@@ -185,8 +185,8 @@ behavior across real storage stacks.
   mutation failure, device-mapper rename failure, ZFS dataset rename failure,
   Btrfs snapshot clone failure, ZFS snapshot clone failure, LVM VG rename
   failure, iSCSI logout and login failures, LVM cache attach, detach,
-  replacement, and rescan failures, VDO grow/start/stop/remove failures, bcache
-  replacement failure, VDO and bcache property mutation failures, bcache rescan failure,
+  replacement, and rescan failures, VDO create/grow/start/stop/remove failures,
+  bcache replacement failure, VDO and bcache property mutation failures, bcache rescan failure,
   and an LVM cache property mutation failure, without touching real block
   devices.
 
@@ -271,7 +271,7 @@ added.
   remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add,
   LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
   remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach,
-  LVM cache replacement, LVM cache rescan, VDO grow, VDO start, VDO stop,
+  LVM cache replacement, LVM cache rescan, VDO create, VDO grow, VDO start, VDO stop,
   VDO remove, VDO property, bcache replacement, bcache property, bcache rescan,
   and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
