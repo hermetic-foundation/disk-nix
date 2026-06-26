@@ -636,6 +636,104 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$filesystem_trim_receipt" >/dev/null
 
+filesystem_check_tools="$tmpdir/fake-filesystem-check-tools"
+mkdir -p "$filesystem_check_tools"
+
+cat > "$filesystem_check_tools/e2fsck" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "-n /dev/disk/by-label/home" ]]; then
+  echo "synthetic filesystem check failure for disk-nix recovery coverage" >&2
+  exit 84
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$filesystem_check_tools/e2fsck"
+
+filesystem_check_spec="$tmpdir/filesystem-check-spec.json"
+filesystem_check_json="$tmpdir/filesystem-check-apply.json"
+filesystem_check_report="$tmpdir/filesystem-check-report.json"
+filesystem_check_receipt="$tmpdir/filesystem-check-receipt.json"
+
+jq -n '{
+  filesystems: {
+    home: {
+      mountpoint: "/home",
+      device: "/dev/disk/by-label/home",
+      fsType: "ext4",
+      operation: "check"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$filesystem_check_spec"
+
+if PATH="$filesystem_check_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$filesystem_check_spec" \
+  --execute \
+  --report-out "$filesystem_check_report" \
+  --receipt-out "$filesystem_check_receipt" \
+  --json > "$filesystem_check_json"; then
+  echo "expected synthetic filesystem check failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 2
+  and .commandSummary.commandCount == 3
+  and .commandSummary.mutatingCount == 0
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "filesystem:home:inspect"
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/home"]
+  and .executionResults[1].success == true
+  and .executionResults[1].actionId == "filesystems:home:check"
+  and .executionResults[1].argv == ["disk-nix", "inspect", "/home"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 84
+  and .executionResults[2].argv == ["e2fsck", "-n", "/dev/disk/by-label/home"]
+  and (.executionResults[2].stderr | contains("synthetic filesystem check failure"))
+  and .partialExecutionRecovery.completedActionIds == ["filesystem:home:inspect"]
+  and .partialExecutionRecovery.failedActionId == "filesystems:home:check"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["e2fsck", "-n", "/dev/disk/by-label/home"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["filesystems:home:check"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["blkid", "/dev/disk/by-label/home"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-label/home", "--json"]))
+    and (.notes | any(contains("filesystem changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "inspect", "home", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["blkid", "/dev/disk/by-label/home"]))
+  ))
+' "$filesystem_check_json" >/dev/null
+
+cmp "$filesystem_check_json" "$filesystem_check_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.completedActionIds == ["filesystem:home:inspect"]
+  and .report.partialExecutionRecovery.failedActionId == "filesystems:home:check"
+  and .report.partialExecutionRecovery.failedCommand == ["e2fsck", "-n", "/dev/disk/by-label/home"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$filesystem_check_receipt" >/dev/null
+
 swap_label_tools="$tmpdir/fake-swap-label-tools"
 mkdir -p "$swap_label_tools"
 
@@ -3979,4 +4077,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
