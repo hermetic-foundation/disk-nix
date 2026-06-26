@@ -109,18 +109,51 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-luks-smoke.sh
 ```
 
+## LVM loop-backed smoke test
+
+The repository also includes a root-only LVM loop-backed harness:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-lvm-smoke
+```
+
+When enabled, it:
+
+- creates a temporary 128 MiB backing file
+- attaches it to the next available `/dev/loop*`
+- creates a temporary LVM physical volume and volume group
+- verifies `disk-nix inspect <vg> --json` sees the volume group
+- executes a `volumeGroups.<name>.operation = "rescan"` apply plan
+- verifies the generated JSON report was written and the rendered
+  `pvscan --cache`, `vgscan`, and `vgchange --refresh <vg>` commands succeeded
+- removes the temporary volume group, wipes the physical volume metadata,
+  detaches the loop device, and removes the backing file during cleanup
+
+This test intentionally writes LVM metadata only to the temporary backing file
+it creates. It still requires destructive opt-in because it uses real loop and
+LVM tooling.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-lvm-smoke.sh
+```
+
 ## Flake coverage
 
 `nix flake check` does not run destructive integration tests. It does validate
 that the loop smoke harnesses parse, remain opt-in, and still contain the
 expected loop, filesystem setup, resize, mount, scrub, LUKS format, LUKS open,
-and LUKS close steps. This keeps the harnesses available and packaged while
-preserving safe default checks.
+LUKS close, LVM create, and LVM rescan steps. This keeps the harnesses
+available and packaged while preserving safe default checks.
 
 ## Remaining integration coverage
 
 The loop smoke tests are only the first host-backed integration paths. Feature
 completion still needs disposable VM or lab-host tests for broader LUKS
-format/grow/keyslot/token behavior, LVM, bcachefs, ZFS, MD RAID, multipath,
-iSCSI, NFS, VDO, NVMe namespace operations, failure recovery, and broader
-destructive apply behavior.
+format/grow/keyslot/token behavior, broader LVM LV/thin/cache/device-topology
+behavior, bcachefs, ZFS, MD RAID, multipath, iSCSI, NFS, VDO, NVMe namespace
+operations, failure recovery, and broader destructive apply behavior.

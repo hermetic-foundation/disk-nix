@@ -113,6 +113,17 @@
           ];
           text = builtins.readFile ./scripts/integration-luks-smoke.sh;
         };
+        integrationLvmSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-lvm-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.lvm2
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-lvm-smoke.sh;
+        };
         nixosModuleTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -1377,6 +1388,7 @@
           disk-nix = diskNix;
           integration-btrfs-smoke = integrationBtrfsSmoke;
           integration-luks-smoke = integrationLuksSmoke;
+          integration-lvm-smoke = integrationLvmSmoke;
           integration-loop-smoke = integrationLoopSmoke;
         };
 
@@ -1405,6 +1417,13 @@
             program = "${integrationLuksSmoke}/bin/disk-nix-integration-luks-smoke";
             meta = {
               description = "Root-only LUKS loop-backed disk-nix smoke integration harness";
+            };
+          };
+          integration-lvm-smoke = {
+            type = "app";
+            program = "${integrationLvmSmoke}/bin/disk-nix-integration-lvm-smoke";
+            meta = {
+              description = "Root-only LVM loop-backed disk-nix smoke integration harness";
             };
           };
         };
@@ -1454,6 +1473,15 @@
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup luksFormat' ${./scripts/integration-luks-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup open' ${./scripts/integration-luks-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup", "close"' ${./scripts/integration-luks-smoke.sh}
+            touch "$out"
+          '';
+          integrationLvmSmoke = pkgs.runCommand "disk-nix-integration-lvm-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'pvcreate --force --yes' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'vgcreate' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'vgchange", "--refresh"' ${./scripts/integration-lvm-smoke.sh}
             touch "$out"
           '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''
