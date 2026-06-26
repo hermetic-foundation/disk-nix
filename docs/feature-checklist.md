@@ -300,7 +300,8 @@ Update rules:
   XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement,
   bcachefs replacement, filesystem trim, filesystem check,
   filesystem repair, swap label, device-mapper rename, ZFS dataset rename,
-  Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace
+  Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS pool
+  replacement, ZFS rollback, NVMe namespace create, NVMe namespace
   grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,
   target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO
   detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with
@@ -308,7 +309,7 @@ Update rules:
   LIO rescan, target-side LUN tgt create, target-side LUN tgt attach,
   target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt
   grow not-ready with concrete property rendering, target-side LUN tgt property,
-  target-side LUN tgt rescan, multipath resize, multipath replace, LVM VG replacement, MD RAID
+  target-side LUN tgt rescan, multipath resize, multipath replace, LVM VG replacement, ZFS pool replacement, MD RAID
   add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow,
   LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove,
   partition grow,

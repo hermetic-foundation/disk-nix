@@ -174,13 +174,13 @@ behavior across real storage stacks.
   bcachefs replacement failure, filesystem trim failure, filesystem
   check failure, filesystem repair failure, LUKS format failure, LUKS close
   failure, LUKS grow failure, LUKS keyslot add failure, LUKS token import
-  failure, LUKS keyslot remove failure, LUKS token remove failure, and ZFS
-  rollback failure, plus NVMe namespace create, grow, attach, detach, and
+  failure, LUKS keyslot remove failure, LUKS token remove failure, ZFS pool
+  replacement failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create, attach, detach, and destroy
   failures, target-side LUN LIO grow not-ready, property, and rescan failures,
   Linux tgt create, attach, detach, and destroy failures, Linux tgt grow
   not-ready, property, and rescan failures, multipath resize and replacement
-  failures, LVM VG replacement failure, MD RAID member add and replacement failures, LUKS open failure,
+  failures, LVM VG replacement failure, ZFS pool replacement failure, MD RAID member add and replacement failures, LUKS open failure,
   partition grow failure, NFS remount failure, NFS unmount failure, swap label
   mutation failure, device-mapper rename failure, ZFS dataset rename failure,
   Btrfs snapshot clone failure, ZFS snapshot clone failure, LVM VG rename
@@ -258,7 +258,7 @@ added.
   flows, property mutation across more supported domains, and failed-command
   recovery beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
   scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair,
-  swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
+  swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
   namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
   LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
   target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete
@@ -266,7 +266,7 @@ added.
   target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
   detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
   concrete property rendering, target-side LUN tgt property, target-side LUN tgt
-  rescan, multipath resize, multipath replace, LVM VG replacement, MD RAID add-member, MD RAID
+  rescan, multipath resize, multipath replace, LVM VG replacement, ZFS pool replacement, MD RAID add-member, MD RAID
   remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add,
   LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
   remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach,

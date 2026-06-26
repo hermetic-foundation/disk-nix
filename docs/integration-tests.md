@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for fifty failed apply paths:
+fake storage tools ahead of `PATH` for fifty-one failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -130,6 +130,10 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
   `zfs clone tank/home@before tank/home-review` fails
 - an LVM volume group rename where fake `vgs --reportformat json vg-old`
   succeeds and fake `vgrename vg-old vg-new` fails
+- a ZFS pool device replacement where fake `disk-nix inspect tank` succeeds
+  and fake
+  `zpool replace tank /dev/disk/by-id/old-zfs-vdev /dev/disk/by-id/new-zfs-vdev`
+  fails
 - a ZFS snapshot rollback where fake `zfs list` succeeds and fake
   `zfs rollback tank/home@before` fails
 - an NVMe namespace create where fake `nvme list-ns` succeeds and fake
@@ -923,7 +927,7 @@ additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
 scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair,
-swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
+swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
 target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete
