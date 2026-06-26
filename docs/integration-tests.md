@@ -895,8 +895,8 @@ scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair,
 swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
-target-side LUN LIO destroy, target-side LUN LIO grow/property not-ready,
-target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
+target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete
+property rendering, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
 detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
 concrete property rendering, multipath
 resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS close, LUKS

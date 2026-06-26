@@ -177,14 +177,17 @@ Update rules:
   `targetLuns` create, grow, map, unmap, remove, rescan, and property handoff
   actions. Linux LIO target-side create/map/unmap/rescan now renders concrete
   `targetcli` inventory, backstore, target, LUN mapping, ACL, target removal,
-  reviewed backstore removal, and persistence commands; LIO grow/property
-  requests now include native target/backstore inventory around an explicit
-  non-ready provider handoff. Linux tgt target-side create/map/unmap/rescan now
-  renders concrete `tgtadm` inventory, target, logical-unit, initiator-address
-  bind/unbind, and target removal commands when the reviewed `targetId`/`tid`,
-  `lun`, backing object, and ACL values are declared; tgt grow/property requests
-  now include native target inventory, tgt property requests render concrete
-  reviewed `tgtadm --mode logicalunit --op update --name ... --value ...`
+  reviewed backstore removal, and persistence commands; LIO grow requests now
+  include native target/backstore inventory, LIO write-cache property requests
+  render concrete reviewed
+  `targetcli ... set attribute emulate_write_cache=...` commands, and LIO grow
+  remains an explicit non-ready provider handoff. Linux tgt target-side
+  create/map/unmap/rescan now renders concrete `tgtadm` inventory, target,
+  logical-unit, initiator-address bind/unbind, and target removal commands when
+  the reviewed `targetId`/`tid`, `lun`, backing object, and ACL values are
+  declared; tgt grow requests now include native target inventory, tgt property
+  requests render concrete reviewed
+  `tgtadm --mode logicalunit --op update --name ... --value ...`
   commands when `targetId`/`tid`, `lun`, property, and value are declared, and
   tgt grow remains an explicit non-ready provider handoff.
   Provider handoffs carry declared `targetId`/`tid` and `lun` values. Other
@@ -296,8 +299,8 @@ Update rules:
   Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace
   grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,
   target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO
-  detach, target-side LUN LIO destroy, target-side LUN LIO grow/property
-  not-ready, target-side LUN tgt create, target-side LUN tgt attach,
+  detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with
+  concrete property rendering, target-side LUN tgt create, target-side LUN tgt attach,
   target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt
   grow not-ready with concrete property rendering, multipath resize, multipath
   replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS

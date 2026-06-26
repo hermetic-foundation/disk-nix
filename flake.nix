@@ -2048,7 +2048,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'SAS enclosure fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'non-block SES enclosure records' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'active/standby state' ${./docs/storage-scope.md}
-            ${pkgs.gnugrep}/bin/grep -q 'LIO grow/property updates' ${./docs/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache' ${./docs/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' ${./scripts/integration-failure-recovery-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'tgt property updates render' ${./docs/cli.md}
             runbooks=${./docs/operator-runbooks.md}
             for runbook in \

@@ -1114,9 +1114,12 @@ adapter. `provider = "lio"` renders concrete Linux LIO `targetcli` command
 plans for inventory, backstore creation, target creation, LUN mapping, ACL
 mapping/unmapping, target removal, reviewed backstore removal, and `saveconfig`
 when the target IQN, backing object, LUN number, and initiators are declared.
-LIO grow/property updates add native target and backstore inventory around an
-explicit non-ready provider handoff. `provider = "tgt"` or `"tgtadm"` renders
-concrete Linux tgt `tgtadm` command plans for target inventory, target
+LIO write-cache property updates render native target/backstore inventory and
+concrete `targetcli ... set attribute emulate_write_cache=...` commands when
+the backing object and reviewed boolean value are declared, while LIO grow
+still adds native target and backstore inventory around an explicit non-ready
+provider handoff. `provider = "tgt"` or `"tgtadm"` renders concrete Linux tgt
+`tgtadm` command plans for target inventory, target
 creation/removal, logical-unit creation/removal, and initiator-address
 bind/unbind when `targetId` or `tid`, `lun`, backing object, and
 initiator-address or `ALL` ACL values are declared. tgt property updates render

@@ -434,8 +434,11 @@ Examples:
   `targetcli` inventory, backstore creation, target creation, LUN mapping,
   ACL mapping/unmapping, target removal, reviewed backstore removal, and
   `saveconfig` commands for Linux LIO targets when the target IQN, backing
-  object, LUN number, and initiators are declared. LIO grow/property updates
-  render native target and backstore inventory around an explicit non-ready
+  object, LUN number, and initiators are declared. LIO write-cache property
+  updates render native target/backstore inventory and concrete
+  `targetcli ... set attribute emulate_write_cache=...` commands when the
+  backing object and reviewed boolean value are declared. LIO grow still
+  renders native target/backstore inventory around an explicit non-ready
   provider handoff so operators can review the real targetcli state before
   adapter-specific mutation. `provider = "tgt"` or `"tgtadm"` renders concrete
   Linux tgt `tgtadm` inventory, target creation, logical-unit creation/removal,

@@ -11107,14 +11107,23 @@ fn target_lun_lio_commands(action: &PlannedAction, target: &str) -> Vec<Executio
             commands.push(target_lun_lio_backstore_inventory_command(
                 action,
                 &backstore,
-                "inspect the reviewed LIO backstore before target-side LUN property handoff",
+                "inspect the reviewed LIO backstore before target-side LUN property update",
             ));
-            commands.push(target_lun_provider_command(
+            if let Some(command) = target_lun_lio_property_command(
                 action,
-                target,
-                "set-property",
-                action.context.desired_size.as_deref(),
-            ));
+                &backstore,
+                "update the reviewed LIO backstore property",
+            ) {
+                commands.push(command);
+                commands.push(target_lun_lio_saveconfig_command());
+            } else {
+                commands.push(target_lun_provider_command(
+                    action,
+                    target,
+                    "set-property",
+                    action.context.desired_size.as_deref(),
+                ));
+            }
         }
         _ => {}
     }
@@ -11280,6 +11289,75 @@ fn target_lun_lio_backstore_delete_command(
         unresolved_inputs,
         note,
     )
+}
+
+fn target_lun_lio_property_command(
+    action: &PlannedAction,
+    backstore: &str,
+    note: &str,
+) -> Option<ExecutionCommand> {
+    let property = action.context.property.as_deref()?;
+    let attribute = target_lun_lio_attribute_for_property(property)?;
+    let mut unresolved_inputs = Vec::new();
+    let value = match action.context.property_value.as_deref() {
+        Some(value) => match normalize_lio_bool_attribute_value(value) {
+            Some(value) => value.to_string(),
+            None => {
+                unresolved_inputs.push("boolean LIO write-cache property value".to_string());
+                "<0-or-1>".to_string()
+            }
+        },
+        None => {
+            unresolved_inputs.push("boolean LIO write-cache property value".to_string());
+            "<0-or-1>".to_string()
+        }
+    };
+    let backstore_path = if action.context.device.is_some() {
+        format!("/backstores/block/{backstore}")
+    } else {
+        unresolved_inputs
+            .push("LIO backstore name or backing device for property update".to_string());
+        "/backstores/block/<backstore>".to_string()
+    };
+
+    Some(command_vec_with_readiness(
+        vec![
+            "targetcli".to_string(),
+            backstore_path,
+            "set".to_string(),
+            "attribute".to_string(),
+            format!("{attribute}={value}"),
+        ],
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    ))
+}
+
+fn target_lun_lio_attribute_for_property(property: &str) -> Option<&'static str> {
+    match property
+        .trim()
+        .trim_start_matches("lio.")
+        .replace(['-', '_'], "")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "writecache" | "emulatewritecache" => Some("emulate_write_cache"),
+        _ => None,
+    }
+}
+
+fn normalize_lio_bool_attribute_value(value: &str) -> Option<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" | "enabled" | "enable" => Some("1"),
+        "0" | "false" | "no" | "off" | "disabled" | "disable" => Some("0"),
+        _ => None,
+    }
 }
 
 fn target_lun_lio_acl_commands(
@@ -29678,7 +29756,7 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_summary.needs_domain_implementation_count, 2);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
         assert!(!report.command_summary.all_commands_ready());
 
         let grow = report
@@ -29735,23 +29813,19 @@ mod tests {
         assert!(property.commands.iter().any(|command| {
             command.argv
                 == [
-                    "<target-lun-provider:lio>",
-                    "set-lun-property",
-                    "--target",
-                    "iqn.2026-06.example:storage.root",
-                    "--provider",
-                    "lio",
-                    "--backing",
-                    "/dev/zvol/tank/root",
-                    "--lun",
-                    "7",
-                    "--property",
-                    "lio.writeCache",
-                    "--value",
-                    "off",
+                    "targetcli",
+                    "/backstores/block/_dev_zvol_tank_root",
+                    "set",
+                    "attribute",
+                    "emulate_write_cache=0",
                 ]
                 && command.mutates
-                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(property.commands.iter().any(|command| {
+            command.argv == ["targetcli", "saveconfig"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
         }));
     }
 

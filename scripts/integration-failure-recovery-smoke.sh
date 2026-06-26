@@ -2856,7 +2856,7 @@ if PATH="$target_lun_lio_grow_tools:$PATH" "$disk_nix_bin" apply \
   --report-out "$target_lun_lio_grow_report" \
   --receipt-out "$target_lun_lio_grow_receipt" \
   --json > "$target_lun_lio_grow_json"; then
-  echo "expected synthetic target-side LUN LIO grow/property handoff to stay not-ready" >&2
+  echo "expected synthetic target-side LUN LIO grow handoff to stay not-ready with concrete property rendering" >&2
   exit 1
 fi
 
@@ -2864,8 +2864,8 @@ jq -e '
   .status == "not-ready"
   and .apply.blockedCount == 0
   and .commandSummary.stepCount == 2
-  and .commandSummary.commandCount == 8
-  and .commandSummary.needsDomainImplementationCount == 2
+  and .commandSummary.commandCount == 9
+  and .commandSummary.needsDomainImplementationCount == 1
   and (.executionResults | length) == 0
   and (.messages | any(contains("execute refused")))
   and (.commandPlan | any(
@@ -2883,9 +2883,14 @@ jq -e '
     .actionId == "targetLuns:iqn.2026-06.example:storage.root:set-property:lio.writeCache"
     and (.commands | any(.argv == ["targetcli", "/backstores/block/_dev_zvol_tank_root", "ls"] and .mutates == false))
     and (.commands | any(
-      .argv == ["<target-lun-provider:lio>", "set-lun-property", "--target", "iqn.2026-06.example:storage.root", "--provider", "lio", "--backing", "/dev/zvol/tank/root", "--lun", "7", "--property", "lio.writeCache", "--value", "off"]
+      .argv == ["targetcli", "/backstores/block/_dev_zvol_tank_root", "set", "attribute", "emulate_write_cache=0"]
       and .mutates == true
-      and .readiness == "needs-domain-implementation"
+      and .readiness == "ready"
+    ))
+    and (.commands | any(
+      .argv == ["targetcli", "saveconfig"]
+      and .mutates == true
+      and .readiness == "ready"
     ))
   ))
   and (.recoveryActions | any(
@@ -2904,7 +2909,7 @@ jq -e '
   and .command == "apply"
   and .executeRequested == true
   and .report.status == "not-ready"
-  and .report.commandSummary.needsDomainImplementationCount == 2
+  and .report.commandSummary.needsDomainImplementationCount == 1
   and (.report.executionResults | length) == 0
 ' "$target_lun_lio_grow_receipt" >/dev/null
 
@@ -5263,4 +5268,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow/property not-ready, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
