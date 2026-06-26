@@ -2203,6 +2203,69 @@
               and (.report.recoveryActions | any(.kind == "review-execution-failure"))
             ' "$failingApplyReceipt"
 
+            rollbackToolDir="$TMPDIR/rollback-tools"
+            mkdir -p "$rollbackToolDir"
+            cat > "$rollbackToolDir/zfs" <<'EOF'
+            #!${pkgs.bash}/bin/bash
+            if [ "$1" = rollback ]; then
+              echo "synthetic zfs rollback failure for disk-nix recovery coverage" >&2
+              exit 74
+            fi
+            printf '{}\n'
+            EOF
+            chmod +x "$rollbackToolDir/zfs"
+            rollbackSpec="$TMPDIR/failing-rollback.json"
+            rollbackApply="$TMPDIR/failing-rollback.out"
+            jq -n '{
+              spec: {
+                snapshots: {
+                  "tank/home@before": {
+                    rollback: true
+                  }
+                }
+              },
+              apply: {
+                allowPotentialDataLoss: true
+              }
+            }' > "$rollbackSpec"
+            if PATH="$rollbackToolDir:${diskNix}/bin:$PATH" ${diskNix}/bin/disk-nix apply \
+              --spec "$rollbackSpec" \
+              --execute \
+              --json > "$rollbackApply"; then
+              echo "expected failing ZFS rollback apply to fail" >&2
+              exit 1
+            fi
+            jq -e '
+              .status == "failed"
+              and .apply.blockedCount == 0
+              and .commandSummary.commandCount == 2
+              and (.executionResults | length) == 2
+              and .executionResults[0].argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "tank/home@before"]
+              and .executionResults[0].success == true
+              and .executionResults[1].argv == ["zfs", "rollback", "tank/home@before"]
+              and .executionResults[1].success == false
+              and .executionResults[1].statusCode == 74
+              and (.executionResults[1].stderr | contains("synthetic zfs rollback failure"))
+              and (.recoveryActions | any(
+                .kind == "domain-recovery"
+                and (.commands | any(.argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "tank/home@before"]))
+                and (.commands | any(.argv == ["zfs", "list", "-H", "-p", "tank/home"]))
+                and (.notes | any(contains("prefer cloning the snapshot")))
+              ))
+              and (.recoveryActions | any(
+                .kind == "roll-forward-review"
+                and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+                and (.commands | any(.argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "-o", "name,creation,used,referenced,userrefs", "-r", "tank/home"]))
+              ))
+              and (.recoveryActions | any(
+                .kind == "rollback-review"
+                and (.commands | all(.mutates == false))
+                and (.commands | any(.argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "tank/home@before"]))
+                and (.commands | any(.argv == ["zfs", "list", "-H", "-p", "tank/home"]))
+              ))
+              and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+            ' "$rollbackApply"
+
             if ${diskNix}/bin/disk-nix apply --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleApplyReport" --json > "$lifecycleApply"; then
               echo "expected lifecycle example apply to be blocked" >&2
               exit 1
