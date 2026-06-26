@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for three failed apply paths:
+fake storage tools ahead of `PATH` for four failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -101,6 +101,8 @@ fake storage tools ahead of `PATH` for three failed apply paths:
   `zfs rollback tank/home@before` fails
 - an NVMe namespace destroy where fake `nvme detach-ns` succeeds and fake
   `nvme delete-ns /dev/nvme4 --namespace-id 9` fails
+- an iSCSI session logout where fake `iscsiadm --logout` fails for the reviewed
+  target and portal
 
 The test verifies that the failed report and receipt preserve:
 
@@ -116,6 +118,10 @@ The test verifies that the failed report and receipt preserve:
   `nvmenamespaces:/dev/nvme4:destroy`
 - the failed `nvme delete-ns /dev/nvme4 --namespace-id 9` command and
   non-zero status
+- `partialExecutionRecovery.failedActionId` as
+  `iscsisessions:iqn.2026-06.example:storage.old:logout`
+- the failed `iscsiadm --mode node --targetname iqn.2026-06.example:storage.old --portal 192.0.2.11:3260 --logout` command
+  and non-zero status
 - retry/review, roll-forward review, rollback review, snapshot-preservation,
   and domain-recovery guidance for the failed applies
 
@@ -576,6 +582,7 @@ broader MD RAID grow/member-topology behavior, broader multipath path
 add/remove/replace/flush/grow/failure behavior, broader iSCSI
 login/logout/LUN/failure behavior, broader NFS server/export/unmount/failure
 behavior, broader VDO create/grow/start/stop/property/remove behavior, NVMe
-namespace create/grow/attach/detach/delete/failure behavior, recovery behavior
-beyond the synthetic LVM-plus-filesystem, ZFS rollback, and NVMe namespace
-delete failed-command paths, and broader destructive apply behavior.
+namespace create/grow/attach/detach/delete/failure behavior, iSCSI login/LUN
+failure behavior, recovery behavior beyond the synthetic LVM-plus-filesystem,
+ZFS rollback, NVMe namespace delete, and iSCSI logout failed-command paths, and
+broader destructive apply behavior.

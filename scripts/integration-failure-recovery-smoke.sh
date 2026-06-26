@@ -313,4 +313,94 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$nvme_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, and NVMe namespace delete failures"
+iscsi_tools="$tmpdir/fake-iscsi-tools"
+mkdir -p "$iscsi_tools"
+
+cat > "$iscsi_tools/iscsiadm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == *"--logout"* ]]; then
+  echo "synthetic iscsi logout failure for disk-nix recovery coverage" >&2
+  exit 76
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$iscsi_tools/iscsiadm"
+
+iscsi_spec="$tmpdir/iscsi-spec.json"
+iscsi_json="$tmpdir/iscsi-apply.json"
+iscsi_report="$tmpdir/iscsi-report.json"
+iscsi_receipt="$tmpdir/iscsi-receipt.json"
+
+jq -n '{
+  iscsiSessions: {
+    "iqn.2026-06.example:storage.old": {
+      operation: "logout",
+      portal: "192.0.2.11:3260"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$iscsi_spec"
+
+if PATH="$iscsi_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$iscsi_spec" \
+  --execute \
+  --report-out "$iscsi_report" \
+  --receipt-out "$iscsi_receipt" \
+  --json > "$iscsi_json"; then
+  echo "expected synthetic iSCSI logout failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 1
+  and (.executionResults | length) == 1
+  and .executionResults[0].success == false
+  and .executionResults[0].statusCode == 76
+  and .executionResults[0].argv == ["iscsiadm", "--mode", "node", "--targetname", "iqn.2026-06.example:storage.old", "--portal", "192.0.2.11:3260", "--logout"]
+  and (.executionResults[0].stderr | contains("synthetic iscsi logout failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "iscsisessions:iqn.2026-06.example:storage.old:logout"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["iscsiadm", "--mode", "node", "--targetname", "iqn.2026-06.example:storage.old", "--portal", "192.0.2.11:3260", "--logout"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["iscsisessions:iqn.2026-06.example:storage.old:logout"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["iscsiadm", "--mode", "session"]))
+    and (.commands | any(.argv == ["iscsiadm", "--mode", "node", "--targetname", "iqn.2026-06.example:storage.old"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+    and (.notes | any(contains("login or logout")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["iscsiadm", "--mode", "session"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$iscsi_json" >/dev/null
+
+cmp "$iscsi_json" "$iscsi_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "iscsisessions:iqn.2026-06.example:storage.old:logout"
+  and .report.partialExecutionRecovery.failedCommand == ["iscsiadm", "--mode", "node", "--targetname", "iqn.2026-06.example:storage.old", "--portal", "192.0.2.11:3260", "--logout"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$iscsi_receipt" >/dev/null
+
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace delete, and iSCSI logout failures"
