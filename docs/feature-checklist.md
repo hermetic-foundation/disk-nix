@@ -275,11 +275,11 @@ Update rules:
   failed-apply recovery.
 - [ ] **Partial:** Broader destructive and failure-path integration tests are
   still needed for device replacement, degraded arrays, additional cache
-  variants, namespace grow/attach/detach flows, LUN flows, property mutation
-  across more supported domains, and failed-command recovery beyond the
-  synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace create, NVMe
-  namespace delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache
-  detach, and LVM cache property paths.
+  variants, namespace grow/detach flows, LUN flows, property mutation across
+  more supported domains, and failed-command recovery beyond the synthetic
+  LVM-plus-filesystem, ZFS rollback, NVMe namespace create, NVMe namespace
+  attach, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach,
+  LVM cache detach, and LVM cache property paths.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
   for multi-layer apply behavior on isolated disposable disks are still needed;
   the default VM suite now includes the synthetic failure-recovery harness.
