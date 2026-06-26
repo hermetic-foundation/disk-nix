@@ -598,6 +598,8 @@ edges between matched planned actions, including lower-to-upper growth paths and
 reversed upper-to-lower teardown paths. The topology comparison summary reports
 the number of graph-derived dependency edges as `graphDependencyEdgeCount` and
 mixed-direction graph-path warnings as `graphDependencyConflictCount`.
+Dry-run reports keep those conflicts visible for review, but `--execute`
+refuses to run while the count is non-zero.
 
 With `--probe-current`, the CLI also probes the current host and adds
 `topologyComparison`, including matched target counts, missing target counts,

@@ -136,6 +136,7 @@ dependencies = [
 name = "disk-nix-exec"
 version = "0.1.0"
 dependencies = [
+ "disk-nix-model",
  "disk-nix-plan",
  "serde",
  "serde_json",

@@ -49,7 +49,9 @@ pub struct ExecutionReport {
 impl ExecutionReport {
     #[must_use]
     pub fn can_apply(&self) -> bool {
-        self.status == ExecutionStatus::DryRun && self.apply.can_execute()
+        self.status == ExecutionStatus::DryRun
+            && self.apply.can_execute()
+            && graph_dependency_conflict_count(self.topology_comparison.as_ref()) == 0
     }
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
@@ -58,7 +60,9 @@ impl ExecutionReport {
 
     #[must_use]
     pub fn to_shell_script(&self) -> Option<String> {
-        self.apply.can_execute().then(|| render_shell_script(self))
+        (self.apply.can_execute()
+            && graph_dependency_conflict_count(self.topology_comparison.as_ref()) == 0)
+            .then(|| render_shell_script(self))
     }
 }
 
@@ -289,6 +293,25 @@ fn prepare_execution_with_runner_and_tool_checker(
                     ],
                 });
             }
+            let graph_dependency_conflict_count =
+                graph_dependency_conflict_count(topology_comparison.as_ref());
+            if graph_dependency_conflict_count > 0 {
+                return attach_recovery_actions(ExecutionReport {
+                    apply,
+                    status: ExecutionStatus::NotReady,
+                    topology_comparison,
+                    command_summary,
+                    tool_requirements,
+                    command_plan,
+                    verification_summary,
+                    verification_plan,
+                    execution_results: Vec::new(),
+                    recovery_actions: Vec::new(),
+                    messages: vec![format!(
+                        "execute refused: current topology comparison reported {graph_dependency_conflict_count} graph dependency conflict(s); split the plan or review ordering before mutating storage"
+                    )],
+                });
+            }
             if let Some(missing_tools_message) = missing_tools_message(&tool_requirements) {
                 return attach_recovery_actions(ExecutionReport {
                     apply,
@@ -348,6 +371,12 @@ fn missing_tools_message(tool_requirements: &[ToolRequirement]) -> Option<String
         .map(|requirement| requirement.tool.as_str())
         .collect::<Vec<_>>();
     (!missing.is_empty()).then(|| missing.join(", "))
+}
+
+fn graph_dependency_conflict_count(comparison: Option<&TopologyComparison>) -> usize {
+    comparison.map_or(0, |comparison| {
+        comparison.summary.graph_dependency_conflict_count
+    })
 }
 
 fn attach_recovery_actions(mut report: ExecutionReport) -> ExecutionReport {
@@ -416,17 +445,20 @@ fn not_ready_recovery_actions(report: &ExecutionReport) -> Vec<RecoveryAction> {
         .iter()
         .filter(|requirement| requirement.availability == ToolAvailability::Missing)
         .count();
+    let graph_dependency_conflict_count =
+        graph_dependency_conflict_count(report.topology_comparison.as_ref());
     vec![
         RecoveryAction {
             kind: RecoveryActionKind::ResolveInputs,
             summary: "Resolve unresolved command inputs before requesting execution".to_string(),
             commands: Vec::new(),
             notes: vec![format!(
-                "{} command(s) need desired size, {} need domain command implementation, {} are manual-only, {} required tool(s) are missing",
+                "{} command(s) need desired size, {} need domain command implementation, {} are manual-only, {} required tool(s) are missing, {} graph dependency conflict(s) need plan splitting or ordering review",
                 report.command_summary.needs_desired_size_count,
                 report.command_summary.needs_domain_implementation_count,
                 report.command_summary.manual_only_count,
-                missing_tool_count
+                missing_tool_count,
+                graph_dependency_conflict_count
             )],
         },
         RecoveryAction {
@@ -1360,13 +1392,14 @@ fn render_shell_script(report: &ExecutionReport) -> String {
 
     if let Some(comparison) = &report.topology_comparison {
         script.push_str(&format!(
-            "# Topology comparison: {} matched, {} missing, {} size diagnostics, {} type conflicts, {} already satisfied, {} suppressed.\n\n",
+            "# Topology comparison: {} matched, {} missing, {} size diagnostics, {} type conflicts, {} already satisfied, {} suppressed, {} graph dependency conflicts.\n\n",
             comparison.summary.matched_count,
             comparison.summary.missing_count,
             comparison.summary.size_diagnostic_count,
             comparison.summary.type_conflict_count,
             comparison.summary.already_satisfied_count,
-            comparison.summary.suppressed_action_count
+            comparison.summary.suppressed_action_count,
+            comparison.summary.graph_dependency_conflict_count
         ));
     }
 
@@ -14001,7 +14034,10 @@ fn property_assignment(action: &PlannedAction) -> String {
 
 #[cfg(test)]
 mod tests {
-    use disk_nix_plan::{ActionContext, PlanSummary, plan_and_policy_from_json_bytes};
+    use disk_nix_model::{Node, NodeKind, Relationship, StorageGraph};
+    use disk_nix_plan::{
+        ActionContext, PlanSummary, compare_plan_with_topology, plan_and_policy_from_json_bytes,
+    };
 
     use super::*;
 
@@ -22381,6 +22417,95 @@ mod tests {
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
                         && command.unresolved_inputs == ["storage-domain command renderer"]
                 })
+        }));
+    }
+
+    #[test]
+    fn execute_refuses_graph_dependency_conflicts_before_running_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "root": {
+                    "operation": "grow",
+                    "device": "/dev/mapper/cryptroot",
+                    "mountpoint": "/",
+                    "fsType": "xfs",
+                    "resizePolicy": "grow-only",
+                    "desiredSize": "200GiB"
+                  }
+                },
+                "luks": {
+                  "devices": {
+                    "cryptroot": {
+                      "operation": "close",
+                      "device": "/dev/disk/by-partuuid/root",
+                      "target": "cryptroot"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("luks:cryptroot", NodeKind::LuksContainer, "cryptroot")
+                .with_path("/dev/mapper/cryptroot"),
+        );
+        graph.add_node(
+            Node::new("filesystem:/", NodeKind::Filesystem, "root")
+                .with_path("/")
+                .with_property("filesystem.type", "xfs")
+                .with_size_bytes(100 * 1024 * 1024 * 1024),
+        );
+        graph.add_edge(disk_nix_model::Edge::new(
+            "luks:cryptroot",
+            "filesystem:/",
+            Relationship::Backs,
+        ));
+        let plan = compare_plan_with_topology(plan, &graph);
+        let dry_run = prepare_execution(&plan, policy.clone(), ExecutionMode::DryRun);
+
+        assert_eq!(dry_run.status, ExecutionStatus::DryRun);
+        assert_eq!(
+            dry_run
+                .topology_comparison
+                .as_ref()
+                .map(|comparison| comparison.summary.graph_dependency_conflict_count),
+            Some(1)
+        );
+        assert!(!dry_run.can_apply());
+        assert!(dry_run.to_shell_script().is_none());
+
+        let mut ran_commands = false;
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |_| {
+            ran_commands = true;
+            CommandRunResult {
+                success: true,
+                status_code: Some(0),
+                stdout: String::new(),
+                stderr: String::new(),
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::NotReady);
+        assert!(!ran_commands);
+        assert!(report.execution_results.is_empty());
+        assert!(report.command_summary.all_commands_ready());
+        assert!(report.messages.iter().any(|message| {
+            message.contains("graph dependency conflict") && message.contains("execute refused")
+        }));
+        assert!(report.recovery_actions.iter().any(|action| {
+            action.kind == RecoveryActionKind::ResolveInputs
+                && action
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("1 graph dependency conflict"))
         }));
     }
 

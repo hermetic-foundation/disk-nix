@@ -61,8 +61,10 @@ to filesystem are emitted in build/grow order, while teardown actions reverse
 the path so consumers are handled before backing layers. Mixed-direction
 actions on the same graph path are reported as warning diagnostics and counted
 as `graphDependencyConflictCount` so operators can split the plan or review
-ordering before execution. This is still conservative: ambiguous current-state
-recovery and choosing between competing graph paths remain hardening work.
+ordering before execution. Apply dry-runs preserve those diagnostics for
+review, while `--execute` refuses to mutate storage until the conflict count is
+zero. This is still conservative: ambiguous current-state recovery and choosing
+between competing graph paths remain hardening work.
 
 Examples:
 

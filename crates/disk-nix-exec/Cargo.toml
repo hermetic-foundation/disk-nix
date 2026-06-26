@@ -13,5 +13,8 @@ disk-nix-plan = { path = "../disk-nix-plan" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 
+[dev-dependencies]
+disk-nix-model = { path = "../disk-nix-model" }
+
 [lints]
 workspace = true
