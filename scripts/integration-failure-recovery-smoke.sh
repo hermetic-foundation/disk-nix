@@ -429,6 +429,113 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$btrfs_scrub_receipt" >/dev/null
 
+btrfs_rebalance_tools="$tmpdir/fake-btrfs-rebalance-tools"
+mkdir -p "$btrfs_rebalance_tools"
+
+cat > "$btrfs_rebalance_tools/findmnt" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$btrfs_rebalance_tools/btrfs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "balance start -dusage=50 -musage=75 /data" ]]; then
+  echo "synthetic Btrfs rebalance failure for disk-nix recovery coverage" >&2
+  exit 82
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$btrfs_rebalance_tools/findmnt" "$btrfs_rebalance_tools/btrfs"
+
+btrfs_rebalance_spec="$tmpdir/btrfs-rebalance-spec.json"
+btrfs_rebalance_json="$tmpdir/btrfs-rebalance-apply.json"
+btrfs_rebalance_report="$tmpdir/btrfs-rebalance-report.json"
+btrfs_rebalance_receipt="$tmpdir/btrfs-rebalance-receipt.json"
+
+jq -n '{
+  filesystems: {
+    data: {
+      mountpoint: "/data",
+      fsType: "btrfs",
+      operation: "rebalance",
+      properties: {
+        "balance.data": "usage=50",
+        "balance.metadata": "usage=75"
+      }
+    }
+  },
+  apply: {
+    allowRebalance: true
+  }
+}' > "$btrfs_rebalance_spec"
+
+if PATH="$btrfs_rebalance_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$btrfs_rebalance_spec" \
+  --execute \
+  --report-out "$btrfs_rebalance_report" \
+  --receipt-out "$btrfs_rebalance_receipt" \
+  --json > "$btrfs_rebalance_json"; then
+  echo "expected synthetic Btrfs rebalance failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 2
+  and .commandSummary.commandCount == 3
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "filesystem:data:inspect"
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/data"]
+  and .executionResults[1].success == true
+  and .executionResults[1].actionId == "filesystems:data:rebalance"
+  and .executionResults[1].argv == ["disk-nix", "inspect", "/data"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 82
+  and .executionResults[2].argv == ["btrfs", "balance", "start", "-dusage=50", "-musage=75", "/data"]
+  and (.executionResults[2].stderr | contains("synthetic Btrfs rebalance failure"))
+  and .partialExecutionRecovery.completedActionIds == ["filesystem:data:inspect"]
+  and .partialExecutionRecovery.failedActionId == "filesystems:data:rebalance"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["btrfs", "balance", "start", "-dusage=50", "-musage=75", "/data"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["filesystems:data:rebalance"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["findmnt", "--json", "--target", "/data"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/data", "--json"]))
+    and (.notes | any(contains("filesystem changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["findmnt", "--json", "--target", "/data"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/data", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$btrfs_rebalance_json" >/dev/null
+
+cmp "$btrfs_rebalance_json" "$btrfs_rebalance_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.completedActionIds == ["filesystem:data:inspect"]
+  and .report.partialExecutionRecovery.failedActionId == "filesystems:data:rebalance"
+  and .report.partialExecutionRecovery.failedCommand == ["btrfs", "balance", "start", "-dusage=50", "-musage=75", "/data"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$btrfs_rebalance_receipt" >/dev/null
+
 swap_label_tools="$tmpdir/fake-swap-label-tools"
 mkdir -p "$swap_label_tools"
 
@@ -3772,4 +3879,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
