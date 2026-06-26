@@ -355,11 +355,23 @@ struct MigrationReport {
     source_version: Option<u64>,
     target_version: u64,
     migrated: bool,
+    version_migrations: Vec<VersionMigrationContract>,
     legacy_mappings: Vec<LegacyMigrationMapping>,
     applied_mappings: Vec<LegacyMigrationMapping>,
     changes: Vec<String>,
     warnings: Vec<String>,
     spec: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionMigrationContract {
+    source_version: Option<u64>,
+    target_version: u64,
+    status: String,
+    mapping_scope: String,
+    field_mappings: Vec<LegacyMigrationMapping>,
+    safety_notes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1599,6 +1611,7 @@ fn migration_report_from_json_bytes(bytes: &[u8]) -> Result<MigrationReport, App
         migrated: !changes
             .iter()
             .any(|change| change == "spec already declares the current supported contract version"),
+        version_migrations: version_migration_contracts(),
         legacy_mappings: legacy_pre_version_mappings(),
         applied_mappings,
         changes,
@@ -1779,6 +1792,35 @@ fn legacy_pre_version_mappings() -> Vec<LegacyMigrationMapping> {
         .collect()
 }
 
+fn version_migration_contracts() -> Vec<VersionMigrationContract> {
+    vec![
+        VersionMigrationContract {
+            source_version: None,
+            target_version: SUPPORTED_SPEC_VERSION,
+            status: "supported".to_string(),
+            mapping_scope: "pre-version legacy aliases to version 1".to_string(),
+            field_mappings: legacy_pre_version_mappings(),
+            safety_notes: vec![
+                "applies only to unversioned documents".to_string(),
+                "does not apply storage mutations".to_string(),
+                "conflicting legacy and current fields are rejected".to_string(),
+            ],
+        },
+        VersionMigrationContract {
+            source_version: Some(SUPPORTED_SPEC_VERSION),
+            target_version: SUPPORTED_SPEC_VERSION,
+            status: "supported".to_string(),
+            mapping_scope: "version 1 metadata normalization".to_string(),
+            field_mappings: Vec::new(),
+            safety_notes: vec![
+                "explicit version 1 documents are validated without legacy alias rewrites"
+                    .to_string(),
+                "does not apply storage mutations".to_string(),
+            ],
+        },
+    ]
+}
+
 fn migration_source_version(value: &Value) -> Result<Option<u64>, AppError> {
     let top_level = optional_version_field(value, "version")?;
     let spec = value
@@ -1841,6 +1883,29 @@ fn print_migration_report(output: &mut impl Write, report: &MigrationReport) -> 
     writeln!(output, "Changes:")?;
     for change in &report.changes {
         writeln!(output, "- {change}")?;
+    }
+    writeln!(output, "Version migration contracts:")?;
+    for contract in &report.version_migrations {
+        writeln!(
+            output,
+            "- {:?} -> {}: {} ({})",
+            contract.source_version,
+            contract.target_version,
+            contract.status,
+            contract.mapping_scope
+        )?;
+        if contract.field_mappings.is_empty() {
+            writeln!(output, "  field mappings: none")?;
+        } else {
+            writeln!(output, "  field mappings:")?;
+            for mapping in &contract.field_mappings {
+                writeln!(
+                    output,
+                    "  - {} -> {} ({})",
+                    mapping.source, mapping.target, mapping.scope
+                )?;
+            }
+        }
     }
     writeln!(output, "Legacy mappings:")?;
     for mapping in &report.legacy_mappings {
@@ -5916,6 +5981,30 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
                 .iter()
                 .any(|warning| warning.contains("does not apply storage mutations"))
         );
+        assert_eq!(report.version_migrations.len(), 2);
+        let legacy_contract = report
+            .version_migrations
+            .iter()
+            .find(|contract| contract.source_version.is_none())
+            .expect("pre-version migration contract should exist");
+        assert_eq!(legacy_contract.target_version, 1);
+        assert_eq!(legacy_contract.status, "supported");
+        assert_eq!(
+            legacy_contract.mapping_scope,
+            "pre-version legacy aliases to version 1"
+        );
+        assert_mapping(
+            &legacy_contract.field_mappings,
+            "fileSystems",
+            "filesystems",
+            "top-level",
+        );
+        assert!(
+            legacy_contract
+                .safety_notes
+                .iter()
+                .any(|note| note.contains("does not apply storage mutations"))
+        );
     }
 
     #[test]
@@ -6210,11 +6299,65 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(!report.migrated);
         assert_eq!(report.legacy_mappings.len(), 10);
         assert!(report.applied_mappings.is_empty());
+        let current_contract = report
+            .version_migrations
+            .iter()
+            .find(|contract| contract.source_version == Some(1))
+            .expect("version 1 migration contract should exist");
+        assert_eq!(current_contract.target_version, 1);
+        assert_eq!(current_contract.status, "supported");
+        assert!(current_contract.field_mappings.is_empty());
+        assert!(
+            current_contract
+                .safety_notes
+                .iter()
+                .any(|note| note.contains("validated without legacy alias rewrites"))
+        );
         assert!(
             report
                 .changes
                 .iter()
                 .any(|change| change.contains("already declares"))
+        );
+    }
+
+    #[test]
+    fn migration_report_json_includes_version_migration_contracts() {
+        let report = migration_report_from_json_bytes(
+            br#"{
+              "fileSystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "ext4"
+                }
+              }
+            }"#,
+        )
+        .expect("legacy spec should migrate");
+
+        let json = serde_json::to_value(&report).expect("report should serialize");
+        assert_eq!(json["versionMigrations"][0]["sourceVersion"], Value::Null);
+        assert_eq!(json["versionMigrations"][0]["targetVersion"], 1);
+        assert_eq!(json["versionMigrations"][0]["status"], "supported");
+        assert_eq!(
+            json["versionMigrations"][0]["mappingScope"],
+            "pre-version legacy aliases to version 1"
+        );
+        assert!(
+            json["versionMigrations"][0]["fieldMappings"]
+                .as_array()
+                .is_some_and(|mappings| mappings.iter().any(|mapping| {
+                    mapping["source"] == "fileSystems"
+                        && mapping["target"] == "filesystems"
+                        && mapping["scope"] == "top-level"
+                }))
+        );
+        assert_eq!(json["versionMigrations"][1]["sourceVersion"], 1);
+        assert_eq!(json["versionMigrations"][1]["targetVersion"], 1);
+        assert!(
+            json["versionMigrations"][1]["fieldMappings"]
+                .as_array()
+                .is_some_and(Vec::is_empty)
         );
     }
 
@@ -6273,6 +6416,11 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         let output = String::from_utf8(output).expect("migration output is utf8");
         assert!(output.contains("Migration: None -> 1"));
         assert!(output.contains("migrated: true"));
+        assert!(output.contains("Version migration contracts:"));
+        assert!(
+            output.contains("- None -> 1: supported (pre-version legacy aliases to version 1)")
+        );
+        assert!(output.contains("- Some(1) -> 1: supported (version 1 metadata normalization)"));
         assert!(output.contains("Legacy mappings:"));
         assert!(output.contains("- fileSystems -> filesystems (top-level)"));
         assert!(output.contains("- spec.fileSystems -> spec.filesystems (spec)"));

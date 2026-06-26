@@ -79,10 +79,14 @@ pre-version field names into the current contract: `fileSystems` to
 `nfsMounts` to `nfs.mounts`, and `iscsiSessions` to `iscsi.sessions`.
 The migration report includes a machine-readable `legacyMappings` matrix for
 both direct specs and wrapper `spec.*` documents, plus `appliedMappings` for the
-aliases actually rewritten in that run. Explicit version `1` documents are not
-silently rewritten through those legacy aliases. Future or conflicting versions
-remain hard errors until their field mappings, examples, tests, and safety notes
-are implemented.
+aliases actually rewritten in that run. It also includes a machine-readable
+`versionMigrations` contract. Today that contract has two supported entries:
+unversioned pre-version documents to version `1`, including the documented
+legacy field mappings, and explicit version `1` documents to version `1`, which
+is metadata validation with no field rewrites. Explicit version `1` documents
+are not silently rewritten through those legacy aliases. Future or conflicting
+versions remain hard errors until their field mappings, examples, tests, and
+safety notes are implemented in `versionMigrations`.
 
 ## JSON output contracts
 

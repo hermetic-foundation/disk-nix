@@ -199,9 +199,10 @@ to current version `1` locations: `fileSystems` to `filesystems`,
 documents are not silently rewritten through these legacy aliases. Migration
 validates the migrated document with the planner parser, reports the complete
 `legacyMappings` matrix for direct specs and NixOS-module wrapper `spec.*`
-documents, and records the run-specific `appliedMappings` audit trail. It also
-reports warnings that storage mutations are not applied. Future or conflicting
-versions are rejected instead of being guessed.
+documents, records the run-specific `appliedMappings` audit trail, and emits a
+machine-readable `versionMigrations` contract for supported source and target
+version paths. It also reports warnings that storage mutations are not applied.
+Future or conflicting versions are rejected instead of being guessed.
 
 ## Focused Views
 

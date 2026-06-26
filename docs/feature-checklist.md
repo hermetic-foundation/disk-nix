@@ -43,10 +43,11 @@ Update rules:
 - [x] **Finished:** CLI subcommands for focused storage views and object
   inspection.
 - [x] **Finished:** Parser and fixture tests for probe adapters.
-- [ ] **Partial:** Migration maps documented unversioned legacy aliases into
-  version `1` with a machine-readable legacy mapping matrix and applied-mapping
-  audit trail; future version-to-version mappings still need a version `2`
-  contract before they can be finished.
+- [x] **Finished:** Migration maps documented unversioned legacy aliases into
+  version `1` with a machine-readable legacy mapping matrix, applied-mapping
+  audit trail, and `versionMigrations` contract that documents supported
+  pre-version and version `1` normalization paths while rejecting unsupported
+  future versions.
 
 ## Read-only storage awareness
 
