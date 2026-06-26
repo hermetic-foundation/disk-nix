@@ -2745,14 +2745,15 @@ fn print_topology_comparison(
 ) -> io::Result<()> {
     writeln!(
         output,
-        "Topology comparison: {} actions, {} matched, {} missing, {} size notes, {} type conflicts, {} already satisfied, {} suppressed",
+        "Topology comparison: {} actions, {} matched, {} missing, {} size notes, {} type conflicts, {} already satisfied, {} suppressed, {} graph dependency conflicts",
         comparison.summary.action_count,
         comparison.summary.matched_count,
         comparison.summary.missing_count,
         comparison.summary.size_diagnostic_count,
         comparison.summary.type_conflict_count,
         comparison.summary.already_satisfied_count,
-        comparison.summary.suppressed_action_count
+        comparison.summary.suppressed_action_count,
+        comparison.summary.graph_dependency_conflict_count
     )?;
 
     for diagnostic in &comparison.diagnostics {

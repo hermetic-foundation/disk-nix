@@ -208,6 +208,8 @@ pub struct TopologyComparisonSummary {
     pub suppressed_action_count: usize,
     #[serde(default)]
     pub graph_dependency_edge_count: usize,
+    #[serde(default)]
+    pub graph_dependency_conflict_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -368,6 +370,7 @@ pub enum TopologyDiagnosticKind {
     ZfsPoolCreateRequired,
     ZfsPoolImportAlreadySatisfied,
     ZfsPoolImportRequired,
+    GraphDependencyConflict,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -799,7 +802,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
 #[must_use]
 pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan {
     let original_action_count = plan.actions.len();
-    let diagnostics: Vec<TopologyDiagnostic> = plan
+    let mut diagnostics: Vec<TopologyDiagnostic> = plan
         .actions
         .iter()
         .flat_map(|action| topology_diagnostics_for_action(action, graph))
@@ -815,6 +818,10 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
     }
     let graph_edges = graph_dependency_edges_for_actions(&plan.actions, graph);
     let graph_dependency_edge_count = graph_edges.graph_edges.len();
+    let graph_dependency_conflicts =
+        graph_dependency_conflict_diagnostics_for_actions(&plan.actions, graph);
+    let graph_dependency_conflict_count = graph_dependency_conflicts.len();
+    diagnostics.extend(graph_dependency_conflicts);
     plan.dependency_order = dependency_order_for_actions_with_edges(&plan.actions, graph_edges);
 
     let summary = TopologyComparisonSummary {
@@ -912,6 +919,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
             .count(),
         suppressed_action_count,
         graph_dependency_edge_count,
+        graph_dependency_conflict_count,
     };
 
     plan.topology_comparison = Some(TopologyComparison {
@@ -1075,6 +1083,53 @@ fn graph_dependency_edges_for_actions(
         }
     }
     edges
+}
+
+fn graph_dependency_conflict_diagnostics_for_actions(
+    actions: &[PlannedAction],
+    graph: &StorageGraph,
+) -> Vec<TopologyDiagnostic> {
+    let matches = graph_action_matches(actions, graph);
+    let reachability = graph_storage_reachability(graph);
+    let mut diagnostics = Vec::new();
+    let mut seen = BTreeSet::new();
+    for (lower_id, upper_ids) in reachability {
+        for upper_id in upper_ids {
+            for lower_action in actions_for_node(&matches, &lower_id) {
+                for upper_action in actions_for_node(&matches, &upper_id) {
+                    if lower_action.id == upper_action.id {
+                        continue;
+                    }
+                    let lower_direction = dependency_direction(lower_action.operation);
+                    let upper_direction = dependency_direction(upper_action.operation);
+                    if lower_direction == upper_direction {
+                        continue;
+                    }
+                    let key = (
+                        lower_action.id.clone(),
+                        upper_action.id.clone(),
+                        lower_id.clone(),
+                        upper_id.clone(),
+                    );
+                    if !seen.insert(key) {
+                        continue;
+                    }
+                    diagnostics.push(TopologyDiagnostic {
+                        action_id: lower_action.id.clone(),
+                        level: TopologyDiagnosticLevel::Warning,
+                        kind: TopologyDiagnosticKind::GraphDependencyConflict,
+                        query: format!("{lower_id} -> {upper_id}"),
+                        message: format!(
+                            "current topology path has mixed dependency directions: {} runs {:?} while {} runs {:?}; split the plan or review ordering before execution",
+                            lower_action.id, lower_direction, upper_action.id, upper_direction
+                        ),
+                        current: None,
+                    });
+                }
+            }
+        }
+    }
+    diagnostics
 }
 
 fn graph_storage_reachability(graph: &StorageGraph) -> BTreeMap<String, BTreeSet<String>> {
@@ -25920,6 +25975,66 @@ mod tests {
         );
         assert!(luks.notes.iter().any(|note| {
             note.contains("current topology graph path requires filesystems:root:unmount")
+        }));
+    }
+
+    #[test]
+    fn topology_comparison_reports_mixed_direction_graph_dependency_conflicts() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "root": {
+                  "operation": "grow",
+                  "device": "/dev/mapper/cryptroot",
+                  "mountpoint": "/",
+                  "resizePolicy": "grow-only",
+                  "desiredSize": "200GiB"
+                }
+              },
+              "luks": {
+                "devices": {
+                  "cryptroot": {
+                    "operation": "close",
+                    "device": "/dev/disk/by-partuuid/root",
+                    "target": "cryptroot"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("luks:cryptroot", NodeKind::LuksContainer, "cryptroot")
+                .with_path("/dev/mapper/cryptroot"),
+        );
+        graph.add_node(
+            Node::new("filesystem:/", NodeKind::Filesystem, "root")
+                .with_path("/")
+                .with_property("filesystem.type", "xfs")
+                .with_size_bytes(100 * 1024 * 1024 * 1024),
+        );
+        graph.add_edge(disk_nix_model::Edge::new(
+            "luks:cryptroot",
+            "filesystem:/",
+            Relationship::Backs,
+        ));
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.graph_dependency_edge_count, 0);
+        assert_eq!(comparison.summary.graph_dependency_conflict_count, 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptroot:close"
+                && diagnostic.level == TopologyDiagnosticLevel::Warning
+                && diagnostic.kind == TopologyDiagnosticKind::GraphDependencyConflict
+                && diagnostic.query == "luks:cryptroot -> filesystem:/"
+                && diagnostic.message.contains("mixed dependency directions")
+                && diagnostic.message.contains("filesystem:root:grow")
         }));
     }
 

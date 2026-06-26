@@ -58,9 +58,11 @@ layered changes. When current topology probing is enabled, matched graph paths
 also add dependency edges across direct and multi-hop storage relationships.
 Lower-to-upper paths such as LUN to multipath to partition to mapper to volume
 to filesystem are emitted in build/grow order, while teardown actions reverse
-the path so consumers are handled before backing layers. This is still
-conservative: ambiguous current-state recovery, conflict handling, and choosing
-between competing graph paths remain hardening work.
+the path so consumers are handled before backing layers. Mixed-direction
+actions on the same graph path are reported as warning diagnostics and counted
+as `graphDependencyConflictCount` so operators can split the plan or review
+ordering before execution. This is still conservative: ambiguous current-state
+recovery and choosing between competing graph paths remain hardening work.
 
 Examples:
 

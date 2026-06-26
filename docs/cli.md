@@ -596,7 +596,8 @@ derived from declared action identities. When `--probe-current` is set, direct
 and multi-hop relationships in the probed storage graph also add dependency
 edges between matched planned actions, including lower-to-upper growth paths and
 reversed upper-to-lower teardown paths. The topology comparison summary reports
-the number of graph-derived dependency edges as `graphDependencyEdgeCount`.
+the number of graph-derived dependency edges as `graphDependencyEdgeCount` and
+mixed-direction graph-path warnings as `graphDependencyConflictCount`.
 
 With `--probe-current`, the CLI also probes the current host and adds
 `topologyComparison`, including matched target counts, missing target counts,

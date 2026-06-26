@@ -29,7 +29,9 @@ behavior across real storage stacks.
   build/mutate/teardown phase, lower-first or upper-first direction, and storage
   collection layer rank, plus inferred `dependsOn`/`unblocks` edges for
   declared adjacent-layer identities and direct or multi-hop probed graph paths
-  when current topology comparison is enabled.
+  when current topology comparison is enabled, plus warning diagnostics and a
+  summary count for mixed-direction actions on the same current-topology graph
+  path.
 - Guarded apply flow with dry-run reports, script generation, readiness
   summaries, manual-review markers, unresolved-input reporting, policy blocks,
   renderer tool requirement inventories with PATH availability and per-tool
@@ -189,10 +191,11 @@ manual-review guidance, or non-ready command plans instead of guessing.
   operation types and multi-action groups before command rendering.
 - Runtime graph-path dependency ordering for multi-layer changes. The planner
   now applies coarse layer ordering and reports inferred dependency edges from
-  declared identities and direct or multi-hop current-topology graph paths, but
-  grouped changes such as iSCSI LUN refresh, multipath, partition growth,
-  LUKS/LVM resize, and filesystem growth still need conflict handling and
-  recovery-aware ordering.
+  declared identities and direct or multi-hop current-topology graph paths, and
+  warns when matched actions on the same graph path require mixed dependency
+  directions. Grouped changes such as iSCSI LUN refresh, multipath, partition
+  growth, LUKS/LVM resize, and filesystem growth still need recovery-aware
+  ordering and stronger conflict resolution before execution.
 - More NixOS steady-state synthesis for lifecycle-managed resources after
   mutation, especially when imperative changes should update declarative mounts,
   crypttab, swap, NFS exports, iSCSI boot, or generated files.
