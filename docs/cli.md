@@ -99,12 +99,14 @@ surfaces such as device-mapper, LVM, ZFS, iSCSI, NVMe, multipath, MD RAID, and
 VDO state, including root-only and superuser barriers; parse failures ask for
 raw command-output fixtures and tool versions; inaccessible-data reports point
 to missing kernel surfaces, services, imports, sessions, or mountpoints.
-`probe-status --preflight` adds OS release, kernel release, effective UID, and
-storage tool version probes so CI, operators, and bug reports can tie adapter
-failures to the distribution, privilege context, and tool-output variant that
-produced them. With `--json`, preflight output is wrapped as
-`{ environment, reports }`; without `--preflight`, `probe-status --json` keeps
-the stable adapter-report array shape.
+`probe-status --preflight` adds OS release, kernel release, effective UID,
+storage tool version probes, and preflight check summaries so CI, operators, and
+bug reports can tie adapter failures to the distribution, privilege context, and
+tool-output variant that produced them. The checks report whether probing is
+running as root, count missing or failing storage tools, list the affected
+tools, and emit remediation text. With `--json`, preflight output is wrapped as
+`{ environment, preflightChecks, reports }`; without `--preflight`,
+`probe-status --json` keeps the stable adapter-report array shape.
 
 Unavailable or partial adapters are not fatal. They mean the graph is degraded
 for that storage domain. For example, a host without `zpool` can still report

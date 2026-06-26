@@ -1835,6 +1835,7 @@
             emptyExecute=$(mktemp)
             legacySpec=$(mktemp)
             legacyMigration=$(mktemp)
+            preflightStatus=$(mktemp)
             schema=$(mktemp)
             scriptOut=$(mktemp)
 
@@ -1853,6 +1854,18 @@
             ${diskNix}/bin/disk-nix --help | grep -- 'iscsi'
             ${diskNix}/bin/disk-nix --help | grep -- 'nfs'
             ${diskNix}/bin/disk-nix probe-status --help | grep -- '--preflight'
+            ${diskNix}/bin/disk-nix probe-status --preflight --json > "$preflightStatus"
+            jq -e '
+              (.environment | has("toolVersions"))
+              and (.preflightChecks | has("status"))
+              and (.preflightChecks | has("root"))
+              and (.preflightChecks | has("unavailableToolCount"))
+              and (.preflightChecks | has("failedToolCount"))
+              and (.preflightChecks.missingTools | type == "array")
+              and (.preflightChecks.failedTools | type == "array")
+              and (.preflightChecks.remediation | type == "array")
+              and (.reports | type == "array")
+            ' "$preflightStatus"
             if grep -R -E 'executor-unavailable|does not mutate storage yet|future mutating executor|future `btrfs device remove`|does not run mutating storage commands directly|non-executed command' ${./README.md} ${./docs}; then
               echo "stale executor documentation found" >&2
               exit 1

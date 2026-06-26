@@ -361,6 +361,7 @@ struct MigrationReport {
 #[serde(rename_all = "camelCase")]
 struct ProbeStatusPreflightReport {
     environment: ProbePreflightEnvironment,
+    preflight_checks: ProbePreflightChecks,
     reports: Vec<disk_nix_probe::ProbeReport>,
 }
 
@@ -373,6 +374,25 @@ struct ProbePreflightEnvironment {
     kernel_release: Option<String>,
     effective_uid: Option<String>,
     tool_versions: Vec<ToolVersionReport>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProbePreflightChecks {
+    status: ProbePreflightCheckStatus,
+    root: bool,
+    unavailable_tool_count: usize,
+    failed_tool_count: usize,
+    missing_tools: Vec<String>,
+    failed_tools: Vec<String>,
+    remediation: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum ProbePreflightCheckStatus {
+    Ready,
+    Degraded,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -447,8 +467,11 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 .map_err(|error| AppError::Message(error.to_string()))?;
             if json {
                 if preflight {
+                    let environment = collect_probe_preflight_environment();
+                    let preflight_checks = probe_preflight_checks(&environment);
                     let report = ProbeStatusPreflightReport {
-                        environment: collect_probe_preflight_environment(),
+                        environment,
+                        preflight_checks,
                         reports: result.reports,
                     };
                     writeln!(
@@ -467,7 +490,9 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                 }
             } else if preflight {
                 let environment = collect_probe_preflight_environment();
+                let preflight_checks = probe_preflight_checks(&environment);
                 print_probe_preflight_environment(output, &environment)?;
+                print_probe_preflight_checks(output, &preflight_checks)?;
                 print_probe_reports(output, &result.reports)?;
             } else {
                 print_probe_reports(output, &result.reports)?;
@@ -2097,6 +2122,60 @@ fn storage_tool_version_report(tool: &str, args: &[&str]) -> ToolVersionReport {
     }
 }
 
+fn probe_preflight_checks(environment: &ProbePreflightEnvironment) -> ProbePreflightChecks {
+    let root = environment.effective_uid.as_deref() == Some("0");
+    let missing_tools = environment
+        .tool_versions
+        .iter()
+        .filter(|tool| tool.status == ToolVersionStatus::Unavailable)
+        .map(|tool| tool.tool.clone())
+        .collect::<Vec<_>>();
+    let failed_tools = environment
+        .tool_versions
+        .iter()
+        .filter(|tool| tool.status == ToolVersionStatus::Failed)
+        .map(|tool| tool.tool.clone())
+        .collect::<Vec<_>>();
+    let mut remediation = Vec::new();
+    if !root {
+        remediation.push(
+            "run probe-status with privileges when adapter metadata requires root-only kernel or device access"
+                .to_string(),
+        );
+    }
+    if !missing_tools.is_empty() {
+        remediation.push(format!(
+            "install or expose missing storage tool(s): {}",
+            missing_tools.join(", ")
+        ));
+        remediation.push(
+            "on NixOS, add the required storage packages to environment.systemPackages or services.disk-nix.toolPackages"
+                .to_string(),
+        );
+    }
+    if !failed_tools.is_empty() {
+        remediation.push(format!(
+            "rerun failed storage tool version probe(s) manually with stderr captured: {}",
+            failed_tools.join(", ")
+        ));
+    }
+    let status = if root && missing_tools.is_empty() && failed_tools.is_empty() {
+        ProbePreflightCheckStatus::Ready
+    } else {
+        ProbePreflightCheckStatus::Degraded
+    };
+
+    ProbePreflightChecks {
+        status,
+        root,
+        unavailable_tool_count: missing_tools.len(),
+        failed_tool_count: failed_tools.len(),
+        missing_tools,
+        failed_tools,
+        remediation,
+    }
+}
+
 fn command_stdout_first_line(command: &str, args: &[&str]) -> Result<String, String> {
     match ProcessCommand::new(command).args(args).output() {
         Ok(output) if output.status.success() => {
@@ -2175,6 +2254,44 @@ fn print_probe_preflight_environment(
             .or(tool.message.as_deref())
             .unwrap_or("-");
         writeln!(output, "    {:<12} {:<12} {}", tool.tool, status, detail)?;
+    }
+    writeln!(output)?;
+    Ok(())
+}
+
+fn print_probe_preflight_checks(
+    output: &mut impl Write,
+    checks: &ProbePreflightChecks,
+) -> io::Result<()> {
+    let status = match checks.status {
+        ProbePreflightCheckStatus::Ready => "ready",
+        ProbePreflightCheckStatus::Degraded => "degraded",
+    };
+    writeln!(output, "Preflight checks:")?;
+    writeln!(output, "  status: {status}")?;
+    writeln!(output, "  root: {}", checks.root)?;
+    writeln!(
+        output,
+        "  unavailable-tools: {}",
+        checks.unavailable_tool_count
+    )?;
+    writeln!(output, "  failed-tools: {}", checks.failed_tool_count)?;
+    if !checks.missing_tools.is_empty() {
+        writeln!(
+            output,
+            "  missing-tools: {}",
+            checks.missing_tools.join(", ")
+        )?;
+    }
+    if !checks.failed_tools.is_empty() {
+        writeln!(
+            output,
+            "  failed-tool-names: {}",
+            checks.failed_tools.join(", ")
+        )?;
+    }
+    for remediation in &checks.remediation {
+        writeln!(output, "    remediation: {remediation}")?;
     }
     writeln!(output)?;
     Ok(())
@@ -5296,9 +5413,10 @@ mod tests {
         print_encryption, print_filesystems, print_filtered_json, print_inspect,
         print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm, print_mappings,
         print_migration_report, print_mounts, print_multipath, print_network_storage, print_nfs,
-        print_nvme, print_partitions, print_pools, print_probe_preflight_environment,
-        print_probe_reports, print_raid, print_snapshots, print_swap, print_usage, print_vdo,
-        print_volumes, print_zfs, print_zram, script_refusal_message, snapshot_source,
+        print_nvme, print_partitions, print_pools, print_probe_preflight_checks,
+        print_probe_preflight_environment, print_probe_reports, print_raid, print_snapshots,
+        print_swap, print_usage, print_vdo, print_volumes, print_zfs, print_zram,
+        probe_preflight_checks, script_refusal_message, snapshot_source,
         storage_tool_version_report, usage_details, usage_percent, zfs_child_count,
     };
 
@@ -5413,24 +5531,36 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(output.contains("lsblk"));
         assert!(output.contains("zpool"));
         assert!(output.contains("unavailable"));
+
+        let checks = probe_preflight_checks(&environment);
+        let mut output = Vec::new();
+        print_probe_preflight_checks(&mut output, &checks).expect("preflight checks render");
+        let output = String::from_utf8(output).expect("preflight checks output is utf8");
+        assert!(output.contains("Preflight checks:"));
+        assert!(output.contains("status: degraded"));
+        assert!(output.contains("missing-tools: zpool"));
+        assert!(output.contains("remediation:"));
     }
 
     #[test]
     fn probe_preflight_json_wraps_environment_and_reports() {
+        let environment = ProbePreflightEnvironment {
+            os_id: Some("nixos".to_string()),
+            os_version_id: Some("26.05".to_string()),
+            os_pretty_name: Some("NixOS 26.05".to_string()),
+            kernel_release: Some("6.12.0".to_string()),
+            effective_uid: Some("0".to_string()),
+            tool_versions: vec![ToolVersionReport {
+                tool: "lsblk".to_string(),
+                status: ToolVersionStatus::Available,
+                version: Some("lsblk from util-linux 2.41".to_string()),
+                message: None,
+            }],
+        };
+        let preflight_checks = probe_preflight_checks(&environment);
         let report = ProbeStatusPreflightReport {
-            environment: ProbePreflightEnvironment {
-                os_id: Some("nixos".to_string()),
-                os_version_id: Some("26.05".to_string()),
-                os_pretty_name: Some("NixOS 26.05".to_string()),
-                kernel_release: Some("6.12.0".to_string()),
-                effective_uid: Some("0".to_string()),
-                tool_versions: vec![ToolVersionReport {
-                    tool: "lsblk".to_string(),
-                    status: ToolVersionStatus::Available,
-                    version: Some("lsblk from util-linux 2.41".to_string()),
-                    message: None,
-                }],
-            },
+            environment,
+            preflight_checks,
             reports: vec![ProbeReport {
                 adapter: "lsblk".to_string(),
                 status: ProbeStatus::Available,
@@ -5441,6 +5571,9 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         let json = serde_json::to_value(&report).expect("preflight report serializes");
         assert_eq!(json["environment"]["osId"], "nixos");
         assert_eq!(json["environment"]["toolVersions"][0]["tool"], "lsblk");
+        assert_eq!(json["preflightChecks"]["status"], "ready");
+        assert_eq!(json["preflightChecks"]["root"], true);
+        assert_eq!(json["preflightChecks"]["unavailableToolCount"], 0);
         assert_eq!(json["reports"][0]["adapter"], "lsblk");
         assert_eq!(json["reports"][0]["category"], "none");
     }
