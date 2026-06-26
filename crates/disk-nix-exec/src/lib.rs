@@ -11438,11 +11438,9 @@ fn target_lun_tgt_commands(action: &PlannedAction, target: &str) -> Vec<Executio
             ));
         }
         Operation::SetProperty => {
-            commands.push(target_lun_provider_command(
+            commands.push(target_lun_tgt_property_command(
                 action,
-                target,
-                "set-property",
-                action.context.desired_size.as_deref(),
+                "update the reviewed Linux tgt logical-unit property",
             ));
         }
         _ => {}
@@ -11538,6 +11536,54 @@ fn target_lun_tgt_lun_command(action: &PlannedAction, op: &str, note: &str) -> E
     }
     command_vec_with_readiness(
         argv,
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_tgt_property_command(action: &PlannedAction, note: &str) -> ExecutionCommand {
+    let (target_id, mut unresolved_inputs) = target_lun_tgt_target_id(action);
+    let (lun, lun_unresolved) = target_lun_tgt_lun(action);
+    unresolved_inputs.extend(lun_unresolved);
+    let property = match action.context.property.as_deref() {
+        Some(property) => property.to_string(),
+        None => {
+            unresolved_inputs.push("Linux tgt logical-unit property name".to_string());
+            "<property>".to_string()
+        }
+    };
+    let value = match action.context.property_value.as_deref() {
+        Some(value) => value.to_string(),
+        None => {
+            unresolved_inputs.push("Linux tgt logical-unit property value".to_string());
+            "<value>".to_string()
+        }
+    };
+
+    command_vec_with_readiness(
+        vec![
+            "tgtadm".to_string(),
+            "--lld".to_string(),
+            "iscsi".to_string(),
+            "--mode".to_string(),
+            "logicalunit".to_string(),
+            "--op".to_string(),
+            "update".to_string(),
+            "--tid".to_string(),
+            target_id,
+            "--lun".to_string(),
+            lun,
+            "--name".to_string(),
+            property,
+            "--value".to_string(),
+            value,
+        ],
         true,
         if unresolved_inputs.is_empty() {
             CommandReadiness::Ready
@@ -30128,7 +30174,7 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_summary.needs_domain_implementation_count, 2);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
         assert!(!report.command_summary.all_commands_ready());
 
         let grow = report
@@ -30184,25 +30230,24 @@ mod tests {
         assert!(property.commands.iter().any(|command| {
             command.argv
                 == [
-                    "<target-lun-provider:tgt>",
-                    "set-lun-property",
-                    "--target",
-                    "iqn.2026-06.example:tgt.root",
-                    "--provider",
-                    "tgt",
-                    "--backing",
-                    "/dev/zvol/tank/root",
-                    "--target-id",
+                    "tgtadm",
+                    "--lld",
+                    "iscsi",
+                    "--mode",
+                    "logicalunit",
+                    "--op",
+                    "update",
+                    "--tid",
                     "42",
                     "--lun",
                     "8",
-                    "--property",
+                    "--name",
                     "tgt.writeCache",
                     "--value",
                     "off",
                 ]
                 && command.mutates
-                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.readiness == CommandReadiness::Ready
         }));
     }
 

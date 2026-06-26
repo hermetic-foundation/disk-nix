@@ -441,9 +441,12 @@ Examples:
   Linux tgt `tgtadm` inventory, target creation, logical-unit creation/removal,
   initiator-address bind/unbind, and target removal when `targetId`/`tid`,
   `lun`, backing object, and initiator-address or `ALL` ACL values are declared.
-  tgt grow/property updates likewise render native target inventory around the
-  non-ready provider handoff. Missing tgt-specific inputs keep the affected
-  commands non-ready with explicit unresolved-input notes.
+  tgt property updates render concrete
+  `tgtadm --mode logicalunit --op update --name ... --value ...` commands when
+  `targetId`/`tid`, `lun`, property, and value are declared. tgt grow still
+  renders native target inventory around the non-ready provider handoff.
+  Missing tgt-specific inputs keep the affected commands non-ready with
+  explicit unresolved-input notes.
   Other providers still emit non-ready `<target-lun-provider[:provider]>`
   handoff commands carrying the target identity, provider label, desired size,
   backing object, target id, LUN number, portal, and initiators, plus read-only

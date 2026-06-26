@@ -1119,10 +1119,12 @@ explicit non-ready provider handoff. `provider = "tgt"` or `"tgtadm"` renders
 concrete Linux tgt `tgtadm` command plans for target inventory, target
 creation/removal, logical-unit creation/removal, and initiator-address
 bind/unbind when `targetId` or `tid`, `lun`, backing object, and
-initiator-address or `ALL` ACL values are declared. tgt grow/property updates
-add native target inventory around the non-ready provider handoff. Missing
-tgt-specific values leave only the affected commands non-ready with
-unresolved-input notes. Other providers render non-ready
+initiator-address or `ALL` ACL values are declared. tgt property updates render
+concrete `tgtadm --mode logicalunit --op update --name ... --value ...`
+commands when `targetId`/`tid`, `lun`, property, and value are declared, while
+tgt grow still adds native target inventory around the non-ready provider
+handoff. Missing tgt-specific values leave only the affected commands non-ready
+with unresolved-input notes. Other providers render non-ready
 `<target-lun-provider[:provider]>` placeholders with reviewed target, provider
 label, size, backing object, target id, LUN number, portal, and initiator inputs
 until an adapter or

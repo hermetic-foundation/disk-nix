@@ -1914,6 +1914,7 @@
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt detach logicalunit failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt destroy target failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt grow handoff should stay not-ready' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q '"--mode", "logicalunit", "--op", "update"' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic multipath resize failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic multipath replace delete failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic MD RAID add-member failure' ${./scripts/integration-failure-recovery-smoke.sh}
@@ -2048,7 +2049,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'non-block SES enclosure records' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'active/standby state' ${./docs/storage-scope.md}
             ${pkgs.gnugrep}/bin/grep -q 'LIO grow/property updates' ${./docs/planning.md}
-            ${pkgs.gnugrep}/bin/grep -q 'tgt grow/property updates' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'tgt property updates render' ${./docs/cli.md}
             runbooks=${./docs/operator-runbooks.md}
             for runbook in \
               "Device replacement" \

@@ -183,7 +183,10 @@ Update rules:
   renders concrete `tgtadm` inventory, target, logical-unit, initiator-address
   bind/unbind, and target removal commands when the reviewed `targetId`/`tid`,
   `lun`, backing object, and ACL values are declared; tgt grow/property requests
-  now include native target inventory around the non-ready provider handoff.
+  now include native target inventory, tgt property requests render concrete
+  reviewed `tgtadm --mode logicalunit --op update --name ... --value ...`
+  commands when `targetId`/`tid`, `lun`, property, and value are declared, and
+  tgt grow remains an explicit non-ready provider handoff.
   Provider handoffs carry declared `targetId`/`tid` and `lun` values. Other
   array/provider adapters still use provider-labeled non-ready commands and
   verification placeholders.
@@ -296,9 +299,10 @@ Update rules:
   detach, target-side LUN LIO destroy, target-side LUN LIO grow/property
   not-ready, target-side LUN tgt create, target-side LUN tgt attach,
   target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt
-  grow/property not-ready, multipath resize, multipath replace, MD RAID
-  add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add,
-  LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow,
+  grow not-ready with concrete property rendering, multipath resize, multipath
+  replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS
+  close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove,
+  LUKS token remove, partition grow,
   NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM
   cache detach, VDO grow, VDO property, bcache property, and LVM cache property
   paths.

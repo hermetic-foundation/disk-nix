@@ -169,8 +169,9 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
   inventory, initiator unbind, and logical-unit delete succeed and fake
   `tgtadm --lld iscsi --mode target --op delete --tid 42` fails
 - a target-side LUN grow plus property update through the Linux tgt provider
-  where execute mode refuses the non-ready provider handoffs after rendering
-  concrete `tgtadm` target inventory for review
+  where execute mode refuses the non-ready grow handoff after rendering
+  concrete `tgtadm` target inventory and a ready
+  `tgtadm --mode logicalunit --op update` property command for review
 - a multipath map resize where fake `multipath -ll /dev/mapper/mpatha` and
   fake `lsscsi -t -s` succeed and fake
   `multipathd resize map /dev/mapper/mpatha` fails
@@ -896,7 +897,8 @@ namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
 target-side LUN LIO destroy, target-side LUN LIO grow/property not-ready,
 target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
-detach, target-side LUN tgt destroy, target-side LUN tgt grow/property not-ready, multipath
+detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
+concrete property rendering, multipath
 resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
