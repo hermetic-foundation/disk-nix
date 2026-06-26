@@ -1114,7 +1114,12 @@ adapter. `provider = "lio"` renders concrete Linux LIO `targetcli` command
 plans for inventory, backstore creation, target creation, LUN mapping, ACL
 mapping/unmapping, target removal, reviewed backstore removal, and `saveconfig`
 when the target IQN, backing object, LUN number, and initiators are declared.
-Other providers render non-ready
+`provider = "tgt"` or `"tgtadm"` renders concrete Linux tgt `tgtadm` command
+plans for target inventory, target creation/removal, logical-unit
+creation/removal, and initiator-address bind/unbind when `targetId` or `tid`,
+`lun`, backing object, and initiator-address or `ALL` ACL values are declared.
+Missing tgt-specific values leave only the affected commands non-ready with
+unresolved-input notes. Other providers render non-ready
 `<target-lun-provider[:provider]>` placeholders with reviewed target, provider
 label, size, backing object, portal, and initiator inputs until an adapter or
 reviewed runbook supplies concrete commands. Host-side `luns`,

@@ -510,6 +510,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub lun: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<String>,
@@ -560,6 +562,7 @@ impl ActionContext {
             && self.client.is_none()
             && self.portal.is_none()
             && self.provider.is_none()
+            && self.target_id.is_none()
             && self.lun.is_none()
             && self.options.is_none()
             && self.namespace_id.is_none()
@@ -7785,6 +7788,10 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
                 "arrayProvider",
                 "array-provider",
             ],
+        ),
+        target_id: metadata_string_field(
+            object,
+            &["targetId", "targetID", "target-id", "target_id", "tid"],
         ),
         lun: metadata_string_field(
             object,

@@ -121,7 +121,8 @@ and backup directory under `declarativeHandoff.autoImport`.
 `toolPackages` defaults to the storage tools used by the probe and executor
 adapters, including bash shell wrappers, coreutils file helpers, Btrfs,
 bcachefs, ext, XFS, F2FS, exFAT, LVM, cryptsetup, MD RAID, multipath, NFS,
-iSCSI, SCSI inventory, NVMe, SMART, VDO, Linux LIO `targetcli`, bcache, ZFS,
+iSCSI, SCSI inventory, NVMe, SMART, VDO, Linux LIO `targetcli`, Linux tgt
+`tgtadm`, bcache, ZFS,
 partitioning, cloud-utils `growpart`, and util-linux tooling. The apply service adds these
 packages to `PATH`, and the same packages are installed in
 `environment.systemPackages`. Override the list to pin site-specific tool

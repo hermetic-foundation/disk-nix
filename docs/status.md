@@ -198,15 +198,19 @@ to overwrite an existing path before rendering sparse-file growth.
 
 Unsupported or unsafe requests are kept explicit. Examples include XFS shrink,
 unsupported filesystem or Btrfs subvolume properties, unsupported VDO property
-values, non-LIO target-side LUN provider execution, and actions whose concrete
-identity or required input is not declared. These produce machine-readable
-blocked actions, manual-review guidance, or non-ready command plans instead of
-guessing. Target-side LUN provisioning is modeled through `targetLuns`;
+values, target-side LUN providers without concrete adapters, and actions whose
+concrete identity or required input is not declared. These produce
+machine-readable blocked actions, manual-review guidance, or non-ready command
+plans instead of guessing. Target-side LUN provisioning is modeled through
+`targetLuns`;
 `provider = "lio"` now renders concrete Linux LIO `targetcli` inventory,
 backstore, target, LUN mapping, ACL, target removal, reviewed backstore removal,
-and persistence commands, while other providers still use provider-labeled
-handoff commands and verification placeholders until concrete adapters are
-added.
+and persistence commands. `provider = "tgt"` or `"tgtadm"` renders concrete
+Linux tgt `tgtadm` inventory, target creation/removal, logical-unit
+creation/removal, and initiator-address bind/unbind commands when the reviewed
+`targetId`/`tid`, `lun`, backing object, and ACL values are declared. Other
+providers still use provider-labeled handoff commands and verification
+placeholders until concrete adapters are added.
 
 ## Remaining for feature complete
 

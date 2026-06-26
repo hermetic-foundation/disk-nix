@@ -49,6 +49,7 @@ let
     parted
     smartmontools
     targetcli-fb
+    tgt
     util-linux
     vdo
     xfsprogs
@@ -1767,6 +1768,7 @@ in
           parted
           smartmontools
           targetcli-fb
+          tgt
           util-linux
           vdo
           xfsprogs

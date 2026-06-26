@@ -3915,6 +3915,7 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
         "parted" => Some("parted"),
         "smartctl" => Some("smartmontools"),
         "targetcli" => Some("targetcli-fb"),
+        "tgtadm" => Some("tgt"),
         "vdo" | "vdostats" => Some("vdo"),
         "mkfs.xfs" | "xfs_admin" | "xfs_growfs" | "xfs_info" | "xfs_repair" => Some("xfsprogs"),
         "zfs" | "zpool" => Some("zfs"),
@@ -3947,6 +3948,7 @@ fn disk_nix_default_tool_package(package: &str) -> bool {
             | "parted"
             | "smartmontools"
             | "targetcli-fb"
+            | "tgt"
             | "util-linux"
             | "vdo"
             | "xfsprogs"
@@ -10732,6 +10734,18 @@ fn target_lun_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCom
     {
         return target_lun_lio_commands(action, target);
     }
+    if target_lun_tgt_provider(action)
+        && matches!(
+            action.operation,
+            Operation::Create
+                | Operation::Attach
+                | Operation::Detach
+                | Operation::Destroy
+                | Operation::Rescan
+        )
+    {
+        return target_lun_tgt_commands(action, target);
+    }
 
     let operation = operation_name(action.operation);
     let desired_size = action.context.desired_size.as_deref();
@@ -10769,6 +10783,12 @@ fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec
         }
         return commands;
     }
+    if target_lun_tgt_provider(action) {
+        return vec![target_lun_tgt_inventory_command(
+            action,
+            "verify Linux tgt target-side LUN inventory after tgtadm action",
+        )];
+    }
 
     let mut commands = vec![target_lun_inventory_command(
         action,
@@ -10799,6 +10819,15 @@ fn target_lun_lio_provider(action: &PlannedAction) -> bool {
         matches!(
             provider.to_ascii_lowercase().as_str(),
             "lio" | "linux-lio" | "targetcli" | "targetcli-fb"
+        )
+    })
+}
+
+fn target_lun_tgt_provider(action: &PlannedAction) -> bool {
+    action.context.provider.as_deref().is_some_and(|provider| {
+        matches!(
+            provider.to_ascii_lowercase().as_str(),
+            "tgt" | "linux-tgt" | "tgtadm"
         )
     })
 }
@@ -11122,6 +11151,255 @@ fn target_lun_lio_backstore_name(action: &PlannedAction, target: &str) -> String
         "disk_nix_lun".to_string()
     } else {
         sanitized
+    }
+}
+
+fn target_lun_tgt_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCommand> {
+    let mut commands = vec![target_lun_tgt_inventory_command(
+        action,
+        "inspect Linux tgt target-side inventory before tgtadm mutation",
+    )];
+    match action.operation {
+        Operation::Create => {
+            commands.push(target_lun_tgt_target_command(
+                action,
+                target,
+                "new",
+                "create or ensure the reviewed Linux tgt iSCSI target exists",
+            ));
+            commands.push(target_lun_tgt_lun_command(
+                action,
+                "new",
+                "create the reviewed Linux tgt logical unit with the declared backing store",
+            ));
+            target_lun_tgt_bind_commands(action, true, &mut commands);
+        }
+        Operation::Attach => {
+            if action.context.device.is_some() {
+                commands.push(target_lun_tgt_lun_command(
+                    action,
+                    "new",
+                    "map the reviewed backing store as a Linux tgt logical unit",
+                ));
+            }
+            target_lun_tgt_bind_commands(action, true, &mut commands);
+        }
+        Operation::Detach => {
+            target_lun_tgt_bind_commands(action, false, &mut commands);
+            commands.push(target_lun_tgt_lun_command(
+                action,
+                "delete",
+                "unmap the reviewed Linux tgt logical unit without deleting target-side data",
+            ));
+        }
+        Operation::Destroy => {
+            target_lun_tgt_bind_commands(action, false, &mut commands);
+            commands.push(target_lun_tgt_lun_command(
+                action,
+                "delete",
+                "unmap the reviewed Linux tgt logical unit before target removal",
+            ));
+            commands.push(target_lun_tgt_target_command(
+                action,
+                target,
+                "delete",
+                "remove the reviewed Linux tgt iSCSI target",
+            ));
+        }
+        Operation::Rescan => {}
+        _ => {}
+    }
+    commands.push(target_lun_tgt_inventory_command(
+        action,
+        "inspect Linux tgt target-side inventory after tgtadm mutation",
+    ));
+    commands
+}
+
+fn target_lun_tgt_inventory_command(action: &PlannedAction, note: &str) -> ExecutionCommand {
+    let mut argv = vec![
+        "tgtadm".to_string(),
+        "--lld".to_string(),
+        "iscsi".to_string(),
+        "--mode".to_string(),
+        "target".to_string(),
+        "--op".to_string(),
+        "show".to_string(),
+    ];
+    if let Some(target_id) = action.context.target_id.as_deref() {
+        argv.push("--tid".to_string());
+        argv.push(target_id.to_string());
+    }
+    command_vec(argv, false, note)
+}
+
+fn target_lun_tgt_target_command(
+    action: &PlannedAction,
+    target: &str,
+    op: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let (target_id, mut unresolved_inputs) = target_lun_tgt_target_id(action);
+    let mut argv = vec![
+        "tgtadm".to_string(),
+        "--lld".to_string(),
+        "iscsi".to_string(),
+        "--mode".to_string(),
+        "target".to_string(),
+        "--op".to_string(),
+        op.to_string(),
+        "--tid".to_string(),
+        target_id,
+    ];
+    if op == "new" {
+        argv.push("--targetname".to_string());
+        argv.push(target.to_string());
+    }
+    command_vec_with_readiness(
+        argv,
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        std::mem::take(&mut unresolved_inputs),
+        note,
+    )
+}
+
+fn target_lun_tgt_lun_command(action: &PlannedAction, op: &str, note: &str) -> ExecutionCommand {
+    let (target_id, mut unresolved_inputs) = target_lun_tgt_target_id(action);
+    let (lun, lun_unresolved) = target_lun_tgt_lun(action);
+    unresolved_inputs.extend(lun_unresolved);
+    let mut argv = vec![
+        "tgtadm".to_string(),
+        "--lld".to_string(),
+        "iscsi".to_string(),
+        "--mode".to_string(),
+        "logicalunit".to_string(),
+        "--op".to_string(),
+        op.to_string(),
+        "--tid".to_string(),
+        target_id,
+        "--lun".to_string(),
+        lun,
+    ];
+    if op == "new" {
+        match action.context.device.as_deref() {
+            Some(device) => {
+                argv.push("--backing-store".to_string());
+                argv.push(device.to_string());
+            }
+            None => {
+                argv.push("--backing-store".to_string());
+                argv.push("<backing-block-device-or-file>".to_string());
+                unresolved_inputs.push("Linux tgt backing store path".to_string());
+            }
+        }
+    }
+    command_vec_with_readiness(
+        argv,
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_tgt_bind_commands(
+    action: &PlannedAction,
+    bind: bool,
+    commands: &mut Vec<ExecutionCommand>,
+) {
+    let mut initiators = Vec::new();
+    if let Some(client) = action.context.client.as_deref() {
+        initiators.push(client.to_string());
+    }
+    initiators.extend(action.context.devices.iter().cloned());
+
+    if initiators.is_empty() {
+        let (target_id, mut unresolved_inputs) = target_lun_tgt_target_id(action);
+        unresolved_inputs.push("Linux tgt initiator address or ALL ACL value".to_string());
+        commands.push(command_vec_with_readiness(
+            vec![
+                "tgtadm".to_string(),
+                "--lld".to_string(),
+                "iscsi".to_string(),
+                "--mode".to_string(),
+                "target".to_string(),
+                "--op".to_string(),
+                if bind { "bind" } else { "unbind" }.to_string(),
+                "--tid".to_string(),
+                target_id,
+                "--initiator-address".to_string(),
+                "<initiator-address-or-ALL>".to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            unresolved_inputs,
+            if bind {
+                "bind the Linux tgt target to a reviewed initiator address"
+            } else {
+                "unbind the reviewed initiator address from the Linux tgt target"
+            },
+        ));
+        return;
+    }
+
+    for initiator in initiators {
+        let (target_id, unresolved_inputs) = target_lun_tgt_target_id(action);
+        commands.push(command_vec_with_readiness(
+            vec![
+                "tgtadm".to_string(),
+                "--lld".to_string(),
+                "iscsi".to_string(),
+                "--mode".to_string(),
+                "target".to_string(),
+                "--op".to_string(),
+                if bind { "bind" } else { "unbind" }.to_string(),
+                "--tid".to_string(),
+                target_id,
+                "--initiator-address".to_string(),
+                initiator,
+            ],
+            true,
+            if unresolved_inputs.is_empty() {
+                CommandReadiness::Ready
+            } else {
+                CommandReadiness::NeedsDomainImplementation
+            },
+            unresolved_inputs,
+            if bind {
+                "bind the Linux tgt target to the reviewed initiator address"
+            } else {
+                "unbind the reviewed initiator address from the Linux tgt target"
+            },
+        ));
+    }
+}
+
+fn target_lun_tgt_target_id(action: &PlannedAction) -> (String, Vec<String>) {
+    match action.context.target_id.as_deref() {
+        Some(target_id) => (target_id.to_string(), Vec::new()),
+        None => (
+            "<tid>".to_string(),
+            vec!["Linux tgt numeric target id (targetId or tid)".to_string()],
+        ),
+    }
+}
+
+fn target_lun_tgt_lun(action: &PlannedAction) -> (String, Vec<String>) {
+    match action.context.lun.as_deref() {
+        Some(lun) => (lun.to_string(), Vec::new()),
+        None => (
+            "<lun>".to_string(),
+            vec!["Linux tgt LUN number".to_string()],
+        ),
     }
 }
 
@@ -28845,6 +29123,222 @@ mod tests {
                 && command
                     .unresolved_inputs
                     .contains(&"LIO backstore name or backing device for removal".to_string())
+        }));
+    }
+
+    #[test]
+    fn target_lun_tgt_provider_renders_concrete_tgtadm_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:tgt.root": {
+                    "operation": "create",
+                    "provider": "tgt",
+                    "targetId": 42,
+                    "source": "/dev/zvol/tank/root",
+                    "lun": 8,
+                    "client": "ALL"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
+
+        let step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:tgt.root:create")
+            .expect("Linux tgt target-side LUN create command plan exists");
+        assert!(step.requires_manual_review);
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm",
+                    "--lld",
+                    "iscsi",
+                    "--mode",
+                    "target",
+                    "--op",
+                    "new",
+                    "--tid",
+                    "42",
+                    "--targetname",
+                    "iqn.2026-06.example:tgt.root",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm",
+                    "--lld",
+                    "iscsi",
+                    "--mode",
+                    "logicalunit",
+                    "--op",
+                    "new",
+                    "--tid",
+                    "42",
+                    "--lun",
+                    "8",
+                    "--backing-store",
+                    "/dev/zvol/tank/root",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm",
+                    "--lld",
+                    "iscsi",
+                    "--mode",
+                    "target",
+                    "--op",
+                    "bind",
+                    "--tid",
+                    "42",
+                    "--initiator-address",
+                    "ALL",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "targetluns:iqn.2026-06.example:tgt.root:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show",
+                            "--tid", "42",
+                        ]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+
+        let tgtadm = report
+            .tool_requirements
+            .iter()
+            .find(|requirement| requirement.tool == "tgtadm")
+            .expect("tgtadm tool requirement exists");
+        assert!(
+            tgtadm
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.tgt"))
+        );
+    }
+
+    #[test]
+    fn target_lun_tgt_provider_requires_reviewed_target_id_and_lun_inputs() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:tgt.root": {
+                    "operation": "create",
+                    "provider": "tgt"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+
+        let step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:tgt.root:create")
+            .expect("Linux tgt target-side LUN create command plan exists");
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm",
+                    "--lld",
+                    "iscsi",
+                    "--mode",
+                    "target",
+                    "--op",
+                    "new",
+                    "--tid",
+                    "<tid>",
+                    "--targetname",
+                    "iqn.2026-06.example:tgt.root",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command
+                    .unresolved_inputs
+                    .contains(&"Linux tgt numeric target id (targetId or tid)".to_string())
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm",
+                    "--lld",
+                    "iscsi",
+                    "--mode",
+                    "logicalunit",
+                    "--op",
+                    "new",
+                    "--tid",
+                    "<tid>",
+                    "--lun",
+                    "<lun>",
+                    "--backing-store",
+                    "<backing-block-device-or-file>",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command
+                    .unresolved_inputs
+                    .contains(&"Linux tgt LUN number".to_string())
+                && command
+                    .unresolved_inputs
+                    .contains(&"Linux tgt backing store path".to_string())
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm",
+                    "--lld",
+                    "iscsi",
+                    "--mode",
+                    "target",
+                    "--op",
+                    "bind",
+                    "--tid",
+                    "<tid>",
+                    "--initiator-address",
+                    "<initiator-address-or-ALL>",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command
+                    .unresolved_inputs
+                    .contains(&"Linux tgt initiator address or ALL ACL value".to_string())
         }));
     }
 

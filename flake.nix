@@ -2888,6 +2888,7 @@
                   grep -- 'open-iscsi-' service-paths
                   grep -- 'smartmontools-' service-paths
                   grep -- 'targetcli-fb-' service-paths
+                  grep -- 'tgt-' service-paths
                   grep -- 'util-linux-' service-paths
                   grep -- 'zfs-user-' service-paths
                   swapDevices=${

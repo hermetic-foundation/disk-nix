@@ -543,9 +543,12 @@ declared stable paths through `device`, `path`, `devices`, `paths`, or
 `devicePaths`.
 Target-side `targetLuns` declarations can use `provider = "lio"` to render
 concrete Linux LIO `targetcli` inventory, backstore creation, target creation,
-LUN mapping, ACL mapping/unmapping, and persistence commands. Non-LIO array
-providers remain explicit handoff plans until a provider adapter or reviewed
-runbook supplies concrete commands.
+LUN mapping, ACL mapping/unmapping, and persistence commands.
+`provider = "tgt"` or `"tgtadm"` renders concrete Linux tgt `tgtadm` target,
+logical-unit, and initiator-address bind/unbind commands when the reviewed
+`targetId`/`tid`, `lun`, backing object, and ACL values are declared. Other
+array providers remain explicit handoff plans until a provider adapter or
+reviewed runbook supplies concrete commands.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain. Btrfs snapshot declarations with `readOnly = true` render

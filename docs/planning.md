@@ -434,7 +434,12 @@ Examples:
   `targetcli` inventory, backstore creation, target creation, LUN mapping,
   ACL mapping/unmapping, target removal, reviewed backstore removal, and
   `saveconfig` commands for Linux LIO targets when the target IQN, backing
-  object, LUN number, and initiators are declared.
+  object, LUN number, and initiators are declared. `provider = "tgt"` or
+  `"tgtadm"` renders concrete Linux tgt `tgtadm` inventory, target creation,
+  logical-unit creation/removal, initiator-address bind/unbind, and target
+  removal when `targetId`/`tid`, `lun`, backing object, and initiator-address
+  or `ALL` ACL values are declared. Missing tgt-specific inputs keep the
+  affected commands non-ready with explicit unresolved-input notes.
   Other providers still emit non-ready `<target-lun-provider[:provider]>`
   handoff commands carrying the target identity, provider label, desired size,
   backing object, portal, and initiators, plus read-only inventory verification
@@ -627,7 +632,9 @@ Lifecycle objects may use:
 - `initiators`, `initiatorIqns`, or `clients`: initiator identities for
   target-side LUN mapping requests
 - `lun`, `lunId`, or `lunNumber`: target-side LUN number for concrete provider
-  adapters such as Linux LIO `targetcli`
+  adapters such as Linux LIO `targetcli` and Linux tgt `tgtadm`
+- `targetId` or `tid`: Linux tgt numeric target id used by the `tgtadm`
+  provider adapter
 - `level` or `raidLevel`: MD RAID level for reviewed array creation
 - `client`: NFS export client or network selector
 - `portal`: iSCSI target portal such as `192.0.2.10:3260`; `metadata.portal`
