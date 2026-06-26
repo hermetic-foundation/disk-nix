@@ -562,10 +562,24 @@ fn domain_recovery_actions_for_failure(
 }
 
 fn requires_domain_recovery(step: &ExecutionStep) -> bool {
-    matches!(
+    if matches!(
         step.risk,
         RiskClass::Destructive | RiskClass::PotentialDataLoss | RiskClass::Irreversible
-    ) || matches!(
+    ) {
+        return true;
+    }
+
+    if matches!(
+        (step.operation, command_step_collection(step)),
+        (
+            Operation::Create | Operation::Destroy | Operation::Login | Operation::Logout,
+            Some("iscsiSessions")
+        )
+    ) {
+        return true;
+    }
+
+    matches!(
         step.operation,
         Operation::Rollback
             | Operation::Shrink
@@ -780,6 +794,30 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             ));
         }
         (
+            Operation::Create | Operation::Destroy | Operation::Login | Operation::Logout,
+            Some("iscsiSessions"),
+            Some(target),
+        ) => {
+            commands.push(command_vec(
+                ["iscsiadm", "--mode", "session"],
+                false,
+                "inspect active iSCSI sessions before choosing roll-forward",
+            ));
+            commands.push(command_vec(
+                ["iscsiadm", "--mode", "node", "--targetname", target],
+                false,
+                "inspect iSCSI node records before retrying login or logout",
+            ));
+            commands.push(lsscsi_lun_inventory_command(
+                "inspect host-visible LUN transport and size before retrying session changes",
+            ));
+            commands.push(command_vec(
+                ["multipath", "-ll"],
+                false,
+                "inspect multipath maps before retrying iSCSI session changes",
+            ));
+        }
+        (
             Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
             Some("nvmeNamespaces"),
             Some(target),
@@ -888,6 +926,30 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             ]
         }
         (
+            Operation::Create | Operation::Destroy | Operation::Login | Operation::Logout,
+            Some("iscsiSessions"),
+            Some(target),
+        ) => vec![
+            command_vec(
+                ["iscsiadm", "--mode", "session"],
+                false,
+                "confirm active iSCSI sessions before rollback decisions",
+            ),
+            command_vec(
+                ["iscsiadm", "--mode", "node", "--targetname", target],
+                false,
+                "confirm iSCSI node records before undoing or retrying session changes",
+            ),
+            lsscsi_lun_inventory_command(
+                "confirm host-visible LUN paths before rollback decisions",
+            ),
+            command_vec(
+                ["multipath", "-ll"],
+                false,
+                "confirm multipath path grouping before rollback decisions",
+            ),
+        ],
+        (
             Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
             Some("nvmeNamespaces"),
             Some(target),
@@ -949,6 +1011,30 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
                 ["lvs", "--reportformat", "json", target],
                 false,
                 "inspect LVM snapshot and merge state before deciding whether to retry",
+            ));
+        }
+        (
+            Operation::Create | Operation::Destroy | Operation::Login | Operation::Logout,
+            Some("iscsiSessions"),
+            Some(target),
+        ) => {
+            commands.push(command(
+                ["iscsiadm", "--mode", "session"],
+                false,
+                "inspect active iSCSI sessions before deciding whether to retry",
+            ));
+            commands.push(command(
+                ["iscsiadm", "--mode", "node", "--targetname", target],
+                false,
+                "inspect iSCSI node records after the failed session command",
+            ));
+            commands.push(lsscsi_lun_inventory_command(
+                "inspect host-visible LUN paths after the failed session command",
+            ));
+            commands.push(command(
+                ["multipath", "-ll"],
+                false,
+                "inspect multipath maps after the failed session command",
             ));
         }
         (
@@ -1032,6 +1118,17 @@ fn domain_recovery_notes(
             );
         }
         (
+            Operation::Create | Operation::Destroy | Operation::Login | Operation::Logout,
+            Some("iscsiSessions"),
+        ) => {
+            notes.push(
+                "for iSCSI session changes, inspect active sessions, node records, LUN paths, and multipath maps before retrying login or logout".to_string(),
+            );
+            notes.push(
+                "keep dependent filesystems, LVM stacks, and services stopped or migrated until host-visible paths match the intended session state".to_string(),
+            );
+        }
+        (
             Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
             Some("nvmeNamespaces"),
         ) => {
@@ -1080,6 +1177,7 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
         .map(|collection| match collection {
             "snapshot" => "snapshots",
             "filesystem" => "filesystems",
+            "iscsisessions" => "iscsiSessions",
             "nvmenamespaces" => "nvmeNamespaces",
             other => other,
         })
@@ -1093,6 +1191,11 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     }
     if command_step_collection(step) == Some("nvmeNamespaces") {
         if let Some(target) = nvme_controller_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if command_step_collection(step) == Some("iscsiSessions") {
+        if let Some(target) = iscsi_target_from_step(step) {
             return Some(target);
         }
     }
@@ -1119,6 +1222,19 @@ fn md_array_target_from_step(step: &ExecutionStep) -> Option<&str> {
             {
                 return command.argv.get(1).map(String::as_str);
             }
+        }
+        None
+    })
+}
+
+fn iscsi_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        if command.argv.first().is_some_and(|arg| arg == "iscsiadm") {
+            return command
+                .argv
+                .windows(2)
+                .find(|window| window[0] == "--targetname")
+                .map(|window| window[1].as_str());
         }
         None
     })
@@ -23483,6 +23599,117 @@ mod tests {
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["nvme", "list-subsys", "--output-format=json"] && !command.mutates
         }));
+    }
+
+    #[test]
+    fn failed_iscsi_session_login_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "operation": "login",
+                  "portal": "192.0.2.10:3260"
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_login = [
+            "iscsiadm",
+            "--mode",
+            "node",
+            "--targetname",
+            "iqn.2026-06.example:storage.root",
+            "--portal",
+            "192.0.2.10:3260",
+            "--login",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_login,
+                status_code: Some(if argv == failed_login { 15 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_login {
+                    "login failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success
+                && result.argv
+                    == [
+                        "iscsiadm",
+                        "--mode",
+                        "node",
+                        "--targetname",
+                        "iqn.2026-06.example:storage.root",
+                        "--portal",
+                        "192.0.2.10:3260",
+                        "--login",
+                    ]
+        }));
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("iSCSI session domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Login"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["iscsiadm", "--mode", "session"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "iscsiadm",
+                    "--mode",
+                    "node",
+                    "--targetname",
+                    "iqn.2026-06.example:storage.root",
+                ]
+                && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
+        );
+        assert!(domain_recovery.notes.iter().any(|note| {
+            note.contains("iSCSI session changes") && note.contains("login or logout")
+        }));
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("iSCSI roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["iscsiadm", "--mode", "session"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("iSCSI rollback recovery review is reported");
+        assert!(
+            rollback
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
+        );
     }
 
     #[test]
