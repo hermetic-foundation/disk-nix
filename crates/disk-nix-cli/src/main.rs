@@ -1359,6 +1359,11 @@ fn spec_schema() -> serde_json::Value {
                         "items": { "type": "string" }
                     },
                     "portal": { "type": "string" },
+                    "provider": { "type": "string" },
+                    "storageProvider": { "type": "string" },
+                    "storage-provider": { "type": "string" },
+                    "arrayProvider": { "type": "string" },
+                    "array-provider": { "type": "string" },
                     "namespaceId": { "type": ["string", "number"] },
                     "nsid": { "type": ["string", "number"] },
                     "controllers": { "type": "string" },

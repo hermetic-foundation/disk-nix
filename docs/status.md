@@ -188,8 +188,8 @@ values, target-side LUN provider execution, and actions whose concrete identity
 or required input is not declared. These produce machine-readable blocked
 actions, manual-review guidance, or non-ready command plans instead of
 guessing. Target-side LUN provisioning itself is now modeled through
-`targetLuns` with provider handoff commands and verification placeholders, but
-concrete array adapters remain future work.
+`targetLuns` with provider-labeled handoff commands and verification
+placeholders, but concrete array adapters remain future work.
 
 ## Remaining for feature complete
 

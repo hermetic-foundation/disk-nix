@@ -1974,6 +1974,9 @@
               and .properties.snapshots["$ref"] == "#/$defs/snapshotMap"
               and ."$defs".lifecycleObject.properties.physicalSize.type == ["string", "number"]
               and ."$defs".lifecycleObject.properties.vdoPhysicalSize.type == ["string", "number"]
+              and ."$defs".lifecycleObject.properties.provider.type == "string"
+              and ."$defs".lifecycleObject.properties.storageProvider.type == "string"
+              and ."$defs".lifecycleObject.properties.arrayProvider.type == "string"
               and ."$defs".snapshot.properties.operation["$ref"] == "#/$defs/operation"
               and ."$defs".snapshot.properties.action["$ref"] == "#/$defs/operation"
               and (."$defs".operation.enum | index("grow") != null)

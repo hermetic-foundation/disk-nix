@@ -450,6 +450,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub portal: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub namespace_id: Option<String>,
@@ -497,6 +499,7 @@ impl ActionContext {
             && self.level.is_none()
             && self.client.is_none()
             && self.portal.is_none()
+            && self.provider.is_none()
             && self.options.is_none()
             && self.namespace_id.is_none()
             && self.controllers.is_none()
@@ -7371,6 +7374,16 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         level: string_field(object, &["level", "raidLevel"]),
         client: string_field(object, &["client"]),
         portal: lifecycle_portal(object),
+        provider: metadata_string_field(
+            object,
+            &[
+                "provider",
+                "storageProvider",
+                "storage-provider",
+                "arrayProvider",
+                "array-provider",
+            ],
+        ),
         options: lifecycle_options(object),
         namespace_id: metadata_string_field(object, &["namespaceId", "nsid"]),
         controllers: metadata_string_field(object, &["controllers", "controllerId", "controller"]),
@@ -26866,6 +26879,7 @@ mod tests {
                   "operation": "create",
                   "desiredSize": "2TiB",
                   "source": "pool-a/volumes/root",
+                  "provider": "netapp-ontap",
                   "portal": "192.0.2.10:3260",
                   "client": "iqn.2026-06.example:host.primary",
                   "initiators": [
@@ -26901,6 +26915,7 @@ mod tests {
             create.context.device.as_deref(),
             Some("pool-a/volumes/root")
         );
+        assert_eq!(create.context.provider.as_deref(), Some("netapp-ontap"));
         assert_eq!(create.context.portal.as_deref(), Some("192.0.2.10:3260"));
         assert_eq!(
             create.context.client.as_deref(),

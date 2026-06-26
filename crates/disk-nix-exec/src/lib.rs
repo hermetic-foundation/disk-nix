@@ -10567,11 +10567,13 @@ fn target_lun_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCom
     let desired_size = action.context.desired_size.as_deref();
     vec![
         target_lun_inventory_command(
+            action,
             target,
             "inspect target-side LUN inventory before provider mutation",
         ),
         target_lun_provider_command(action, target, &operation, desired_size),
         target_lun_inventory_command(
+            action,
             target,
             "inspect target-side LUN inventory after provider mutation",
         ),
@@ -10580,13 +10582,14 @@ fn target_lun_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCom
 
 fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCommand> {
     let mut commands = vec![target_lun_inventory_command(
+        action,
         target,
         "verify target-side LUN inventory after provider action",
     )];
     if let Some(portal) = action.context.portal.as_deref() {
         commands.push(command_vec_with_readiness(
             vec![
-                "<target-lun-provider>".to_string(),
+                target_lun_provider_program(action),
                 "show-mapping".to_string(),
                 "--portal".to_string(),
                 portal.to_string(),
@@ -10595,24 +10598,28 @@ fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec
             ],
             false,
             CommandReadiness::NeedsDomainImplementation,
-            ["target LUN provider implementation"],
+            [target_lun_provider_unresolved(action)],
             "verify target-side portal mapping after provider action",
         ));
     }
     commands
 }
 
-fn target_lun_inventory_command(target: &str, note: &str) -> ExecutionCommand {
+fn target_lun_inventory_command(
+    action: &PlannedAction,
+    target: &str,
+    note: &str,
+) -> ExecutionCommand {
     command_vec_with_readiness(
         vec![
-            "<target-lun-provider>".to_string(),
+            target_lun_provider_program(action),
             "show-lun".to_string(),
             "--target".to_string(),
             target.to_string(),
         ],
         false,
         CommandReadiness::NeedsDomainImplementation,
-        ["target LUN provider implementation"],
+        [target_lun_provider_unresolved(action)],
         note,
     )
 }
@@ -10634,12 +10641,16 @@ fn target_lun_provider_command(
         _ => operation,
     };
     let mut argv = vec![
-        "<target-lun-provider>".to_string(),
+        target_lun_provider_program(action),
         provider_operation.to_string(),
         "--target".to_string(),
         target.to_string(),
     ];
-    let mut unresolved_inputs = vec!["target LUN provider implementation".to_string()];
+    let mut unresolved_inputs = vec![target_lun_provider_unresolved(action)];
+    if let Some(provider) = action.context.provider.as_deref() {
+        argv.push("--provider".to_string());
+        argv.push(provider.to_string());
+    }
     if matches!(action.operation, Operation::Create | Operation::Grow) {
         match desired_size {
             Some(size) => {
@@ -10681,6 +10692,24 @@ fn target_lun_provider_command(
         unresolved_inputs,
         &format!("render provider-specific target-side LUN {operation} command"),
     )
+}
+
+fn target_lun_provider_program(action: &PlannedAction) -> String {
+    action
+        .context
+        .provider
+        .as_deref()
+        .map(|provider| format!("<target-lun-provider:{provider}>"))
+        .unwrap_or_else(|| "<target-lun-provider>".to_string())
+}
+
+fn target_lun_provider_unresolved(action: &PlannedAction) -> String {
+    action
+        .context
+        .provider
+        .as_deref()
+        .map(|provider| format!("{provider} target LUN provider implementation"))
+        .unwrap_or_else(|| "target LUN provider implementation".to_string())
 }
 
 fn unimplemented_action_command(
@@ -27790,6 +27819,7 @@ mod tests {
                     "operation": "create",
                     "desiredSize": "2TiB",
                     "source": "pool-a/volumes/root",
+                    "provider": "netapp-ontap",
                     "portal": "192.0.2.10:3260",
                     "client": "iqn.2026-06.example:host.primary",
                     "initiators": [
@@ -27825,10 +27855,12 @@ mod tests {
         assert!(create.commands.iter().any(|command| {
             command.argv
                 == [
-                    "<target-lun-provider>",
+                    "<target-lun-provider:netapp-ontap>",
                     "create-lun",
                     "--target",
                     "array-a/root",
+                    "--provider",
+                    "netapp-ontap",
                     "--size",
                     "2TiB",
                     "--backing",
@@ -27844,14 +27876,14 @@ mod tests {
                 && command.readiness == CommandReadiness::NeedsDomainImplementation
                 && command
                     .unresolved_inputs
-                    .contains(&"target LUN provider implementation".to_string())
+                    .contains(&"netapp-ontap target LUN provider implementation".to_string())
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "targetluns:array-a/root:create"
                 && step.commands.iter().any(|command| {
                     command.argv
                         == [
-                            "<target-lun-provider>",
+                            "<target-lun-provider:netapp-ontap>",
                             "show-mapping",
                             "--portal",
                             "192.0.2.10:3260",

@@ -423,12 +423,14 @@ Examples:
   external storage-target allocation or capacity changes, while
   `operation = "attach"` and `operation = "detach"` model mapping and unmapping
   the reviewed target LUN to initiators. These actions are provider-specific:
-  apply reports emit non-ready `<target-lun-provider>` handoff commands carrying
-  the target identity, desired size, backing object, portal, and initiators, plus
-  read-only inventory verification placeholders. They remain blocked from
-  execution until an array adapter or reviewed runbook renders concrete
-  provider commands. Host-side `luns`, `iscsiSessions`, and `multipathMaps`
-  rescans should be staged after target-side verification.
+  declarations can set `provider`, `storageProvider`, or `arrayProvider` to
+  label the intended array adapter. Apply reports emit non-ready
+  `<target-lun-provider[:provider]>` handoff commands carrying the target
+  identity, provider label, desired size, backing object, portal, and
+  initiators, plus read-only inventory verification placeholders. They remain
+  blocked from execution until an array adapter or reviewed runbook renders
+  concrete provider commands. Host-side `luns`, `iscsiSessions`, and
+  `multipathMaps` rescans should be staged after target-side verification.
   Current-topology comparison suppresses attach actions only when the declared
   LUN path is already visible and suppresses detach actions only when the
   declared LUN path is already absent; opposite states stay actionable with a
