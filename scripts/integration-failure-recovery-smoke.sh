@@ -3406,6 +3406,104 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$luks_keyslot_add_receipt" >/dev/null
 
+luks_token_import_tools="$tmpdir/fake-luks-token-import-tools"
+mkdir -p "$luks_token_import_tools"
+
+cat > "$luks_token_import_tools/cryptsetup" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "token import --token-id 0 --json-file /run/keys/root-token.json /dev/disk/by-id/root-luks" ]]; then
+  echo "synthetic LUKS token import failure for disk-nix recovery coverage" >&2
+  exit 86
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$luks_token_import_tools/cryptsetup"
+
+luks_token_import_spec="$tmpdir/luks-token-import-spec.json"
+luks_token_import_json="$tmpdir/luks-token-import-apply.json"
+luks_token_import_report="$tmpdir/luks-token-import-report.json"
+luks_token_import_receipt="$tmpdir/luks-token-import-receipt.json"
+
+jq -n '{
+  luksTokens: {
+    "cryptroot:0": {
+      operation: "import-token",
+      device: "/dev/disk/by-id/root-luks",
+      metadata: {
+        tokenId: "0",
+        tokenFile: "/run/keys/root-token.json"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$luks_token_import_spec"
+
+if PATH="$luks_token_import_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$luks_token_import_spec" \
+  --execute \
+  --report-out "$luks_token_import_report" \
+  --receipt-out "$luks_token_import_receipt" \
+  --json > "$luks_token_import_json"; then
+  echo "expected synthetic LUKS token import failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 86
+  and .executionResults[1].argv == ["cryptsetup", "token", "import", "--token-id", "0", "--json-file", "/run/keys/root-token.json", "/dev/disk/by-id/root-luks"]
+  and (.executionResults[1].stderr | contains("synthetic LUKS token import failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "lukstokens:cryptroot:0:import-token"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["cryptsetup", "token", "import", "--token-id", "0", "--json-file", "/run/keys/root-token.json", "/dev/disk/by-id/root-luks"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["lukstokens:cryptroot:0:import-token"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/root-luks", "--json"]))
+    and (.notes | any(contains("LUKS changes")))
+    and (.notes | any(contains("tokens")))
+    and (.notes | any(contains("alternate unlock paths")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/root-luks", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/root-luks", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$luks_token_import_json" >/dev/null
+
+cmp "$luks_token_import_json" "$luks_token_import_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "lukstokens:cryptroot:0:import-token"
+  and .report.partialExecutionRecovery.failedCommand == ["cryptsetup", "token", "import", "--token-id", "0", "--json-file", "/run/keys/root-token.json", "/dev/disk/by-id/root-luks"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$luks_token_import_receipt" >/dev/null
+
 partition_grow_tools="$tmpdir/fake-partition-grow-tools"
 mkdir -p "$partition_grow_tools"
 
@@ -4379,4 +4477,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS keyslot add, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS keyslot add, LUKS token import, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
