@@ -644,6 +644,125 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$btrfs_replace_receipt" >/dev/null
 
+bcachefs_replace_tools="$tmpdir/fake-bcachefs-replace-tools"
+mkdir -p "$bcachefs_replace_tools"
+bcachefs_replace_disk_nix="$(command -v "$disk_nix_bin")"
+
+cat > "$bcachefs_replace_tools/bcachefs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "data rereplicate /bulk" ]]; then
+  echo "synthetic bcachefs replacement rereplicate failure for disk-nix recovery coverage" >&2
+  exit 85
+fi
+printf '{}\n'
+EOF
+
+cat > "$bcachefs_replace_tools/btrfs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$bcachefs_replace_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$bcachefs_replace_disk_nix" "\$@"
+EOF
+
+chmod +x "$bcachefs_replace_tools/bcachefs" "$bcachefs_replace_tools/btrfs" "$bcachefs_replace_tools/disk-nix"
+
+bcachefs_replace_spec="$tmpdir/bcachefs-replace-spec.json"
+bcachefs_replace_json="$tmpdir/bcachefs-replace-apply.json"
+bcachefs_replace_report="$tmpdir/bcachefs-replace-report.json"
+bcachefs_replace_receipt="$tmpdir/bcachefs-replace-receipt.json"
+
+jq -n '{
+  filesystems: {
+    bulk: {
+      mountpoint: "/bulk",
+      fsType: "bcachefs",
+      replaceDevices: {
+        "/dev/disk/by-id/old-bcachefs-device": "/dev/disk/by-id/new-bcachefs-device"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowDeviceReplacement: true
+  }
+}' > "$bcachefs_replace_spec"
+
+if PATH="$bcachefs_replace_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$bcachefs_replace_spec" \
+  --execute \
+  --report-out "$bcachefs_replace_report" \
+  --receipt-out "$bcachefs_replace_receipt" \
+  --json > "$bcachefs_replace_json"; then
+  echo "expected synthetic bcachefs replacement rereplicate failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 2
+  and .commandSummary.commandCount == 5
+  and .commandSummary.mutatingCount == 3
+  and .commandSummary.manualReviewCount == 1
+  and .commandSummary.readyCount == 5
+  and (.commandSummary.missingToolCount // 0) == 0
+  and (.commandSummary.readinessIssueCount // 0) == 0
+  and (.executionResults | length) == 4
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "filesystem:bulk:inspect"
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/bulk"]
+  and .executionResults[1].success == true
+  and .executionResults[1].actionId == "filesystems:bulk:replace-device:/dev/disk/by-id/old-bcachefs-device"
+  and .executionResults[1].argv == ["bcachefs", "fs", "usage", "/bulk"]
+  and .executionResults[2].success == true
+  and .executionResults[2].actionId == "filesystems:bulk:replace-device:/dev/disk/by-id/old-bcachefs-device"
+  and .executionResults[2].argv == ["bcachefs", "device", "add", "/bulk", "/dev/disk/by-id/new-bcachefs-device"]
+  and .executionResults[3].success == false
+  and .executionResults[3].statusCode == 85
+  and .executionResults[3].actionId == "filesystems:bulk:replace-device:/dev/disk/by-id/old-bcachefs-device"
+  and .executionResults[3].argv == ["bcachefs", "data", "rereplicate", "/bulk"]
+  and (.executionResults[3].stderr | contains("synthetic bcachefs replacement rereplicate failure"))
+  and .partialExecutionRecovery.completedActionIds == ["filesystem:bulk:inspect"]
+  and .partialExecutionRecovery.failedActionId == "filesystems:bulk:replace-device:/dev/disk/by-id/old-bcachefs-device"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["bcachefs", "data", "rereplicate", "/bulk"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["filesystems:bulk:replace-device:/dev/disk/by-id/old-bcachefs-device"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 1
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["disk-nix", "inspect", "bulk", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "probe-status", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "topology", "--json"]))
+    and (.notes | any(contains("1 mutating command(s) completed")))
+    and (.notes | any(contains("bcachefs data rereplicate /bulk")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "bulk", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/bulk", "--json"]))
+    and (.commands | any(.argv == ["btrfs", "filesystem", "usage", "-b", "/bulk"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$bcachefs_replace_json" >/dev/null
+
+cmp "$bcachefs_replace_json" "$bcachefs_replace_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.completedActionIds == ["filesystem:bulk:inspect"]
+  and .report.partialExecutionRecovery.failedActionId == "filesystems:bulk:replace-device:/dev/disk/by-id/old-bcachefs-device"
+  and .report.partialExecutionRecovery.failedCommand == ["bcachefs", "data", "rereplicate", "/bulk"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
+' "$bcachefs_replace_receipt" >/dev/null
+
 filesystem_trim_tools="$tmpdir/fake-filesystem-trim-tools"
 mkdir -p "$filesystem_trim_tools"
 
@@ -6198,4 +6317,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO grow, VDO property, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO grow, VDO property, bcache property, bcache rescan, and LVM cache property failures"
