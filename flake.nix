@@ -1924,6 +1924,9 @@
                 ${pkgs.gnugrep}/bin/grep -q 'fake-loop-rescan-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic loop rescan failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'loopdevices:/dev/loop7:rescan' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'fake-backing-file-rescan-tools' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'synthetic backing-file rescan stat failure' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'backingfiles:inventory:rescan' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic device-mapper rename failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic ZFS dataset rename failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic Btrfs snapshot clone failure' ${./scripts/integration-failure-recovery-smoke.sh}

@@ -1567,6 +1567,110 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$loop_rescan_receipt" >/dev/null
 
+backing_file_rescan_tools="$tmpdir/fake-backing-file-rescan-tools"
+mkdir -p "$backing_file_rescan_tools"
+backing_file_rescan_disk_nix="$(command -v "$disk_nix_bin")"
+
+cat > "$backing_file_rescan_tools/stat" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "--printf=%n %s %b %B\\n /var/lib/images/inventory.img" ]]; then
+  echo "synthetic backing-file rescan stat failure for disk-nix recovery coverage" >&2
+  exit 87
+fi
+printf '/var/lib/images/inventory.img 1048576 8 512\n'
+EOF
+
+cat > "$backing_file_rescan_tools/du" <<'EOF'
+#!/usr/bin/env bash
+printf '1048576\t/var/lib/images/inventory.img\n'
+EOF
+
+cat > "$backing_file_rescan_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$backing_file_rescan_disk_nix" "\$@"
+EOF
+
+chmod +x "$backing_file_rescan_tools/stat" "$backing_file_rescan_tools/du" "$backing_file_rescan_tools/disk-nix"
+
+backing_file_rescan_spec="$tmpdir/backing-file-rescan-spec.json"
+backing_file_rescan_json="$tmpdir/backing-file-rescan-apply.json"
+backing_file_rescan_report="$tmpdir/backing-file-rescan-report.json"
+backing_file_rescan_receipt="$tmpdir/backing-file-rescan-receipt.json"
+
+jq -n '{
+  backingFiles: {
+    inventory: {
+      operation: "rescan",
+      path: "/var/lib/images/inventory.img"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$backing_file_rescan_spec"
+
+if PATH="$backing_file_rescan_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$backing_file_rescan_spec" \
+  --execute \
+  --report-out "$backing_file_rescan_report" \
+  --receipt-out "$backing_file_rescan_receipt" \
+  --json > "$backing_file_rescan_json"; then
+  echo "expected synthetic backing-file rescan failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 3
+  and .commandSummary.mutatingCount == 0
+  and (.executionResults | length) == 1
+  and .executionResults[0].success == false
+  and .executionResults[0].statusCode == 87
+  and .executionResults[0].actionId == "backingfiles:inventory:rescan"
+  and .executionResults[0].argv == ["stat", "--printf=%n %s %b %B\\n", "/var/lib/images/inventory.img"]
+  and (.executionResults[0].stderr | contains("synthetic backing-file rescan stat failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "backingfiles:inventory:rescan"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["stat", "--printf=%n %s %b %B\\n", "/var/lib/images/inventory.img"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["backingfiles:inventory:rescan"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["stat", "--printf=%n %s %b %B\\n", "/var/lib/images/inventory.img"]))
+    and (.commands | any(.argv == ["du", "--bytes", "--apparent-size", "/var/lib/images/inventory.img"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/var/lib/images/inventory.img", "--json"]))
+    and (.notes | any(contains("local mapping changes")))
+    and (.notes | any(contains("backing file size")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["stat", "--printf=%n %s %b %B\\n", "/var/lib/images/inventory.img"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/var/lib/images/inventory.img", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["stat", "--printf=%n %s %b %B\\n", "/var/lib/images/inventory.img"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/var/lib/images/inventory.img", "--json"]))
+  ))
+' "$backing_file_rescan_json" >/dev/null
+
+cmp "$backing_file_rescan_json" "$backing_file_rescan_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "backingfiles:inventory:rescan"
+  and .report.partialExecutionRecovery.failedCommand == ["stat", "--printf=%n %s %b %B\\n", "/var/lib/images/inventory.img"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$backing_file_rescan_receipt" >/dev/null
+
 dm_rename_tools="$tmpdir/fake-dm-rename-tools"
 mkdir -p "$dm_rename_tools"
 
@@ -8839,4 +8943,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, filesystem property, swap label, zram rescan, zram property inventory, loop rescan, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, filesystem property, swap label, zram rescan, zram property inventory, loop rescan, backing-file rescan, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"

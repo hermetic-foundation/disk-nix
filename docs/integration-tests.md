@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for seventy-nine failed apply paths:
+fake storage tools ahead of `PATH` for eighty failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -130,6 +130,9 @@ fake storage tools ahead of `PATH` for seventy-nine failed apply paths:
   `zram:set-property:algorithm` action remains pending for retry review
 - a loop-device inventory rescan where fake
   `losetup --json --list /dev/loop7` fails before any mutating command runs
+- a backing-file inventory rescan where fake
+  `stat --printf=%n %s %b %B\\n /var/lib/images/inventory.img` fails before
+  any mutating command runs
 - a device-mapper rename where fake `dmsetup info` and `dmsetup deps` succeed
   and fake `dmsetup rename /dev/mapper/cryptswap cryptswap-retired` fails
 - a ZFS dataset rename where fake `zfs list -H -p tank/home` succeeds and fake
@@ -520,6 +523,11 @@ The test verifies that the failed report and receipt preserve:
   `loopdevices:/dev/loop7:rescan`
 - the failed `losetup --json --list /dev/loop7` command and non-zero status
   before any mutating command runs, with local mapping recovery guidance
+- `partialExecutionRecovery.failedActionId` as
+  `backingfiles:inventory:rescan`
+- the failed `stat --printf=%n %s %b %B\\n /var/lib/images/inventory.img`
+  command and non-zero status before any mutating command runs, with backing
+  file and local mapping recovery guidance
 - `partialExecutionRecovery.failedActionId` as
   `lvmCaches:vg0/root:set-property:lvm.cache-mode`
 - the failed `lvchange --cachemode writethrough vg0/root` command and non-zero
@@ -1028,7 +1036,7 @@ failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
 scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement,
 filesystem trim, filesystem check, filesystem repair, filesystem property,
-swap label, zram rescan, zram property inventory, loop rescan, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
+swap label, zram rescan, zram property inventory, loop rescan, backing-file rescan, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
 ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement,
 ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
