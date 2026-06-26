@@ -613,6 +613,23 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 | Operation::SetProperty,
             Some("luksTokens")
         ) | (
+            Operation::AddDevice
+                | Operation::Check
+                | Operation::Format
+                | Operation::Grow
+                | Operation::Mount
+                | Operation::Rebalance
+                | Operation::RemoveDevice
+                | Operation::Remount
+                | Operation::Repair
+                | Operation::Rescan
+                | Operation::Scrub
+                | Operation::SetProperty
+                | Operation::Shrink
+                | Operation::Trim
+                | Operation::Unmount,
+            Some("filesystems")
+        ) | (
             Operation::Activate
                 | Operation::Create
                 | Operation::Deactivate
@@ -854,6 +871,28 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
                 "inspect LVM origin, snapshot, and merge state before roll-forward",
             ));
         }
+        (
+            Operation::AddDevice
+            | Operation::Check
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Mount
+            | Operation::Rebalance
+            | Operation::RemoveDevice
+            | Operation::Remount
+            | Operation::Repair
+            | Operation::Rescan
+            | Operation::Scrub
+            | Operation::SetProperty
+            | Operation::Shrink
+            | Operation::Trim
+            | Operation::Unmount,
+            Some("filesystems"),
+            _,
+        ) => commands.extend(filesystem_recovery_inspection_commands(
+            step,
+            "inspect filesystem state before choosing roll-forward",
+        )),
         (
             Operation::AddDevice
             | Operation::Create
@@ -1135,6 +1174,28 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
         )],
         (
             Operation::AddDevice
+            | Operation::Check
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Mount
+            | Operation::Rebalance
+            | Operation::RemoveDevice
+            | Operation::Remount
+            | Operation::Repair
+            | Operation::Rescan
+            | Operation::Scrub
+            | Operation::SetProperty
+            | Operation::Shrink
+            | Operation::Trim
+            | Operation::Unmount,
+            Some("filesystems"),
+            _,
+        ) => filesystem_recovery_inspection_commands(
+            step,
+            "confirm filesystem state before rollback decisions",
+        ),
+        (
+            Operation::AddDevice
             | Operation::Create
             | Operation::Destroy
             | Operation::Export
@@ -1408,6 +1469,28 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
                 "inspect LVM snapshot and merge state before deciding whether to retry",
             ));
         }
+        (
+            Operation::AddDevice
+            | Operation::Check
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Mount
+            | Operation::Rebalance
+            | Operation::RemoveDevice
+            | Operation::Remount
+            | Operation::Repair
+            | Operation::Rescan
+            | Operation::Scrub
+            | Operation::SetProperty
+            | Operation::Shrink
+            | Operation::Trim
+            | Operation::Unmount,
+            Some("filesystems"),
+            _,
+        ) => commands.extend(filesystem_recovery_inspection_commands(
+            step,
+            "inspect filesystem state after the failed command",
+        )),
         (
             Operation::AddDevice
             | Operation::Create
@@ -1716,6 +1799,31 @@ fn domain_recovery_notes(
             );
         }
         (
+            Operation::AddDevice
+            | Operation::Check
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Mount
+            | Operation::Rebalance
+            | Operation::RemoveDevice
+            | Operation::Remount
+            | Operation::Repair
+            | Operation::Rescan
+            | Operation::Scrub
+            | Operation::SetProperty
+            | Operation::Shrink
+            | Operation::Trim
+            | Operation::Unmount,
+            Some("filesystems"),
+        ) => {
+            notes.push(
+                "for filesystem changes, inspect mount state, source device signatures, usage, labels, UUIDs, and dependent services before retrying".to_string(),
+            );
+            notes.push(
+                "prefer snapshots, read-only mounts, or cloned-device repair workflows before destructive format, shrink, repair, or device-removal retries".to_string(),
+            );
+        }
+        (
             Operation::Create | Operation::Destroy | Operation::Login | Operation::Logout,
             Some("iscsiSessions"),
         ) => {
@@ -1959,6 +2067,11 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
         Some("pools" | "datasets" | "zvols")
     ) {
         if let Some(target) = zfs_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if command_step_collection(step) == Some("filesystems") {
+        if let Some(target) = filesystem_target_from_step(step) {
             return Some(target);
         }
     }
@@ -2443,6 +2556,150 @@ fn zfs_target_from_step(step: &ExecutionStep) -> Option<&str> {
                 && !target.starts_with('<')
                 && *target != "import"
         })
+    })
+}
+
+fn filesystem_recovery_inspection_commands(
+    step: &ExecutionStep,
+    note: &'static str,
+) -> Vec<ExecutionCommand> {
+    let target = filesystem_target_from_step(step).or_else(|| {
+        step.action_id
+            .split(':')
+            .nth(1)
+            .filter(|target| !target.is_empty())
+    });
+    let source = filesystem_source_from_step(step);
+    let mut commands = Vec::new();
+
+    if let Some(mountpoint) = target.filter(|target| target.starts_with('/')) {
+        commands.push(command(
+            ["findmnt", "--json", "--target", mountpoint],
+            false,
+            note,
+        ));
+        commands.push(command(
+            ["disk-nix", "inspect", mountpoint, "--json"],
+            false,
+            note,
+        ));
+    }
+
+    if let Some(source) = source {
+        commands.push(command(["blkid", source], false, note));
+        commands.push(command(
+            ["disk-nix", "inspect", source, "--json"],
+            false,
+            note,
+        ));
+    }
+
+    if commands.is_empty() {
+        commands.push(command(
+            ["disk-nix", "filesystems", "--json"],
+            false,
+            "inspect modeled filesystem inventory before retrying",
+        ));
+    }
+
+    commands
+}
+
+fn filesystem_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        let target = match tool {
+            "xfs_growfs" | "fstrim" | "umount" => command.argv.get(1).map(String::as_str),
+            "mount" => command.argv.last().map(String::as_str),
+            "findmnt" if command.argv.iter().any(|arg| arg == "--target") => {
+                command.argv.last().map(String::as_str)
+            }
+            "btrfs"
+                if command
+                    .argv
+                    .get(1..3)
+                    .is_some_and(|args| args == ["filesystem", "resize"]) =>
+            {
+                command.argv.get(3).map(String::as_str)
+            }
+            "btrfs"
+                if command
+                    .argv
+                    .get(1..3)
+                    .is_some_and(|args| args == ["filesystem", "usage"]) =>
+            {
+                command.argv.last().map(String::as_str)
+            }
+            "btrfs"
+                if command
+                    .argv
+                    .get(1..3)
+                    .is_some_and(|args| args == ["balance", "start"]) =>
+            {
+                command.argv.last().map(String::as_str)
+            }
+            "btrfs"
+                if command
+                    .argv
+                    .get(1..3)
+                    .is_some_and(|args| args == ["scrub", "start"]) =>
+            {
+                command.argv.last().map(String::as_str)
+            }
+            "zfs" if command.argv.get(1).is_some_and(|arg| arg == "set") => {
+                command.argv.last().map(String::as_str)
+            }
+            _ => None,
+        }?;
+
+        Some(target).filter(|target| {
+            !target.is_empty() && !target.starts_with('-') && !target.starts_with('<')
+        })
+    })
+}
+
+fn filesystem_source_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        let source = match tool {
+            "blkid" => command.argv.get(1).map(String::as_str),
+            "mount" if command.argv.len() >= 3 => {
+                command.argv.get(command.argv.len() - 2).map(String::as_str)
+            }
+            "resize2fs" | "resize.f2fs" | "e2fsck" | "xfs_repair" | "ntfsfix" => {
+                command.argv.last().map(String::as_str)
+            }
+            "fsck.fat" | "fsck.exfat" | "fsck.f2fs" => command.argv.last().map(String::as_str),
+            "btrfs" if command.argv.get(1).is_some_and(|arg| arg == "check") => {
+                command.argv.last().map(String::as_str)
+            }
+            "bcachefs"
+                if command
+                    .argv
+                    .get(1)
+                    .is_some_and(|arg| arg == "fsck" || arg == "format") =>
+            {
+                command.argv.last().map(String::as_str)
+            }
+            "bcachefs"
+                if command
+                    .argv
+                    .get(1..3)
+                    .is_some_and(|args| args == ["device", "resize"]) =>
+            {
+                command.argv.get(3).map(String::as_str)
+            }
+            tool if tool.starts_with("mkfs.") => command.argv.last().map(String::as_str),
+            "mkfs" => command.argv.last().map(String::as_str),
+            "e2label" | "fatlabel" | "ntfslabel" | "exfatlabel" | "f2fslabel" => {
+                command.argv.get(1).map(String::as_str)
+            }
+            "xfs_admin" => command.argv.last().map(String::as_str),
+            _ => None,
+        }?;
+
+        Some(source)
+            .filter(|source| source.starts_with('/') && !source.starts_with("<") && *source != "/")
     })
 }
 
@@ -26005,6 +26262,81 @@ mod tests {
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["zfs", "list", "-H", "-p", "-t", "filesystem", "tank/home"]
                 && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_filesystem_grow_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "filesystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "xfs",
+                  "resizePolicy": "grow-only"
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_grow = ["xfs_growfs", "/"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_grow,
+                status_code: Some(if argv == failed_grow { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_grow {
+                    "grow failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_grow)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("filesystem domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Grow"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["findmnt", "--json", "--target", "/"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "/", "--json"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("filesystem changes") && note.contains("UUIDs"))
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("filesystem roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["findmnt", "--json", "--target", "/"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("filesystem rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "/", "--json"] && !command.mutates
         }));
     }
 
