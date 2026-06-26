@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for seventy-four failed apply paths:
+fake storage tools ahead of `PATH` for seventy-five failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -117,6 +117,9 @@ fake storage tools ahead of `PATH` for seventy-four failed apply paths:
   fake `e2fsck -n /dev/disk/by-label/home` fails
 - a Btrfs filesystem repair where fake target and mount-state inspections
   succeed and fake `btrfs check --repair /dev/disk/by-label/data` fails
+- an XFS filesystem property mutation where fake `disk-nix inspect /scratch`
+  succeeds and fake `xfs_admin -L scratch-new /dev/disk/by-label/scratch-old`
+  fails
 - a swap label mutation where fake
   `swaplabel --label swap-new /dev/disk/by-label/swap-old` fails
 - a device-mapper rename where fake `dmsetup info` and `dmsetup deps` succeed
@@ -1000,8 +1003,11 @@ behavior, broader VDO create/rescan/logical-grow/physical-grow/start/stop/proper
 additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
-scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair,
-swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
+scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement,
+filesystem trim, filesystem check, filesystem repair, filesystem property,
+swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
+ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement,
+ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
 target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete
@@ -1016,5 +1022,7 @@ resize, multipath add, multipath remove, multipath flush, multipath replace, MD 
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login,
 iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
-create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
+create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop,
+VDO remove, VDO property, bcache replacement, bcache property, bcache rescan,
+filesystem property, and LVM cache property failed-command
 paths, and broader destructive apply behavior.

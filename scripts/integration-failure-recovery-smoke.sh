@@ -1069,6 +1069,114 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$filesystem_repair_receipt" >/dev/null
 
+filesystem_property_tools="$tmpdir/fake-filesystem-property-tools"
+mkdir -p "$filesystem_property_tools"
+
+cat > "$filesystem_property_tools/xfs_admin" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "-L scratch-new /dev/disk/by-label/scratch-old" ]]; then
+  echo "synthetic filesystem property failure for disk-nix recovery coverage" >&2
+  exit 86
+fi
+printf '{}\n'
+EOF
+
+cat > "$filesystem_property_tools/blkid" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+chmod +x "$filesystem_property_tools/xfs_admin" "$filesystem_property_tools/blkid"
+
+filesystem_property_spec="$tmpdir/filesystem-property-spec.json"
+filesystem_property_json="$tmpdir/filesystem-property-apply.json"
+filesystem_property_report="$tmpdir/filesystem-property-report.json"
+filesystem_property_receipt="$tmpdir/filesystem-property-receipt.json"
+
+jq -n '{
+  filesystems: {
+    scratch: {
+      mountpoint: "/scratch",
+      device: "/dev/disk/by-label/scratch-old",
+      fsType: "xfs",
+      properties: {
+        label: "scratch-new"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowPropertyChanges: true
+  }
+}' > "$filesystem_property_spec"
+
+if PATH="$filesystem_property_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$filesystem_property_spec" \
+  --execute \
+  --report-out "$filesystem_property_report" \
+  --receipt-out "$filesystem_property_receipt" \
+  --json > "$filesystem_property_json"; then
+  echo "expected synthetic filesystem property failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 2
+  and .commandSummary.commandCount == 3
+  and .commandSummary.mutatingCount == 1
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "filesystem:scratch:inspect"
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/scratch"]
+  and .executionResults[1].success == true
+  and .executionResults[1].actionId == "filesystems:scratch:set-property:label"
+  and .executionResults[1].argv == ["disk-nix", "inspect", "/scratch"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 86
+  and .executionResults[2].argv == ["xfs_admin", "-L", "scratch-new", "/dev/disk/by-label/scratch-old"]
+  and (.executionResults[2].stderr | contains("synthetic filesystem property failure"))
+  and .partialExecutionRecovery.completedActionIds == ["filesystem:scratch:inspect"]
+  and .partialExecutionRecovery.failedActionId == "filesystems:scratch:set-property:label"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["xfs_admin", "-L", "scratch-new", "/dev/disk/by-label/scratch-old"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["filesystems:scratch:set-property:label"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["blkid", "/dev/disk/by-label/scratch-old"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-label/scratch-old", "--json"]))
+    and (.notes | any(contains("filesystem changes")))
+    and (.notes | any(contains("labels")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "inspect", "scratch", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["blkid", "/dev/disk/by-label/scratch-old"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$filesystem_property_json" >/dev/null
+
+cmp "$filesystem_property_json" "$filesystem_property_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.completedActionIds == ["filesystem:scratch:inspect"]
+  and .report.partialExecutionRecovery.failedActionId == "filesystems:scratch:set-property:label"
+  and .report.partialExecutionRecovery.failedCommand == ["xfs_admin", "-L", "scratch-new", "/dev/disk/by-label/scratch-old"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$filesystem_property_receipt" >/dev/null
+
 swap_label_tools="$tmpdir/fake-swap-label-tools"
 mkdir -p "$swap_label_tools"
 
@@ -8350,4 +8458,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, filesystem property, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"

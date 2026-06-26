@@ -172,7 +172,8 @@ behavior across real storage stacks.
   LVM-plus-filesystem apply failure, LVM grow failure, XFS grow failure, Btrfs
   scrub failure, Btrfs rebalance failure, Btrfs device replacement failure,
   bcachefs replacement failure, filesystem trim failure, filesystem
-  check failure, filesystem repair failure, LUKS format failure, LUKS close
+  check failure, filesystem repair failure, filesystem property failure,
+  LUKS format failure, LUKS close
   failure, LUKS grow failure, LUKS keyslot add failure, LUKS token import
   failure, LUKS keyslot remove failure, LUKS token remove failure, ZFS pool
   replacement failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
@@ -270,8 +271,11 @@ concrete adapters are added.
   additional cache variants, additional NVMe namespace variants, additional LUN
   flows, property mutation across more supported domains, and failed-command
   recovery beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
-  scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair,
-  swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
+  scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement,
+  filesystem trim, filesystem check, filesystem repair, filesystem property,
+  swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
+  ZFS snapshot clone, LVM VG rename, ZFS pool replacement, ZFS rollback,
+  NVMe namespace create, NVMe namespace grow, NVMe
   namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
   LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
   target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete
