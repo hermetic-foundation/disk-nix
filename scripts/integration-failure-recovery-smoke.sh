@@ -403,6 +403,99 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$nvme_attach_receipt" >/dev/null
 
+nvme_detach_tools="$tmpdir/fake-nvme-detach-tools"
+mkdir -p "$nvme_detach_tools"
+
+cat > "$nvme_detach_tools/nvme" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "detach-ns" ]]; then
+  echo "synthetic nvme namespace detach failure for disk-nix recovery coverage" >&2
+  exit 83
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$nvme_detach_tools/nvme"
+
+nvme_detach_spec="$tmpdir/nvme-detach-spec.json"
+nvme_detach_json="$tmpdir/nvme-detach-apply.json"
+nvme_detach_report="$tmpdir/nvme-detach-report.json"
+nvme_detach_receipt="$tmpdir/nvme-detach-receipt.json"
+
+jq -n '{
+  nvmeNamespaces: {
+    "/dev/nvme3": {
+      operation: "detach",
+      namespaceId: "8",
+      controllers: "0x3"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$nvme_detach_spec"
+
+if PATH="$nvme_detach_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$nvme_detach_spec" \
+  --execute \
+  --report-out "$nvme_detach_report" \
+  --receipt-out "$nvme_detach_receipt" \
+  --json > "$nvme_detach_json"; then
+  echo "expected synthetic NVMe namespace detach failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 6
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["nvme", "list-ns", "/dev/nvme3", "--all", "--output-format=json"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["nvme", "list-subsys", "--output-format=json"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 83
+  and .executionResults[2].argv == ["nvme", "detach-ns", "/dev/nvme3", "--namespace-id", "8", "--controllers", "0x3"]
+  and (.executionResults[2].stderr | contains("synthetic nvme namespace detach failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "nvmenamespaces:/dev/nvme3:detach"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["nvme", "detach-ns", "/dev/nvme3", "--namespace-id", "8", "--controllers", "0x3"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["nvmenamespaces:/dev/nvme3:detach"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["nvme", "list-ns", "/dev/nvme3", "--all", "--output-format=json"]))
+    and (.commands | any(.argv == ["nvme", "list-subsys", "--output-format=json"]))
+    and (.notes | any(contains("NVMe namespace changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["nvme", "list-ns", "/dev/nvme3", "--all", "--output-format=json"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["nvme", "list-subsys", "--output-format=json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$nvme_detach_json" >/dev/null
+
+cmp "$nvme_detach_json" "$nvme_detach_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "nvmenamespaces:/dev/nvme3:detach"
+  and .report.partialExecutionRecovery.failedCommand == ["nvme", "detach-ns", "/dev/nvme3", "--namespace-id", "8", "--controllers", "0x3"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$nvme_detach_receipt" >/dev/null
+
 nvme_tools="$tmpdir/fake-nvme-tools"
 mkdir -p "$nvme_tools"
 
@@ -959,4 +1052,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace attach, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property failures"

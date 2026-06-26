@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for ten failed apply paths:
+fake storage tools ahead of `PATH` for eleven failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -103,6 +103,8 @@ fake storage tools ahead of `PATH` for ten failed apply paths:
   `nvme create-ns /dev/nvme0 --nsze-si 100G --ncap-si 100G` fails
 - an NVMe namespace attach where fake namespace and subsystem inventory
   succeeds and fake `nvme attach-ns /dev/nvme2 --namespace-id 7 --controllers 0x2` fails
+- an NVMe namespace detach where fake namespace and subsystem inventory
+  succeeds and fake `nvme detach-ns /dev/nvme3 --namespace-id 8 --controllers 0x3` fails
 - an NVMe namespace destroy where fake `nvme detach-ns` succeeds and fake
   `nvme delete-ns /dev/nvme4 --namespace-id 9` fails
 - an iSCSI session logout where fake `iscsiadm --logout` fails for the reviewed
@@ -133,6 +135,11 @@ The test verifies that the failed report and receipt preserve:
 - `partialExecutionRecovery.failedActionId` as
   `nvmenamespaces:/dev/nvme2:attach`
 - the failed `nvme attach-ns /dev/nvme2 --namespace-id 7 --controllers 0x2`
+  command and non-zero status after namespace and subsystem inventory
+  inspection
+- `partialExecutionRecovery.failedActionId` as
+  `nvmenamespaces:/dev/nvme3:detach`
+- the failed `nvme detach-ns /dev/nvme3 --namespace-id 8 --controllers 0x3`
   command and non-zero status after namespace and subsystem inventory
   inspection
 - `partialExecutionRecovery.failedActionId` as
@@ -619,9 +626,9 @@ broader MD RAID grow/member-topology behavior, broader multipath path
 add/remove/replace/flush/grow/failure behavior, broader iSCSI LUN failure
 behavior, broader NFS server/export/unmount/failure behavior, broader VDO
 create/grow/start/stop/property/remove behavior, NVMe namespace
-grow/detach/delete/failure behavior, additional cache variant failure
+grow and additional variant failure behavior, additional cache variant failure
 behavior, property mutation across more supported domains, recovery behavior
 beyond the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace create,
-NVMe namespace attach, NVMe namespace delete, iSCSI logout, iSCSI login, LVM
-cache attach, LVM cache detach, and LVM cache property failed-command paths, and
-broader destructive apply behavior.
+NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, iSCSI
+logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property
+failed-command paths, and broader destructive apply behavior.
