@@ -310,6 +310,99 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$nvme_create_receipt" >/dev/null
 
+nvme_grow_tools="$tmpdir/fake-nvme-grow-tools"
+mkdir -p "$nvme_grow_tools"
+
+cat > "$nvme_grow_tools/nvme" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "ns-rescan" ]]; then
+  echo "synthetic nvme namespace grow rescan failure for disk-nix recovery coverage" >&2
+  exit 84
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$nvme_grow_tools/nvme"
+
+nvme_grow_spec="$tmpdir/nvme-grow-spec.json"
+nvme_grow_json="$tmpdir/nvme-grow-apply.json"
+nvme_grow_report="$tmpdir/nvme-grow-report.json"
+nvme_grow_receipt="$tmpdir/nvme-grow-receipt.json"
+
+jq -n '{
+  nvmeNamespaces: {
+    "/dev/nvme1": {
+      operation: "grow"
+    }
+  },
+  apply: {
+    allowGrow: true,
+    allowOffline: true
+  }
+}' > "$nvme_grow_spec"
+
+if PATH="$nvme_grow_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$nvme_grow_spec" \
+  --execute \
+  --report-out "$nvme_grow_report" \
+  --receipt-out "$nvme_grow_receipt" \
+  --json > "$nvme_grow_json"; then
+  echo "expected synthetic NVMe namespace grow failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 5
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["nvme", "list-ns", "/dev/nvme1", "--all", "--output-format=json"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["nvme", "list-subsys", "--output-format=json"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 84
+  and .executionResults[2].argv == ["nvme", "ns-rescan", "/dev/nvme1"]
+  and (.executionResults[2].stderr | contains("synthetic nvme namespace grow rescan failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "nvmenamespaces:/dev/nvme1:grow"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["nvme", "ns-rescan", "/dev/nvme1"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["nvmenamespaces:/dev/nvme1:grow"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["nvme", "list-ns", "/dev/nvme1", "--all", "--output-format=json"]))
+    and (.commands | any(.argv == ["nvme", "list-subsys", "--output-format=json"]))
+    and (.notes | any(contains("NVMe namespace changes")))
+    and (.notes | any(contains("grow/rescan")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["nvme", "list-ns", "/dev/nvme1", "--all", "--output-format=json"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["nvme", "list-subsys", "--output-format=json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$nvme_grow_json" >/dev/null
+
+cmp "$nvme_grow_json" "$nvme_grow_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "nvmenamespaces:/dev/nvme1:grow"
+  and .report.partialExecutionRecovery.failedCommand == ["nvme", "ns-rescan", "/dev/nvme1"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$nvme_grow_receipt" >/dev/null
+
 nvme_attach_tools="$tmpdir/fake-nvme-attach-tools"
 mkdir -p "$nvme_attach_tools"
 
@@ -1052,4 +1145,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property failures"

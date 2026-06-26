@@ -886,6 +886,14 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                     | Operation::SetProperty,
                 Some("swaps")
             )
+            | (
+                Operation::Attach
+                    | Operation::Create
+                    | Operation::Destroy
+                    | Operation::Detach
+                    | Operation::Grow,
+                Some("nvmeNamespaces")
+            )
     ) {
         return true;
     }
@@ -1245,7 +1253,11 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             ));
         }
         (
-            Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Attach
+            | Operation::Detach,
             Some("nvmeNamespaces"),
             Some(target),
         ) => {
@@ -1585,7 +1597,11 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             ),
         ],
         (
-            Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Attach
+            | Operation::Detach,
             Some("nvmeNamespaces"),
             Some(target),
         ) => vec![
@@ -1868,7 +1884,11 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             ));
         }
         (
-            Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Attach
+            | Operation::Detach,
             Some("nvmeNamespaces"),
             Some(target),
         ) => {
@@ -2200,11 +2220,15 @@ fn domain_recovery_notes(
             );
         }
         (
-            Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Attach
+            | Operation::Detach,
             Some("nvmeNamespaces"),
         ) => {
             notes.push(
-                "for NVMe namespace changes, inspect namespace inventory and subsystem attachments before retrying create, attach, detach, or delete operations".to_string(),
+                "for NVMe namespace changes, inspect namespace inventory and subsystem attachments before retrying create, grow/rescan, attach, detach, or delete operations".to_string(),
             );
             notes.push(
                 "keep dependent filesystems, multipath maps, and consumers quiesced until namespace visibility and attachment state are verified".to_string(),
@@ -27024,7 +27048,7 @@ mod tests {
         }));
         assert!(domain_recovery.notes.iter().any(|note| {
             note.contains("NVMe namespace changes")
-                && note.contains("create, attach, detach, or delete")
+                && note.contains("create, grow/rescan, attach, detach, or delete")
         }));
         let roll_forward = report
             .recovery_actions
@@ -27050,6 +27074,110 @@ mod tests {
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["nvme", "list-subsys", "--output-format=json"] && !command.mutates
         }));
+    }
+
+    #[test]
+    fn failed_nvme_namespace_grow_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "nvmeNamespaces": {
+                "logical-grow": {
+                  "target": "/dev/nvme1",
+                  "operation": "grow"
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_rescan = ["nvme", "ns-rescan", "/dev/nvme1"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_rescan,
+                status_code: Some(if argv == failed_rescan { 84 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_rescan {
+                    "namespace grow rescan failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success && result.argv == ["nvme", "ns-rescan", "/dev/nvme1"]
+        }));
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("NVMe namespace grow domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Grow"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "nvme",
+                    "list-ns",
+                    "/dev/nvme1",
+                    "--all",
+                    "--output-format=json",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["nvme", "list-subsys", "--output-format=json"] && !command.mutates
+        }));
+        assert!(domain_recovery.notes.iter().any(|note| {
+            note.contains("NVMe namespace changes") && note.contains("grow/rescan")
+        }));
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("NVMe grow roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "nvme",
+                    "list-ns",
+                    "/dev/nvme1",
+                    "--all",
+                    "--output-format=json",
+                ]
+                && !command.mutates
+        }));
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "disk-nix",
+                    "apply",
+                    "--spec",
+                    "<spec>",
+                    "--probe-current",
+                    "--json",
+                ]
+                && command.readiness == CommandReadiness::ManualOnly
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("NVMe grow rollback recovery review is reported");
+        assert!(rollback.commands.iter().all(|command| !command.mutates));
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["nvme", "list-subsys", "--output-format=json"] && !command.mutates
+        }));
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints)
+        );
     }
 
     #[test]
