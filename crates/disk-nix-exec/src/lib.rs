@@ -581,6 +581,14 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 | Operation::Start
                 | Operation::Stop,
             Some("vdoVolumes")
+        ) | (
+            Operation::AddDevice
+                | Operation::Destroy
+                | Operation::Grow
+                | Operation::RemoveDevice
+                | Operation::ReplaceDevice
+                | Operation::Rescan,
+            Some("multipathMaps")
         )
     ) {
         return true;
@@ -863,6 +871,30 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             ));
         }
         (
+            Operation::AddDevice
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::Rescan,
+            Some("multipathMaps"),
+            Some(target),
+        ) => {
+            commands.push(command_vec(
+                ["multipath", "-ll", target],
+                false,
+                "inspect multipath map paths, policy, and size before choosing roll-forward",
+            ));
+            commands.push(lsscsi_lun_inventory_command(
+                "inspect host-visible SCSI path transport and size before retrying multipath changes",
+            ));
+            commands.push(command_vec(
+                ["disk-nix", "multipath", "--json"],
+                false,
+                "inspect modeled multipath inventory before retrying lifecycle changes",
+            ));
+        }
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1020,6 +1052,30 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             ),
         ],
         (
+            Operation::AddDevice
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::Rescan,
+            Some("multipathMaps"),
+            Some(target),
+        ) => vec![
+            command_vec(
+                ["multipath", "-ll", target],
+                false,
+                "confirm multipath map paths, policy, and size before rollback decisions",
+            ),
+            lsscsi_lun_inventory_command(
+                "confirm host-visible SCSI paths before rollback decisions",
+            ),
+            command_vec(
+                ["disk-nix", "multipath", "--json"],
+                false,
+                "confirm modeled multipath inventory before rollback decisions",
+            ),
+        ],
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1133,6 +1189,30 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             ));
         }
         (
+            Operation::AddDevice
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::Rescan,
+            Some("multipathMaps"),
+            Some(target),
+        ) => {
+            commands.push(command(
+                ["multipath", "-ll", target],
+                false,
+                "inspect multipath map paths, policy, and size after the failed command",
+            ));
+            commands.push(lsscsi_lun_inventory_command(
+                "inspect host-visible SCSI paths after the failed multipath command",
+            ));
+            commands.push(command(
+                ["disk-nix", "multipath", "--json"],
+                false,
+                "inspect modeled multipath inventory before deciding whether to retry",
+            ));
+        }
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1237,6 +1317,22 @@ fn domain_recovery_notes(
             );
         }
         (
+            Operation::AddDevice
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::Rescan,
+            Some("multipathMaps"),
+        ) => {
+            notes.push(
+                "for multipath changes, inspect path grouping, SCSI path state, map size, and modeled consumers before retrying reload, resize, path add, path removal, or flush operations".to_string(),
+            );
+            notes.push(
+                "keep dependent filesystems, LVM layers, and services inactive or migrated until every expected path reports the intended map state".to_string(),
+            );
+        }
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1275,6 +1371,7 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
             "snapshot" => "snapshots",
             "filesystem" => "filesystems",
             "iscsisessions" => "iscsiSessions",
+            "multipathmaps" => "multipathMaps",
             "nvmenamespaces" => "nvmeNamespaces",
             "vdovolumes" => "vdoVolumes",
             other => other,
@@ -1294,6 +1391,11 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     }
     if command_step_collection(step) == Some("iscsiSessions") {
         if let Some(target) = iscsi_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if command_step_collection(step) == Some("multipathMaps") {
+        if let Some(target) = multipath_map_target_from_step(step) {
             return Some(target);
         }
     }
@@ -1320,6 +1422,28 @@ fn md_array_target_from_step(step: &ExecutionStep) -> Option<&str> {
             {
                 return command.argv.get(1).map(String::as_str);
             }
+        }
+        None
+    })
+}
+
+fn multipath_map_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        if command.argv.first().is_some_and(|arg| arg == "multipath")
+            && command
+                .argv
+                .get(1)
+                .is_some_and(|arg| arg == "-ll" || arg == "-f")
+        {
+            return command.argv.get(2).map(String::as_str);
+        }
+        if command.argv.first().is_some_and(|arg| arg == "multipathd")
+            && command
+                .argv
+                .get(1..3)
+                .is_some_and(|args| args == ["resize", "map"])
+        {
+            return command.argv.get(3).map(String::as_str);
         }
         None
     })
@@ -23896,6 +24020,83 @@ mod tests {
             .expect("VDO rollback recovery review is reported");
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["vdostats", "--human-readable", "archive"] && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_multipath_resize_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "multipathMaps": {
+                "root-map": {
+                  "device": "/dev/mapper/mpatha",
+                  "operation": "grow"
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_resize = ["multipathd", "resize", "map", "/dev/mapper/mpatha"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_resize,
+                status_code: Some(if argv == failed_resize { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_resize {
+                    "resize failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success && result.argv == ["multipathd", "resize", "map", "/dev/mapper/mpatha"]
+        }));
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("multipath domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Grow"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["multipath", "-ll", "/dev/mapper/mpatha"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "multipath", "--json"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery.notes.iter().any(|note| {
+                note.contains("multipath changes") && note.contains("reload, resize")
+            })
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("multipath roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["multipath", "-ll", "/dev/mapper/mpatha"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("multipath rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "multipath", "--json"] && !command.mutates
         }));
     }
 

@@ -746,10 +746,10 @@ starts with a fresh `disk-nix apply --probe-current --json` dry run against the
 original spec and `rollback-review` guidance for domains with inspectable
 rollback preconditions, such as ZFS rollback points, LVM snapshot merges, VG
 device migration, cache detach, MD RAID member replacement, NVMe namespace
-changes, iSCSI session login/logout, VDO lifecycle changes, and host-side LUN
-detach. These commands remain read-only or manual-only; disk-nix does not
-automatically roll back storage because rollback safety is domain- and
-topology-specific.
+changes, iSCSI session login/logout, VDO lifecycle changes, multipath map
+changes, and host-side LUN detach. These commands remain read-only or
+manual-only; disk-nix does not automatically roll back storage because rollback
+safety is domain- and topology-specific.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.
