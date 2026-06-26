@@ -178,7 +178,10 @@ combines iSCSI session/node data, host-visible SCSI LUNs, and multipath path
 state in one normalized graph. Fixture coverage also includes a merged
 degraded-MD-with-LUKS stack covering recovering array state, failed member
 metadata, active encrypted mapper status, backing edges, and LUKS header
-metadata. See [storage-scope.md](storage-scope.md) for the
+metadata, plus a clustered LVM over NVMe-oF fixture covering shared/clustered
+VG metadata, sanlock lock hints, remote LV activity, NVMe fabrics controller
+paths, ANA state, and namespace-to-controller edges. See
+[storage-scope.md](storage-scope.md) for the
 detailed field-level coverage.
 See [feature-checklist.md](feature-checklist.md) for a checklist view of
 finished, partial, and desired features.

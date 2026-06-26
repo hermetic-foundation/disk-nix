@@ -88,8 +88,12 @@ Update rules:
   including a cross-adapter shared-storage fixture that combines iSCSI session
   and node data, host-visible SCSI LUNs, and multipath paths, plus a
   degraded-MD-with-LUKS fixture that combines recovering array state, failed
-  member metadata, active encrypted mapper status, and LUKS header metadata. It
-  still needs broader hardware, fabric variants, and clustered storage samples.
+  member metadata, active encrypted mapper status, and LUKS header metadata,
+  plus a clustered LVM over NVMe-oF fixture covering shared/clustered VG
+  metadata, sanlock lock hints, remote LV activity, NVMe fabrics paths, ANA
+  state, and namespace-to-controller edges. It still needs broader hardware,
+  additional fabric variants, and clustered storage samples from more real
+  systems.
 
 ## Planning and apply safety
 

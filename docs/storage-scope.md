@@ -238,7 +238,10 @@ The current probe layer normalizes:
   counters and formatted LBA descriptor metadata, while `nvme id-ctrl -o json`
   adds controller capability, namespace count, queue, cache, sanitize, ANA,
   thermal, and capacity metadata, and `nvme smart-log -o json` adds controller
-  health, error, temperature, lifetime usage, and power telemetry
+  health, error, temperature, lifetime usage, and power telemetry.
+  Cross-adapter fixture coverage includes clustered LVM on an NVMe-oF namespace
+  with shared VG metadata, sanlock lock hints, remote LV activity, fabrics path
+  state, ANA state, and controller-to-namespace relationships
 
 Probe-status remediation is adapter-aware. Missing-tool reports include the
 likely tool names and Nix packages, including PATH and `ENOENT` command launch

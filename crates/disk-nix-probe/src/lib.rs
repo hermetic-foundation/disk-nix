@@ -2731,6 +2731,164 @@ Digests:
         Iterations: 1000
 "#;
 
+    const CLUSTERED_NVME_LIST: &[u8] = br#"{
+      "Devices": [
+        {
+          "Name": "/dev/nvme2n1",
+          "GenericDevice": "/dev/ng2n1",
+          "ModelNumber": "Fabric Array Namespace",
+          "SerialNumber": "FABRIC123",
+          "Firmware": "9.9",
+          "Index": 2,
+          "Namespace": 1,
+          "NSID": 1,
+          "NamespaceUUID": "11111111-2222-3333-4444-555555555555",
+          "NGUID": "0123456789abcdef0123456789abcdef",
+          "SubSystem": "nqn.2014-08.org.nvmexpress:uuid:clustered-array",
+          "Controller": "nvme2",
+          "Transport": "tcp",
+          "Address": "traddr=192.0.2.50,trsvcid=4420",
+          "ControllerID": 7,
+          "NamespaceSize": 500000000000,
+          "NamespaceUsage": 300000000000,
+          "NamespaceCapacity": 500000000000,
+          "LBAFormat": "0: 512B + 0B",
+          "MaximumLBA": 976562500,
+          "SectorSize": 512,
+          "ANAState": "optimized"
+        }
+      ]
+    }"#;
+
+    const CLUSTERED_NVME_SUBSYSTEMS: &[u8] = br#"{
+      "Subsystems": [
+        {
+          "Name": "nvme-subsys2",
+          "NQN": "nqn.2014-08.org.nvmexpress:uuid:clustered-array",
+          "HostNQN": "nqn.2014-08.org.nvmexpress:host:node-a",
+          "Paths": [
+            {
+              "Name": "nvme2",
+              "Transport": "tcp",
+              "Address": "traddr=192.0.2.50,trsvcid=4420",
+              "HostTRADDR": "192.0.2.20",
+              "HostIface": "ens3f0",
+              "State": "live",
+              "ANAState": "optimized",
+              "Namespaces": [
+                {
+                  "Name": "/dev/nvme2n1",
+                  "NSID": 1
+                }
+              ]
+            },
+            {
+              "Name": "nvme3",
+              "Transport": "tcp",
+              "Address": "traddr=192.0.2.51,trsvcid=4420",
+              "HostTRADDR": "192.0.2.21",
+              "HostIface": "ens3f1",
+              "State": "connecting",
+              "ANAState": "non-optimized",
+              "Namespaces": [
+                {
+                  "Name": "/dev/nvme2n1",
+                  "NSID": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }"#;
+
+    const CLUSTERED_LVM_PVS: &[u8] = br#"{
+      "report": [{
+        "pv": [{
+          "pv_name": "/dev/nvme2n1",
+          "vg_name": "vgcluster",
+          "pv_fmt": "lvm2",
+          "pv_uuid": "cluster-pv-uuid",
+          "dev_size": "465.66g",
+          "pv_size": "465.66g",
+          "pv_free": "165.66g",
+          "pv_used": "300.00g",
+          "pv_attr": "a--",
+          "pv_allocatable": "allocatable",
+          "pv_pe_count": "119209",
+          "pv_pe_alloc_count": "76800",
+          "pv_tags": "fabric,shared",
+          "pv_in_use": "used",
+          "pv_device_id": "nvme.0123456789abcdef0123456789abcdef",
+          "pv_device_id_type": "sys_wwid"
+        }]
+      }]
+    }"#;
+
+    const CLUSTERED_LVM_VGS: &[u8] = br#"{
+      "report": [{
+        "vg": [{
+          "vg_name": "vgcluster",
+          "vg_fmt": "lvm2",
+          "vg_uuid": "cluster-vg-uuid",
+          "vg_attr": "wz--ns",
+          "vg_permissions": "writeable",
+          "vg_extendable": "extendable",
+          "vg_autoactivation": "enabled",
+          "vg_partial": "",
+          "vg_allocation_policy": "cling",
+          "vg_clustered": "clustered",
+          "vg_shared": "shared",
+          "vg_size": "465.66g",
+          "vg_free": "165.66g",
+          "vg_sysid": "node-a",
+          "vg_lock_type": "sanlock",
+          "vg_lock_args": "host_id=1",
+          "vg_extent_size": "4.00m",
+          "vg_extent_count": "119209",
+          "vg_free_count": "42409",
+          "pv_count": "1",
+          "vg_missing_pv_count": "0",
+          "lv_count": "1",
+          "snap_count": "0",
+          "vg_seqno": "42",
+          "vg_tags": "clustered,fabric"
+        }]
+      }]
+    }"#;
+
+    const CLUSTERED_LVM_LVS: &[u8] = br#"{
+      "report": [{
+        "lv": [{
+          "lv_name": "shareddata",
+          "vg_name": "vgcluster",
+          "lv_uuid": "cluster-lv-uuid",
+          "lv_path": "/dev/vgcluster/shareddata",
+          "lv_size": "300.00g",
+          "lv_attr": "-wi-ao----",
+          "lv_layout": "linear",
+          "lv_active": "active",
+          "lv_active_locally": "active locally",
+          "lv_active_remotely": "active remotely",
+          "lv_active_exclusively": "",
+          "lv_permissions": "writeable",
+          "lv_health_status": "",
+          "lv_tags": "clustered,fabric",
+          "lv_dm_path": "/dev/mapper/vgcluster-shareddata",
+          "lv_read_ahead": "auto",
+          "lv_kernel_read_ahead": "256",
+          "lv_suspended": "not suspended",
+          "lv_live_table": "live",
+          "lv_modules": "linear",
+          "lv_host": "node-a",
+          "lv_kernel_major": "253",
+          "lv_kernel_minor": "10",
+          "lv_device_open": "open",
+          "lv_role": "public"
+        }]
+      }]
+    }"#;
+
     #[test]
     fn shared_storage_fabric_fixture_links_iscsi_luns_and_multipath_paths() {
         let mut graph = StorageGraph::empty();
@@ -2863,6 +3021,130 @@ Digests:
                 .count(),
             2
         );
+    }
+
+    #[test]
+    fn clustered_lvm_over_nvme_fabric_fixture_preserves_shared_locking_metadata() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            nvme::normalize_nvme_list_json(CLUSTERED_NVME_LIST)
+                .expect("NVMe list fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            nvme::normalize_nvme_subsystems_json(CLUSTERED_NVME_SUBSYSTEMS)
+                .expect("NVMe subsystem fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lvm::normalize_lvm_json(
+                CLUSTERED_LVM_PVS,
+                CLUSTERED_LVM_VGS,
+                CLUSTERED_LVM_LVS,
+                None,
+            )
+            .expect("clustered LVM fixture should parse"),
+        );
+
+        let namespace = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/nvme2n1")
+            .expect("NVMe-oF namespace should exist");
+        assert_eq!(namespace.kind, NodeKind::NvmeNamespace);
+        assert_eq!(namespace.size_bytes, Some(500_000_000_000));
+        assert_eq!(
+            namespace.usage.as_ref().and_then(|usage| usage.used_bytes),
+            Some(300_000_000_000)
+        );
+        assert_has_property(namespace, "nvme.transport", "tcp");
+        assert_has_property(namespace, "nvme.ana-state", "optimized");
+        assert_has_property(
+            namespace,
+            "nvme.subsystem-nqn",
+            "nqn.2014-08.org.nvmexpress:uuid:clustered-array",
+        );
+
+        let controller = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nvme-controller:nvme2")
+            .expect("primary fabric controller should exist");
+        assert_eq!(controller.kind, NodeKind::NvmeController);
+        assert_has_property(controller, "nvme.transport", "tcp");
+        assert_has_property(controller, "nvme.path-state", "live");
+        assert_has_property(controller, "nvme.host-iface", "ens3f0");
+        assert_has_property(controller, "nvme.ana-state", "optimized");
+
+        let secondary_controller = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nvme-controller:nvme3")
+            .expect("secondary fabric controller should exist");
+        assert_has_property(secondary_controller, "nvme.path-state", "connecting");
+        assert_has_property(secondary_controller, "nvme.ana-state", "non-optimized");
+
+        let pv = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-pv:/dev/nvme2n1")
+            .expect("clustered LVM PV should exist");
+        assert_eq!(pv.kind, NodeKind::LvmPhysicalVolume);
+        assert_eq!(pv.identity.uuid.as_deref(), Some("cluster-pv-uuid"));
+        assert_has_property(pv, "lvm.pv-device-id-type", "sys_wwid");
+        assert_has_property(
+            pv,
+            "lvm.pv-device-id",
+            "nvme.0123456789abcdef0123456789abcdef",
+        );
+        assert_has_property(pv, "lvm.pv-tags", "fabric,shared");
+
+        let vg = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-vg:vgcluster")
+            .expect("clustered LVM VG should exist");
+        assert_eq!(vg.kind, NodeKind::LvmVolumeGroup);
+        assert_eq!(vg.identity.uuid.as_deref(), Some("cluster-vg-uuid"));
+        assert_has_property(vg, "lvm.vg-clustered", "clustered");
+        assert_has_property(vg, "lvm.vg-shared", "shared");
+        assert_has_property(vg, "lvm.vg-lock-type", "sanlock");
+        assert_has_property(vg, "lvm.vg-lock-args", "host_id=1");
+        assert_has_property(vg, "lvm.vg-system-id", "node-a");
+
+        let lv = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-lv:vgcluster/shareddata")
+            .expect("clustered shared LV should exist");
+        assert_eq!(lv.kind, NodeKind::LvmLogicalVolume);
+        assert_eq!(lv.path.as_deref(), Some("/dev/vgcluster/shareddata"));
+        assert_has_property(lv, "lvm.active-locally", "active locally");
+        assert_has_property(lv, "lvm.active-remotely", "active remotely");
+        assert_has_property(lv, "lvm.host", "node-a");
+        assert_has_property(lv, "lvm.tags", "clustered,fabric");
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "nvme-subsystem:nvme-subsys2"
+                && edge.to.0 == "nvme-controller:nvme2"
+                && edge.relationship == Relationship::Contains
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "nvme-controller:nvme2"
+                && edge.to.0 == "block:/dev/nvme2n1"
+                && edge.relationship == Relationship::Contains
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "lvm-pv:/dev/nvme2n1"
+                && edge.to.0 == "lvm-vg:vgcluster"
+                && edge.relationship == Relationship::MemberOf
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "lvm-vg:vgcluster"
+                && edge.to.0 == "lvm-lv:vgcluster/shareddata"
+                && edge.relationship == Relationship::Contains
+        }));
     }
 
     #[test]
