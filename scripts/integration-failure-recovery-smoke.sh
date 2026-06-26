@@ -424,6 +424,96 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$zfs_dataset_rename_receipt" >/dev/null
 
+btrfs_snapshot_clone_tools="$tmpdir/fake-btrfs-snapshot-clone-tools"
+mkdir -p "$btrfs_snapshot_clone_tools"
+
+cat > "$btrfs_snapshot_clone_tools/btrfs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "subvolume snapshot -r /mnt/persist/@home-before /mnt/persist/@home-review" ]]; then
+  echo "synthetic Btrfs snapshot clone failure for disk-nix recovery coverage" >&2
+  exit 78
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$btrfs_snapshot_clone_tools/btrfs"
+
+btrfs_snapshot_clone_spec="$tmpdir/btrfs-snapshot-clone-spec.json"
+btrfs_snapshot_clone_json="$tmpdir/btrfs-snapshot-clone-apply.json"
+btrfs_snapshot_clone_report="$tmpdir/btrfs-snapshot-clone-report.json"
+btrfs_snapshot_clone_receipt="$tmpdir/btrfs-snapshot-clone-receipt.json"
+
+jq -n '{
+  snapshots: {
+    "/mnt/persist/@home-before": {
+      target: "/mnt/persist/@home",
+      cloneTo: "/mnt/persist/@home-review",
+      readOnly: true
+    }
+  }
+}' > "$btrfs_snapshot_clone_spec"
+
+if PATH="$btrfs_snapshot_clone_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$btrfs_snapshot_clone_spec" \
+  --execute \
+  --report-out "$btrfs_snapshot_clone_report" \
+  --receipt-out "$btrfs_snapshot_clone_receipt" \
+  --json > "$btrfs_snapshot_clone_json"; then
+  echo "expected synthetic Btrfs snapshot clone failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["btrfs", "subvolume", "show", "/mnt/persist/@home-before"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 78
+  and .executionResults[1].argv == ["btrfs", "subvolume", "snapshot", "-r", "/mnt/persist/@home-before", "/mnt/persist/@home-review"]
+  and (.executionResults[1].stderr | contains("synthetic Btrfs snapshot clone failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "snapshot:/mnt/persist/@home-before:clone:/mnt/persist/@home-review"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["btrfs", "subvolume", "snapshot", "-r", "/mnt/persist/@home-before", "/mnt/persist/@home-review"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["snapshot:/mnt/persist/@home-before:clone:/mnt/persist/@home-review"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["btrfs", "subvolume", "show", "/mnt/persist/@home-before"]))
+    and (.commands | any(.argv == ["btrfs", "property", "get", "-ts", "/mnt/persist/@home-before", "ro"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/mnt/persist/@home-before", "--json"]))
+    and (.notes | any(contains("snapshot lifecycle")))
+    and (.notes | any(contains("read-only state")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["btrfs", "subvolume", "show", "/mnt/persist/@home-review"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["btrfs", "property", "get", "-ts", "/mnt/persist/@home-before", "ro"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$btrfs_snapshot_clone_json" >/dev/null
+
+cmp "$btrfs_snapshot_clone_json" "$btrfs_snapshot_clone_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "snapshot:/mnt/persist/@home-before:clone:/mnt/persist/@home-review"
+  and .report.partialExecutionRecovery.failedCommand == ["btrfs", "subvolume", "snapshot", "-r", "/mnt/persist/@home-before", "/mnt/persist/@home-review"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$btrfs_snapshot_clone_receipt" >/dev/null
+
 rollback_tools="$tmpdir/fake-rollback-tools"
 mkdir -p "$rollback_tools"
 
@@ -2459,4 +2549,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"

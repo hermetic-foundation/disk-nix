@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for twenty-five failed apply paths:
+fake storage tools ahead of `PATH` for twenty-six failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -103,6 +103,9 @@ fake storage tools ahead of `PATH` for twenty-five failed apply paths:
   and fake `dmsetup rename /dev/mapper/cryptswap cryptswap-retired` fails
 - a ZFS dataset rename where fake `zfs list -H -p tank/home` succeeds and fake
   `zfs rename tank/home tank/home-staged` fails
+- a Btrfs snapshot clone where fake `btrfs subvolume show /mnt/persist/@home-before` succeeds and fake
+  `btrfs subvolume snapshot -r /mnt/persist/@home-before /mnt/persist/@home-review`
+  fails
 - a ZFS snapshot rollback where fake `zfs list` succeeds and fake
   `zfs rollback tank/home@before` fails
 - an NVMe namespace create where fake `nvme list-ns` succeeds and fake
@@ -682,10 +685,10 @@ behavior, broader VDO create/grow/start/stop/property/remove behavior,
 additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, swap label, device-mapper
-rename, ZFS dataset rename, ZFS rollback, NVMe namespace create, NVMe namespace
-grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,
-target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD
-RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI
-login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache
-property, and LVM cache property failed-command paths, and broader destructive
-apply behavior.
+rename, ZFS dataset rename, Btrfs snapshot clone, ZFS rollback, NVMe namespace
+create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe
+namespace delete, target-side LUN LIO create, target-side LUN tgt create,
+multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount,
+iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO
+property, bcache property, and LVM cache property failed-command paths, and
+broader destructive apply behavior.
