@@ -332,6 +332,98 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$dm_rename_receipt" >/dev/null
 
+zfs_dataset_rename_tools="$tmpdir/fake-zfs-dataset-rename-tools"
+mkdir -p "$zfs_dataset_rename_tools"
+
+cat > "$zfs_dataset_rename_tools/zfs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "rename tank/home tank/home-staged" ]]; then
+  echo "synthetic ZFS dataset rename failure for disk-nix recovery coverage" >&2
+  exit 77
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$zfs_dataset_rename_tools/zfs"
+
+zfs_dataset_rename_spec="$tmpdir/zfs-dataset-rename-spec.json"
+zfs_dataset_rename_json="$tmpdir/zfs-dataset-rename-apply.json"
+zfs_dataset_rename_report="$tmpdir/zfs-dataset-rename-report.json"
+zfs_dataset_rename_receipt="$tmpdir/zfs-dataset-rename-receipt.json"
+
+jq -n '{
+  datasets: {
+    "tank/home": {
+      operation: "rename",
+      renameTo: "tank/home-staged"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$zfs_dataset_rename_spec"
+
+if PATH="$zfs_dataset_rename_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$zfs_dataset_rename_spec" \
+  --execute \
+  --report-out "$zfs_dataset_rename_report" \
+  --receipt-out "$zfs_dataset_rename_receipt" \
+  --json > "$zfs_dataset_rename_json"; then
+  echo "expected synthetic ZFS dataset rename failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["zfs", "list", "-H", "-p", "tank/home"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 77
+  and .executionResults[1].argv == ["zfs", "rename", "tank/home", "tank/home-staged"]
+  and (.executionResults[1].stderr | contains("synthetic ZFS dataset rename failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "datasets:tank/home:rename"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["zfs", "rename", "tank/home", "tank/home-staged"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["datasets:tank/home:rename"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["zfs", "list", "-H", "-p", "-t", "filesystem", "tank/home"]))
+    and (.commands | any(.argv == ["zfs", "get", "all", "tank/home"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "tank/home", "--json"]))
+    and (.notes | any(contains("ZFS changes")))
+    and (.notes | any(contains("LUN consumers")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["zfs", "get", "all", "tank/home"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["zfs", "list", "-H", "-p", "-t", "filesystem", "tank/home"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$zfs_dataset_rename_json" >/dev/null
+
+cmp "$zfs_dataset_rename_json" "$zfs_dataset_rename_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "datasets:tank/home:rename"
+  and .report.partialExecutionRecovery.failedCommand == ["zfs", "rename", "tank/home", "tank/home-staged"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$zfs_dataset_rename_receipt" >/dev/null
+
 rollback_tools="$tmpdir/fake-rollback-tools"
 mkdir -p "$rollback_tools"
 
@@ -2367,4 +2459,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
