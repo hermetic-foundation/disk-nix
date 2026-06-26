@@ -617,6 +617,18 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
             Some("partitions")
         ) | (Operation::Create | Operation::Rescan, Some("disks"))
             | (
+                Operation::Create | Operation::Grow | Operation::Rescan,
+                Some("backingFiles")
+            )
+            | (
+                Operation::Create | Operation::Destroy | Operation::Grow | Operation::Rescan,
+                Some("loopDevices")
+            )
+            | (
+                Operation::Destroy | Operation::Rename | Operation::Rescan,
+                Some("dmMaps")
+            )
+            | (
                 Operation::AddDevice
                     | Operation::Check
                     | Operation::Format
@@ -886,6 +898,18 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             commands.extend(partition_recovery_inspection_commands(
                 step,
                 "inspect partition table state before choosing roll-forward",
+            ))
+        }
+        (Operation::Create | Operation::Grow | Operation::Rescan, Some("backingFiles"), _)
+        | (
+            Operation::Create | Operation::Destroy | Operation::Grow | Operation::Rescan,
+            Some("loopDevices"),
+            _,
+        )
+        | (Operation::Destroy | Operation::Rename | Operation::Rescan, Some("dmMaps"), _) => {
+            commands.extend(local_mapping_recovery_inspection_commands(
+                step,
+                "inspect local mapping state before choosing roll-forward",
             ))
         }
         (
@@ -1196,6 +1220,18 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
                 "confirm partition table state before rollback decisions",
             )
         }
+        (Operation::Create | Operation::Grow | Operation::Rescan, Some("backingFiles"), _)
+        | (
+            Operation::Create | Operation::Destroy | Operation::Grow | Operation::Rescan,
+            Some("loopDevices"),
+            _,
+        )
+        | (Operation::Destroy | Operation::Rename | Operation::Rescan, Some("dmMaps"), _) => {
+            local_mapping_recovery_inspection_commands(
+                step,
+                "confirm local mapping state before rollback decisions",
+            )
+        }
         (
             Operation::AddDevice
             | Operation::Check
@@ -1498,6 +1534,18 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             commands.extend(partition_recovery_inspection_commands(
                 step,
                 "inspect partition table state after the failed command",
+            ))
+        }
+        (Operation::Create | Operation::Grow | Operation::Rescan, Some("backingFiles"), _)
+        | (
+            Operation::Create | Operation::Destroy | Operation::Grow | Operation::Rescan,
+            Some("loopDevices"),
+            _,
+        )
+        | (Operation::Destroy | Operation::Rename | Operation::Rescan, Some("dmMaps"), _) => {
+            commands.extend(local_mapping_recovery_inspection_commands(
+                step,
+                "inspect local mapping state after the failed command",
             ))
         }
         (
@@ -1838,6 +1886,19 @@ fn domain_recovery_notes(
                 "preserve partition table captures and avoid formatting or resizing upper layers until the kernel and modeled topology agree on the new geometry".to_string(),
             );
         }
+        (Operation::Create | Operation::Grow | Operation::Rescan, Some("backingFiles"))
+        | (
+            Operation::Create | Operation::Destroy | Operation::Grow | Operation::Rescan,
+            Some("loopDevices"),
+        )
+        | (Operation::Destroy | Operation::Rename | Operation::Rescan, Some("dmMaps")) => {
+            notes.push(
+                "for local mapping changes, inspect backing file size, loop mappings, device-mapper tables, dependencies, and modeled consumers before retrying".to_string(),
+            );
+            notes.push(
+                "prefer refreshing or repairing the owning LUKS, LVM, VDO, multipath, cache, or filesystem layer before forcing generic map removal or rename retries".to_string(),
+            );
+        }
         (
             Operation::AddDevice
             | Operation::Check
@@ -2044,7 +2105,10 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
         .map(|collection| match collection {
             "snapshot" => "snapshots",
             "filesystem" => "filesystems",
+            "backingfiles" => "backingFiles",
+            "dmmaps" => "dmMaps",
             "iscsisessions" => "iscsiSessions",
+            "loopdevices" => "loopDevices",
             "lvmcaches" => "lvmCaches",
             "lukskeyslots" => "luksKeyslots",
             "lukstokens" => "luksTokens",
@@ -2119,6 +2183,14 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
         if let Some(target) =
             partition_disk_from_step(step).or_else(|| partition_target_from_step(step))
         {
+            return Some(target);
+        }
+    }
+    if matches!(
+        command_step_collection(step),
+        Some("backingFiles" | "loopDevices" | "dmMaps")
+    ) {
+        if let Some(target) = local_mapping_target_from_step(step) {
             return Some(target);
         }
     }
@@ -2836,6 +2908,174 @@ fn partition_target_from_step(step: &ExecutionStep) -> Option<&str> {
                 .filter(|target| target.starts_with('/') && !target.starts_with('<'));
         }
         None
+    })
+}
+
+fn local_mapping_recovery_inspection_commands(
+    step: &ExecutionStep,
+    note: &'static str,
+) -> Vec<ExecutionCommand> {
+    match command_step_collection(step) {
+        Some("dmMaps") => {
+            let target = dm_map_target_from_step(step).or_else(|| {
+                step.action_id
+                    .split(':')
+                    .nth(1)
+                    .filter(|target| is_dm_map_target(target))
+            });
+            vec![
+                dmsetup_info_command(target, note),
+                dmsetup_deps_command(target),
+                dmsetup_table_command(target),
+                dmsetup_status_command(target),
+                dm_map_inspect_json_command(target, note),
+            ]
+        }
+        Some("loopDevices") => {
+            let target = loop_target_from_step(step).or_else(|| {
+                step.action_id
+                    .split(':')
+                    .nth(1)
+                    .filter(|target| target.starts_with("/dev/loop"))
+            });
+            let mut commands = Vec::new();
+            if let Some(target) = target {
+                commands.push(command(
+                    ["losetup", "--json", "--list", target],
+                    false,
+                    note,
+                ));
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            } else {
+                commands.push(command(
+                    ["losetup", "--json", "--list"],
+                    false,
+                    "inspect loop mappings before retrying",
+                ));
+            }
+            if let Some(backing) = backing_file_from_step(step) {
+                commands.push(command(
+                    ["stat", "--printf=%n %s %b %B\\n", backing],
+                    false,
+                    note,
+                ));
+                commands.push(command(
+                    ["disk-nix", "inspect", backing, "--json"],
+                    false,
+                    note,
+                ));
+            }
+            commands
+        }
+        Some("backingFiles") => {
+            let target = backing_file_from_step(step).or_else(|| {
+                step.action_id
+                    .split(':')
+                    .nth(1)
+                    .filter(|target| target.starts_with('/'))
+            });
+            let mut commands = Vec::new();
+            if let Some(target) = target {
+                commands.push(command(
+                    ["stat", "--printf=%n %s %b %B\\n", target],
+                    false,
+                    note,
+                ));
+                commands.push(command(
+                    ["du", "--bytes", "--apparent-size", target],
+                    false,
+                    note,
+                ));
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            } else {
+                commands.push(command(
+                    ["disk-nix", "backing-files", "--json"],
+                    false,
+                    "inspect modeled backing-file inventory before retrying",
+                ));
+            }
+            commands
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn local_mapping_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    dm_map_target_from_step(step)
+        .or_else(|| loop_target_from_step(step))
+        .or_else(|| backing_file_from_step(step))
+}
+
+fn dm_map_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        let target = match tool {
+            "dmsetup" => match command.argv.get(1).map(String::as_str) {
+                Some("rename") => command.argv.get(2).map(String::as_str),
+                Some("remove" | "deps" | "table" | "status") => {
+                    command.argv.get(2).map(String::as_str)
+                }
+                Some("info") => command.argv.last().map(String::as_str),
+                _ => None,
+            },
+            "disk-nix" if command.argv.get(1).is_some_and(|arg| arg == "inspect") => {
+                command.argv.get(2).map(String::as_str)
+            }
+            _ => None,
+        }?;
+
+        Some(target).filter(|target| is_dm_map_target(target))
+    })
+}
+
+fn loop_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        let target = match tool {
+            "losetup" => match command.argv.get(1).map(String::as_str) {
+                Some("--detach" | "-c") => command.argv.get(2).map(String::as_str),
+                Some("--json") => command.argv.last().map(String::as_str),
+                Some(target) if target.starts_with("/dev/loop") => {
+                    command.argv.get(1).map(String::as_str)
+                }
+                _ => None,
+            },
+            "disk-nix" if command.argv.get(1).is_some_and(|arg| arg == "inspect") => {
+                command.argv.get(2).map(String::as_str)
+            }
+            _ => None,
+        }?;
+
+        Some(target).filter(|target| target.starts_with("/dev/loop") && !target.starts_with('<'))
+    })
+}
+
+fn backing_file_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        let target = match tool {
+            "truncate" | "stat" | "du" | "test" => command.argv.last().map(String::as_str),
+            "losetup" => command.argv.last().map(String::as_str),
+            "disk-nix" if command.argv.get(1).is_some_and(|arg| arg == "inspect") => {
+                command.argv.get(2).map(String::as_str)
+            }
+            _ => None,
+        }?;
+
+        Some(target).filter(|target| {
+            target.starts_with('/')
+                && !target.starts_with('<')
+                && !target.starts_with("/dev/loop")
+                && !is_dm_map_target(target)
+        })
     })
 }
 
@@ -26578,6 +26818,107 @@ mod tests {
                     "/dev/disk/by-id/nvme-root",
                 ]
                 && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_dm_map_rename_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "dmMaps": {
+                "cryptswap": {
+                  "operation": "rename",
+                  "target": "/dev/mapper/cryptswap",
+                  "renameTo": "/dev/mapper/cryptswap-retired"
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_rename = [
+            "dmsetup",
+            "rename",
+            "/dev/mapper/cryptswap",
+            "cryptswap-retired",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_rename,
+                status_code: Some(if argv == failed_rename { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_rename {
+                    "dm rename failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_rename)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("device-mapper domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Rename"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "dmsetup",
+                    "info",
+                    "-c",
+                    "--noheadings",
+                    "-o",
+                    "name,uuid,major,minor,open,segments,events",
+                    "/dev/mapper/cryptswap",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["dmsetup", "deps", "-o", "devname", "/dev/mapper/cryptswap"]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["dmsetup", "table", "/dev/mapper/cryptswap"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["dmsetup", "status", "/dev/mapper/cryptswap"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "/dev/mapper/cryptswap", "--json"]
+                && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("local mapping changes") && note.contains("dependencies"))
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("device-mapper roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["dmsetup", "status", "/dev/mapper/cryptswap"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("device-mapper rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["dmsetup", "table", "/dev/mapper/cryptswap"] && !command.mutates
         }));
     }
 

@@ -753,9 +753,10 @@ changes, filesystem format/grow/shrink/check/repair/mount/remount/unmount/trim
 updates, disk and partition-table create/grow/rescan changes, LUKS
 mapper/header/keyslot/token changes, MD RAID member replacement, NVMe namespace
 changes, iSCSI session login/logout, VDO lifecycle changes, multipath map
-changes, and host-side LUN detach. These commands remain read-only or
-manual-only; disk-nix does not automatically roll back storage because rollback
-safety is domain- and topology-specific.
+changes, loop-device, backing-file, and device-mapper map changes, and
+host-side LUN detach. These commands remain read-only or manual-only; disk-nix
+does not automatically roll back storage because rollback safety is domain- and
+topology-specific.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

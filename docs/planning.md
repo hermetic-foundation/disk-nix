@@ -779,8 +779,9 @@ cache lifecycle changes, ZFS pool/dataset/zvol lifecycle changes, swap
 signature/activation changes, filesystem lifecycle updates, disk and
 partition-table lifecycle changes, LUKS mapper, header, keyslot, and token
 changes, MD RAID member replacement, NVMe namespace changes, iSCSI session
-login/logout, VDO lifecycle changes, multipath map changes, and host-side LUN
-detach; it does not run rollback commands automatically.
+login/logout, VDO lifecycle changes, multipath map changes, loop-device,
+backing-file, and device-mapper map changes, and host-side LUN detach; it does
+not run rollback commands automatically.
 Cache command plans include bcache-aware sysfs updates for existing cache-set
 attachment, cache-mode property changes, `bcache.set-*` cache-set tuning
 updates, read-only rescans, dirty-data checks, and replacement steps that remain
