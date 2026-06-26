@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for six failed apply paths:
+fake storage tools ahead of `PATH` for seven failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -105,6 +105,8 @@ fake storage tools ahead of `PATH` for six failed apply paths:
   target and portal
 - an iSCSI session login where fake `iscsiadm --mode discovery` succeeds and
   fake `iscsiadm --login` fails for the reviewed target and portal
+- an LVM cache attach where fake `lvconvert --type cache` fails for the
+  reviewed origin LV and cache pool
 - an LVM cache property mutation where fake `lvchange --cachemode` fails for a
   reviewed origin LV
 
@@ -130,6 +132,10 @@ The test verifies that the failed report and receipt preserve:
   `iscsisessions:iqn.2026-06.example:storage.root:login`
 - the failed `iscsiadm --mode node --targetname iqn.2026-06.example:storage.root --portal 192.0.2.10:3260 --login` command
   and non-zero status after successful discovery
+- `partialExecutionRecovery.failedActionId` as
+  `lvmCaches:vg0/root:add-device:vg0/root-cache`
+- the failed `lvconvert --type cache --cachepool vg0/root-cache vg0/root`
+  command and non-zero status
 - `partialExecutionRecovery.failedActionId` as
   `lvmCaches:vg0/root:set-property:lvm.cache-mode`
 - the failed `lvchange --cachemode writethrough vg0/root` command and non-zero
@@ -594,8 +600,9 @@ broader MD RAID grow/member-topology behavior, broader multipath path
 add/remove/replace/flush/grow/failure behavior, broader iSCSI LUN failure
 behavior, broader NFS server/export/unmount/failure behavior, broader VDO
 create/grow/start/stop/property/remove behavior, NVMe namespace
-create/grow/attach/detach/delete/failure behavior, cache attach/detach failure
-behavior, property mutation across more supported domains, recovery behavior
-beyond the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace delete,
-iSCSI logout, iSCSI login, and LVM cache property failed-command paths, and
-broader destructive apply behavior.
+create/grow/attach/detach/delete/failure behavior, cache detach and additional
+cache variant failure behavior, property mutation across more supported
+domains, recovery behavior beyond the synthetic LVM-plus-filesystem, ZFS
+rollback, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach,
+and LVM cache property failed-command paths, and broader destructive apply
+behavior.
