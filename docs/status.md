@@ -169,7 +169,7 @@ behavior across real storage stacks.
   delete failures, target-side LUN LIO create, attach, detach, and destroy
   failures, Linux tgt create, attach, detach, and destroy failures, multipath
   resize and replacement failures, MD RAID member replacement failure, LUKS
-  open failure, partition grow failure, NFS remount failure, swap label
+  open failure, partition grow failure, NFS remount failure, NFS unmount failure, swap label
   mutation failure, device-mapper rename failure, ZFS dataset rename failure,
   Btrfs snapshot clone failure, ZFS snapshot clone failure, LVM VG rename
   failure, iSCSI logout and login failures, LVM cache attach and detach
@@ -239,7 +239,7 @@ placeholders until concrete adapters are added.
   target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt
   attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath
   resize, multipath replace, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
-  remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
+  remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
   grow, VDO property, bcache property, and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.

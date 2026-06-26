@@ -4113,6 +4113,107 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$nfs_remount_receipt" >/dev/null
 
+nfs_unmount_tools="$tmpdir/fake-nfs-unmount-tools"
+mkdir -p "$nfs_unmount_tools"
+
+cat > "$nfs_unmount_tools/findmnt" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$nfs_unmount_tools/umount" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "/srv/old" ]]; then
+  echo "synthetic NFS unmount failure for disk-nix recovery coverage" >&2
+  exit 91
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$nfs_unmount_tools/findmnt" "$nfs_unmount_tools/umount"
+
+nfs_unmount_spec="$tmpdir/nfs-unmount-spec.json"
+nfs_unmount_json="$tmpdir/nfs-unmount-apply.json"
+nfs_unmount_report="$tmpdir/nfs-unmount-report.json"
+nfs_unmount_receipt="$tmpdir/nfs-unmount-receipt.json"
+
+jq -n '{
+  nfs: {
+    mounts: {
+      "/srv/old": {
+        operation: "unmount",
+        source: "nas.example.com:/srv/old"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$nfs_unmount_spec"
+
+if PATH="$nfs_unmount_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$nfs_unmount_spec" \
+  --execute \
+  --report-out "$nfs_unmount_report" \
+  --receipt-out "$nfs_unmount_receipt" \
+  --json > "$nfs_unmount_json"; then
+  echo "expected synthetic NFS unmount failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["findmnt", "--json", "/srv/old"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 91
+  and .executionResults[1].argv == ["umount", "/srv/old"]
+  and (.executionResults[1].stderr | contains("synthetic NFS unmount failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "nfs.mounts:/srv/old:unmount"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["umount", "/srv/old"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["nfs.mounts:/srv/old:unmount"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["findmnt", "--json", "/srv/old"]))
+    and (.commands | any(.argv == ["nfsstat", "-m", "/srv/old"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/srv/old", "--json"]))
+    and (.notes | any(contains("NFS changes")))
+    and (.notes | any(contains("dependent services")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["findmnt", "--json", "/srv/old"]))
+    and (.commands | any(.argv == ["disk-nix", "topology", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["findmnt", "--json", "/srv/old"]))
+    and (.commands | any(.argv == ["nfsstat", "-m", "/srv/old"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$nfs_unmount_json" >/dev/null
+
+cmp "$nfs_unmount_json" "$nfs_unmount_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "nfs.mounts:/srv/old:unmount"
+  and .report.partialExecutionRecovery.failedCommand == ["umount", "/srv/old"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$nfs_unmount_receipt" >/dev/null
+
 iscsi_tools="$tmpdir/fake-iscsi-tools"
 mkdir -p "$iscsi_tools"
 
@@ -4875,4 +4976,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
