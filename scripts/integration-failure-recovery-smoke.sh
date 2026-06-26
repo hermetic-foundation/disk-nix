@@ -586,6 +586,102 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_attach_receipt" >/dev/null
 
+lvm_cache_detach_tools="$tmpdir/fake-lvm-cache-detach-tools"
+mkdir -p "$lvm_cache_detach_tools"
+
+cat > "$lvm_cache_detach_tools/lvs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$lvm_cache_detach_tools/lvconvert" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == *"--uncache"* ]]; then
+  echo "synthetic lvm cache detach failure for disk-nix recovery coverage" >&2
+  exit 80
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$lvm_cache_detach_tools/lvs" "$lvm_cache_detach_tools/lvconvert"
+
+lvm_cache_detach_spec="$tmpdir/lvm-cache-detach-spec.json"
+lvm_cache_detach_json="$tmpdir/lvm-cache-detach-apply.json"
+lvm_cache_detach_report="$tmpdir/lvm-cache-detach-report.json"
+lvm_cache_detach_receipt="$tmpdir/lvm-cache-detach-receipt.json"
+
+jq -n '{
+  lvmCaches: {
+    "vg0/root": {
+      removeDevices: ["vg0/root-cache"]
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$lvm_cache_detach_spec"
+
+if PATH="$lvm_cache_detach_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$lvm_cache_detach_spec" \
+  --execute \
+  --report-out "$lvm_cache_detach_report" \
+  --receipt-out "$lvm_cache_detach_receipt" \
+  --json > "$lvm_cache_detach_json"; then
+  echo "expected synthetic LVM cache detach failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["lvs", "--reportformat", "json", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent", "vg0/root"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 80
+  and .executionResults[1].argv == ["lvconvert", "--uncache", "vg0/root"]
+  and (.executionResults[1].stderr | contains("synthetic lvm cache detach failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "lvmCaches:vg0/root:remove-device:vg0/root-cache"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["lvconvert", "--uncache", "vg0/root"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["lvmCaches:vg0/root:remove-device:vg0/root-cache"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-a", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/root"]))
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "vg0/root", "--json"]))
+    and (.notes | any(contains("cache changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/root"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-a", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/root"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$lvm_cache_detach_json" >/dev/null
+
+cmp "$lvm_cache_detach_json" "$lvm_cache_detach_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "lvmCaches:vg0/root:remove-device:vg0/root-cache"
+  and .report.partialExecutionRecovery.failedCommand == ["lvconvert", "--uncache", "vg0/root"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$lvm_cache_detach_receipt" >/dev/null
+
 lvm_cache_tools="$tmpdir/fake-lvm-cache-tools"
 mkdir -p "$lvm_cache_tools"
 
@@ -677,4 +773,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property failures"
