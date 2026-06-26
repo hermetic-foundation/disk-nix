@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for seventy-two failed apply paths:
+fake storage tools ahead of `PATH` for seventy-four failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -259,6 +259,9 @@ fake storage tools ahead of `PATH` for seventy-two failed apply paths:
   `mount -o remount,_netdev,ro,vers=4.2 /srv/tuned` fails
 - an NFS unmount where fake `findmnt --json /srv/old` succeeds and fake
   `umount /srv/old` fails
+- an NFS export where fake
+  `exportfs -i -o rw,sync,no_subtree_check 192.0.2.0/24:/srv/share` fails
+- an NFS unexport where fake `exportfs -u 192.0.2.55:/srv/old` fails
 - an iSCSI session logout where fake `iscsiadm --logout` fails for the reviewed
   target and portal
 - an iSCSI session login where fake `iscsiadm --mode discovery` succeeds and
@@ -976,9 +979,9 @@ that the loop smoke harnesses parse, remain opt-in, and still contain the
 expected loop, filesystem setup, resize, mount, Btrfs scrub, bcachefs format,
 bcachefs scrub, LUKS format, LUKS open, LUKS close, LVM create, LVM rescan, MD
 RAID create, MD RAID rescan, ZFS pool create, ZFS scrub, NFS mount, NFS rescan,
-NFS remount, VDO status, VDO stats, VDO rescan, VM orchestration guard steps,
-iSCSI session rescan, multipath map rescan, NVMe namespace rescan, layered
-loop/LUKS/LVM/ext4 VM grow assertions, and the synthetic failed-apply
+NFS remount, NFS export, NFS unexport, VDO status, VDO stats, VDO rescan, VM
+orchestration guard steps, iSCSI session rescan, multipath map rescan, NVMe
+namespace rescan, layered loop/LUKS/LVM/ext4 VM grow assertions, and the synthetic failed-apply
 `partialExecutionRecovery` assertions. This keeps the harnesses available and
 packaged while preserving safe default checks.
 
@@ -992,7 +995,7 @@ broader bcachefs multi-device and member-topology behavior, broader ZFS
 vdev/dataset/zvol/snapshot behavior, broader MD RAID grow/member-topology and
 degraded-array variant behavior, broader multipath path
 add/remove/flush/grow/failure behavior,
-broader iSCSI LUN failure behavior, broader NFS server/export/unmount/failure
+broader iSCSI LUN failure behavior, broader NFS server/client variant failure
 behavior, broader VDO create/rescan/logical-grow/physical-grow/start/stop/property/remove behavior,
 additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
@@ -1011,6 +1014,7 @@ target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST
 grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath
 resize, multipath add, multipath remove, multipath flush, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
-remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
+remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login,
+iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
 create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
 paths, and broader destructive apply behavior.

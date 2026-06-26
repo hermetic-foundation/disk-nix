@@ -6214,6 +6214,191 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$nfs_unmount_receipt" >/dev/null
 
+nfs_export_tools="$tmpdir/fake-nfs-export-tools"
+mkdir -p "$nfs_export_tools"
+
+cat > "$nfs_export_tools/exportfs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "-i -o rw,sync,no_subtree_check 192.0.2.0/24:/srv/share" ]]; then
+  echo "synthetic NFS export failure for disk-nix recovery coverage" >&2
+  exit 82
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$nfs_export_tools/exportfs"
+
+nfs_export_spec="$tmpdir/nfs-export-spec.json"
+nfs_export_json="$tmpdir/nfs-export-apply.json"
+nfs_export_report="$tmpdir/nfs-export-report.json"
+nfs_export_receipt="$tmpdir/nfs-export-receipt.json"
+
+jq -n '{
+  exports: {
+    share: {
+      operation: "export",
+      path: "/srv/share",
+      client: "192.0.2.0/24",
+      options: ["rw", "sync", "no_subtree_check"]
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$nfs_export_spec"
+
+if PATH="$nfs_export_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$nfs_export_spec" \
+  --execute \
+  --report-out "$nfs_export_report" \
+  --receipt-out "$nfs_export_receipt" \
+  --json > "$nfs_export_json"; then
+  echo "expected synthetic NFS export failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 1
+  and (.executionResults | length) == 1
+  and .executionResults[0].success == false
+  and .executionResults[0].statusCode == 82
+  and .executionResults[0].argv == ["exportfs", "-i", "-o", "rw,sync,no_subtree_check", "192.0.2.0/24:/srv/share"]
+  and (.executionResults[0].stderr | contains("synthetic NFS export failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "exports:share:export"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["exportfs", "-i", "-o", "rw,sync,no_subtree_check", "192.0.2.0/24:/srv/share"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["exports:share:export"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["exportfs", "-v"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/srv/share", "--json"]))
+    and (.notes | any(contains("NFS changes")))
+    and (.notes | any(contains("exported paths")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["exportfs", "-v"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/srv/share", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["exportfs", "-v"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/srv/share", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$nfs_export_json" >/dev/null
+
+cmp "$nfs_export_json" "$nfs_export_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "exports:share:export"
+  and .report.partialExecutionRecovery.failedCommand == ["exportfs", "-i", "-o", "rw,sync,no_subtree_check", "192.0.2.0/24:/srv/share"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$nfs_export_receipt" >/dev/null
+
+nfs_unexport_tools="$tmpdir/fake-nfs-unexport-tools"
+mkdir -p "$nfs_unexport_tools"
+
+cat > "$nfs_unexport_tools/exportfs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "-u 192.0.2.55:/srv/old" ]]; then
+  echo "synthetic NFS unexport failure for disk-nix recovery coverage" >&2
+  exit 83
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$nfs_unexport_tools/exportfs"
+
+nfs_unexport_spec="$tmpdir/nfs-unexport-spec.json"
+nfs_unexport_json="$tmpdir/nfs-unexport-apply.json"
+nfs_unexport_report="$tmpdir/nfs-unexport-report.json"
+nfs_unexport_receipt="$tmpdir/nfs-unexport-receipt.json"
+
+jq -n '{
+  exports: {
+    oldshare: {
+      operation: "unexport",
+      path: "/srv/old",
+      client: "192.0.2.55"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$nfs_unexport_spec"
+
+if PATH="$nfs_unexport_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$nfs_unexport_spec" \
+  --execute \
+  --report-out "$nfs_unexport_report" \
+  --receipt-out "$nfs_unexport_receipt" \
+  --json > "$nfs_unexport_json"; then
+  echo "expected synthetic NFS unexport failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 1
+  and (.executionResults | length) == 1
+  and .executionResults[0].success == false
+  and .executionResults[0].statusCode == 83
+  and .executionResults[0].argv == ["exportfs", "-u", "192.0.2.55:/srv/old"]
+  and (.executionResults[0].stderr | contains("synthetic NFS unexport failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "exports:oldshare:unexport"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["exportfs", "-u", "192.0.2.55:/srv/old"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["exports:oldshare:unexport"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["exportfs", "-v"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/srv/old", "--json"]))
+    and (.notes | any(contains("NFS changes")))
+    and (.notes | any(contains("dependent services")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["exportfs", "-v"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/srv/old", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["exportfs", "-v"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/srv/old", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$nfs_unexport_json" >/dev/null
+
+cmp "$nfs_unexport_json" "$nfs_unexport_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "exports:oldshare:unexport"
+  and .report.partialExecutionRecovery.failedCommand == ["exportfs", "-u", "192.0.2.55:/srv/old"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$nfs_unexport_receipt" >/dev/null
+
 iscsi_tools="$tmpdir/fake-iscsi-tools"
 mkdir -p "$iscsi_tools"
 
@@ -8165,4 +8350,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"

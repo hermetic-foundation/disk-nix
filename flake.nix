@@ -1889,6 +1889,8 @@
                 ${pkgs.gnugrep}/bin/grep -q 'lvmCaches:vg0/root:replace-device:vg0/root-cache' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-lvm-cache-rescan-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-nfs-unmount-tools' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'fake-nfs-export-tools' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'fake-nfs-unexport-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-vdo-property-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-bcache-replace-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic bcache replacement failure' ${./scripts/integration-failure-recovery-smoke.sh}
@@ -1982,6 +1984,10 @@
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic partition grow failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic NFS remount failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic NFS unmount failure' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'synthetic NFS export failure' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'synthetic NFS unexport failure' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'exports:share:export' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'exports:oldshare:unexport' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic iscsi logout failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic iscsi login failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-iscsi-rescan-tools' ${./scripts/integration-failure-recovery-smoke.sh}
