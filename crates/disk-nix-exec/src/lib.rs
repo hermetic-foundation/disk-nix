@@ -612,6 +612,16 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 | Operation::RemoveToken
                 | Operation::SetProperty,
             Some("luksTokens")
+        ) | (
+            Operation::Activate
+                | Operation::Create
+                | Operation::Deactivate
+                | Operation::Destroy
+                | Operation::Grow
+                | Operation::Rename
+                | Operation::Rescan
+                | Operation::Shrink,
+            Some("volumes" | "thinPools" | "physicalVolumes")
         )
     ) {
         return true;
@@ -950,6 +960,21 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             "inspect LUKS state before choosing roll-forward",
         )),
         (
+            Operation::Activate
+            | Operation::Create
+            | Operation::Deactivate
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Rename
+            | Operation::Rescan
+            | Operation::Shrink,
+            Some("volumes" | "thinPools" | "physicalVolumes"),
+            _,
+        ) => commands.extend(lvm_recovery_inspection_commands(
+            step,
+            "inspect LVM state before choosing roll-forward",
+        )),
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1162,6 +1187,18 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             luks_recovery_inspection_commands(step, "confirm LUKS state before rollback decisions")
         }
         (
+            Operation::Activate
+            | Operation::Create
+            | Operation::Deactivate
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Rename
+            | Operation::Rescan
+            | Operation::Shrink,
+            Some("volumes" | "thinPools" | "physicalVolumes"),
+            _,
+        ) => lvm_recovery_inspection_commands(step, "confirm LVM state before rollback decisions"),
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1331,6 +1368,21 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             "inspect LUKS state after the failed command",
         )),
         (
+            Operation::Activate
+            | Operation::Create
+            | Operation::Deactivate
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Rename
+            | Operation::Rescan
+            | Operation::Shrink,
+            Some("volumes" | "thinPools" | "physicalVolumes"),
+            _,
+        ) => commands.extend(lvm_recovery_inspection_commands(
+            step,
+            "inspect LVM state after the failed command",
+        )),
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1484,6 +1536,24 @@ fn domain_recovery_notes(
             );
         }
         (
+            Operation::Activate
+            | Operation::Create
+            | Operation::Deactivate
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Rename
+            | Operation::Rescan
+            | Operation::Shrink,
+            Some("volumes" | "thinPools" | "physicalVolumes"),
+        ) => {
+            notes.push(
+                "for LVM changes, inspect LV, PV, and VG metadata before retrying activation, resize, rename, create, or removal operations".to_string(),
+            );
+            notes.push(
+                "keep dependent filesystems, encryption layers, and services inactive until LVM metadata and activation state match the intended topology".to_string(),
+            );
+        }
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1549,6 +1619,14 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     }
     if command_step_collection(step) == Some("multipathMaps") {
         if let Some(target) = multipath_map_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if matches!(
+        command_step_collection(step),
+        Some("volumes" | "thinPools" | "physicalVolumes")
+    ) {
+        if let Some(target) = lvm_target_from_step(step) {
             return Some(target);
         }
     }
@@ -1689,6 +1767,76 @@ fn cryptsetup_positional_arg(command: &ExecutionCommand, index: usize) -> Option
         position += 1;
     }
     None
+}
+
+fn lvm_recovery_inspection_commands(
+    step: &ExecutionStep,
+    note: &'static str,
+) -> Vec<ExecutionCommand> {
+    let mut commands = Vec::new();
+    match command_step_collection(step) {
+        Some("physicalVolumes") => {
+            if let Some(target) = lvm_target_from_step(step).or_else(|| {
+                step.action_id
+                    .split(':')
+                    .nth(1)
+                    .filter(|target| !target.is_empty())
+            }) {
+                commands.push(command(
+                    ["pvs", "--reportformat", "json", target],
+                    false,
+                    note,
+                ));
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            }
+            commands.push(command(["vgs", "--reportformat", "json"], false, note));
+            commands.push(command(["lvs", "--reportformat", "json"], false, note));
+        }
+        Some("volumes" | "thinPools") => {
+            if let Some(target) = lvm_target_from_step(step).or_else(|| {
+                step.action_id
+                    .split(':')
+                    .nth(1)
+                    .filter(|target| !target.is_empty())
+            }) {
+                commands.push(command(
+                    ["lvs", "--reportformat", "json", target],
+                    false,
+                    note,
+                ));
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            }
+            commands.push(command(["vgs", "--reportformat", "json"], false, note));
+            commands.push(command(["pvs", "--reportformat", "json"], false, note));
+        }
+        _ => {}
+    }
+    commands
+}
+
+fn lvm_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        match tool {
+            "lvs" | "pvs" if command.argv.len() > 3 => command.argv.last().map(String::as_str),
+            "lvchange" | "lvextend" | "lvremove" | "lvreduce" => {
+                command.argv.last().map(String::as_str)
+            }
+            "lvrename" => command.argv.get(1).map(String::as_str),
+            "pvcreate" | "pvremove" | "pvresize" => command.argv.last().map(String::as_str),
+            "pvscan" if command.argv.len() > 2 => command.argv.last().map(String::as_str),
+            _ => None,
+        }
+        .filter(|target| !target.starts_with('<'))
+    })
 }
 
 fn iscsi_target_from_step(step: &ExecutionStep) -> Option<&str> {
@@ -24443,6 +24591,84 @@ mod tests {
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/archive-luks"]
                 && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_lvm_volume_growth_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "volumes": {
+                "root": {
+                  "target": "vg0/root",
+                  "operation": "grow",
+                  "desiredSize": "50GiB"
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_extend = ["lvextend", "--resizefs", "--size", "50GiB", "vg0/root"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_extend,
+                status_code: Some(if argv == failed_extend { 5 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_extend {
+                    "extend failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success
+                && result.argv == ["lvextend", "--resizefs", "--size", "50GiB", "vg0/root"]
+        }));
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("LVM domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Grow"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["lvs", "--reportformat", "json", "vg0/root"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["vgs", "--reportformat", "json"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["pvs", "--reportformat", "json"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "vg0/root", "--json"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery.notes.iter().any(|note| {
+                note.contains("LVM changes") && note.contains("activation, resize")
+            })
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("LVM roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["lvs", "--reportformat", "json", "vg0/root"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("LVM rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "vg0/root", "--json"] && !command.mutates
         }));
     }
 

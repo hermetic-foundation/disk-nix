@@ -208,11 +208,11 @@ manual-review guidance, or non-ready command plans instead of guessing.
   apply runs. Apply reports now expose generic recovery actions, targeted
   failed-action domain recovery guidance, current-topology roll-forward review,
   read-only rollback precondition review for concrete risky actions, and
-  LUKS mapper/header/keyslot/token changes, MD RAID member replacement,
-  NVMe namespace, iSCSI session, VDO lifecycle, and multipath map recovery
-  inspection, plus receipt files that bind reports to their invocation
-  metadata, but safe automated rollback remains out of scope until broader
-  topology-specific recovery proofs exist.
+  LVM volume/thin/PV changes, LUKS mapper/header/keyslot/token changes, MD RAID
+  member replacement, NVMe namespace, iSCSI session, VDO lifecycle, and
+  multipath map recovery inspection, plus receipt files that bind reports to
+  their invocation metadata, but safe automated rollback remains out of scope
+  until broader topology-specific recovery proofs exist.
 - Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output
   formats. Probe reports now expose structured degradation categories plus
