@@ -1990,6 +1990,9 @@
                 ${pkgs.gnugrep}/bin/grep -q 'fake-md-create-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic MD RAID create failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'mdraids:newroot:create' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'fake-md-assemble-tools' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'synthetic MD RAID assemble failure' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'mdraids:existing:assemble' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-md-grow-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic MD RAID grow failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'mdraids:root:grow' ${./scripts/integration-failure-recovery-smoke.sh}
