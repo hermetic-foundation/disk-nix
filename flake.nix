@@ -1830,6 +1830,7 @@
                 ${pkgs.gnugrep}/bin/grep -q 'fake-multipath-replace-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-iscsi-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-iscsi-login-tools' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'fake-multipath-resize-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-lvm-cache-attach-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-lvm-cache-detach-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-vdo-property-tools' ${./scripts/integration-failure-recovery-smoke.sh}
@@ -1850,6 +1851,7 @@
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic nvme namespace delete failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN LIO create failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt create failure' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'synthetic multipath resize failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic multipath replace delete failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic MD RAID replace failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic LUKS open failure' ${./scripts/integration-failure-recovery-smoke.sh}
@@ -1871,6 +1873,7 @@
                 ${pkgs.gnugrep}/bin/grep -q 'nvmenamespaces:/dev/nvme4:destroy' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'targetluns:iqn.2026-06.example:storage.root:create' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'targetluns:iqn.2026-06.example:tgt.root:create' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'multipathmaps:root-map:grow' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'multipathMaps:root-map:replace-device:/dev/sdc' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'mdRaids:root:replace-device:/dev/disk/by-id/old-md-member' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'luks.devices:cryptarchive:open' ${./scripts/integration-failure-recovery-smoke.sh}

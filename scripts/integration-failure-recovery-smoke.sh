@@ -1476,6 +1476,111 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$target_lun_tgt_receipt" >/dev/null
 
+multipath_resize_tools="$tmpdir/fake-multipath-resize-tools"
+mkdir -p "$multipath_resize_tools"
+
+cat > "$multipath_resize_tools/multipath" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$multipath_resize_tools/lsscsi" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$multipath_resize_tools/multipathd" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "resize map /dev/mapper/mpatha" ]]; then
+  echo "synthetic multipath resize failure for disk-nix recovery coverage" >&2
+  exit 81
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$multipath_resize_tools/multipath" "$multipath_resize_tools/lsscsi" "$multipath_resize_tools/multipathd"
+
+multipath_resize_spec="$tmpdir/multipath-resize-spec.json"
+multipath_resize_json="$tmpdir/multipath-resize-apply.json"
+multipath_resize_report="$tmpdir/multipath-resize-report.json"
+multipath_resize_receipt="$tmpdir/multipath-resize-receipt.json"
+
+jq -n '{
+  multipathMaps: {
+    "root-map": {
+      device: "/dev/mapper/mpatha",
+      operation: "grow"
+    }
+  },
+  apply: {
+    allowGrow: true,
+    allowOffline: true
+  }
+}' > "$multipath_resize_spec"
+
+if PATH="$multipath_resize_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$multipath_resize_spec" \
+  --execute \
+  --report-out "$multipath_resize_report" \
+  --receipt-out "$multipath_resize_receipt" \
+  --json > "$multipath_resize_json"; then
+  echo "expected synthetic multipath resize failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 4
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["multipath", "-ll", "/dev/mapper/mpatha"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["lsscsi", "-t", "-s"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 81
+  and .executionResults[2].argv == ["multipathd", "resize", "map", "/dev/mapper/mpatha"]
+  and (.executionResults[2].stderr | contains("synthetic multipath resize failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "multipathmaps:root-map:grow"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["multipathd", "resize", "map", "/dev/mapper/mpatha"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["multipathmaps:root-map:grow"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["multipath", "-ll", "/dev/mapper/mpatha"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["disk-nix", "multipath", "--json"]))
+    and (.notes | any(contains("multipath changes")))
+    and (.notes | any(contains("reload, resize")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["multipath", "-ll", "/dev/mapper/mpatha"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["disk-nix", "multipath", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$multipath_resize_json" >/dev/null
+
+cmp "$multipath_resize_json" "$multipath_resize_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "multipathmaps:root-map:grow"
+  and .report.partialExecutionRecovery.failedCommand == ["multipathd", "resize", "map", "/dev/mapper/mpatha"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$multipath_resize_receipt" >/dev/null
+
 multipath_replace_tools="$tmpdir/fake-multipath-replace-tools"
 mkdir -p "$multipath_replace_tools"
 
@@ -2748,4 +2853,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
