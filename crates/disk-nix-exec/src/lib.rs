@@ -574,6 +574,13 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
         (
             Operation::Create | Operation::Destroy | Operation::Login | Operation::Logout,
             Some("iscsiSessions")
+        ) | (
+            Operation::Create
+                | Operation::Destroy
+                | Operation::Grow
+                | Operation::Start
+                | Operation::Stop,
+            Some("vdoVolumes")
         )
     ) {
         return true;
@@ -831,6 +838,31 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             ));
         }
         (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Start
+            | Operation::Stop,
+            Some("vdoVolumes"),
+            Some(target),
+        ) => {
+            commands.push(command_vec(
+                ["vdo", "status", "--name", target],
+                false,
+                "inspect VDO volume status before choosing roll-forward",
+            ));
+            commands.push(command_vec(
+                ["vdostats", "--human-readable", target],
+                false,
+                "inspect VDO utilization and savings counters before retrying",
+            ));
+            commands.push(command_vec(
+                ["disk-nix", "vdo", "--json"],
+                false,
+                "inspect modeled VDO inventory before retrying lifecycle changes",
+            ));
+        }
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -963,6 +995,31 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             ),
         ],
         (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Start
+            | Operation::Stop,
+            Some("vdoVolumes"),
+            Some(target),
+        ) => vec![
+            command_vec(
+                ["vdo", "status", "--name", target],
+                false,
+                "confirm VDO status before undoing or retrying lifecycle changes",
+            ),
+            command_vec(
+                ["vdostats", "--human-readable", target],
+                false,
+                "confirm VDO utilization and savings counters before rollback decisions",
+            ),
+            command_vec(
+                ["disk-nix", "vdo", "--json"],
+                false,
+                "confirm modeled VDO inventory before rollback decisions",
+            ),
+        ],
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1048,6 +1105,31 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             ));
             commands.push(nvme_list_subsystems_command(
                 "inspect NVMe subsystem attachments after the failed namespace command",
+            ));
+        }
+        (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Start
+            | Operation::Stop,
+            Some("vdoVolumes"),
+            Some(target),
+        ) => {
+            commands.push(command(
+                ["vdo", "status", "--name", target],
+                false,
+                "inspect VDO volume status after the failed lifecycle command",
+            ));
+            commands.push(command(
+                ["vdostats", "--human-readable", target],
+                false,
+                "inspect VDO utilization and savings counters after the failed lifecycle command",
+            ));
+            commands.push(command(
+                ["disk-nix", "vdo", "--json"],
+                false,
+                "inspect modeled VDO inventory before deciding whether to retry",
             ));
         }
         (
@@ -1140,6 +1222,21 @@ fn domain_recovery_notes(
             );
         }
         (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Grow
+            | Operation::Start
+            | Operation::Stop,
+            Some("vdoVolumes"),
+        ) => {
+            notes.push(
+                "for VDO lifecycle changes, inspect status, utilization, operating mode, and backing storage before retrying create, grow, start, stop, or removal".to_string(),
+            );
+            notes.push(
+                "keep dependent filesystems, LVM layers, and services inactive until VDO mode and capacity match the intended topology".to_string(),
+            );
+        }
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1179,6 +1276,7 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
             "filesystem" => "filesystems",
             "iscsisessions" => "iscsiSessions",
             "nvmenamespaces" => "nvmeNamespaces",
+            "vdovolumes" => "vdoVolumes",
             other => other,
         })
 }
@@ -23710,6 +23808,95 @@ mod tests {
                 .iter()
                 .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
         );
+    }
+
+    #[test]
+    fn failed_vdo_growth_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "operation": "grow",
+                  "desiredSize": "4TiB"
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_grow = [
+            "vdo",
+            "growLogical",
+            "--name",
+            "archive",
+            "--vdoLogicalSize",
+            "4TiB",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_grow,
+                status_code: Some(if argv == failed_grow { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_grow {
+                    "growth failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success
+                && result.argv
+                    == [
+                        "vdo",
+                        "growLogical",
+                        "--name",
+                        "archive",
+                        "--vdoLogicalSize",
+                        "4TiB",
+                    ]
+        }));
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("VDO domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Grow"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["vdo", "status", "--name", "archive"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["vdostats", "--human-readable", "archive"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery.commands.iter().any(|command| {
+                command.argv == ["disk-nix", "vdo", "--json"] && !command.mutates
+            })
+        );
+        assert!(domain_recovery.notes.iter().any(|note| {
+            note.contains("VDO lifecycle changes") && note.contains("create, grow, start, stop")
+        }));
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("VDO roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["vdo", "status", "--name", "archive"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("VDO rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["vdostats", "--human-readable", "archive"] && !command.mutates
+        }));
     }
 
     #[test]
