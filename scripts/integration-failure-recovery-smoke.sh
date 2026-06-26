@@ -3885,6 +3885,117 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$target_lun_tgt_rescan_receipt" >/dev/null
 
+target_lun_scst_tools="$tmpdir/fake-target-lun-scst-tools"
+mkdir -p "$target_lun_scst_tools"
+
+cat > "$target_lun_scst_tools/scstadmin" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+*"-add_lun 9"*)
+  echo "synthetic SCST target-side LUN add_lun failure for disk-nix recovery coverage" >&2
+  exit 96
+  ;;
+*)
+  printf 'scst ok\n'
+  ;;
+esac
+EOF
+
+chmod +x "$target_lun_scst_tools/scstadmin"
+
+target_lun_scst_spec="$tmpdir/target-lun-scst-spec.json"
+target_lun_scst_json="$tmpdir/target-lun-scst-apply.json"
+target_lun_scst_report="$tmpdir/target-lun-scst-report.json"
+target_lun_scst_receipt="$tmpdir/target-lun-scst-receipt.json"
+
+jq -n '{
+  targetLuns: {
+    "iqn.2026-06.example:scst.root": {
+      operation: "create",
+      provider: "scst",
+      source: "/dev/zvol/tank/root",
+      lun: 9,
+      group: "hosts",
+      client: "iqn.2026-06.example:host.primary"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$target_lun_scst_spec"
+
+if PATH="$target_lun_scst_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$target_lun_scst_spec" \
+  --execute \
+  --report-out "$target_lun_scst_report" \
+  --receipt-out "$target_lun_scst_receipt" \
+  --json > "$target_lun_scst_json"; then
+  echo "expected synthetic target-side LUN SCST create failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 1
+  and .commandSummary.commandCount == 9
+  and .commandSummary.mutatingCount == 7
+  and .commandSummary.manualReviewCount == 1
+  and .commandSummary.readyCount == 9
+  and .commandSummary.needsDomainImplementationCount == 0
+  and (.executionResults | length) == 6
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["scstadmin", "-list_target", "iqn.2026-06.example:scst.root", "-driver", "iscsi"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["scstadmin", "-open_dev", "_dev_zvol_tank_root", "-handler", "vdisk_blockio", "-attributes", "filename=/dev/zvol/tank/root"]
+  and .executionResults[2].success == true
+  and .executionResults[2].argv == ["scstadmin", "-add_target", "iqn.2026-06.example:scst.root", "-driver", "iscsi"]
+  and .executionResults[3].success == true
+  and .executionResults[3].argv == ["scstadmin", "-add_group", "hosts", "-driver", "iscsi", "-target", "iqn.2026-06.example:scst.root"]
+  and .executionResults[4].success == true
+  and .executionResults[4].argv == ["scstadmin", "-add_init", "iqn.2026-06.example:host.primary", "-driver", "iscsi", "-target", "iqn.2026-06.example:scst.root", "-group", "hosts"]
+  and .executionResults[5].success == false
+  and .executionResults[5].statusCode == 96
+  and .executionResults[5].argv == ["scstadmin", "-add_lun", "9", "-driver", "iscsi", "-target", "iqn.2026-06.example:scst.root", "-group", "hosts", "-device", "_dev_zvol_tank_root"]
+  and (.executionResults[5].stderr | contains("synthetic SCST target-side LUN add_lun failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:scst.root:create"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["scstadmin", "-add_lun", "9", "-driver", "iscsi", "-target", "iqn.2026-06.example:scst.root", "-group", "hosts", "-device", "_dev_zvol_tank_root"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["targetluns:iqn.2026-06.example:scst.root:create"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 4
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(.kind == "review-execution-failure"))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["targetcli", "/iscsi", "ls"]))
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:scst.root", "ls"]))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+    and (.notes | any(contains("target-side LUN changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["scstadmin", "-list_target", "iqn.2026-06.example:scst.root", "-driver", "iscsi"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(.kind == "resume-after-fix"))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$target_lun_scst_json" >/dev/null
+
+cmp "$target_lun_scst_json" "$target_lun_scst_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:scst.root:create"
+  and .report.partialExecutionRecovery.failedCommand == ["scstadmin", "-add_lun", "9", "-driver", "iscsi", "-target", "iqn.2026-06.example:scst.root", "-group", "hosts", "-device", "_dev_zvol_tank_root"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 4
+' "$target_lun_scst_receipt" >/dev/null
+
 host_lun_rescan_tools="$tmpdir/fake-host-lun-rescan-tools"
 mkdir -p "$host_lun_rescan_tools"
 host_lun_rescan_disk_nix="$(command -v "$disk_nix_bin")"
@@ -7551,4 +7662,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, host-side LUN rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, host-side LUN rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"

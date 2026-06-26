@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for sixty-one failed apply paths:
+fake storage tools ahead of `PATH` for sixty-two failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -195,6 +195,9 @@ fake storage tools ahead of `PATH` for sixty-one failed apply paths:
   fails
 - a target-side LUN rescan through the Linux tgt provider where fake
   `tgtadm --lld iscsi --mode target --op show --tid 42` inventory fails
+- a target-side LUN create through the SCST provider where fake `scstadmin`
+  inventory, backing-device open, target creation, initiator group creation,
+  and initiator mapping succeed before fake `scstadmin -add_lun 9 ...` fails
 - a host-side LUN rescan where fake `iscsiadm --mode session --rescan`,
   `lsscsi -t -s`, and `disk-nix inspect iqn.2026-06.example:storage/root:0`
   succeed before the reviewed `disk-nix-scsi-rescan` handoff fails
@@ -380,6 +383,11 @@ The test verifies that the failed report and receipt preserve:
 - a Linux tgt target-side grow/property `not-ready` report with zero execution
   results, concrete target inventory commands, and provider handoff commands
   marked `needs-domain-implementation`
+- `partialExecutionRecovery.failedActionId` as
+  `targetluns:iqn.2026-06.example:scst.root:create`
+- the failed SCST `scstadmin -add_lun 9 ...` command and non-zero status after
+  target inventory, backing-device open, target creation, initiator group
+  creation, and initiator mapping
 - `partialExecutionRecovery.failedActionId` as
   `luks.devices:cryptclosed:close`
 - the failed `cryptsetup close cryptclosed` command and non-zero status after
@@ -987,7 +995,7 @@ property rendering, target-side LUN LIO property, target-side LUN LIO rescan,
 target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
 detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
 concrete property rendering, target-side LUN tgt property, target-side LUN tgt
-rescan, host-side LUN rescan, multipath
+rescan, target-side LUN SCST create, host-side LUN rescan, multipath
 resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO

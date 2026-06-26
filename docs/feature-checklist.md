@@ -314,8 +314,10 @@ Update rules:
   LIO rescan, target-side LUN tgt create, target-side LUN tgt attach,
   target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt
   grow not-ready with concrete property rendering, target-side LUN tgt property,
-  target-side LUN tgt rescan, host-side LUN rescan, multipath resize, multipath replace, LVM VG replacement, ZFS pool replacement, MD RAID
-  add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow,
+  target-side LUN tgt rescan, target-side LUN SCST create, host-side LUN
+  rescan, multipath resize, multipath replace, LVM VG replacement, ZFS pool
+  replacement, MD RAID add-member, MD RAID remove-member, MD RAID replace,
+  LUKS open, LUKS format, LUKS close, LUKS grow,
   LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove,
   partition grow,
   NFS remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache
