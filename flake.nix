@@ -1999,6 +1999,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'lvextend --yes --size 192M' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'filesystem:layeredRoot:grow' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'resize2fs' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'vgchange --activate n' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'luks.devices:layeredMapper:close' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cryptsetup", "close"' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix layered vm persistence check' ${./scripts/integration-layered-vm-smoke.sh}
             touch "$out"
           '';
           integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''

@@ -188,6 +188,9 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
   destructive format gates are enabled
 - a LUKS mapper close where fake `cryptsetup status cryptclosed` succeeds and
   fake `cryptsetup close cryptclosed` fails
+- LUKS close execution semantics where a successful `cryptsetup close` followed
+  by `cryptsetup status <mapper>` returning inactive status is accepted as the
+  desired post-close verification result
 - a LUKS grow where fake backing-device and mapper inspections succeed and fake
   `cryptsetup resize cryptroot` fails
 - a LUKS keyslot add where fake `cryptsetup luksDump /dev/disk/by-id/root-luks`
@@ -837,6 +840,12 @@ When enabled, it:
 - verifies the rendered `resize2fs <lv>` command succeeded and the JSON report
   was written
 - verifies the mounted filesystem remains inspectable after the grow
+- writes a sentinel file, unmounts the filesystem, deactivates the VG, executes
+  a `luks.devices.layeredMapper` close apply plan, and verifies the rendered
+  `cryptsetup close <mapper>` command succeeded
+- reopens the LUKS mapper with the temporary key, reactivates the VG, remounts
+  the LV, verifies the sentinel survived, and inspects the reopened layered
+  topology
 
 The harness removes the mount, VG, mapper, loop device, backing file, and key
 material during cleanup. It is included in the default VM smoke suite alongside

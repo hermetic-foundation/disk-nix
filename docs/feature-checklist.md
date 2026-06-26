@@ -303,7 +303,9 @@ Update rules:
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
   are still needed; the default VM suite now includes the synthetic
   failure-recovery harness and a disposable loop/LUKS/LVM/ext4 layered grow
-  harness that executes `resize2fs` through disk-nix after an LV extension.
+  harness that executes `resize2fs` through disk-nix after an LV extension,
+  then unmounts/deactivates the stack, executes a disk-nix LUKS close plan,
+  reopens the mapper, remounts the LV, and verifies sentinel data survived.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
   checks for root privilege plus missing, failing, stderr-only, and empty-output

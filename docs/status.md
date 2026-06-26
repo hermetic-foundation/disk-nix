@@ -161,13 +161,20 @@ behavior across real storage stacks.
   execute reviewed apply plans, and clean up temporary devices. A layered VM
   harness creates loop, LUKS, LVM, and mounted ext4 layers on a disposable disk,
   extends the LV, and executes the disk-nix filesystem grow path with
-  `resize2fs`. Lab-hardware harnesses for NFS, VDO, iSCSI, multipath, and NVMe require explicit
-  environment-selected existing targets and exercise non-destructive refresh
-  or remount paths. The failure-recovery harness uses fake storage tools to
-  prove `partialExecutionRecovery`, failed-command receipts, roll-forward
-  review, rollback review, snapshot-preservation, and domain-recovery
-  reporting for a layered LVM-plus-filesystem apply failure, LVM grow failure,
-  XFS grow failure, Btrfs scrub failure, Btrfs rebalance failure, filesystem trim failure, filesystem check failure, filesystem repair failure, LUKS format failure, LUKS close failure, LUKS grow failure, LUKS keyslot add failure, LUKS token import failure, LUKS keyslot remove failure, LUKS token remove failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
+  `resize2fs`; it then unmounts and deactivates the stack, executes a disk-nix
+  LUKS close plan, reopens the mapper, reactivates the VG, remounts the LV, and
+  verifies sentinel data survived. Lab-hardware harnesses for NFS, VDO, iSCSI,
+  multipath, and NVMe require explicit environment-selected existing targets
+  and exercise non-destructive refresh or remount paths. The failure-recovery
+  harness uses fake storage tools to prove `partialExecutionRecovery`,
+  failed-command receipts, roll-forward review, rollback review,
+  snapshot-preservation, and domain-recovery reporting for a layered
+  LVM-plus-filesystem apply failure, LVM grow failure, XFS grow failure, Btrfs
+  scrub failure, Btrfs rebalance failure, filesystem trim failure, filesystem
+  check failure, filesystem repair failure, LUKS format failure, LUKS close
+  failure, LUKS grow failure, LUKS keyslot add failure, LUKS token import
+  failure, LUKS keyslot remove failure, LUKS token remove failure, and ZFS
+  rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create, attach, detach, and destroy
   failures, Linux tgt create, attach, detach, and destroy failures, multipath
   resize and replacement failures, MD RAID member replacement failure, LUKS

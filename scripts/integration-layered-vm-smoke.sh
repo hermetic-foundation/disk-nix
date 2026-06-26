@@ -19,7 +19,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" blockdev cryptsetup jq losetup lvcreate lvextend lvs mkfs.ext4 mount mountpoint pvcreate pvremove resize2fs truncate umount vgchange vgcreate vgremove vgs; do
+for tool in "$disk_nix_bin" blockdev cmp cryptsetup jq losetup lvcreate lvextend lvs mkfs.ext4 mount mountpoint pvcreate pvremove resize2fs truncate umount vgchange vgcreate vgremove vgs; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -54,7 +54,10 @@ backing="$tmpdir/disk-nix-layered-vm.img"
 keyfile="$tmpdir/keyfile"
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
+close_spec="$tmpdir/close-spec.json"
+close_report="$tmpdir/close-report.json"
 lv_path="/dev/$vg/root"
+sentinel="$mountpoint/disk-nix-layered-sentinel"
 
 printf 'disk-nix layered VM integration passphrase\n' > "$keyfile"
 chmod 0600 "$keyfile"
@@ -118,6 +121,7 @@ jq -e --arg lv_path "$lv_path" '
 ' "$tmpdir/apply.json" >/dev/null
 
 cmp "$tmpdir/apply.json" "$report" >/dev/null
+printf 'disk-nix layered vm persistence check\n' > "$sentinel"
 
 "$disk_nix_bin" inspect "$lv_path" --json > "$tmpdir/inspect-after.json"
 jq -e --arg mountpoint "$mountpoint" --arg lv_path "$lv_path" '
@@ -130,4 +134,63 @@ jq -e --arg mountpoint "$mountpoint" --arg lv_path "$lv_path" '
     )
 ' "$tmpdir/inspect-after.json" >/dev/null
 
-echo "layered VM integration smoke test grew ext4 on $lv_path mounted at $mountpoint"
+umount "$mountpoint"
+vgchange --activate n "$vg"
+
+jq -n --arg loopdev "$loopdev" --arg mapper "$mapper" '{
+  version: 1,
+  luks: {
+    devices: {
+      layeredMapper: {
+        device: $loopdev,
+        target: $mapper,
+        operation: "close"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$close_spec"
+
+if ! "$disk_nix_bin" apply \
+  --spec "$close_spec" \
+  --execute \
+  --report-out "$close_report" \
+  --json > "$tmpdir/close-apply.json"; then
+  cat "$tmpdir/close-apply.json" >&2 || true
+  cat "$close_report" >&2 || true
+  exit 1
+fi
+
+jq -e --arg mapper "$mapper" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == "luks.devices:layeredMapper:close")
+    | .commands | any(.argv == ["cryptsetup", "close", $mapper]))
+  and (.executionResults
+    | any(.argv == ["cryptsetup", "close", $mapper] and .success == true))
+' "$tmpdir/close-apply.json" >/dev/null
+
+cmp "$tmpdir/close-apply.json" "$close_report" >/dev/null
+if [[ -e "/dev/mapper/$mapper" ]]; then
+  echo "layered VM LUKS mapper still exists after disk-nix close operation" >&2
+  exit 1
+fi
+
+cryptsetup open --key-file "$keyfile" "$loopdev" "$mapper"
+vgchange --activate y "$vg"
+mount "$lv_path" "$mountpoint"
+printf 'disk-nix layered vm persistence check\n' | cmp - "$sentinel" >/dev/null
+
+"$disk_nix_bin" inspect "$lv_path" --json > "$tmpdir/inspect-reopened.json"
+jq -e --arg mountpoint "$mountpoint" --arg lv_path "$lv_path" '
+  (.matchedNodes // .nodes // [])
+  | any(
+      .path == $lv_path
+      or (.properties // [] | any(.key == "mount.target" and .value == $mountpoint))
+      or (.properties // [] | any(.key == "lvm.lv-path" and .value == $lv_path))
+      or (.properties // [] | any(.key == "lvm.lv-name" and .value == "root"))
+    )
+' "$tmpdir/inspect-reopened.json" >/dev/null
+
+echo "layered VM integration smoke test grew ext4, closed LUKS through disk-nix, and reopened $lv_path mounted at $mountpoint"

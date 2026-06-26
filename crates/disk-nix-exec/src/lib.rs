@@ -3902,15 +3902,40 @@ fn run_planned_command(
     runner: &mut impl FnMut(&[String]) -> CommandRunResult,
 ) -> ExecutionCommandResult {
     let result = runner(argv);
+    let success = result.success
+        || verification_result_matches_expected_absence(phase, action_id, argv, &result);
     ExecutionCommandResult {
         phase,
         action_id: action_id.to_string(),
         argv: argv.to_vec(),
-        success: result.success,
+        success,
         status_code: result.status_code,
         stdout: result.stdout,
         stderr: result.stderr,
     }
+}
+
+fn verification_result_matches_expected_absence(
+    phase: ExecutionPhase,
+    action_id: &str,
+    argv: &[String],
+    result: &CommandRunResult,
+) -> bool {
+    if phase != ExecutionPhase::Verification
+        || !action_id.starts_with("luks.devices:")
+        || !(action_id.ends_with(":close") || action_id.ends_with(":destroy"))
+        || argv.len() != 3
+        || argv[0] != "cryptsetup"
+        || argv[1] != "status"
+        || result.status_code != Some(4)
+    {
+        return false;
+    }
+
+    let output = format!("{}{}", result.stdout, result.stderr).to_ascii_lowercase();
+    output.contains("inactive")
+        || output.contains("not active")
+        || output.contains("does not exist")
 }
 
 fn summarize_command_plan(command_plan: &[ExecutionStep]) -> CommandPlanSummary {
@@ -26373,6 +26398,65 @@ mod tests {
         assert!(report.execution_results.iter().any(|result| {
             result.phase == ExecutionPhase::Verification && result.argv == ["exportfs", "-v"]
         }));
+    }
+
+    #[test]
+    fn execute_treats_inactive_luks_close_verification_as_success() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "luks": {
+                "devices": {
+                  "closedMapping": {
+                    "device": "/dev/disk/by-id/closed-luks",
+                    "target": "cryptclosed",
+                    "operation": "close"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let mut status_calls = 0;
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            let status_code = if argv == ["cryptsetup", "status", "cryptclosed"] {
+                status_calls += 1;
+                if status_calls == 1 { 0 } else { 4 }
+            } else {
+                0
+            };
+            CommandRunResult {
+                success: status_code == 0,
+                status_code: Some(status_code),
+                stdout: if status_code == 4 {
+                    "/dev/mapper/cryptclosed is inactive.\n".to_string()
+                } else {
+                    String::new()
+                },
+                stderr: String::new(),
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Succeeded);
+        assert!(report.execution_results.iter().any(|result| {
+            result.phase == ExecutionPhase::Command
+                && result.argv == ["cryptsetup", "close", "cryptclosed"]
+                && result.success
+        }));
+        let verification = report
+            .execution_results
+            .iter()
+            .find(|result| {
+                result.phase == ExecutionPhase::Verification
+                    && result.argv == ["cryptsetup", "status", "cryptclosed"]
+            })
+            .expect("cryptsetup close verification ran");
+        assert!(verification.success);
+        assert_eq!(verification.status_code, Some(4));
+        assert!(verification.stdout.contains("inactive"));
     }
 
     #[test]
