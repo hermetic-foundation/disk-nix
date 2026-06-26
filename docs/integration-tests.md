@@ -74,16 +74,53 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-btrfs-smoke.sh
 ```
 
+## LUKS loop-backed smoke test
+
+The repository also includes a root-only LUKS loop-backed harness:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-luks-smoke
+```
+
+When enabled, it:
+
+- creates a temporary 64 MiB backing file and temporary keyfile
+- attaches the file to the next available `/dev/loop*`
+- formats the temporary loop device as a LUKS container
+- opens it as a temporary `/dev/mapper/*` mapping
+- verifies `disk-nix inspect <mapper> --json` sees the mapping
+- executes a `luks.devices.<name>.operation = "close"` apply plan with
+  `allowOffline = true`
+- verifies the generated JSON report was written and the rendered
+  `cryptsetup close <mapper>` command succeeded
+- detaches the loop device and removes the backing file and key material during
+  cleanup
+
+This test intentionally formats only the temporary backing file it creates. It
+still requires destructive opt-in because it uses real loop, device-mapper, and
+LUKS tooling.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-luks-smoke.sh
+```
+
 ## Flake coverage
 
 `nix flake check` does not run destructive integration tests. It does validate
 that the loop smoke harnesses parse, remain opt-in, and still contain the
-expected loop, filesystem setup, resize, mount, and scrub steps. This keeps the
-harnesses available and packaged while preserving safe default checks.
+expected loop, filesystem setup, resize, mount, scrub, LUKS format, LUKS open,
+and LUKS close steps. This keeps the harnesses available and packaged while
+preserving safe default checks.
 
 ## Remaining integration coverage
 
 The loop smoke tests are only the first host-backed integration paths. Feature
-completion still needs disposable VM or lab-host tests for LUKS, LVM,
-bcachefs, ZFS, MD RAID, multipath, iSCSI, NFS, VDO, NVMe namespace operations,
-failure recovery, and broader destructive apply behavior.
+completion still needs disposable VM or lab-host tests for broader LUKS
+format/grow/keyslot/token behavior, LVM, bcachefs, ZFS, MD RAID, multipath,
+iSCSI, NFS, VDO, NVMe namespace operations, failure recovery, and broader
+destructive apply behavior.

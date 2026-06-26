@@ -102,6 +102,17 @@
           ];
           text = builtins.readFile ./scripts/integration-btrfs-smoke.sh;
         };
+        integrationLuksSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-luks-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.cryptsetup
+            pkgs.jq
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-luks-smoke.sh;
+        };
         nixosModuleTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -1365,6 +1376,7 @@
           default = diskNix;
           disk-nix = diskNix;
           integration-btrfs-smoke = integrationBtrfsSmoke;
+          integration-luks-smoke = integrationLuksSmoke;
           integration-loop-smoke = integrationLoopSmoke;
         };
 
@@ -1386,6 +1398,13 @@
             program = "${integrationBtrfsSmoke}/bin/disk-nix-integration-btrfs-smoke";
             meta = {
               description = "Root-only Btrfs loop-backed disk-nix smoke integration harness";
+            };
+          };
+          integration-luks-smoke = {
+            type = "app";
+            program = "${integrationLuksSmoke}/bin/disk-nix-integration-luks-smoke";
+            meta = {
+              description = "Root-only LUKS loop-backed disk-nix smoke integration harness";
             };
           };
         };
@@ -1426,6 +1445,15 @@
             ${pkgs.gnugrep}/bin/grep -q 'mkfs.btrfs' ${./scripts/integration-btrfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mount -t btrfs' ${./scripts/integration-btrfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'btrfs", "scrub", "start", "-B"' ${./scripts/integration-btrfs-smoke.sh}
+            touch "$out"
+          '';
+          integrationLuksSmoke = pkgs.runCommand "disk-nix-integration-luks-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-luks-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-luks-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-luks-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cryptsetup luksFormat' ${./scripts/integration-luks-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cryptsetup open' ${./scripts/integration-luks-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cryptsetup", "close"' ${./scripts/integration-luks-smoke.sh}
             touch "$out"
           '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''
