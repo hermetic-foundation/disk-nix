@@ -187,8 +187,8 @@ behavior across real storage stacks.
   replacement failure, ZFS pool replacement failure, MD RAID grow failure,
   MD RAID member add and replacement failures, LUKS open failure,
   partition grow failure, NFS remount failure, NFS unmount failure, NFS export
-  failure, NFS unexport failure, swap label mutation failure, device-mapper
-  rename failure, ZFS dataset rename failure,
+  failure, NFS unexport failure, swap label mutation failure, zram rescan
+  failure, device-mapper rename failure, ZFS dataset rename failure,
   Btrfs snapshot clone failure, ZFS snapshot clone failure, LVM VG rename
   failure, iSCSI logout, login, and rescan failures, LVM cache attach, detach,
   replacement, and rescan failures, VDO create, rescan, logical-grow,
@@ -277,7 +277,7 @@ concrete adapters are added.
   recovery beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
   scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement,
   filesystem trim, filesystem check, filesystem repair, filesystem property,
-  swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
+  swap label, zram rescan, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
   ZFS snapshot clone, LVM VG rename, ZFS pool replacement, ZFS rollback,
   NVMe namespace create, NVMe namespace grow, NVMe
   namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
