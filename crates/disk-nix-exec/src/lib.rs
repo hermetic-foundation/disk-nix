@@ -637,6 +637,22 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 | Operation::Rescan,
             Some("volumeGroups")
         ) | (
+            Operation::AddDevice
+                | Operation::Create
+                | Operation::Destroy
+                | Operation::Export
+                | Operation::Grow
+                | Operation::Import
+                | Operation::Promote
+                | Operation::Rebalance
+                | Operation::RemoveDevice
+                | Operation::Rename
+                | Operation::ReplaceDevice
+                | Operation::Rescan
+                | Operation::Scrub
+                | Operation::SetProperty,
+            Some("pools" | "datasets" | "zvols")
+        ) | (
             Operation::Clone
                 | Operation::Create
                 | Operation::Destroy
@@ -838,6 +854,27 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
                 "inspect LVM origin, snapshot, and merge state before roll-forward",
             ));
         }
+        (
+            Operation::AddDevice
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Export
+            | Operation::Grow
+            | Operation::Import
+            | Operation::Promote
+            | Operation::Rebalance
+            | Operation::RemoveDevice
+            | Operation::Rename
+            | Operation::ReplaceDevice
+            | Operation::Rescan
+            | Operation::Scrub
+            | Operation::SetProperty,
+            Some("pools" | "datasets" | "zvols"),
+            _,
+        ) => commands.extend(zfs_recovery_inspection_commands(
+            step,
+            "inspect ZFS state before choosing roll-forward",
+        )),
         (
             Operation::Clone
             | Operation::Create
@@ -1097,6 +1134,24 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             "confirm the LVM snapshot and origin state before retrying merge rollback",
         )],
         (
+            Operation::AddDevice
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Export
+            | Operation::Grow
+            | Operation::Import
+            | Operation::Promote
+            | Operation::Rebalance
+            | Operation::RemoveDevice
+            | Operation::Rename
+            | Operation::ReplaceDevice
+            | Operation::Rescan
+            | Operation::Scrub
+            | Operation::SetProperty,
+            Some("pools" | "datasets" | "zvols"),
+            _,
+        ) => zfs_recovery_inspection_commands(step, "confirm ZFS state before rollback decisions"),
+        (
             Operation::Clone
             | Operation::Create
             | Operation::Destroy
@@ -1354,6 +1409,27 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             ));
         }
         (
+            Operation::AddDevice
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Export
+            | Operation::Grow
+            | Operation::Import
+            | Operation::Promote
+            | Operation::Rebalance
+            | Operation::RemoveDevice
+            | Operation::Rename
+            | Operation::ReplaceDevice
+            | Operation::Rescan
+            | Operation::Scrub
+            | Operation::SetProperty,
+            Some("pools" | "datasets" | "zvols"),
+            _,
+        ) => commands.extend(zfs_recovery_inspection_commands(
+            step,
+            "inspect ZFS state after the failed command",
+        )),
+        (
             Operation::Clone
             | Operation::Create
             | Operation::Destroy
@@ -1589,6 +1665,30 @@ fn domain_recovery_notes(
             );
             notes.push(
                 "review newer snapshots, clones, mountpoints, shares, and dependent services before choosing rollback or roll-forward".to_string(),
+            );
+        }
+        (
+            Operation::AddDevice
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Export
+            | Operation::Grow
+            | Operation::Import
+            | Operation::Promote
+            | Operation::Rebalance
+            | Operation::RemoveDevice
+            | Operation::Rename
+            | Operation::ReplaceDevice
+            | Operation::Rescan
+            | Operation::Scrub
+            | Operation::SetProperty,
+            Some("pools" | "datasets" | "zvols"),
+        ) => {
+            notes.push(
+                "for ZFS changes, inspect pool health, dataset or zvol properties, snapshots, clones, mountpoints, shares, and LUN consumers before retrying".to_string(),
+            );
+            notes.push(
+                "prefer read-only import, clone, or fresh snapshot workflows until pool state and dependent services match the intended topology".to_string(),
             );
         }
         (
@@ -1851,6 +1951,14 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     }
     if command_step_collection(step) == Some("swaps") {
         if let Some(target) = swap_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if matches!(
+        command_step_collection(step),
+        Some("pools" | "datasets" | "zvols")
+    ) {
+        if let Some(target) = zfs_target_from_step(step) {
             return Some(target);
         }
     }
@@ -2226,6 +2334,116 @@ fn swap_target_from_shell(script: &str) -> Option<&str> {
         .trim_matches('"')
         .strip_prefix("\\")
         .or(Some(target.trim_matches('\'').trim_matches('"')))
+}
+
+fn zfs_recovery_inspection_commands(
+    step: &ExecutionStep,
+    note: &'static str,
+) -> Vec<ExecutionCommand> {
+    let target = zfs_target_from_step(step).or_else(|| {
+        step.action_id
+            .split(':')
+            .nth(1)
+            .filter(|target| !target.is_empty())
+    });
+    let mut commands = Vec::new();
+
+    match command_step_collection(step) {
+        Some("pools") => {
+            if let Some(target) = target {
+                commands.push(command(["zpool", "status", "-P", target], false, note));
+                commands.push(command(["zpool", "list", "-H", "-p", target], false, note));
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            } else {
+                commands.push(command(["zpool", "status", "-P"], false, note));
+                commands.push(command(["zpool", "list", "-H", "-p"], false, note));
+            }
+        }
+        Some("datasets") => {
+            if let Some(target) = target {
+                commands.push(command(
+                    ["zfs", "list", "-H", "-p", "-t", "filesystem", target],
+                    false,
+                    note,
+                ));
+                commands.push(command(["zfs", "get", "all", target], false, note));
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            } else {
+                commands.push(command(
+                    ["zfs", "list", "-H", "-p", "-t", "filesystem"],
+                    false,
+                    note,
+                ));
+            }
+        }
+        Some("zvols") => {
+            if let Some(target) = target {
+                commands.push(command(
+                    ["zfs", "list", "-H", "-p", "-t", "volume", target],
+                    false,
+                    note,
+                ));
+                commands.push(command(["zfs", "get", "all", target], false, note));
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            } else {
+                commands.push(command(
+                    ["zfs", "list", "-H", "-p", "-t", "volume"],
+                    false,
+                    note,
+                ));
+            }
+        }
+        _ => {}
+    }
+
+    commands
+}
+
+fn zfs_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        let target = match tool {
+            "zpool" => match command.argv.get(1).map(String::as_str) {
+                Some("add" | "create" | "destroy" | "export" | "remove" | "replace" | "scrub") => {
+                    command.argv.get(2).map(String::as_str)
+                }
+                Some("import") => command.argv.last().map(String::as_str),
+                Some("set") => command.argv.get(3).map(String::as_str),
+                Some("list" | "status" | "get") if command.argv.len() > 3 => {
+                    command.argv.last().map(String::as_str)
+                }
+                _ => None,
+            },
+            "zfs" => match command.argv.get(1).map(String::as_str) {
+                Some("create" | "destroy" | "get" | "promote" | "set") => {
+                    command.argv.last().map(String::as_str)
+                }
+                Some("rename") => command.argv.get(2).map(String::as_str),
+                Some("list") if command.argv.len() > 4 => command.argv.last().map(String::as_str),
+                _ => None,
+            },
+            _ => None,
+        }?;
+
+        Some(target).filter(|target| {
+            !target.is_empty()
+                && !target.starts_with('-')
+                && !target.starts_with('<')
+                && *target != "import"
+        })
+    })
 }
 
 fn snapshot_recovery_inspection_commands(
@@ -25708,6 +25926,85 @@ mod tests {
             .expect("swap rollback recovery review is reported");
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["blkid", "/dev/disk/by-label/swap-old"] && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_zfs_dataset_rename_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "datasets": {
+                "tank/home": {
+                  "operation": "rename",
+                  "renameTo": "tank/home-staged"
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_rename = ["zfs", "rename", "tank/home", "tank/home-staged"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_rename,
+                status_code: Some(if argv == failed_rename { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_rename {
+                    "rename failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_rename)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("ZFS dataset domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Rename"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["zfs", "list", "-H", "-p", "-t", "filesystem", "tank/home"]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["zfs", "get", "all", "tank/home"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "tank/home", "--json"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("ZFS changes") && note.contains("LUN consumers"))
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("ZFS dataset roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["zfs", "get", "all", "tank/home"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("ZFS dataset rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["zfs", "list", "-H", "-p", "-t", "filesystem", "tank/home"]
+                && !command.mutates
         }));
     }
 
