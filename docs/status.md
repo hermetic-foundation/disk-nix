@@ -176,14 +176,16 @@ behavior across real storage stacks.
   failure, LUKS keyslot remove failure, LUKS token remove failure, and ZFS
   rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create, attach, detach, and destroy
-  failures, Linux tgt create, attach, detach, and destroy failures, multipath
-  resize and replacement failures, MD RAID member add and replacement failures, LUKS
-  open failure, partition grow failure, NFS remount failure, NFS unmount failure, swap label
-  mutation failure, device-mapper rename failure, ZFS dataset rename failure,
-  Btrfs snapshot clone failure, ZFS snapshot clone failure, LVM VG rename
-  failure, iSCSI logout and login failures, LVM cache attach and detach
-  failures, VDO grow failure, VDO and bcache property mutation failures, and an
-  LVM cache property mutation failure, without touching real block devices.
+  failures, target-side LUN LIO grow not-ready and property failures, Linux tgt
+  create, attach, detach, and destroy failures, Linux tgt grow not-ready and
+  property failures, multipath resize and replacement failures, MD RAID member
+  add and replacement failures, LUKS open failure, partition grow failure, NFS
+  remount failure, NFS unmount failure, swap label mutation failure,
+  device-mapper rename failure, ZFS dataset rename failure, Btrfs snapshot clone
+  failure, ZFS snapshot clone failure, LVM VG rename failure, iSCSI logout and
+  login failures, LVM cache attach and detach failures, VDO grow failure, VDO
+  and bcache property mutation failures, and an LVM cache property mutation
+  failure, without touching real block devices.
 
 ## Implemented probe coverage
 

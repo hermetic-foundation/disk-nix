@@ -30429,6 +30429,114 @@ mod tests {
     }
 
     #[test]
+    fn failed_target_lun_tgt_property_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:tgt.root": {
+                    "provider": "tgt",
+                    "targetId": 42,
+                    "source": "/dev/zvol/tank/root",
+                    "lun": 8,
+                    "properties": {
+                      "tgt.writeCache": "off"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_property = [
+            "tgtadm",
+            "--lld",
+            "iscsi",
+            "--mode",
+            "logicalunit",
+            "--op",
+            "update",
+            "--tid",
+            "42",
+            "--lun",
+            "8",
+            "--name",
+            "tgt.writeCache",
+            "--value",
+            "off",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_property,
+                status_code: Some(if argv == failed_property { 89 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_property {
+                    "tgt property failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert_eq!(
+            report
+                .partial_execution_recovery
+                .as_ref()
+                .expect("partial execution recovery is reported")
+                .failed_action_id,
+            "targetLuns:iqn.2026-06.example:tgt.root:set-property:tgt.writeCache"
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("tgt target-side LUN property domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("SetProperty"));
+        assert!(
+            domain_recovery.commands.iter().any(|command| {
+                command.argv == ["targetcli", "/iscsi", "ls"] && !command.mutates
+            })
+        );
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:tgt.root", "ls"]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.notes.iter().any(|note| {
+            note.contains("target-side LUN changes") && note.contains("provider inventory")
+        }));
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("tgt target-side LUN property roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42",
+                ]
+                && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("tgt target-side LUN property rollback recovery review is reported");
+        assert!(rollback.commands.iter().all(|command| !command.mutates));
+    }
+
+    #[test]
     fn target_lun_tgt_provider_requires_reviewed_target_id_and_lun_inputs() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
