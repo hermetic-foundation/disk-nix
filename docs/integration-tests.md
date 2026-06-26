@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for thirty-two failed apply paths:
+fake storage tools ahead of `PATH` for thirty-three failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -136,6 +136,10 @@ fake storage tools ahead of `PATH` for thirty-two failed apply paths:
 - a target-side LUN create through the Linux tgt provider where fake `tgtadm`
   inventory and target creation succeed and fake
   `tgtadm --lld iscsi --mode logicalunit --op new --tid 42 --lun 8 --backing-store /dev/zvol/tank/root`
+  fails
+- a target-side LUN attach through the Linux tgt provider where fake `tgtadm`
+  inventory and logical-unit mapping succeed and fake
+  `tgtadm --lld iscsi --mode target --op bind --tid 42 --initiator-address ALL`
   fails
 - a target-side LUN destroy through the Linux tgt provider where fake `tgtadm`
   inventory, initiator unbind, and logical-unit delete succeed and fake
@@ -224,6 +228,10 @@ The test verifies that the failed report and receipt preserve:
 - the failed Linux tgt `tgtadm --lld iscsi --mode target --op delete --tid 42`
   command and non-zero status after inventory, initiator unbind, and
   logical-unit delete
+- `partialExecutionRecovery.failedActionId` as
+  `targetluns:iqn.2026-06.example:tgt.root:attach`
+- the failed Linux tgt `tgtadm --lld iscsi --mode target --op bind --tid 42 --initiator-address ALL`
+  command and non-zero status after inventory and logical-unit mapping
 - `partialExecutionRecovery.failedActionId` as
   `multipathMaps:root-map:replace-device:/dev/sdc`
 - the failed `multipathd del path /dev/sdc` command and non-zero status after
@@ -720,8 +728,8 @@ rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG
 rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO destroy,
-target-side LUN tgt create, target-side LUN tgt destroy, multipath resize,
-multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount,
-iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO
-property, bcache property, and LVM cache property failed-command paths, and
-broader destructive apply behavior.
+target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
+destroy, multipath resize, multipath replace, MD RAID replace, LUKS open,
+partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM
+cache detach, VDO grow, VDO property, bcache property, and LVM cache property
+failed-command paths, and broader destructive apply behavior.

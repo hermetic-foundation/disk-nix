@@ -1682,6 +1682,107 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$target_lun_tgt_receipt" >/dev/null
 
+target_lun_tgt_attach_tools="$tmpdir/fake-target-lun-tgt-attach-tools"
+mkdir -p "$target_lun_tgt_attach_tools"
+
+cat > "$target_lun_tgt_attach_tools/tgtadm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "--lld iscsi --mode target --op bind --tid 42 --initiator-address ALL" ]]; then
+  echo "synthetic target-side LUN tgt attach bind failure for disk-nix recovery coverage" >&2
+  exit 80
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$target_lun_tgt_attach_tools/tgtadm"
+
+target_lun_tgt_attach_spec="$tmpdir/target-lun-tgt-attach-spec.json"
+target_lun_tgt_attach_json="$tmpdir/target-lun-tgt-attach-apply.json"
+target_lun_tgt_attach_report="$tmpdir/target-lun-tgt-attach-report.json"
+target_lun_tgt_attach_receipt="$tmpdir/target-lun-tgt-attach-receipt.json"
+
+jq -n '{
+  spec: {
+    targetLuns: {
+      "iqn.2026-06.example:tgt.root": {
+        operation: "attach",
+        provider: "tgt",
+        targetId: 42,
+        source: "/dev/zvol/tank/root",
+        lun: 8,
+        client: "ALL"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$target_lun_tgt_attach_spec"
+
+if PATH="$target_lun_tgt_attach_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$target_lun_tgt_attach_spec" \
+  --execute \
+  --report-out "$target_lun_tgt_attach_report" \
+  --receipt-out "$target_lun_tgt_attach_receipt" \
+  --json > "$target_lun_tgt_attach_json"; then
+  echo "expected synthetic target-side LUN tgt attach failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 4
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["tgtadm", "--lld", "iscsi", "--mode", "logicalunit", "--op", "new", "--tid", "42", "--lun", "8", "--backing-store", "/dev/zvol/tank/root"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 80
+  and .executionResults[2].argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "bind", "--tid", "42", "--initiator-address", "ALL"]
+  and (.executionResults[2].stderr | contains("synthetic target-side LUN tgt attach bind failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:tgt.root:attach"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "bind", "--tid", "42", "--initiator-address", "ALL"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["targetluns:iqn.2026-06.example:tgt.root:attach"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 1
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["targetcli", "/iscsi", "ls"]))
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:tgt.root", "ls"]))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+    and (.notes | any(contains("target-side LUN changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$target_lun_tgt_attach_json" >/dev/null
+
+cmp "$target_lun_tgt_attach_json" "$target_lun_tgt_attach_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:tgt.root:attach"
+  and .report.partialExecutionRecovery.failedCommand == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "bind", "--tid", "42", "--initiator-address", "ALL"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
+' "$target_lun_tgt_attach_receipt" >/dev/null
+
 target_lun_tgt_destroy_tools="$tmpdir/fake-target-lun-tgt-destroy-tools"
 mkdir -p "$target_lun_tgt_destroy_tools"
 
@@ -3163,4 +3264,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
