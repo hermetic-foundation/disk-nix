@@ -5,6 +5,37 @@ module evaluation, examples, schema generation, completions, and manpage output.
 Real storage mutation needs additional host-backed tests because Nix build
 sandboxes cannot safely create privileged block devices.
 
+## VM destructive suite
+
+The preferred destructive workflow is to run the smoke harnesses inside a
+disposable virtual machine:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-vm-smoke
+```
+
+The VM suite refuses to run unless:
+
+- `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set
+- it is running as root
+- `systemd-detect-virt --vm` detects a virtual machine
+
+For controlled lab automation where VM detection is unavailable but isolation
+is provided externally, set `DISK_NIX_INTEGRATION_ASSUME_VM=1`.
+
+By default the suite runs the loop, Btrfs, LUKS, LVM, and MD RAID smoke
+harnesses. To run a subset:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_VM_HARNESSES="loop btrfs" \
+  nix run .#integration-vm-smoke
+```
+
+The individual harnesses below remain available for targeted lab debugging,
+but they should still be treated as destructive host operations.
+
 ## Loop-backed smoke test
 
 The repository includes a root-only loop-backed smoke harness:
@@ -181,15 +212,15 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 `nix flake check` does not run destructive integration tests. It does validate
 that the loop smoke harnesses parse, remain opt-in, and still contain the
 expected loop, filesystem setup, resize, mount, scrub, LUKS format, LUKS open,
-LUKS close, LVM create, LVM rescan, MD RAID create, and MD RAID rescan steps.
-This keeps the harnesses available and packaged while preserving safe default
-checks.
+LUKS close, LVM create, LVM rescan, MD RAID create, MD RAID rescan, and VM
+orchestration guard steps. This keeps the harnesses available and packaged
+while preserving safe default checks.
 
 ## Remaining integration coverage
 
-The loop smoke tests are only the first host-backed integration paths. Feature
-completion still needs disposable VM or lab-host tests for broader LUKS
-format/grow/keyslot/token behavior, broader LVM LV/thin/cache/device-topology
-behavior, bcachefs, ZFS, broader MD RAID grow/member-topology behavior,
-multipath, iSCSI, NFS, VDO, NVMe namespace operations, failure recovery, and
-broader destructive apply behavior.
+The VM smoke suite and targeted loop tests are only the first host-backed
+integration paths. Feature completion still needs disposable VM or lab-host
+tests for broader LUKS format/grow/keyslot/token behavior, broader LVM
+LV/thin/cache/device-topology behavior, bcachefs, ZFS, broader MD RAID
+grow/member-topology behavior, multipath, iSCSI, NFS, VDO, NVMe namespace
+operations, failure recovery, and broader destructive apply behavior.

@@ -135,6 +135,18 @@
           ];
           text = builtins.readFile ./scripts/integration-mdraid-smoke.sh;
         };
+        integrationVmSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-vm-smoke";
+          runtimeInputs = [
+            integrationLoopSmoke
+            integrationBtrfsSmoke
+            integrationLuksSmoke
+            integrationLvmSmoke
+            integrationMdraidSmoke
+            pkgs.systemd
+          ];
+          text = builtins.readFile ./scripts/integration-vm-smoke.sh;
+        };
         nixosModuleTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -1401,6 +1413,7 @@
           integration-luks-smoke = integrationLuksSmoke;
           integration-lvm-smoke = integrationLvmSmoke;
           integration-mdraid-smoke = integrationMdraidSmoke;
+          integration-vm-smoke = integrationVmSmoke;
           integration-loop-smoke = integrationLoopSmoke;
         };
 
@@ -1443,6 +1456,13 @@
             program = "${integrationMdraidSmoke}/bin/disk-nix-integration-mdraid-smoke";
             meta = {
               description = "Root-only MD RAID loop-backed disk-nix smoke integration harness";
+            };
+          };
+          integration-vm-smoke = {
+            type = "app";
+            program = "${integrationVmSmoke}/bin/disk-nix-integration-vm-smoke";
+            meta = {
+              description = "VM-only destructive disk-nix integration suite orchestrator";
             };
           };
         };
@@ -1510,6 +1530,15 @@
             ${pkgs.gnugrep}/bin/grep -q 'mdadm --create' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm", "--detail", "--scan"' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm", "--examine", "--scan"' ${./scripts/integration-mdraid-smoke.sh}
+            touch "$out"
+          '';
+          integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_ASSUME_VM ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'systemd-detect-virt --quiet --vm' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-loop-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-mdraid-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
           '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''
