@@ -314,7 +314,7 @@ Update rules:
   LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove,
   partition grow,
   NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM
-  cache detach, LVM cache replacement, LVM cache rescan, VDO grow,
+  cache detach, LVM cache replacement, LVM cache rescan, VDO grow, VDO start,
   VDO property, bcache replacement, bcache property, bcache rescan, and LVM
   cache property paths.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests

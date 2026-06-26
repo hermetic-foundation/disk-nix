@@ -6147,6 +6147,122 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$vdo_grow_receipt" >/dev/null
 
+vdo_start_tools="$tmpdir/fake-vdo-start-tools"
+mkdir -p "$vdo_start_tools"
+vdo_start_disk_nix="$(command -v "$disk_nix_bin")"
+
+cat > "$vdo_start_tools/vdo" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "start --name warmArchive" ]]; then
+  echo "synthetic VDO start failure for disk-nix recovery coverage" >&2
+  exit 87
+fi
+printf '{}\n'
+EOF
+
+cat > "$vdo_start_tools/vdostats" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$vdo_start_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$vdo_start_disk_nix" "\$@"
+EOF
+
+chmod +x "$vdo_start_tools/vdo" "$vdo_start_tools/vdostats" "$vdo_start_tools/disk-nix"
+
+vdo_start_spec="$tmpdir/vdo-start-spec.json"
+vdo_start_json="$tmpdir/vdo-start-apply.json"
+vdo_start_report="$tmpdir/vdo-start-report.json"
+vdo_start_receipt="$tmpdir/vdo-start-receipt.json"
+
+jq -n '{
+  vdoVolumes: {
+    warmArchive: {
+      operation: "start"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$vdo_start_spec"
+
+if PATH="$vdo_start_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$vdo_start_spec" \
+  --execute \
+  --report-out "$vdo_start_report" \
+  --receipt-out "$vdo_start_receipt" \
+  --json > "$vdo_start_json"; then
+  echo "expected synthetic VDO start failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 1
+  and .commandSummary.commandCount == 2
+  and .commandSummary.mutatingCount == 1
+  and .commandSummary.manualReviewCount == 1
+  and .commandSummary.readyCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "vdovolumes:warmarchive:start"
+  and .executionResults[0].argv == ["vdo", "status", "--name", "warmArchive"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 87
+  and .executionResults[1].actionId == "vdovolumes:warmarchive:start"
+  and .executionResults[1].argv == ["vdo", "start", "--name", "warmArchive"]
+  and (.executionResults[1].stderr | contains("synthetic VDO start failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "vdovolumes:warmarchive:start"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["vdo", "start", "--name", "warmArchive"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["vdovolumes:warmarchive:start"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["vdo", "status", "--name", "warmarchive"]))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "warmarchive"]))
+    and (.commands | any(.argv == ["disk-nix", "vdo", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "probe-status", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "topology", "--json"]))
+    and (.notes | any(contains("VDO lifecycle changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "warmarchive", "--json"]))
+    and (.commands | any(.argv == ["vdo", "status", "--name", "warmarchive"]))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "warmarchive"]))
+    and (.commands | any(.argv == ["vdo", "status", "--name", "warmArchive"]))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "warmArchive"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "warmArchive", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["vdo", "status", "--name", "warmarchive"]))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "warmarchive"]))
+    and (.commands | any(.argv == ["disk-nix", "vdo", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$vdo_start_json" >/dev/null
+
+cmp "$vdo_start_json" "$vdo_start_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "vdovolumes:warmarchive:start"
+  and .report.partialExecutionRecovery.failedCommand == ["vdo", "start", "--name", "warmArchive"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$vdo_start_receipt" >/dev/null
+
 vdo_property_tools="$tmpdir/fake-vdo-property-tools"
 mkdir -p "$vdo_property_tools"
 
@@ -6671,4 +6787,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO grow, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO grow, VDO start, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
