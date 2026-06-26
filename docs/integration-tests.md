@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for five failed apply paths:
+fake storage tools ahead of `PATH` for six failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -103,6 +103,8 @@ fake storage tools ahead of `PATH` for five failed apply paths:
   `nvme delete-ns /dev/nvme4 --namespace-id 9` fails
 - an iSCSI session logout where fake `iscsiadm --logout` fails for the reviewed
   target and portal
+- an iSCSI session login where fake `iscsiadm --mode discovery` succeeds and
+  fake `iscsiadm --login` fails for the reviewed target and portal
 - an LVM cache property mutation where fake `lvchange --cachemode` fails for a
   reviewed origin LV
 
@@ -124,6 +126,10 @@ The test verifies that the failed report and receipt preserve:
   `iscsisessions:iqn.2026-06.example:storage.old:logout`
 - the failed `iscsiadm --mode node --targetname iqn.2026-06.example:storage.old --portal 192.0.2.11:3260 --logout` command
   and non-zero status
+- `partialExecutionRecovery.failedActionId` as
+  `iscsisessions:iqn.2026-06.example:storage.root:login`
+- the failed `iscsiadm --mode node --targetname iqn.2026-06.example:storage.root --portal 192.0.2.10:3260 --login` command
+  and non-zero status after successful discovery
 - `partialExecutionRecovery.failedActionId` as
   `lvmCaches:vg0/root:set-property:lvm.cache-mode`
 - the failed `lvchange --cachemode writethrough vg0/root` command and non-zero
@@ -585,11 +591,11 @@ tests for broader LUKS format/grow/keyslot/token behavior, broader LVM
 LV/thin/cache/device-topology behavior, broader bcachefs multi-device and
 member-topology behavior, broader ZFS vdev/dataset/zvol/snapshot behavior,
 broader MD RAID grow/member-topology behavior, broader multipath path
-add/remove/replace/flush/grow/failure behavior, broader iSCSI
-login/logout/LUN/failure behavior, broader NFS server/export/unmount/failure
-behavior, broader VDO create/grow/start/stop/property/remove behavior, NVMe
-namespace create/grow/attach/detach/delete/failure behavior, iSCSI login/LUN
-failure behavior, cache attach/detach failure behavior, property mutation across
-more supported domains, recovery behavior beyond the synthetic
-LVM-plus-filesystem, ZFS rollback, NVMe namespace delete, iSCSI logout, and LVM
-cache property failed-command paths, and broader destructive apply behavior.
+add/remove/replace/flush/grow/failure behavior, broader iSCSI LUN failure
+behavior, broader NFS server/export/unmount/failure behavior, broader VDO
+create/grow/start/stop/property/remove behavior, NVMe namespace
+create/grow/attach/detach/delete/failure behavior, cache attach/detach failure
+behavior, property mutation across more supported domains, recovery behavior
+beyond the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace delete,
+iSCSI logout, iSCSI login, and LVM cache property failed-command paths, and
+broader destructive apply behavior.

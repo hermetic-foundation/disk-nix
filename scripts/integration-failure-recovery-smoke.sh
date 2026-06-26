@@ -403,6 +403,98 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$iscsi_receipt" >/dev/null
 
+iscsi_login_tools="$tmpdir/fake-iscsi-login-tools"
+mkdir -p "$iscsi_login_tools"
+
+cat > "$iscsi_login_tools/iscsiadm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == *"--login"* ]]; then
+  echo "synthetic iscsi login failure for disk-nix recovery coverage" >&2
+  exit 78
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$iscsi_login_tools/iscsiadm"
+
+iscsi_login_spec="$tmpdir/iscsi-login-spec.json"
+iscsi_login_json="$tmpdir/iscsi-login-apply.json"
+iscsi_login_report="$tmpdir/iscsi-login-report.json"
+iscsi_login_receipt="$tmpdir/iscsi-login-receipt.json"
+
+jq -n '{
+  iscsiSessions: {
+    "iqn.2026-06.example:storage.root": {
+      operation: "login",
+      portal: "192.0.2.10:3260"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$iscsi_login_spec"
+
+if PATH="$iscsi_login_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$iscsi_login_spec" \
+  --execute \
+  --report-out "$iscsi_login_report" \
+  --receipt-out "$iscsi_login_receipt" \
+  --json > "$iscsi_login_json"; then
+  echo "expected synthetic iSCSI login failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["iscsiadm", "--mode", "discovery", "--type", "sendtargets", "--portal", "192.0.2.10:3260"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 78
+  and .executionResults[1].argv == ["iscsiadm", "--mode", "node", "--targetname", "iqn.2026-06.example:storage.root", "--portal", "192.0.2.10:3260", "--login"]
+  and (.executionResults[1].stderr | contains("synthetic iscsi login failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "iscsisessions:iqn.2026-06.example:storage.root:login"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["iscsiadm", "--mode", "node", "--targetname", "iqn.2026-06.example:storage.root", "--portal", "192.0.2.10:3260", "--login"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["iscsisessions:iqn.2026-06.example:storage.root:login"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 1
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["iscsiadm", "--mode", "session"]))
+    and (.commands | any(.argv == ["iscsiadm", "--mode", "node", "--targetname", "iqn.2026-06.example:storage.root"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+    and (.notes | any(contains("login or logout")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["iscsiadm", "--mode", "session"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$iscsi_login_json" >/dev/null
+
+cmp "$iscsi_login_json" "$iscsi_login_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "iscsisessions:iqn.2026-06.example:storage.root:login"
+  and .report.partialExecutionRecovery.failedCommand == ["iscsiadm", "--mode", "node", "--targetname", "iqn.2026-06.example:storage.root", "--portal", "192.0.2.10:3260", "--login"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
+' "$iscsi_login_receipt" >/dev/null
+
 lvm_cache_tools="$tmpdir/fake-lvm-cache-tools"
 mkdir -p "$lvm_cache_tools"
 
@@ -494,4 +586,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace delete, iSCSI logout, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace delete, iSCSI logout, iSCSI login, and LVM cache property failures"
