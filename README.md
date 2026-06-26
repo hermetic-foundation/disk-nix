@@ -218,7 +218,9 @@ The module also writes `/etc/disk-nix/steady-state.json` and
 inventory for automation. The Nix file is a reviewable module snippet derived
 from active steady-state surfaces; it is not imported automatically, and should
 be copied selectively into real NixOS configuration after successful imperative
-changes.
+changes. The companion
+`/etc/disk-nix/declarative-handoff-import.patch` is a reviewable import patch
+skeleton for operators who want to import the handoff module after review.
 Override `toolPackages` to pin alternate tool builds or trim unused domains;
 the default set includes the storage-domain tools plus bash shell wrappers,
 coreutils file helpers, cloud-utils `growpart`, and util-linux helpers used by

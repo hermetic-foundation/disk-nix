@@ -229,7 +229,8 @@ placeholders until concrete adapters are added.
   mutation is still not implemented. The module now emits a
   `declarativeHandoff` index for mounts, crypttab/LUKS, swap, NFS exports,
   iSCSI boot/session state, generated files, and a reviewable
-  `/etc/disk-nix/declarative-handoff.nix` Nix module snippet. It also emits a
+  `/etc/disk-nix/declarative-handoff.nix` Nix module snippet plus a reviewable
+  `/etc/disk-nix/declarative-handoff-import.patch` skeleton. It also emits a
   `lifecycleManaged` steady-state index for active disk-nix lifecycle
   declarations across filesystems, swap, LUKS, NFS, LVM, VDO, dm, MD RAID,
   multipath, ZFS, Btrfs, caches, LUNs, iSCSI sessions, disks, partitions, and
