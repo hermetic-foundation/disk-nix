@@ -184,8 +184,9 @@ behavior across real storage stacks.
   not-ready, property, and rescan failures, SCST create, attach, detach,
   destroy, grow, property, and rescan failures, multipath
   add, remove, flush, resize, and replacement failures, host-side LUN rescan failure, LVM VG
-  replacement failure, ZFS pool replacement failure, MD RAID grow failure,
-  MD RAID member add and replacement failures, LUKS open failure,
+  replacement failure, ZFS pool replacement failure, MD RAID create failure,
+  MD RAID grow failure, MD RAID member add and replacement failures,
+  LUKS open failure,
   partition grow failure, NFS remount failure, NFS unmount failure, NFS export
   failure, NFS unexport failure, swap label mutation failure, zram rescan
   failure, zram property inventory failure, loop rescan failure,
@@ -297,7 +298,7 @@ concrete adapters are added.
   SCST grow, target-side LUN SCST property, target-side LUN SCST rescan,
   host-side LUN rescan, multipath resize,
   multipath add, multipath remove, multipath flush, multipath replace,
-  LVM VG replacement, ZFS pool replacement, MD RAID grow,
+  LVM VG replacement, ZFS pool replacement, MD RAID create, MD RAID grow,
   MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS
   grow, LUKS keyslot add,
   LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property,
