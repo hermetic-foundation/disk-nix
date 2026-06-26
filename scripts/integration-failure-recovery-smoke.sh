@@ -1470,6 +1470,103 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$zram_property_receipt" >/dev/null
 
+loop_rescan_tools="$tmpdir/fake-loop-rescan-tools"
+mkdir -p "$loop_rescan_tools"
+loop_rescan_disk_nix="$(command -v "$disk_nix_bin")"
+
+cat > "$loop_rescan_tools/losetup" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "--json --list /dev/loop7" ]]; then
+  echo "synthetic loop rescan failure for disk-nix recovery coverage" >&2
+  exit 86
+fi
+printf '{}\n'
+EOF
+
+cat > "$loop_rescan_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$loop_rescan_disk_nix" "\$@"
+EOF
+
+chmod +x "$loop_rescan_tools/losetup" "$loop_rescan_tools/disk-nix"
+
+loop_rescan_spec="$tmpdir/loop-rescan-spec.json"
+loop_rescan_json="$tmpdir/loop-rescan-apply.json"
+loop_rescan_report="$tmpdir/loop-rescan-report.json"
+loop_rescan_receipt="$tmpdir/loop-rescan-receipt.json"
+
+jq -n '{
+  loopDevices: {
+    "/dev/loop7": {
+      operation: "rescan"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$loop_rescan_spec"
+
+if PATH="$loop_rescan_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$loop_rescan_spec" \
+  --execute \
+  --report-out "$loop_rescan_report" \
+  --receipt-out "$loop_rescan_receipt" \
+  --json > "$loop_rescan_json"; then
+  echo "expected synthetic loop rescan failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and .commandSummary.mutatingCount == 0
+  and (.executionResults | length) == 1
+  and .executionResults[0].success == false
+  and .executionResults[0].statusCode == 86
+  and .executionResults[0].actionId == "loopdevices:/dev/loop7:rescan"
+  and .executionResults[0].argv == ["losetup", "--json", "--list", "/dev/loop7"]
+  and (.executionResults[0].stderr | contains("synthetic loop rescan failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "loopdevices:/dev/loop7:rescan"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["losetup", "--json", "--list", "/dev/loop7"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["loopdevices:/dev/loop7:rescan"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["losetup", "--json", "--list", "/dev/loop7"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/loop7", "--json"]))
+    and (.notes | any(contains("local mapping changes")))
+    and (.notes | any(contains("modeled consumers")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["losetup", "--json", "--list", "/dev/loop7"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/loop7", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["losetup", "--json", "--list", "/dev/loop7"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/loop7", "--json"]))
+  ))
+' "$loop_rescan_json" >/dev/null
+
+cmp "$loop_rescan_json" "$loop_rescan_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "loopdevices:/dev/loop7:rescan"
+  and .report.partialExecutionRecovery.failedCommand == ["losetup", "--json", "--list", "/dev/loop7"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$loop_rescan_receipt" >/dev/null
+
 dm_rename_tools="$tmpdir/fake-dm-rename-tools"
 mkdir -p "$dm_rename_tools"
 
@@ -8742,4 +8839,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, filesystem property, swap label, zram rescan, zram property inventory, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, filesystem property, swap label, zram rescan, zram property inventory, loop rescan, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
