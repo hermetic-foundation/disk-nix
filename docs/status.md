@@ -203,7 +203,8 @@ VG metadata, sanlock lock hints, remote LV activity, NVMe fabrics controller
 paths, ANA state, and namespace-to-controller edges, plus a Fibre Channel
 multipath fixture covering FC transport WWPN pairs, SCSI unit names, ALUA path
 groups, active/standby path state, failed path metadata, and multipath backing
-edges. See
+edges, plus a SAS enclosure fixture covering non-block SES enclosure records,
+enclosure identifiers, SAS addresses, and attached disk LUN backing edges. See
 [storage-scope.md](storage-scope.md) for the
 detailed field-level coverage.
 See [feature-checklist.md](feature-checklist.md) for a checklist view of

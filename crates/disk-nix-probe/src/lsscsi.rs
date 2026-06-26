@@ -173,31 +173,46 @@ fn parse_list_line(line: &str) -> Option<ScsiRecord> {
     let peripheral_type = tokens[0].to_string();
     let dev_index = tokens.iter().position(|token| token.starts_with("/dev/"));
     let (vendor, model, revision, device, generic, size) = if let Some(dev_index) = dev_index {
-        let device = tokens.get(dev_index).map(|value| (*value).to_string());
-        let generic = tokens.get(dev_index + 1).and_then(optional_token);
-        let size = tokens.get(dev_index + 2).and_then(optional_token);
+        let generic_only = dev_index > 0 && tokens.get(dev_index - 1) == Some(&"-");
+        let device_index = if generic_only {
+            dev_index - 1
+        } else {
+            dev_index
+        };
+        let generic_index = if generic_only {
+            dev_index
+        } else {
+            dev_index + 1
+        };
+        let size_index = generic_index + 1;
+        let device = tokens.get(device_index).and_then(optional_token);
+        let generic = tokens.get(generic_index).and_then(optional_token);
+        let size = tokens.get(size_index).and_then(optional_token);
         (
             tokens.get(1).and_then(optional_token),
             tokens
-                .get(2..dev_index.saturating_sub(1))
+                .get(2..device_index.saturating_sub(1))
                 .map(|parts| parts.join(" "))
                 .filter(|value| !value.is_empty()),
             tokens
-                .get(dev_index.saturating_sub(1))
+                .get(device_index.saturating_sub(1))
                 .and_then(optional_token),
             device,
             generic,
             size,
         )
     } else {
-        (
-            tokens.get(1).and_then(optional_token),
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
+        let vendor = tokens.get(1).and_then(optional_token);
+        let revision = tokens
+            .last()
+            .filter(|_| tokens.len() > 3)
+            .and_then(optional_token);
+        let model_end = tokens.len().saturating_sub(1);
+        let model = tokens
+            .get(2..model_end)
+            .map(|parts| parts.join(" "))
+            .filter(|value| !value.is_empty());
+        (vendor, model, revision, None, None, None)
     };
     Some(ScsiRecord {
         tuple,
@@ -362,6 +377,20 @@ mod tests {
 [1:0:0:0]    disk    5000c500a5a461dc                                                  /dev/sdb   /dev/sg1  /dev/disk/by-id/scsi-35000c500a5a461dc  /dev/disk/by-id/wwn-0x5000c500a5a461dc  1.00TB
 "#;
 
+    const SAS_ENCLOSURE: &[u8] = br#"
+[6:0:0:0]    enclosu HPE      D3710            0141  -          /dev/sg5   -
+  device_blocked=0
+  enclosure_identifier=0x500143803426abcd
+  queue_depth=1
+  sas_address=0x500143803426abcf
+  state=running
+[6:0:1:0]    disk    HPE      LOGICAL VOLUME   5.04  /dev/sdd   /dev/sg6   1.20TB
+  device_blocked=0
+  queue_depth=64
+  sas_address=0x500143803426abd0
+  state=running
+"#;
+
     #[test]
     fn normalizes_lsscsi_list_output() {
         let graph = normalize_lsscsi_list_output(LIST).expect("fixture parses");
@@ -423,5 +452,58 @@ mod tests {
         assert_eq!(parse_size("512GiB"), Some(549_755_813_888));
         assert_eq!(parse_size("4096"), Some(4096));
         assert_eq!(parse_size("-"), None);
+    }
+
+    #[test]
+    fn normalizes_sas_enclosure_and_lun_fixture() {
+        let graph = normalize_lsscsi_list_output(SAS_ENCLOSURE).expect("fixture parses");
+
+        let enclosure = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:6:0:0:0")
+            .expect("SES enclosure record exists");
+        assert_eq!(enclosure.kind, NodeKind::Lun);
+        assert_eq!(enclosure.size_bytes, None);
+        assert!(enclosure.properties.iter().any(|property| {
+            property.key == "scsi.peripheral-type" && property.value == "enclosu"
+        }));
+        assert!(
+            enclosure
+                .properties
+                .iter()
+                .any(|property| { property.key == "scsi.model" && property.value == "D3710" })
+        );
+        assert!(
+            enclosure
+                .properties
+                .iter()
+                .any(|property| { property.key == "scsi.revision" && property.value == "0141" })
+        );
+        assert!(enclosure.properties.iter().any(|property| {
+            property.key == "scsi.enclosure-identifier" && property.value == "0x500143803426abcd"
+        }));
+        assert!(
+            !graph
+                .nodes
+                .iter()
+                .any(|node| node.id.0 == "block:-" || node.path.as_deref() == Some("-")),
+            "non-block enclosure records must not create placeholder block devices"
+        );
+
+        let lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:6:0:1:0")
+            .expect("SAS disk LUN exists");
+        assert_eq!(lun.size_bytes, Some(1_200_000_000_000));
+        assert!(lun.properties.iter().any(|property| {
+            property.key == "scsi.sas-address" && property.value == "0x500143803426abd0"
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "scsi-lun:6:0:1:0"
+                && edge.to.0 == "block:/dev/sdd"
+                && edge.relationship == Relationship::Backs
+        }));
     }
 }

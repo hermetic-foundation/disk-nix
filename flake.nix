@@ -2041,6 +2041,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'bracketed IPv6 portals' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'CHAP secret redaction' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'FC transport WWPN pairs' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'SAS enclosure fixture' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'non-block SES enclosure records' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'active/standby state' ${./docs/storage-scope.md}
             ${pkgs.gnugrep}/bin/grep -q 'LIO grow/property updates' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'tgt grow/property updates' ${./docs/cli.md}
