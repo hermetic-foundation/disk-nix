@@ -84,7 +84,7 @@ jq -n --arg loopdev "$loopdev" --arg mountpoint "$mountpoint" '{
 
 jq -e --arg mountpoint "$mountpoint" '
   .status == "succeeded"
-  and (.commandPlan[] | select(.actionId == "filesystem:btrfsSmoke:scrub")
+  and (.commandPlan[] | select(.actionId == "filesystems:btrfsSmoke:scrub")
     | .commands | any(.argv == ["btrfs", "scrub", "start", "-B", $mountpoint]))
   and (.executionResults
     | any(.argv == ["btrfs", "scrub", "start", "-B", $mountpoint] and .success == true))

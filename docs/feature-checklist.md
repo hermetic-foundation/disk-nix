@@ -292,8 +292,9 @@ Update rules:
   cache detach, VDO grow, VDO property, bcache property, and LVM cache property
   paths.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
-  for multi-layer apply behavior on isolated disposable disks are still needed;
-  the default VM suite now includes the synthetic failure-recovery harness.
+  are still needed; the default VM suite now includes the synthetic
+  failure-recovery harness and a disposable loop/LUKS/LVM/ext4 layered grow
+  harness that executes `resize2fs` through disk-nix after an LV extension.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
   checks for root privilege plus missing, failing, stderr-only, and empty-output

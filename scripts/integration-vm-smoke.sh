@@ -34,7 +34,7 @@ MSG
   fi
 fi
 
-default_harnesses="loop btrfs bcachefs luks lvm mdraid failure-recovery"
+default_harnesses="loop btrfs layered-vm failure-recovery"
 harnesses="${DISK_NIX_VM_HARNESSES:-$default_harnesses}"
 
 run_harness() {
@@ -77,6 +77,9 @@ run_harness() {
       ;;
     failure-recovery)
       disk-nix-integration-failure-recovery-smoke
+      ;;
+    layered-vm)
+      disk-nix-integration-layered-vm-smoke
       ;;
     *)
       echo "unknown VM integration harness: $1" >&2

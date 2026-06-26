@@ -19,7 +19,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" blockdev jq losetup mkfs.ext4 resize2fs truncate; do
+for tool in "$disk_nix_bin" blockdev jq losetup mkfs.ext4 mount mountpoint resize2fs truncate umount; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -28,8 +28,12 @@ done
 
 tmpdir="$(mktemp -d)"
 loopdev=""
+mountpoint="$tmpdir/mnt"
 
 cleanup() {
+  if mountpoint -q "$mountpoint"; then
+    umount "$mountpoint" || true
+  fi
   if [[ -n "$loopdev" ]] && losetup --list "$loopdev" >/dev/null 2>&1; then
     losetup --detach "$loopdev"
   fi
@@ -44,16 +48,23 @@ grow_spec="$tmpdir/grow-spec.json"
 grow_report="$tmpdir/grow-report.json"
 
 truncate --size 64M "$backing"
+mkdir -p "$mountpoint"
 loopdev="$(losetup --find --show "$backing")"
 mkfs.ext4 -F -q "$loopdev"
+mount "$loopdev" "$mountpoint"
 
-"$disk_nix_bin" inspect "$loopdev" --json > "$tmpdir/inspect.json"
-jq -e --arg loopdev "$loopdev" '
+"$disk_nix_bin" inspect "$mountpoint" --json > "$tmpdir/inspect.json"
+jq -e --arg loopdev "$loopdev" --arg mountpoint "$mountpoint" '
   (.matchedNodes // .nodes // [])
-  | any(.path == $loopdev or .id == ("block:" + $loopdev))
+  | any(
+      .path == $loopdev
+      or .path == $mountpoint
+      or .id == ("block:" + $loopdev)
+      or (.properties // [] | any(.key == "mount.target" and .value == $mountpoint))
+    )
 ' "$tmpdir/inspect.json" >/dev/null
 
-jq -n --arg loopdev "$loopdev" '{
+jq -n --arg loopdev "$loopdev" --arg mountpoint "$mountpoint" '{
   version: 1,
   loopDevices: {
     ($loopdev): {
@@ -62,11 +73,15 @@ jq -n --arg loopdev "$loopdev" '{
   }
 }' > "$spec"
 
-"$disk_nix_bin" apply \
+if ! "$disk_nix_bin" apply \
   --spec "$spec" \
   --execute \
   --report-out "$report" \
-  --json > "$tmpdir/apply.json"
+  --json > "$tmpdir/apply.json"; then
+  cat "$tmpdir/apply.json" >&2 || true
+  cat "$report" >&2 || true
+  exit 1
+fi
 
 jq -e '
   .status == "succeeded"
@@ -86,23 +101,27 @@ if (( after_size <= before_size )); then
   exit 1
 fi
 
-jq -n --arg loopdev "$loopdev" '{
+jq -n --arg loopdev "$loopdev" --arg mountpoint "$mountpoint" '{
   version: 1,
   filesystems: {
     loopSmoke: {
       device: $loopdev,
       fsType: "ext4",
-      mountpoint: $loopdev,
+      mountpoint: $mountpoint,
       resizePolicy: "grow-only"
     }
   }
 }' > "$grow_spec"
 
-"$disk_nix_bin" apply \
+if ! "$disk_nix_bin" apply \
   --spec "$grow_spec" \
   --execute \
   --report-out "$grow_report" \
-  --json > "$tmpdir/grow-apply.json"
+  --json > "$tmpdir/grow-apply.json"; then
+  cat "$tmpdir/grow-apply.json" >&2 || true
+  cat "$grow_report" >&2 || true
+  exit 1
+fi
 
 jq -e --arg loopdev "$loopdev" '
   .status == "succeeded"

@@ -158,8 +158,10 @@ behavior across real storage stacks.
   bcachefs, LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, NVMe, and
   synthetic failed-apply recovery. The self-contained loop-backed harnesses
   create disposable backing files or arrays, verify real `inspect --json`,
-  execute reviewed apply plans, and clean up temporary devices. Lab-hardware
-  harnesses for NFS, VDO, iSCSI, multipath, and NVMe require explicit
+  execute reviewed apply plans, and clean up temporary devices. A layered VM
+  harness creates loop, LUKS, LVM, and mounted ext4 layers on a disposable disk,
+  extends the LV, and executes the disk-nix filesystem grow path with
+  `resize2fs`. Lab-hardware harnesses for NFS, VDO, iSCSI, multipath, and NVMe require explicit
   environment-selected existing targets and exercise non-destructive refresh
   or remount paths. The failure-recovery harness uses fake storage tools to
   prove `partialExecutionRecovery`, failed-command receipts, roll-forward

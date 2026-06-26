@@ -804,6 +804,37 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-nvme-smoke.sh
 ```
 
+## Layered VM smoke test
+
+The repository includes a root-only layered harness intended for disposable VMs:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-layered-vm-smoke
+```
+
+When enabled, it:
+
+- creates a temporary loop-backed disk image
+- formats and opens a LUKS mapper on the loop device
+- creates an LVM PV, VG, and root LV on the mapper
+- creates and mounts an ext4 filesystem on the LV
+- verifies `disk-nix inspect <mountpoint> --json` sees the layered topology
+- grows the LV with `lvextend`
+- executes a `filesystems.layeredRoot` grow apply plan
+- verifies the rendered `resize2fs <lv>` command succeeded and the JSON report
+  was written
+- verifies the mounted filesystem remains inspectable after the grow
+
+The harness removes the mount, VG, mapper, loop device, backing file, and key
+material during cleanup. It is included in the default VM smoke suite alongside
+the loop, Btrfs, and synthetic failure-recovery harnesses, but it is not run by
+`nix flake check` because it mutates real kernel block-device state. The LUKS,
+LVM, MD RAID, bcachefs, ZFS, NFS, VDO, iSCSI, multipath, and NVMe harnesses
+remain packaged and VM-callable through `DISK_NIX_VM_HARNESSES`; bcachefs is
+not part of the default VM list because some NixOS test kernels do not expose
+the `bcachefs` filesystem module even when `bcachefs-tools` is available.
+
 ## Flake coverage
 
 `nix flake check` does not run destructive integration tests. It does validate
@@ -812,9 +843,10 @@ expected loop, filesystem setup, resize, mount, Btrfs scrub, bcachefs format,
 bcachefs scrub, LUKS format, LUKS open, LUKS close, LVM create, LVM rescan, MD
 RAID create, MD RAID rescan, ZFS pool create, ZFS scrub, NFS mount, NFS rescan,
 NFS remount, VDO status, VDO stats, VDO rescan, VM orchestration guard steps,
-iSCSI session rescan, multipath map rescan, NVMe namespace rescan, and the
-synthetic failed-apply `partialExecutionRecovery` assertions. This keeps the
-harnesses available and packaged while preserving safe default checks.
+iSCSI session rescan, multipath map rescan, NVMe namespace rescan, layered
+loop/LUKS/LVM/ext4 VM grow assertions, and the synthetic failed-apply
+`partialExecutionRecovery` assertions. This keeps the harnesses available and
+packaged while preserving safe default checks.
 
 ## Remaining integration coverage
 

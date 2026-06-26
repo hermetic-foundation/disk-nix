@@ -220,6 +220,19 @@
           ];
           text = builtins.readFile ./scripts/integration-failure-recovery-smoke.sh;
         };
+        integrationLayeredVmSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-layered-vm-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.cryptsetup
+            pkgs.e2fsprogs
+            pkgs.jq
+            pkgs.lvm2
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-layered-vm-smoke.sh;
+        };
         integrationVmSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-vm-smoke";
           runtimeInputs = [
@@ -236,6 +249,7 @@
             integrationMultipathSmoke
             integrationNvmeSmoke
             integrationFailureRecoverySmoke
+            integrationLayeredVmSmoke
             pkgs.systemd
           ];
           text = builtins.readFile ./scripts/integration-vm-smoke.sh;
@@ -252,7 +266,9 @@
               };
               boot.kernelModules = [
                 "loop"
+                "ext4"
                 "dm_mod"
+                "dm_crypt"
                 "md_mod"
                 "raid1"
                 "bcachefs"
@@ -1560,6 +1576,7 @@
           integration-multipath-smoke = integrationMultipathSmoke;
           integration-nvme-smoke = integrationNvmeSmoke;
           integration-failure-recovery-smoke = integrationFailureRecoverySmoke;
+          integration-layered-vm-smoke = integrationLayeredVmSmoke;
           integration-vm-smoke = integrationVmSmoke;
           integration-vm-test = integrationVmTest;
           integration-loop-smoke = integrationLoopSmoke;
@@ -1660,6 +1677,13 @@
             program = "${integrationFailureRecoverySmoke}/bin/disk-nix-integration-failure-recovery-smoke";
             meta = {
               description = "Synthetic failed-apply disk-nix partial recovery smoke integration harness";
+            };
+          };
+          integration-layered-vm-smoke = {
+            type = "app";
+            program = "${integrationLayeredVmSmoke}/bin/disk-nix-integration-layered-vm-smoke";
+            meta = {
+              description = "Root-only layered loop/LUKS/LVM/ext4 VM integration harness";
             };
           };
           integration-vm-smoke = {
@@ -1961,6 +1985,16 @@
                 ${pkgs.gnugrep}/bin/grep -q 'rollback-review' ${./scripts/integration-failure-recovery-smoke.sh}
                 touch "$out"
               '';
+          integrationLayeredVmSmoke = pkgs.runCommand "disk-nix-integration-layered-vm-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cryptsetup luksFormat' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'pvcreate --force --yes' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'lvextend --yes --size 192M' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystem:layeredRoot:grow' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'resize2fs' ${./scripts/integration-layered-vm-smoke.sh}
+            touch "$out"
+          '';
           integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vm-smoke.sh}
@@ -1976,6 +2010,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-multipath-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-nvme-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-failure-recovery-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-layered-vm-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
           '';
           documentation = pkgs.runCommand "disk-nix-documentation-check" { } ''
