@@ -202,8 +202,9 @@ adapter fixtures and a cross-adapter shared-storage regression fixture that
 combines iSCSI session/node data, host-visible SCSI LUNs, and multipath path
 state in one normalized graph. The iSCSI fixture coverage also includes
 bracketed IPv6 portals, concise open-iscsi node records, attached LUN disks,
-and CHAP secret redaction checks. Fixture coverage also includes a merged
-degraded-MD-with-LUKS stack covering recovering array state, failed member
+CHAP secret redaction checks, and iSER/RDMA session transport over bracketed
+IPv6 portals with InfiniBand netdev metadata. Fixture coverage also includes a
+merged degraded-MD-with-LUKS stack covering recovering array state, failed member
 metadata, active encrypted mapper status, backing edges, and LUKS header
 metadata, plus a clustered LVM over NVMe-oF fixture covering shared/clustered
 VG metadata, sanlock lock hints, remote LV activity, NVMe fabrics controller

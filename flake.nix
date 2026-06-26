@@ -2103,6 +2103,9 @@
             ${pkgs.gnugrep}/bin/grep -q 'partiallySuppressed' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'bracketed IPv6 portals' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'CHAP secret redaction' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'iSER/RDMA session transport' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'iser-rdma0' ${./crates/disk-nix-probe/src/iscsi.rs}
+            ${pkgs.gnugrep}/bin/grep -q '2001:db8:40::10' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q 'FC transport WWPN pairs' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'SAS enclosure fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' "$checklist"

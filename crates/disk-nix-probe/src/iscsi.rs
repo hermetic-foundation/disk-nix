@@ -734,6 +734,41 @@ Target: iqn.2026-06.example:storage.disk1
         Attached scsi disk sdb          State: running
 "#;
 
+    const ISER_SESSION: &[u8] = br#"
+Target: iqn.2026-06.example:rdma.archive
+    Current Portal: [2001:db8:40::10]:3260,2
+    Persistent Portal: [2001:db8:40::10]:3260,2
+    Target Portal Group Tag: 2
+    **********
+    Interface:
+    **********
+    Iface Name: iser-rdma0
+    Iface Transport: iser
+    Iface Initiatorname: iqn.2026-06.client:rdma-node
+    Iface IPaddress: 2001:db8:40::20
+    Iface Netdev: ib0
+    SID: 44
+    iSCSI Connection State: LOGGED IN
+    iSCSI Session State: LOGGED_IN
+    Internal iscsid Session State: NO CHANGE
+    HeaderDigest: None
+    DataDigest: None
+    MaxRecvDataSegmentLength: 1048576
+    MaxXmitDataSegmentLength: 1048576
+    FirstBurstLength: 262144
+    MaxBurstLength: 1048576
+    ImmediateData: Yes
+    InitialR2T: No
+    MaxOutstandingR2T: 1
+    CID: 0
+    Connection State: LOGGED IN
+    Local Address: 2001:db8:40::20
+    Peer Address: 2001:db8:40::10
+    Host Number: 15  State: running
+    scsi15 Channel 00 Id 0 Lun: 3
+        Attached scsi disk sdg          State: running
+"#;
+
     #[test]
     fn normalizes_iscsi_session_target_lun_and_disk() {
         let graph = normalize_iscsi_session_output(SESSION).expect("fixture should parse");
@@ -840,6 +875,70 @@ Target: iqn.2026-06.example:storage.disk1
         assert!(graph.edges.iter().any(|edge| edge.from.0
             == "iscsi-lun:iqn.2026-06.example:storage.disk1:0"
             && edge.to.0 == "block:/dev/sdb"
+            && edge.relationship == Relationship::Backs));
+    }
+
+    #[test]
+    fn normalizes_iser_ipv6_session_fixture() {
+        let graph = normalize_iscsi_session_output(ISER_SESSION).expect("fixture should parse");
+
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::IscsiSession
+                && node.name == "iscsi-session:44"
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.target"
+                        && property.value == "iqn.2026-06.example:rdma.archive"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.iface-transport" && property.value == "iser"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.iface-netdev" && property.value == "ib0")
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.portal-address" && property.value == "2001:db8:40::10"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.portal-port" && property.value == "3260")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.portal-tpgt" && property.value == "2")
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.maxxmitdatasegmentlength" && property.value == "1048576"
+                })
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.initialr2t" && property.value == "No")
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.connection-local-address"
+                        && property.value == "2001:db8:40::20"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.connection-peer-address"
+                        && property.value == "2001:db8:40::10"
+                })
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::Lun
+                && node.name == "3"
+                && node.path.as_deref() == Some("/dev/sdg")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.host-number" && property.value == "15")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.scsi-id" && property.value == "0")
+        }));
+        assert!(graph.edges.iter().any(|edge| edge.from.0
+            == "iscsi-lun:iqn.2026-06.example:rdma.archive:3"
+            && edge.to.0 == "block:/dev/sdg"
             && edge.relationship == Relationship::Backs));
     }
 

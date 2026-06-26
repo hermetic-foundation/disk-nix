@@ -88,7 +88,8 @@ Update rules:
   including a cross-adapter shared-storage fixture that combines iSCSI session
   and node data, host-visible SCSI LUNs, and multipath paths, plus a
   standalone open-iscsi fixture covering bracketed IPv6 portals, concise node
-  records, attached LUN disks, and CHAP secret redaction, plus a
+  records, attached LUN disks, CHAP secret redaction, and iSER/RDMA session
+  transport over bracketed IPv6 portals, plus a
   degraded-MD-with-LUKS fixture that combines recovering array state, failed
   member metadata, active encrypted mapper status, and LUKS header metadata,
   plus a clustered LVM over NVMe-oF fixture covering shared/clustered VG

@@ -245,8 +245,9 @@ The current probe layer normalizes:
   Channel multipath paths with FC transport WWPN pairs, SCSI unit names, ALUA
   path groups, active/standby state, failed path metadata, and multipath backing
   edges. iSCSI parser fixtures also cover bracketed IPv6 portals, concise
-  open-iscsi node records, attached LUN disks, and CHAP password-presence
-  redaction without serializing secret material.
+  open-iscsi node records, attached LUN disks, iSER/RDMA session transport over
+  InfiniBand netdevs, and CHAP password-presence redaction without serializing
+  secret material.
 
 Probe-status remediation is adapter-aware. Missing-tool reports include the
 likely tool names and Nix packages, including PATH and `ENOENT` command launch
