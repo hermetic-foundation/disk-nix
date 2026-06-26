@@ -142,18 +142,54 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-lvm-smoke.sh
 ```
 
+## MD RAID loop-backed smoke test
+
+The repository also includes a root-only MD RAID loop-backed harness:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-mdraid-smoke
+```
+
+When enabled, it:
+
+- creates two temporary 64 MiB backing files
+- attaches them to the next available `/dev/loop*` devices
+- creates a temporary RAID1 MD array with `mdadm`
+- verifies `disk-nix inspect <array> --json` sees the array
+- executes an `mdRaids.<name>.operation = "rescan"` apply plan
+- verifies the generated JSON report was written and the rendered
+  `mdadm --detail`, `mdadm --detail --scan`, `mdadm --examine --scan`, and
+  `/proc/mdstat` inventory commands succeeded
+- stops the array, wipes member superblocks, detaches the loop devices, and
+  removes backing files during cleanup
+
+This test intentionally writes MD RAID metadata only to the temporary backing
+files it creates. It still requires destructive opt-in because it uses real
+loop and MD RAID tooling.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-mdraid-smoke.sh
+```
+
 ## Flake coverage
 
 `nix flake check` does not run destructive integration tests. It does validate
 that the loop smoke harnesses parse, remain opt-in, and still contain the
 expected loop, filesystem setup, resize, mount, scrub, LUKS format, LUKS open,
-LUKS close, LVM create, and LVM rescan steps. This keeps the harnesses
-available and packaged while preserving safe default checks.
+LUKS close, LVM create, LVM rescan, MD RAID create, and MD RAID rescan steps.
+This keeps the harnesses available and packaged while preserving safe default
+checks.
 
 ## Remaining integration coverage
 
 The loop smoke tests are only the first host-backed integration paths. Feature
 completion still needs disposable VM or lab-host tests for broader LUKS
 format/grow/keyslot/token behavior, broader LVM LV/thin/cache/device-topology
-behavior, bcachefs, ZFS, MD RAID, multipath, iSCSI, NFS, VDO, NVMe namespace
-operations, failure recovery, and broader destructive apply behavior.
+behavior, bcachefs, ZFS, broader MD RAID grow/member-topology behavior,
+multipath, iSCSI, NFS, VDO, NVMe namespace operations, failure recovery, and
+broader destructive apply behavior.
