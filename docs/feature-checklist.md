@@ -330,7 +330,7 @@ Update rules:
   replacement, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace,
   LUKS open, LUKS format, LUKS close, LUKS grow,
   LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove,
-  partition grow,
+  LUKS property, partition grow,
   NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI
   login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache
   replacement, LVM cache rescan, VDO create,

@@ -175,7 +175,8 @@ behavior across real storage stacks.
   check failure, filesystem repair failure, filesystem property failure,
   LUKS format failure, LUKS close
   failure, LUKS grow failure, LUKS keyslot add failure, LUKS token import
-  failure, LUKS keyslot remove failure, LUKS token remove failure, ZFS pool
+  failure, LUKS keyslot remove failure, LUKS token remove failure, LUKS
+  property failure, ZFS pool
   replacement failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create, attach, detach, and destroy
   failures, target-side LUN LIO grow not-ready, property, and rescan failures,
@@ -294,7 +295,8 @@ concrete adapters are added.
   LVM VG replacement, ZFS pool replacement, MD RAID grow,
   MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS
   grow, LUKS keyslot add,
-  LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
+  LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property,
+  partition grow, NFS
   remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login,
   iSCSI rescan, LVM cache attach,
   LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical
