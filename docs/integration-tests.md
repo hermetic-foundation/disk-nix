@@ -378,6 +378,11 @@ The test verifies that the failed report and receipt preserve:
 - the failed `mdadm /dev/md/root --add /dev/disk/by-id/nvme-spare` command and
   non-zero status after successful MD detail inspection
 - `partialExecutionRecovery.failedActionId` as
+  `mdRaids:root:remove-device:/dev/disk/by-id/failed-md-member`
+- the failed `mdadm /dev/md/root --remove /dev/disk/by-id/failed-md-member`
+  command and non-zero status after successful MD detail inspection and member
+  fail marking
+- `partialExecutionRecovery.failedActionId` as
   `nfs.mounts:/srv/old:unmount`
 - the failed `umount /srv/old` command and non-zero status after NFS mount
   inspection
@@ -917,7 +922,7 @@ target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
 detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
 concrete property rendering, target-side LUN tgt property, target-side LUN tgt
 rescan, multipath
-resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS close, LUKS
+resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO
 grow, VDO property, bcache property, bcache rescan, and LVM cache property failed-command

@@ -266,7 +266,7 @@ added.
   detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
   concrete property rendering, target-side LUN tgt property, target-side LUN tgt
   rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID
-  replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add,
+  remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add,
   LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
   remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach,
   LVM cache rescan, VDO grow, VDO property, bcache property, bcache rescan, and

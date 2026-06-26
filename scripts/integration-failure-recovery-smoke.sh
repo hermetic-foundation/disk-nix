@@ -3711,6 +3711,102 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$md_add_receipt" >/dev/null
 
+md_remove_tools="$tmpdir/fake-md-remove-tools"
+mkdir -p "$md_remove_tools"
+
+cat > "$md_remove_tools/mdadm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "/dev/md/root --remove /dev/disk/by-id/failed-md-member" ]]; then
+  echo "synthetic MD RAID remove-member failure for disk-nix recovery coverage" >&2
+  exit 87
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$md_remove_tools/mdadm"
+
+md_remove_spec="$tmpdir/md-remove-spec.json"
+md_remove_json="$tmpdir/md-remove-apply.json"
+md_remove_report="$tmpdir/md-remove-report.json"
+md_remove_receipt="$tmpdir/md-remove-receipt.json"
+
+jq -n '{
+  mdRaids: {
+    root: {
+      target: "/dev/md/root",
+      removeDevices: ["/dev/disk/by-id/failed-md-member"]
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowDeviceReplacement: true,
+    allowPotentialDataLoss: true,
+    allowDestructive: true,
+    backupVerified: true
+  }
+}' > "$md_remove_spec"
+
+if PATH="$md_remove_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$md_remove_spec" \
+  --execute \
+  --report-out "$md_remove_report" \
+  --receipt-out "$md_remove_receipt" \
+  --json > "$md_remove_json"; then
+  echo "expected synthetic MD RAID remove-member failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 3
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["mdadm", "--detail", "/dev/md/root"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["mdadm", "/dev/md/root", "--fail", "/dev/disk/by-id/failed-md-member"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 87
+  and .executionResults[2].argv == ["mdadm", "/dev/md/root", "--remove", "/dev/disk/by-id/failed-md-member"]
+  and (.executionResults[2].stderr | contains("synthetic MD RAID remove-member failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "mdRaids:root:remove-device:/dev/disk/by-id/failed-md-member"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["mdadm", "/dev/md/root", "--remove", "/dev/disk/by-id/failed-md-member"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["mdRaids:root:remove-device:/dev/disk/by-id/failed-md-member"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 1
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["mdadm", "--detail", "/dev/md/root"]))
+    and (.commands | any(.argv == ["cat", "/proc/mdstat"]))
+    and (.notes | any(contains("MD RAID member changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["mdadm", "--detail", "/dev/md/root"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["cat", "/proc/mdstat"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$md_remove_json" >/dev/null
+
+cmp "$md_remove_json" "$md_remove_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "mdRaids:root:remove-device:/dev/disk/by-id/failed-md-member"
+  and .report.partialExecutionRecovery.failedCommand == ["mdadm", "/dev/md/root", "--remove", "/dev/disk/by-id/failed-md-member"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
+' "$md_remove_receipt" >/dev/null
+
 md_replace_tools="$tmpdir/fake-md-replace-tools"
 mkdir -p "$md_replace_tools"
 
@@ -5860,4 +5956,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO grow, VDO property, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO grow, VDO property, bcache property, bcache rescan, and LVM cache property failures"
