@@ -147,6 +147,16 @@ no-op `PROGRAM` line used by the installer profile unless the host overrides
 `boot.swraid.mdadmConf`. Typed active multipath map declarations enable
 `services.multipath` so stage-1 and stage-2 include the daemon and kernel
 support expected by `/dev/mapper/mpath*` consumers.
+Lifecycle declarations that intentionally remove a resource from active service
+state stay in `/etc/disk-nix/spec.json` for reviewed imperative execution, but
+are excluded from `/etc/disk-nix/steady-state.json` active identity lists and
+from generated native service enablement. This includes `operation = "close"`,
+`"deactivate"`, `"logout"`, `"unmount"`, `"unexport"`, `"detach"`, and
+`"stop"` as well as destroy-style declarations. For domains where
+`operation = "export"` means detaching an existing local resource, such as ZFS
+pools and LVM volume groups, export declarations follow the same planner-only
+path. NFS export declarations are different: `operation = "export"` describes
+the active published export and can still derive `services.nfs.server.exports`.
 Typed active ZFS pool, dataset, zvol, and ZFS snapshot declarations add their
 pool names to `boot.zfs.extraPools` and include `zfs` in
 `boot.supportedFilesystems`, so NixOS imports pools that disk-nix is asked to

@@ -1022,13 +1022,21 @@ let
     || builtins.elem requestedOperation [
       "destroy"
       "close"
+      "deactivate"
       "logout"
       "unmount"
       "unexport"
       "detach"
+      "stop"
       "remove-key"
       "remove-token"
     ];
+  isExportLifecycle =
+    object:
+    let
+      requestedOperation = if object.operation != null then object.operation else object.action;
+    in
+    requestedOperation == "export";
   activeLifecycleAttrs = attrs: lib.filterAttrs (_: object: !isDestroyLifecycle object) attrs;
   activeFilesystems = activeLifecycleAttrs cfg.filesystems;
   activeSwaps = lib.filterAttrs (_: swap: !isDestroyLifecycle swap) cfg.swaps;
@@ -1037,7 +1045,9 @@ let
   activeBtrfsSubvolumes = activeLifecycleAttrs cfg.btrfsSubvolumes;
   activeBtrfsQgroups = activeLifecycleAttrs cfg.btrfsQgroups;
   activePhysicalVolumes = activeLifecycleAttrs cfg.physicalVolumes;
-  activeVolumeGroups = activeLifecycleAttrs cfg.volumeGroups;
+  activeVolumeGroups = lib.filterAttrs (
+    _: object: !isDestroyLifecycle object && !isExportLifecycle object
+  ) cfg.volumeGroups;
   activeVolumes = activeLifecycleAttrs cfg.volumes;
   activeThinPools = activeLifecycleAttrs cfg.thinPools;
   activeLvmSnapshots = activeLifecycleAttrs cfg.lvmSnapshots;
@@ -1050,7 +1060,9 @@ let
   activeMdRaids = activeLifecycleAttrs cfg.mdRaids;
   activeMultipathMaps = activeLifecycleAttrs cfg.multipathMaps;
   activeVdoVolumes = activeLifecycleAttrs cfg.vdoVolumes;
-  activePools = activeLifecycleAttrs cfg.pools;
+  activePools = lib.filterAttrs (
+    _: object: !isDestroyLifecycle object && !isExportLifecycle object
+  ) cfg.pools;
   activeDatasets = activeLifecycleAttrs cfg.datasets;
   activeZvols = activeLifecycleAttrs cfg.zvols;
   activeSnapshots = lib.filterAttrs (_: snapshot: !snapshot.destroy) cfg.snapshots;

@@ -2873,17 +2873,21 @@
                     and (.storageIdentities.swapDevices | index("/dev/disk/by-label/destroyed-swap") == null)
                     and (.storageIdentities.physicalVolumes | index("/dev/disk/by-id/nvme-pv-grow") != null)
                     and (.storageIdentities.volumes | index("vg0/scratch") != null)
+                    and (.storageIdentities.volumes | index("vg0/archive") == null)
                     and (.storageIdentities.thinPools | index("vg0/thinpool") != null)
                     and (.storageIdentities.lvmCaches | index("vg0/root") != null)
                     and (.storageIdentities.vdoVolumes | index("archive") != null)
+                    and (.storageIdentities.vdoVolumes | index("cold-archive") == null)
                     and (.storageIdentities.luksKeyslots | index("/dev/disk/by-id/root-luks keyslot 1") != null)
                     and (.storageIdentities.luksTokens | index("/dev/disk/by-id/root-luks token 0") != null)
                     and (.storageIdentities.backingFiles | index("/var/lib/images/root.img") != null)
                     and (.storageIdentities.loopDevices | index("/dev/loop7") != null)
                     and (.storageIdentities.dmMaps | index("/dev/mapper/cryptroot") != null)
                     and (.storageIdentities.mdRaids | index("/dev/md/root") != null)
+                    and (.storageIdentities.mdRaids | index("/dev/md/oldroot") == null)
                     and (.storageIdentities.multipathMaps | index("mpatha") != null)
                     and (.storageIdentities.pools | index("vault") != null)
+                    and (.storageIdentities.pools | index("moveme") == null)
                     and (.storageIdentities.datasets | index("tank/home") != null)
                     and (.storageIdentities.zvols | index("tank/vm/root") != null)
                     and (.storageIdentities.btrfsSubvolumes | index("/mnt/persist/@home") != null)
@@ -2910,6 +2914,7 @@
                     and .nativeServices.bcache == true
                     and .nativeServices.nfsServer == true
                     and (.nativeServices.zfsExtraPools | index("tank") != null)
+                    and (.nativeServices.zfsExtraPools | index("moveme") == null)
                     and (.nativeServices.zfsExtraPools | index("mnt") == null)
                   ' steady-state
                   printf '%s\n' ${pkgs.lib.escapeShellArg nixosModuleTest.config.services.nfs.server.exports} > nfs-exports
