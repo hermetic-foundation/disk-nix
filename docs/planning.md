@@ -63,11 +63,15 @@ action edge also appears as an informational `graph-dependency-order`
 diagnostic with the matched graph path, dependent action, prerequisite action,
 and lower-layer or consumer-first rationale. Mixed-direction actions on the
 same graph path are reported as warning `graph-dependency-conflict` diagnostics
-and counted as `graphDependencyConflictCount` so operators can split the plan or
-review ordering before execution. Apply dry-runs preserve those diagnostics for
-review, while `--execute` refuses to mutate storage until the conflict count is
-zero. This is still conservative: ambiguous current-state recovery and choosing
-between competing graph paths remain hardening work.
+and counted as `graphDependencyConflictCount`. Topology comparison JSON also
+includes `graphDependencyConflictResolutions`, which names the conflicting
+path, lower and upper action ids, each dependency direction, a
+`buildOrUpdatePass`, a `teardownOrRecoveryPass`, and a recommendation to split
+the work into reviewed passes. Apply dry-runs preserve those diagnostics and
+split-pass proposals for review, while `--execute` refuses to mutate storage
+until the conflict count is zero. This is still conservative: ambiguous
+current-state recovery and choosing between competing graph paths remain
+hardening work.
 
 Examples:
 

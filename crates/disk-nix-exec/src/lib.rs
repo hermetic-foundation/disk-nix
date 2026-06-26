@@ -27304,12 +27304,10 @@ mod tests {
             command.argv == ["disk-nix", "inspect", "/dev/mapper/cryptswap", "--json"]
                 && !command.mutates
         }));
-        assert!(
-            domain_recovery
-                .notes
-                .iter()
-                .any(|note| note.contains("local mapping changes") && note.contains("dependencies"))
-        );
+        assert!(domain_recovery
+            .notes
+            .iter()
+            .any(|note| note.contains("local mapping changes") && note.contains("dependencies")));
         let roll_forward = report
             .recovery_actions
             .iter()

@@ -208,10 +208,12 @@ placeholders, but concrete array adapters remain future work.
   now applies coarse layer ordering and reports inferred dependency edges from
   declared identities and direct or multi-hop current-topology graph paths,
   emits `graph-dependency-order` diagnostics for matched graph-derived action
-  edges, and warns when matched actions on the same graph path require mixed
-  dependency directions. Grouped changes such as iSCSI LUN refresh, multipath,
-  partition growth, LUKS/LVM resize, and filesystem growth still need
-  recovery-aware ordering and stronger conflict resolution before execution.
+  edges, warns when matched actions on the same graph path require mixed
+  dependency directions, and emits `graphDependencyConflictResolutions` with
+  build/update and teardown/recovery split-pass proposals. Grouped changes such
+  as iSCSI LUN refresh, multipath, partition growth, LUKS/LVM resize, and
+  filesystem growth still need recovery-aware ordering before broad unattended
+  execution.
 - Automated editing of declarative NixOS configuration after successful
   mutation is still not implemented. The module now emits a
   `declarativeHandoff` index for mounts, crypttab/LUKS, swap, NFS exports,

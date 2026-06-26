@@ -111,8 +111,12 @@ Update rules:
 - [ ] **Partial:** Runtime graph-path ordering has coarse phases and dependency
   metadata plus graph-derived order diagnostics, but still needs recovery-aware
   ordering for complex multi-layer mutations.
-- [ ] **Partial:** Mixed-direction graph-path diagnostics exist, but stronger
-  conflict resolution is still needed before broad unattended execution.
+- [x] **Finished:** Mixed-direction graph-path diagnostics include structured
+  conflict resolution proposals. Topology comparison JSON reports
+  `graphDependencyConflictResolutions` with the conflicting path, lower and
+  upper action ids, dependency directions, build/update pass,
+  teardown/recovery pass, and split-plan recommendation; execution remains
+  refused while conflicts are present.
 - [ ] **Desired:** Production-grade automatic rollback. Current reports provide
   guidance; safe automated rollback remains intentionally unimplemented.
 

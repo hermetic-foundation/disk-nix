@@ -194,6 +194,8 @@ pub enum DependencyDirection {
 pub struct TopologyComparison {
     pub summary: TopologyComparisonSummary,
     pub diagnostics: Vec<TopologyDiagnostic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub graph_dependency_conflict_resolutions: Vec<GraphDependencyConflictResolution>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -222,6 +224,19 @@ pub struct TopologyDiagnostic {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current: Option<CurrentNodeSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphDependencyConflictResolution {
+    pub path: String,
+    pub lower_action_id: String,
+    pub upper_action_id: String,
+    pub lower_direction: DependencyDirection,
+    pub upper_direction: DependencyDirection,
+    pub build_or_update_pass: Vec<String>,
+    pub teardown_or_recovery_pass: Vec<String>,
+    pub recommendation: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -828,6 +843,8 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
     let graph_dependency_conflicts =
         graph_dependency_conflict_diagnostics_for_actions(&plan.actions, graph);
     let graph_dependency_conflict_count = graph_dependency_conflicts.len();
+    let graph_dependency_conflict_resolutions =
+        graph_dependency_conflict_resolutions_for_actions(&plan.actions, graph);
     diagnostics.extend(graph_dependency_order_diagnostics);
     diagnostics.extend(graph_dependency_conflicts);
     plan.dependency_order = dependency_order_for_actions_with_edges(&plan.actions, graph_edges);
@@ -933,6 +950,7 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
     plan.topology_comparison = Some(TopologyComparison {
         summary,
         diagnostics,
+        graph_dependency_conflict_resolutions,
     });
     plan
 }
@@ -1097,9 +1115,34 @@ fn graph_dependency_conflict_diagnostics_for_actions(
     actions: &[PlannedAction],
     graph: &StorageGraph,
 ) -> Vec<TopologyDiagnostic> {
+    graph_dependency_conflict_resolutions_for_actions(actions, graph)
+        .into_iter()
+        .map(|resolution| TopologyDiagnostic {
+            action_id: resolution.lower_action_id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::GraphDependencyConflict,
+            query: resolution.path.clone(),
+            message: format!(
+                "current topology path has mixed dependency directions: {} runs {:?} while {} runs {:?}; split into build/update pass [{}] and teardown/recovery pass [{}] before execution",
+                resolution.lower_action_id,
+                resolution.lower_direction,
+                resolution.upper_action_id,
+                resolution.upper_direction,
+                resolution.build_or_update_pass.join(", "),
+                resolution.teardown_or_recovery_pass.join(", ")
+            ),
+            current: None,
+        })
+        .collect()
+}
+
+fn graph_dependency_conflict_resolutions_for_actions(
+    actions: &[PlannedAction],
+    graph: &StorageGraph,
+) -> Vec<GraphDependencyConflictResolution> {
     let matches = graph_action_matches(actions, graph);
     let reachability = graph_storage_reachability(graph);
-    let mut diagnostics = Vec::new();
+    let mut resolutions = Vec::new();
     let mut seen = BTreeSet::new();
     for (lower_id, upper_ids) in reachability {
         for upper_id in upper_ids {
@@ -1122,22 +1165,54 @@ fn graph_dependency_conflict_diagnostics_for_actions(
                     if !seen.insert(key) {
                         continue;
                     }
-                    diagnostics.push(TopologyDiagnostic {
-                        action_id: lower_action.id.clone(),
-                        level: TopologyDiagnosticLevel::Warning,
-                        kind: TopologyDiagnosticKind::GraphDependencyConflict,
-                        query: format!("{lower_id} -> {upper_id}"),
-                        message: format!(
-                            "current topology path has mixed dependency directions: {} runs {:?} while {} runs {:?}; split the plan or review ordering before execution",
-                            lower_action.id, lower_direction, upper_action.id, upper_direction
-                        ),
-                        current: None,
+                    let build_or_update_pass = graph_conflict_pass_actions(
+                        lower_action,
+                        lower_direction,
+                        upper_action,
+                        upper_direction,
+                        DependencyDirection::LowerLayersFirst,
+                    );
+                    let teardown_or_recovery_pass = graph_conflict_pass_actions(
+                        lower_action,
+                        lower_direction,
+                        upper_action,
+                        upper_direction,
+                        DependencyDirection::UpperLayersFirst,
+                    );
+                    resolutions.push(GraphDependencyConflictResolution {
+                        path: format!("{lower_id} -> {upper_id}"),
+                        lower_action_id: lower_action.id.clone(),
+                        upper_action_id: upper_action.id.clone(),
+                        lower_direction,
+                        upper_direction,
+                        build_or_update_pass,
+                        teardown_or_recovery_pass,
+                        recommendation:
+                            "split mixed-direction graph-path work into separate reviewed passes; run build/update actions lower-to-upper and teardown/recovery actions upper-to-lower"
+                                .to_string(),
                     });
                 }
             }
         }
     }
-    diagnostics
+    resolutions
+}
+
+fn graph_conflict_pass_actions(
+    lower_action: &PlannedAction,
+    lower_direction: DependencyDirection,
+    upper_action: &PlannedAction,
+    upper_direction: DependencyDirection,
+    selected_direction: DependencyDirection,
+) -> Vec<String> {
+    [
+        (lower_action, lower_direction),
+        (upper_action, upper_direction),
+    ]
+    .into_iter()
+    .filter(|(_, direction)| *direction == selected_direction)
+    .map(|(action, _)| action.id.clone())
+    .collect()
 }
 
 fn graph_dependency_order_diagnostics_for_actions(
@@ -26198,8 +26273,49 @@ mod tests {
                 && diagnostic.kind == TopologyDiagnosticKind::GraphDependencyConflict
                 && diagnostic.query == "luks:cryptroot -> filesystem:/"
                 && diagnostic.message.contains("mixed dependency directions")
+                && diagnostic
+                    .message
+                    .contains("build/update pass [filesystem:root:grow]")
+                && diagnostic
+                    .message
+                    .contains("teardown/recovery pass [luks.devices:cryptroot:close]")
                 && diagnostic.message.contains("filesystem:root:grow")
         }));
+        let resolution = comparison
+            .graph_dependency_conflict_resolutions
+            .iter()
+            .find(|resolution| resolution.path == "luks:cryptroot -> filesystem:/")
+            .expect("graph conflict resolution should be reported");
+        assert_eq!(
+            resolution.build_or_update_pass,
+            vec!["filesystem:root:grow".to_string()]
+        );
+        assert_eq!(
+            resolution.teardown_or_recovery_pass,
+            vec!["luks.devices:cryptroot:close".to_string()]
+        );
+        assert_eq!(
+            resolution.lower_direction,
+            DependencyDirection::UpperLayersFirst
+        );
+        assert_eq!(
+            resolution.upper_direction,
+            DependencyDirection::LowerLayersFirst
+        );
+        assert!(
+            resolution
+                .recommendation
+                .contains("split mixed-direction graph-path work")
+        );
+        let json = serde_json::to_value(comparison).expect("comparison serializes");
+        assert_eq!(
+            json["graphDependencyConflictResolutions"][0]["buildOrUpdatePass"][0],
+            "filesystem:root:grow"
+        );
+        assert_eq!(
+            json["graphDependencyConflictResolutions"][0]["teardownOrRecoveryPass"][0],
+            "luks.devices:cryptroot:close"
+        );
     }
 
     #[test]

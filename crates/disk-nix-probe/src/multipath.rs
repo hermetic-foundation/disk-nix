@@ -502,12 +502,10 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
         assert!(active_path.properties.iter().any(|property| {
             property.key == "multipath.online-state" && property.value == "running"
         }));
-        assert!(
-            active_path
-                .properties
-                .iter()
-                .any(|property| property.key == "multipath.path-flags" && property.value == "ghost")
-        );
+        assert!(active_path
+            .properties
+            .iter()
+            .any(|property| property.key == "multipath.path-flags" && property.value == "ghost"));
         let enabled_path = graph
             .nodes
             .iter()
