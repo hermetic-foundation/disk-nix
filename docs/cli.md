@@ -616,9 +616,11 @@ and multi-hop relationships in the probed storage graph also add dependency
 edges between matched planned actions, including lower-to-upper growth paths and
 reversed upper-to-lower teardown paths. The topology comparison summary reports
 the number of graph-derived dependency edges as `graphDependencyEdgeCount` and
-mixed-direction graph-path warnings as `graphDependencyConflictCount`.
-Dry-run reports keep those conflicts visible for review, but `--execute`
-refuses to run while the count is non-zero.
+emits `graph-dependency-order` diagnostics for the matched graph paths that
+force those action edges. Mixed-direction graph-path warnings are reported as
+`graph-dependency-conflict` diagnostics and counted as
+`graphDependencyConflictCount`. Dry-run reports keep those conflicts visible for
+review, but `--execute` refuses to run while the count is non-zero.
 
 With `--probe-current`, the CLI also probes the current host and adds
 `topologyComparison`, including matched target counts, missing target counts,

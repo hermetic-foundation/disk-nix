@@ -370,6 +370,7 @@ pub enum TopologyDiagnosticKind {
     ZfsPoolCreateRequired,
     ZfsPoolImportAlreadySatisfied,
     ZfsPoolImportRequired,
+    GraphDependencyOrder,
     GraphDependencyConflict,
 }
 
@@ -819,9 +820,12 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
     }
     let graph_edges = graph_dependency_edges_for_actions(&plan.actions, graph);
     let graph_dependency_edge_count = graph_edges.graph_edges.len();
+    let graph_dependency_order_diagnostics =
+        graph_dependency_order_diagnostics_for_actions(&plan.actions, graph);
     let graph_dependency_conflicts =
         graph_dependency_conflict_diagnostics_for_actions(&plan.actions, graph);
     let graph_dependency_conflict_count = graph_dependency_conflicts.len();
+    diagnostics.extend(graph_dependency_order_diagnostics);
     diagnostics.extend(graph_dependency_conflicts);
     plan.dependency_order = dependency_order_for_actions_with_edges(&plan.actions, graph_edges);
 
@@ -1123,6 +1127,64 @@ fn graph_dependency_conflict_diagnostics_for_actions(
                         message: format!(
                             "current topology path has mixed dependency directions: {} runs {:?} while {} runs {:?}; split the plan or review ordering before execution",
                             lower_action.id, lower_direction, upper_action.id, upper_direction
+                        ),
+                        current: None,
+                    });
+                }
+            }
+        }
+    }
+    diagnostics
+}
+
+fn graph_dependency_order_diagnostics_for_actions(
+    actions: &[PlannedAction],
+    graph: &StorageGraph,
+) -> Vec<TopologyDiagnostic> {
+    let matches = graph_action_matches(actions, graph);
+    let reachability = graph_storage_reachability(graph);
+    let mut diagnostics = Vec::new();
+    let mut seen = BTreeSet::new();
+    for (lower_id, upper_ids) in reachability {
+        for upper_id in upper_ids {
+            for lower_action in actions_for_node(&matches, &lower_id) {
+                for upper_action in actions_for_node(&matches, &upper_id) {
+                    if lower_action.id == upper_action.id {
+                        continue;
+                    }
+                    let lower_direction = dependency_direction(lower_action.operation);
+                    let upper_direction = dependency_direction(upper_action.operation);
+                    if lower_direction != upper_direction {
+                        continue;
+                    }
+                    let (depends_on, action_id, ordering) = match lower_direction {
+                        DependencyDirection::LowerLayersFirst => (
+                            lower_action.id.as_str(),
+                            upper_action.id.as_str(),
+                            "lower layer before consumer",
+                        ),
+                        DependencyDirection::UpperLayersFirst => (
+                            upper_action.id.as_str(),
+                            lower_action.id.as_str(),
+                            "consumer before backing layer",
+                        ),
+                    };
+                    let key = (
+                        action_id.to_string(),
+                        depends_on.to_string(),
+                        lower_id.clone(),
+                        upper_id.clone(),
+                    );
+                    if !seen.insert(key) {
+                        continue;
+                    }
+                    diagnostics.push(TopologyDiagnostic {
+                        action_id: action_id.to_string(),
+                        level: TopologyDiagnosticLevel::Info,
+                        kind: TopologyDiagnosticKind::GraphDependencyOrder,
+                        query: format!("{lower_id} -> {upper_id}"),
+                        message: format!(
+                            "current topology path orders {action_id} after {depends_on} ({ordering})"
                         ),
                         current: None,
                     });
@@ -25935,6 +25997,24 @@ mod tests {
             .expect("comparison should be present");
 
         assert_eq!(comparison.summary.graph_dependency_edge_count, 15);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "filesystem:root:grow"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::GraphDependencyOrder
+                && diagnostic.query == "lvm:lv:vg0/root -> filesystem:root"
+                && diagnostic.message.contains(
+                    "current topology path orders filesystem:root:grow after volumes:vg0/root:grow",
+                )
+                && diagnostic.message.contains("lower layer before consumer")
+        }));
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "volumes:vg0/root:grow"
+                && diagnostic.kind == TopologyDiagnosticKind::GraphDependencyOrder
+                && diagnostic.query == "lun:0 -> lvm:lv:vg0/root"
+                && diagnostic.message.contains(
+                    "current topology path orders volumes:vg0/root:grow after luns:/dev/disk/by-path/ip-192.0.2.10-lun-0:grow"
+                )
+        }));
         let filesystem = plan
             .dependency_order
             .iter()
@@ -26024,6 +26104,16 @@ mod tests {
             .as_ref()
             .expect("comparison should be present");
         assert_eq!(comparison.summary.graph_dependency_edge_count, 1);
+        assert!(comparison.diagnostics.iter().any(|diagnostic| {
+            diagnostic.action_id == "luks.devices:cryptroot:close"
+                && diagnostic.level == TopologyDiagnosticLevel::Info
+                && diagnostic.kind == TopologyDiagnosticKind::GraphDependencyOrder
+                && diagnostic.query == "luks:cryptroot -> filesystem:/"
+                && diagnostic.message.contains(
+                    "current topology path orders luks.devices:cryptroot:close after filesystems:root:unmount"
+                )
+                && diagnostic.message.contains("consumer before backing layer")
+        }));
 
         let luks = plan
             .dependency_order

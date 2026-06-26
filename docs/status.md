@@ -203,11 +203,12 @@ concrete array adapters remain future work.
   operation types and multi-action groups before command rendering.
 - Runtime graph-path dependency ordering for multi-layer changes. The planner
   now applies coarse layer ordering and reports inferred dependency edges from
-  declared identities and direct or multi-hop current-topology graph paths, and
-  warns when matched actions on the same graph path require mixed dependency
-  directions. Grouped changes such as iSCSI LUN refresh, multipath, partition
-  growth, LUKS/LVM resize, and filesystem growth still need recovery-aware
-  ordering and stronger conflict resolution before execution.
+  declared identities and direct or multi-hop current-topology graph paths,
+  emits `graph-dependency-order` diagnostics for matched graph-derived action
+  edges, and warns when matched actions on the same graph path require mixed
+  dependency directions. Grouped changes such as iSCSI LUN refresh, multipath,
+  partition growth, LUKS/LVM resize, and filesystem growth still need
+  recovery-aware ordering and stronger conflict resolution before execution.
 - More NixOS steady-state synthesis for lifecycle-managed resources after
   mutation. The module now emits a `declarativeHandoff` index for mounts,
   crypttab/LUKS, swap, NFS exports, iSCSI boot/session state, generated files,

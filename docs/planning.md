@@ -58,10 +58,13 @@ layered changes. When current topology probing is enabled, matched graph paths
 also add dependency edges across direct and multi-hop storage relationships.
 Lower-to-upper paths such as LUN to multipath to partition to mapper to volume
 to filesystem are emitted in build/grow order, while teardown actions reverse
-the path so consumers are handled before backing layers. Mixed-direction
-actions on the same graph path are reported as warning diagnostics and counted
-as `graphDependencyConflictCount` so operators can split the plan or review
-ordering before execution. Apply dry-runs preserve those diagnostics for
+the path so consumers are handled before backing layers. Each graph-derived
+action edge also appears as an informational `graph-dependency-order`
+diagnostic with the matched graph path, dependent action, prerequisite action,
+and lower-layer or consumer-first rationale. Mixed-direction actions on the
+same graph path are reported as warning `graph-dependency-conflict` diagnostics
+and counted as `graphDependencyConflictCount` so operators can split the plan or
+review ordering before execution. Apply dry-runs preserve those diagnostics for
 review, while `--execute` refuses to mutate storage until the conflict count is
 zero. This is still conservative: ambiguous current-state recovery and choosing
 between competing graph paths remain hardening work.

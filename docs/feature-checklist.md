@@ -109,8 +109,8 @@ Update rules:
 - [x] **Finished:** Inferred dependency edges from declared adjacent-layer
   identities and probed graph paths.
 - [ ] **Partial:** Runtime graph-path ordering has coarse phases and dependency
-  metadata, but still needs recovery-aware ordering for complex multi-layer
-  mutations.
+  metadata plus graph-derived order diagnostics, but still needs recovery-aware
+  ordering for complex multi-layer mutations.
 - [ ] **Partial:** Mixed-direction graph-path diagnostics exist, but stronger
   conflict resolution is still needed before broad unattended execution.
 - [ ] **Desired:** Production-grade automatic rollback. Current reports provide
