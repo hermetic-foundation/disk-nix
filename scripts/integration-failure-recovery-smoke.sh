@@ -3885,6 +3885,132 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$target_lun_tgt_rescan_receipt" >/dev/null
 
+host_lun_rescan_tools="$tmpdir/fake-host-lun-rescan-tools"
+mkdir -p "$host_lun_rescan_tools"
+host_lun_rescan_disk_nix="$(command -v "$disk_nix_bin")"
+host_lun_rescan_real_sh="$(command -v sh)"
+
+cat > "$host_lun_rescan_tools/iscsiadm" <<'EOF'
+#!/usr/bin/env bash
+printf 'rescan ok\n'
+EOF
+
+cat > "$host_lun_rescan_tools/lsscsi" <<'EOF'
+#!/usr/bin/env bash
+printf '[0:0:0:0] disk fake target /dev/sda 1GiB\n'
+EOF
+
+cat > "$host_lun_rescan_tools/multipath" <<'EOF'
+#!/usr/bin/env bash
+printf 'reload ok\n'
+EOF
+
+cat > "$host_lun_rescan_tools/blockdev" <<'EOF'
+#!/usr/bin/env bash
+printf '1073741824\n'
+EOF
+
+cat > "$host_lun_rescan_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$host_lun_rescan_disk_nix" "\$@"
+EOF
+
+cat > "$host_lun_rescan_tools/sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "$host_lun_rescan_real_sh" || "\${1:-}" == "/bin/sh" ]]; then
+  shift
+fi
+case "\$*" in
+*"disk-nix-scsi-rescan"*)
+  echo "synthetic host-side LUN SCSI rescan failure for disk-nix recovery coverage" >&2
+  exit 94
+  ;;
+esac
+exec "$host_lun_rescan_real_sh" "\$@"
+EOF
+
+chmod +x "$host_lun_rescan_tools/iscsiadm" "$host_lun_rescan_tools/lsscsi" \
+  "$host_lun_rescan_tools/multipath" "$host_lun_rescan_tools/blockdev" \
+  "$host_lun_rescan_tools/disk-nix" "$host_lun_rescan_tools/sh"
+
+host_lun_rescan_spec="$tmpdir/host-lun-rescan-spec.json"
+host_lun_rescan_json="$tmpdir/host-lun-rescan-apply.json"
+host_lun_rescan_report="$tmpdir/host-lun-rescan-report.json"
+host_lun_rescan_receipt="$tmpdir/host-lun-rescan-receipt.json"
+host_lun_rescan_device="/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0"
+# shellcheck disable=SC2016
+host_lun_rescan_sh='block=$(basename "$(readlink -f "$1")"); printf '\''1\n'\'' > "/sys/class/block/${block}/device/rescan"'
+
+jq -n --arg device "$host_lun_rescan_device" '{
+  luns: {
+    "iqn.2026-06.example:storage/root:0": {
+      operation: "rescan",
+      devices: [$device]
+    }
+  }
+}' > "$host_lun_rescan_spec"
+
+if PATH="$host_lun_rescan_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$host_lun_rescan_spec" \
+  --execute \
+  --report-out "$host_lun_rescan_report" \
+  --receipt-out "$host_lun_rescan_receipt" \
+  --json > "$host_lun_rescan_json"; then
+  echo "expected synthetic host-side LUN rescan failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e --arg device "$host_lun_rescan_device" --arg shcmd "$host_lun_rescan_sh" '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 1
+  and .commandSummary.commandCount == 6
+  and .commandSummary.mutatingCount == 3
+  and .commandSummary.manualReviewCount == 1
+  and .commandSummary.readyCount == 6
+  and (.executionResults | length) == 4
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "luns:iqn.2026-06.example:storage/root:0:rescan"
+  and .executionResults[0].argv == ["iscsiadm", "--mode", "session", "--rescan"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["lsscsi", "-t", "-s"]
+  and .executionResults[2].success == true
+  and .executionResults[2].argv == ["disk-nix", "inspect", "iqn.2026-06.example:storage/root:0"]
+  and .executionResults[3].success == false
+  and .executionResults[3].statusCode == 94
+  and .executionResults[3].actionId == "luns:iqn.2026-06.example:storage/root:0:rescan"
+  and .executionResults[3].argv == ["sh", "-c", $shcmd, "disk-nix-scsi-rescan", $device]
+  and (.executionResults[3].stderr | contains("synthetic host-side LUN SCSI rescan failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "luns:iqn.2026-06.example:storage/root:0:rescan"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["sh", "-c", $shcmd, "disk-nix-scsi-rescan", $device]
+  and .partialExecutionRecovery.retryReviewActionIds == ["luns:iqn.2026-06.example:storage/root:0:rescan"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 1
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(.kind == "review-execution-failure"))
+  and (.recoveryActions | any(
+    .kind == "inspect-current-state"
+    and (.commands | any(.argv == ["disk-nix", "probe-status", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "topology", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "resume-after-fix"))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$host_lun_rescan_json" >/dev/null
+
+cmp "$host_lun_rescan_json" "$host_lun_rescan_report" >/dev/null
+jq -e --arg device "$host_lun_rescan_device" --arg shcmd "$host_lun_rescan_sh" '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "luns:iqn.2026-06.example:storage/root:0:rescan"
+  and .report.partialExecutionRecovery.failedCommand == ["sh", "-c", $shcmd, "disk-nix-scsi-rescan", $device]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
+' "$host_lun_rescan_receipt" >/dev/null
+
 multipath_resize_tools="$tmpdir/fake-multipath-resize-tools"
 mkdir -p "$multipath_resize_tools"
 
@@ -7425,4 +7551,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, host-side LUN rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
