@@ -309,7 +309,7 @@ Update rules:
   variants, additional cache variants, additional NVMe namespace variants,
   additional LUN flows, property mutation across more supported domains, and
   failed-command recovery beyond the synthetic LVM-plus-filesystem, LVM grow,
-  XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement,
+  LVM thin-pool create, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement,
   bcachefs replacement, filesystem trim, filesystem check,
   filesystem repair, filesystem property, swap label, zram rescan, zram property inventory, loop rescan, backing-file rescan, backing-file grow, backing-file create, device-mapper rename,
   ZFS dataset rename,
