@@ -2145,6 +2145,64 @@
               and (.executionResults | length) == 0
             ' "$emptyExecute"
 
+            failingToolDir="$TMPDIR/failing-tools"
+            mkdir -p "$failingToolDir"
+            cat > "$failingToolDir/truncate" <<'EOF'
+            #!${pkgs.bash}/bin/bash
+            echo "synthetic truncate failure for disk-nix report coverage" >&2
+            exit 73
+            EOF
+            chmod +x "$failingToolDir/truncate"
+            failingSpec="$TMPDIR/failing-apply.json"
+            failingApply="$TMPDIR/failing-apply.out"
+            failingApplyReport="$TMPDIR/failing-apply-report.json"
+            failingApplyReceipt="$TMPDIR/failing-apply-receipt.json"
+            jq -n --arg target "$TMPDIR/failing-backing.img" '{
+              spec: {
+                backingFiles: {
+                  ($target): {
+                    operation: "create",
+                    desiredSize: "1M"
+                  }
+                }
+              }
+            }' > "$failingSpec"
+            if PATH="$failingToolDir:${diskNix}/bin:$PATH" ${diskNix}/bin/disk-nix apply \
+              --spec "$failingSpec" \
+              --execute \
+              --report-out "$failingApplyReport" \
+              --receipt-out "$failingApplyReceipt" \
+              --json > "$failingApply"; then
+              echo "expected failing backing-file apply to fail" >&2
+              exit 1
+            fi
+            jq -e --arg target "$TMPDIR/failing-backing.img" '
+              .status == "failed"
+              and .apply.blockedCount == 0
+              and .commandSummary.commandCount == 3
+              and (.executionResults | length) == 2
+              and .executionResults[0].success == true
+              and .executionResults[0].argv == ["test", "!", "-e", $target]
+              and .executionResults[1].success == false
+              and .executionResults[1].statusCode == 73
+              and .executionResults[1].argv == ["truncate", "--size", "1M", $target]
+              and (.executionResults[1].stderr | contains("synthetic truncate failure"))
+              and (.messages[] | contains("execute failed: stopped after 2 command result(s)"))
+              and (.recoveryActions | any(.kind == "review-execution-failure"))
+              and (.recoveryActions | any(.kind == "inspect-current-state"))
+              and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+            ' "$failingApply"
+            cmp "$failingApply" "$failingApplyReport"
+            jq -e --arg spec "$failingSpec" --arg target "$TMPDIR/failing-backing.img" '
+              .receiptVersion == 1
+              and .command == "apply"
+              and .specPath == $spec
+              and .executeRequested == true
+              and .report.status == "failed"
+              and .report.executionResults[1].argv == ["truncate", "--size", "1M", $target]
+              and (.report.recoveryActions | any(.kind == "review-execution-failure"))
+            ' "$failingApplyReceipt"
+
             if ${diskNix}/bin/disk-nix apply --spec ${./examples/lifecycle-update.json} --report-out "$lifecycleApplyReport" --json > "$lifecycleApply"; then
               echo "expected lifecycle example apply to be blocked" >&2
               exit 1
