@@ -214,9 +214,10 @@ manual-review guidance, or non-ready command plans instead of guessing.
   signature/activation changes, disk and partition-table lifecycle changes, MD
   RAID member replacement, NVMe namespace, iSCSI session, VDO lifecycle, and
   multipath map recovery inspection, loop-device, backing-file, and
-  device-mapper map recovery inspection, plus receipt files that bind reports
-  to their invocation metadata, but safe automated rollback remains out of
-  scope until broader topology-specific recovery proofs exist.
+  device-mapper map recovery inspection, NFS export and client mount recovery
+  inspection, plus receipt files that bind reports to their invocation
+  metadata, but safe automated rollback remains out of scope until broader
+  topology-specific recovery proofs exist.
 - Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output
   formats. Probe reports now expose structured degradation categories plus

@@ -617,6 +617,24 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
             Some("partitions")
         ) | (Operation::Create | Operation::Rescan, Some("disks"))
             | (
+                Operation::Create
+                    | Operation::Destroy
+                    | Operation::Export
+                    | Operation::Rescan
+                    | Operation::SetProperty
+                    | Operation::Unexport,
+                Some("exports")
+            )
+            | (
+                Operation::Create
+                    | Operation::Destroy
+                    | Operation::Mount
+                    | Operation::Remount
+                    | Operation::Rescan
+                    | Operation::Unmount,
+                Some("nfs.mounts")
+            )
+            | (
                 Operation::Create | Operation::Grow | Operation::Rescan,
                 Some("backingFiles")
             )
@@ -900,6 +918,29 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
                 "inspect partition table state before choosing roll-forward",
             ))
         }
+        (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Export
+            | Operation::Rescan
+            | Operation::SetProperty
+            | Operation::Unexport,
+            Some("exports"),
+            _,
+        )
+        | (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Mount
+            | Operation::Remount
+            | Operation::Rescan
+            | Operation::Unmount,
+            Some("nfs.mounts"),
+            _,
+        ) => commands.extend(nfs_recovery_inspection_commands(
+            step,
+            "inspect NFS state before choosing roll-forward",
+        )),
         (Operation::Create | Operation::Grow | Operation::Rescan, Some("backingFiles"), _)
         | (
             Operation::Create | Operation::Destroy | Operation::Grow | Operation::Rescan,
@@ -1220,6 +1261,26 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
                 "confirm partition table state before rollback decisions",
             )
         }
+        (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Export
+            | Operation::Rescan
+            | Operation::SetProperty
+            | Operation::Unexport,
+            Some("exports"),
+            _,
+        )
+        | (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Mount
+            | Operation::Remount
+            | Operation::Rescan
+            | Operation::Unmount,
+            Some("nfs.mounts"),
+            _,
+        ) => nfs_recovery_inspection_commands(step, "confirm NFS state before rollback decisions"),
         (Operation::Create | Operation::Grow | Operation::Rescan, Some("backingFiles"), _)
         | (
             Operation::Create | Operation::Destroy | Operation::Grow | Operation::Rescan,
@@ -1536,6 +1597,29 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
                 "inspect partition table state after the failed command",
             ))
         }
+        (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Export
+            | Operation::Rescan
+            | Operation::SetProperty
+            | Operation::Unexport,
+            Some("exports"),
+            _,
+        )
+        | (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Mount
+            | Operation::Remount
+            | Operation::Rescan
+            | Operation::Unmount,
+            Some("nfs.mounts"),
+            _,
+        ) => commands.extend(nfs_recovery_inspection_commands(
+            step,
+            "inspect NFS state after the failed command",
+        )),
         (Operation::Create | Operation::Grow | Operation::Rescan, Some("backingFiles"), _)
         | (
             Operation::Create | Operation::Destroy | Operation::Grow | Operation::Rescan,
@@ -1886,6 +1970,31 @@ fn domain_recovery_notes(
                 "preserve partition table captures and avoid formatting or resizing upper layers until the kernel and modeled topology agree on the new geometry".to_string(),
             );
         }
+        (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Export
+            | Operation::Rescan
+            | Operation::SetProperty
+            | Operation::Unexport,
+            Some("exports"),
+        )
+        | (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Mount
+            | Operation::Remount
+            | Operation::Rescan
+            | Operation::Unmount,
+            Some("nfs.mounts"),
+        ) => {
+            notes.push(
+                "for NFS changes, inspect exported paths, client selectors, negotiated mount options, mount state, and dependent services before retrying".to_string(),
+            );
+            notes.push(
+                "keep local services quiesced and preserve declarative export or mount configuration until live NFS state matches the intended topology".to_string(),
+            );
+        }
         (Operation::Create | Operation::Grow | Operation::Rescan, Some("backingFiles"))
         | (
             Operation::Create | Operation::Destroy | Operation::Grow | Operation::Rescan,
@@ -2191,6 +2300,14 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
         Some("backingFiles" | "loopDevices" | "dmMaps")
     ) {
         if let Some(target) = local_mapping_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if matches!(
+        command_step_collection(step),
+        Some("exports" | "nfs.mounts")
+    ) {
+        if let Some(target) = nfs_target_from_step(step) {
             return Some(target);
         }
     }
@@ -2908,6 +3025,105 @@ fn partition_target_from_step(step: &ExecutionStep) -> Option<&str> {
                 .filter(|target| target.starts_with('/') && !target.starts_with('<'));
         }
         None
+    })
+}
+
+fn nfs_recovery_inspection_commands(
+    step: &ExecutionStep,
+    note: &'static str,
+) -> Vec<ExecutionCommand> {
+    match command_step_collection(step) {
+        Some("exports") => {
+            let target = nfs_export_target_from_step(step).or_else(|| {
+                step.action_id
+                    .split(':')
+                    .nth(1)
+                    .filter(|target| target.starts_with('/'))
+            });
+            let mut commands = vec![command(["exportfs", "-v"], false, note)];
+            if let Some(target) = target {
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            } else {
+                commands.push(command(
+                    ["disk-nix", "nfs", "--json"],
+                    false,
+                    "inspect modeled NFS exports before retrying",
+                ));
+            }
+            commands
+        }
+        Some("nfs.mounts") => {
+            let mountpoint = nfs_mount_target_from_step(step).or_else(|| {
+                step.action_id
+                    .split(':')
+                    .nth(1)
+                    .filter(|target| target.starts_with('/'))
+            });
+            let mut commands = Vec::new();
+            if let Some(mountpoint) = mountpoint {
+                commands.push(command(["findmnt", "--json", mountpoint], false, note));
+                commands.push(command(["nfsstat", "-m", mountpoint], false, note));
+                commands.push(command(
+                    ["disk-nix", "inspect", mountpoint, "--json"],
+                    false,
+                    note,
+                ));
+            } else {
+                commands.push(command(
+                    ["findmnt", "--json", "--types", "nfs,nfs4"],
+                    false,
+                    "inspect active NFS mounts before retrying",
+                ));
+                commands.push(command(
+                    ["disk-nix", "nfs", "--json"],
+                    false,
+                    "inspect modeled NFS mounts before retrying",
+                ));
+            }
+            commands
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn nfs_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    nfs_export_target_from_step(step).or_else(|| nfs_mount_target_from_step(step))
+}
+
+fn nfs_export_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        if command.argv.first().is_none_or(|arg| arg != "exportfs") {
+            return None;
+        }
+        command
+            .argv
+            .last()
+            .and_then(|target| {
+                target
+                    .split_once(':')
+                    .map(|(_, path)| path)
+                    .or(Some(target))
+            })
+            .filter(|target| target.starts_with('/') && !target.starts_with('<'))
+    })
+}
+
+fn nfs_mount_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        let target = match tool {
+            "mount" | "umount" | "findmnt" | "nfsstat" => command.argv.last().map(String::as_str),
+            "disk-nix" if command.argv.get(1).is_some_and(|arg| arg == "inspect") => {
+                command.argv.get(2).map(String::as_str)
+            }
+            _ => None,
+        }?;
+
+        Some(target).filter(|target| target.starts_with('/') && !target.starts_with('<'))
     })
 }
 
@@ -26919,6 +27135,87 @@ mod tests {
             .expect("device-mapper rollback recovery review is reported");
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["dmsetup", "table", "/dev/mapper/cryptswap"] && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_nfs_mount_remount_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "nfs": {
+                "mounts": {
+                  "/srv/tuned": {
+                    "operation": "remount",
+                    "source": "nas.example.com:/srv/tuned",
+                    "options": ["_netdev", "ro", "vers=4.2"]
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_remount = ["mount", "-o", "remount,_netdev,ro,vers=4.2", "/srv/tuned"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_remount,
+                status_code: Some(if argv == failed_remount { 32 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_remount {
+                    "remount failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_remount)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("NFS domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Remount"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["findmnt", "--json", "/srv/tuned"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["nfsstat", "-m", "/srv/tuned"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "/srv/tuned", "--json"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("NFS changes")
+                    && note.contains("negotiated mount options"))
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("NFS roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["nfsstat", "-m", "/srv/tuned"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("NFS rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["findmnt", "--json", "/srv/tuned"] && !command.mutates
         }));
     }
 
