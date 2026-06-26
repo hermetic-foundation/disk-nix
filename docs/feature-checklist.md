@@ -97,7 +97,10 @@ Update rules:
   fixture covering FC transport WWPN pairs, SCSI unit names, ALUA path groups,
   active/standby path state, failed path metadata, and multipath backing edges,
   plus a SAS enclosure fixture covering non-block SES enclosure records,
-  enclosure identifiers, SAS addresses, and attached disk LUN backing edges.
+  enclosure identifiers, SAS addresses, and attached disk LUN backing edges,
+  plus an LVM-backed VDO fixture that merges native VDO status, vdostats usage,
+  verbose VDO block counters, LVM VDO LV metadata, VDO segment policy, and
+  backing-pool dependency edges.
   It still needs broader hardware, additional fabric variants, and clustered
   storage samples from more real systems.
 

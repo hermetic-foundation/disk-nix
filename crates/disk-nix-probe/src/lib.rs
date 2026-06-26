@@ -2923,6 +2923,161 @@ Digests:
       }]
     }"#;
 
+    const LVM_BACKED_VDO_STATUS: &[u8] = br#"
+VDO status:
+  Date: '2026-06-26 10:00:00-05:00'
+VDOs:
+  vgvdo-vdoarchive:
+    VDO device: /dev/mapper/vgvdo-vdoarchive
+    Storage device: /dev/mapper/vgvdo-vdopool
+    Logical size: 2T
+    Physical size: 512G
+    Compression: enabled
+    Deduplication: enabled
+    Configured write policy: auto
+    Write policy: async
+    Index memory setting: 0.50
+    Block map cache size: 256M
+"#;
+
+    const LVM_BACKED_VDOSTATS: &[u8] = br#"
+Device                         1K-blocks     Used Available Use% Space saving%
+/dev/mapper/vgvdo-vdoarchive          2T     512G      1.5T  25%           68%
+"#;
+
+    const LVM_BACKED_VDOSTATS_VERBOSE: &[u8] = br#"
+/dev/mapper/vgvdo-vdoarchive:
+  version: 47
+  operating mode: normal
+  recovery percentage: 100
+  write policy: async
+  data blocks used: 98304
+  overhead blocks used: 16384
+  logical blocks used: 524288
+"#;
+
+    const LVM_BACKED_VDO_PVS: &[u8] = br#"{
+      "report": [{
+        "pv": [{
+          "pv_name": "/dev/sdf1",
+          "vg_name": "vgvdo",
+          "pv_fmt": "lvm2",
+          "pv_uuid": "vdo-pv-uuid",
+          "pv_size": "1.00t",
+          "pv_free": "448.00g",
+          "pv_used": "576.00g",
+          "pv_attr": "a--",
+          "pv_allocatable": "allocatable",
+          "pv_tags": "vdo,archive",
+          "pv_in_use": "used"
+        }]
+      }]
+    }"#;
+
+    const LVM_BACKED_VDO_VGS: &[u8] = br#"{
+      "report": [{
+        "vg": [{
+          "vg_name": "vgvdo",
+          "vg_fmt": "lvm2",
+          "vg_uuid": "vdo-vg-uuid",
+          "vg_attr": "wz--n-",
+          "vg_permissions": "writeable",
+          "vg_extendable": "extendable",
+          "vg_size": "1.00t",
+          "vg_free": "448.00g",
+          "vg_extent_size": "4.00m",
+          "vg_extent_count": "262144",
+          "vg_free_count": "114688",
+          "pv_count": "1",
+          "lv_count": "2",
+          "vg_seqno": "17",
+          "vg_tags": "vdo,archive"
+        }]
+      }]
+    }"#;
+
+    const LVM_BACKED_VDO_LVS: &[u8] = br#"{
+      "report": [{
+        "lv": [
+          {
+            "lv_name": "vdoarchive",
+            "vg_name": "vgvdo",
+            "lv_uuid": "vdo-lv-uuid",
+            "lv_path": "/dev/mapper/vgvdo-vdoarchive",
+            "lv_size": "2.00t",
+            "lv_attr": "Vwi-a-v---",
+            "lv_layout": "vdo",
+            "lv_active": "active",
+            "lv_active_locally": "active locally",
+            "lv_permissions": "writeable",
+            "lv_health_status": "",
+            "lv_tags": "archive,compressed",
+            "lv_dm_path": "/dev/mapper/vgvdo-vdoarchive",
+            "lv_modules": "vdo",
+            "lv_device_open": "open",
+            "lv_role": "public",
+            "pool_lv": "vdopool",
+            "data_percent": "25.00",
+            "metadata_percent": "12.50",
+            "vdo_operating_mode": "normal",
+            "vdo_compression_state": "online",
+            "vdo_index_state": "online",
+            "vdo_used_size": "512.00g",
+            "vdo_saving_percent": "68.00"
+          },
+          {
+            "lv_name": "vdopool",
+            "vg_name": "vgvdo",
+            "lv_uuid": "vdo-pool-uuid",
+            "lv_path": "/dev/mapper/vgvdo-vdopool",
+            "lv_size": "576.00g",
+            "lv_attr": "-wi-a-----",
+            "lv_layout": "linear",
+            "lv_active": "active",
+            "lv_permissions": "writeable",
+            "lv_tags": "archive,pool",
+            "lv_dm_path": "/dev/mapper/vgvdo-vdopool",
+            "lv_modules": "linear",
+            "lv_device_open": "open",
+            "lv_role": "private"
+          }
+        ]
+      }]
+    }"#;
+
+    const LVM_BACKED_VDO_SEGMENTS: &[u8] = br#"{
+      "report": [{
+        "seg": [{
+          "lv_name": "vdoarchive",
+          "vg_name": "vgvdo",
+          "segtype": "vdo",
+          "seg_size": "2.00t",
+          "seg_size_pe": "524288",
+          "devices": "vdopool(0)",
+          "metadata_devices": "vdopool(0)",
+          "vdo_compression": "enabled",
+          "vdo_deduplication": "enabled",
+          "vdo_minimum_io_size": "4096",
+          "vdo_block_map_cache_size": "256.00m",
+          "vdo_block_map_era_length": "16380",
+          "vdo_use_sparse_index": "enabled",
+          "vdo_index_memory_size": "512.00m",
+          "vdo_slab_size": "2.00g",
+          "vdo_ack_threads": "1",
+          "vdo_bio_threads": "4",
+          "vdo_bio_rotation": "64",
+          "vdo_cpu_threads": "2",
+          "vdo_hash_zone_threads": "1",
+          "vdo_logical_threads": "2",
+          "vdo_physical_threads": "2",
+          "vdo_max_discard": "4.00m",
+          "vdo_header_size": "512.00k",
+          "vdo_use_metadata_hints": "enabled",
+          "vdo_write_policy": "auto"
+        }]
+      }]
+    }"#;
+
     #[test]
     fn shared_storage_fabric_fixture_links_iscsi_luns_and_multipath_paths() {
         let mut graph = StorageGraph::empty();
@@ -3305,6 +3460,113 @@ Digests:
             edge.from.0 == "lvm-vg:vgcluster"
                 && edge.to.0 == "lvm-lv:vgcluster/shareddata"
                 && edge.relationship == Relationship::Contains
+        }));
+    }
+
+    #[test]
+    fn lvm_backed_vdo_fixture_merges_runtime_stats_and_lvm_metadata() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            vdo::normalize_vdo_status(LVM_BACKED_VDO_STATUS)
+                .expect("LVM-backed VDO status fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            vdo::normalize_vdostats_table(LVM_BACKED_VDOSTATS)
+                .expect("LVM-backed vdostats fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            vdo::normalize_vdostats_verbose(LVM_BACKED_VDOSTATS_VERBOSE)
+                .expect("LVM-backed verbose vdostats fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lvm::normalize_lvm_json(
+                LVM_BACKED_VDO_PVS,
+                LVM_BACKED_VDO_VGS,
+                LVM_BACKED_VDO_LVS,
+                Some(LVM_BACKED_VDO_SEGMENTS),
+            )
+            .expect("LVM-backed VDO LVM fixture should parse"),
+        );
+
+        let runtime_vdo = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "vdo:vgvdo-vdoarchive")
+            .expect("native VDO runtime node should exist");
+        assert_eq!(runtime_vdo.kind, NodeKind::VdoVolume);
+        assert_eq!(
+            runtime_vdo.path.as_deref(),
+            Some("/dev/mapper/vgvdo-vdoarchive")
+        );
+        assert_eq!(runtime_vdo.size_bytes, Some(2_199_023_255_552));
+        assert_has_property(
+            runtime_vdo,
+            "vdo.storage-device",
+            "/dev/mapper/vgvdo-vdopool",
+        );
+        assert_has_property(runtime_vdo, "vdo.write-policy", "async");
+        assert_has_property(runtime_vdo, "vdo.use-percent", "25");
+        assert_has_property(runtime_vdo, "vdo.space-saving-percent", "68");
+        assert_has_property(runtime_vdo, "vdo.operating-mode", "normal");
+        assert_has_property(runtime_vdo, "vdo.data-blocks-used-bytes", "402653184");
+        assert_has_property(runtime_vdo, "vdo.overhead-blocks-used-bytes", "67108864");
+        assert_has_property(runtime_vdo, "vdo.logical-blocks-used-bytes", "2147483648");
+
+        let lvm_vdo = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-lv:vgvdo/vdoarchive")
+            .expect("LVM VDO logical volume should exist");
+        assert_eq!(lvm_vdo.kind, NodeKind::VdoVolume);
+        assert_eq!(
+            lvm_vdo.path.as_deref(),
+            Some("/dev/mapper/vgvdo-vdoarchive")
+        );
+        assert_eq!(lvm_vdo.identity.uuid.as_deref(), Some("vdo-lv-uuid"));
+        assert_has_property(lvm_vdo, "lvm.layout", "vdo");
+        assert_has_property(lvm_vdo, "lvm.vdo-operating-mode", "normal");
+        assert_has_property(lvm_vdo, "lvm.vdo-compression-state", "online");
+        assert_has_property(lvm_vdo, "lvm.vdo-index-state", "online");
+        assert_has_property(lvm_vdo, "lvm.vdo-saving-percent", "68.00");
+
+        let pool = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-lv:vgvdo/vdopool")
+            .expect("LVM VDO pool backing LV should exist");
+        assert_eq!(pool.kind, NodeKind::LvmLogicalVolume);
+        assert_has_property(pool, "lvm.role", "private");
+
+        let segment = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-seg:vgvdo/vdoarchive:0")
+            .expect("LVM VDO segment should exist");
+        assert_eq!(segment.kind, NodeKind::LvmSegment);
+        assert_has_property(segment, "lvm.segment-type", "vdo");
+        assert_has_property(segment, "lvm.vdo-compression", "enabled");
+        assert_has_property(segment, "lvm.vdo-deduplication", "enabled");
+        assert_has_property(segment, "lvm.vdo-write-policy", "auto");
+        assert_has_property(segment, "lvm.vdo-use-metadata-hints", "enabled");
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "block:/dev/mapper/vgvdo-vdopool"
+                && edge.to.0 == "vdo:vgvdo-vdoarchive"
+                && edge.relationship == Relationship::Backs
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "lvm-lv:vgvdo/vdoarchive"
+                && edge.to.0 == "lvm-lv:vgvdo/vdopool"
+                && edge.relationship == Relationship::DependsOn
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "lvm-seg:vgvdo/vdoarchive:0"
+                && edge.to.0 == "lvm-lv:vgvdo/vdopool"
+                && edge.relationship == Relationship::DependsOn
         }));
     }
 

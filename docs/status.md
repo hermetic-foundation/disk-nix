@@ -204,7 +204,10 @@ paths, ANA state, and namespace-to-controller edges, plus a Fibre Channel
 multipath fixture covering FC transport WWPN pairs, SCSI unit names, ALUA path
 groups, active/standby path state, failed path metadata, and multipath backing
 edges, plus a SAS enclosure fixture covering non-block SES enclosure records,
-enclosure identifiers, SAS addresses, and attached disk LUN backing edges. See
+enclosure identifiers, SAS addresses, and attached disk LUN backing edges, plus
+an LVM-backed VDO fixture that correlates native VDO status, vdostats usage,
+verbose VDO block counters, LVM VDO LV metadata, VDO segment policy, and
+backing-pool dependency edges. See
 [storage-scope.md](storage-scope.md) for the
 detailed field-level coverage.
 See [feature-checklist.md](feature-checklist.md) for a checklist view of

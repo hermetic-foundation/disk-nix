@@ -2046,7 +2046,9 @@
             ${pkgs.gnugrep}/bin/grep -q 'CHAP secret redaction' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'FC transport WWPN pairs' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'SAS enclosure fixture' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'non-block SES enclosure records' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'active/standby state' ${./docs/storage-scope.md}
             ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' ${./scripts/integration-failure-recovery-smoke.sh}
