@@ -514,6 +514,114 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$btrfs_snapshot_clone_receipt" >/dev/null
 
+lvm_vg_rename_tools="$tmpdir/fake-lvm-vg-rename-tools"
+mkdir -p "$lvm_vg_rename_tools"
+
+cat > "$lvm_vg_rename_tools/vgs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$lvm_vg_rename_tools/pvs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$lvm_vg_rename_tools/lvs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$lvm_vg_rename_tools/vgrename" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "vg-old vg-new" ]]; then
+  echo "synthetic LVM VG rename failure for disk-nix recovery coverage" >&2
+  exit 79
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$lvm_vg_rename_tools/vgs" "$lvm_vg_rename_tools/pvs" "$lvm_vg_rename_tools/lvs" "$lvm_vg_rename_tools/vgrename"
+
+lvm_vg_rename_spec="$tmpdir/lvm-vg-rename-spec.json"
+lvm_vg_rename_json="$tmpdir/lvm-vg-rename-apply.json"
+lvm_vg_rename_report="$tmpdir/lvm-vg-rename-report.json"
+lvm_vg_rename_receipt="$tmpdir/lvm-vg-rename-receipt.json"
+
+jq -n '{
+  volumeGroups: {
+    "vg-old": {
+      operation: "rename",
+      renameTo: "vg-new"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$lvm_vg_rename_spec"
+
+if PATH="$lvm_vg_rename_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$lvm_vg_rename_spec" \
+  --execute \
+  --report-out "$lvm_vg_rename_report" \
+  --receipt-out "$lvm_vg_rename_receipt" \
+  --json > "$lvm_vg_rename_json"; then
+  echo "expected synthetic LVM VG rename failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["vgs", "--reportformat", "json", "vg-old"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 79
+  and .executionResults[1].argv == ["vgrename", "vg-old", "vg-new"]
+  and (.executionResults[1].stderr | contains("synthetic LVM VG rename failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "volumegroups:vg-old:rename"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["vgrename", "vg-old", "vg-new"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["volumegroups:vg-old:rename"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json", "vg-old"]))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-a"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "vg-old", "--json"]))
+    and (.notes | any(contains("LVM changes")))
+    and (.notes | any(contains("import, export")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json", "vg-old"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-a"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$lvm_vg_rename_json" >/dev/null
+
+cmp "$lvm_vg_rename_json" "$lvm_vg_rename_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "volumegroups:vg-old:rename"
+  and .report.partialExecutionRecovery.failedCommand == ["vgrename", "vg-old", "vg-new"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$lvm_vg_rename_receipt" >/dev/null
+
 rollback_tools="$tmpdir/fake-rollback-tools"
 mkdir -p "$rollback_tools"
 
@@ -2549,4 +2657,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
