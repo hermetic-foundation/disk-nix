@@ -645,6 +645,15 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 | Operation::Rollback
                 | Operation::SetProperty,
             Some("snapshots")
+        ) | (
+            Operation::AddDevice
+                | Operation::Create
+                | Operation::Destroy
+                | Operation::RemoveDevice
+                | Operation::ReplaceDevice
+                | Operation::Rescan
+                | Operation::SetProperty,
+            Some("caches" | "lvmCaches")
         )
     ) {
         return true;
@@ -850,21 +859,19 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             ));
         }
         (
-            Operation::RemoveDevice | Operation::Detach,
+            Operation::AddDevice
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::Rescan
+            | Operation::SetProperty,
             Some("caches" | "lvmCaches"),
-            Some(target),
-        ) => {
-            commands.push(command_vec(
-                ["disk-nix", "cache", "--json"],
-                false,
-                "inspect cache mode and dirty-data state before completing detach",
-            ));
-            commands.push(command_vec(
-                ["disk-nix", "inspect", target, "--json"],
-                false,
-                "inspect the cache origin or bcache target before roll-forward",
-            ));
-        }
+            _,
+        ) => commands.extend(cache_recovery_inspection_commands(
+            step,
+            "inspect cache state before choosing roll-forward",
+        )),
         (Operation::Destroy | Operation::RemoveDevice | Operation::Detach, Some("luns"), _) => {
             commands.push(command_vec(
                 ["disk-nix", "luns", "--json"],
@@ -1097,18 +1104,20 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
                 ),
             ]
         }
-        (Operation::RemoveDevice | Operation::Detach, Some("caches" | "lvmCaches"), _) => vec![
-            command_vec(
-                ["disk-nix", "cache", "--json"],
-                false,
-                "confirm cache attachment and dirty-data state before undoing cache changes",
-            ),
-            command_vec(
-                ["disk-nix", "volumes", "--json"],
-                false,
-                "inspect backing volumes before reattaching or disabling cache layers",
-            ),
-        ],
+        (
+            Operation::AddDevice
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("caches" | "lvmCaches"),
+            _,
+        ) => cache_recovery_inspection_commands(
+            step,
+            "confirm cache state before rollback decisions",
+        ),
         (Operation::Destroy | Operation::RemoveDevice | Operation::Detach, Some("luns"), _) => {
             vec![
                 command_vec(
@@ -1359,6 +1368,20 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             ));
         }
         (
+            Operation::AddDevice
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("caches" | "lvmCaches"),
+            _,
+        ) => commands.extend(cache_recovery_inspection_commands(
+            step,
+            "inspect cache state after the failed command",
+        )),
+        (
             Operation::Create
             | Operation::Destroy
             | Operation::Grow
@@ -1596,6 +1619,23 @@ fn domain_recovery_notes(
             );
         }
         (
+            Operation::AddDevice
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("caches" | "lvmCaches"),
+        ) => {
+            notes.push(
+                "for cache changes, inspect dirty-data, cache mode, attachment, and backing volume state before retrying attach, detach, replacement, or property updates".to_string(),
+            );
+            notes.push(
+                "prefer writethrough or clean-cache state before detaching, replacing, or disabling writeback cache layers".to_string(),
+            );
+        }
+        (
             Operation::Close
             | Operation::Create
             | Operation::Destroy
@@ -1734,6 +1774,11 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     }
     if command_step_collection(step) == Some("snapshots") {
         if let Some(target) = snapshot_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if matches!(command_step_collection(step), Some("caches" | "lvmCaches")) {
+        if let Some(target) = cache_target_from_step(step) {
             return Some(target);
         }
     }
@@ -1973,6 +2018,79 @@ fn lvm_target_from_step(step: &ExecutionStep) -> Option<&str> {
             "vgcreate" | "vgextend" | "vgreduce" | "vgrename" => {
                 command.argv.get(1).map(String::as_str)
             }
+            _ => None,
+        }
+        .filter(|target| !target.starts_with('<'))
+    })
+}
+
+fn cache_recovery_inspection_commands(
+    step: &ExecutionStep,
+    note: &'static str,
+) -> Vec<ExecutionCommand> {
+    let mut commands = Vec::new();
+    let target = cache_target_from_step(step).or_else(|| {
+        step.action_id
+            .split(':')
+            .nth(1)
+            .filter(|target| !target.is_empty())
+    });
+
+    match command_step_collection(step) {
+        Some("lvmCaches") => {
+            if let Some(target) = target {
+                commands.push(command(
+                    [
+                        "lvs",
+                        "--reportformat",
+                        "json",
+                        "-a",
+                        "-o",
+                        "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent",
+                        target,
+                    ],
+                    false,
+                    note,
+                ));
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            }
+            commands.push(command(["vgs", "--reportformat", "json"], false, note));
+            commands.push(command(["pvs", "--reportformat", "json"], false, note));
+        }
+        Some("caches") => {
+            if let Some(target) = target {
+                commands.push(bcache_sysfs_read_command(target, "state", note));
+                commands.push(bcache_sysfs_read_command(target, "cache_mode", note));
+                commands.push(bcache_sysfs_read_command(target, "dirty_data", note));
+                commands.push(command(
+                    ["disk-nix", "inspect", target, "--json"],
+                    false,
+                    note,
+                ));
+            }
+            commands.push(command(["disk-nix", "cache", "--json"], false, note));
+        }
+        _ => {}
+    }
+    commands
+}
+
+fn cache_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        match tool {
+            "sh" => command
+                .argv
+                .get(3)
+                .filter(|wrapper| wrapper.starts_with("disk-nix-bcache-"))
+                .and_then(|_| command.argv.get(4))
+                .map(String::as_str),
+            "lvchange" | "lvconvert" => command.argv.last().map(String::as_str),
+            "lvs" if command.argv.len() > 3 => command.argv.last().map(String::as_str),
             _ => None,
         }
         .filter(|target| !target.starts_with('<'))
@@ -25198,6 +25316,184 @@ mod tests {
             .expect("LVM VG rollback recovery review is reported");
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "vg-old", "--json"] && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_bcache_property_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "caches": {
+                "writeback-cache": {
+                  "path": "/dev/bcache1",
+                  "properties": {
+                    "bcache.cache-mode": "writearound"
+                  }
+                }
+              },
+              "apply": {
+                "allowPropertyChanges": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_property = [
+            "sh",
+            "-c",
+            "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"",
+            "disk-nix-bcache-property",
+            "/dev/bcache1",
+            "writearound",
+            "cache_mode",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_property,
+                status_code: Some(if argv == failed_property { 5 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_property {
+                    "cache mode failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_property)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("bcache domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("SetProperty"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "sh",
+                    "-c",
+                    "cat \"/sys/block/${1#/dev/}/bcache/$2\"",
+                    "disk-nix-bcache-read",
+                    "/dev/bcache1",
+                    "state",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "sh",
+                    "-c",
+                    "cat \"/sys/block/${1#/dev/}/bcache/$2\"",
+                    "disk-nix-bcache-read",
+                    "/dev/bcache1",
+                    "dirty_data",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "cache", "--json"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "/dev/bcache1", "--json"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("cache changes") && note.contains("dirty-data"))
+        );
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("bcache rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "sh",
+                    "-c",
+                    "cat \"/sys/block/${1#/dev/}/bcache/$2\"",
+                    "disk-nix-bcache-read",
+                    "/dev/bcache1",
+                    "cache_mode",
+                ]
+                && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_lvm_cache_property_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "lvmCaches": {
+                "vg0/root": {
+                  "properties": {
+                    "lvm.cache-mode": "writethrough"
+                  }
+                }
+              },
+              "apply": {
+                "allowPropertyChanges": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_property = ["lvchange", "--cachemode", "writethrough", "vg0/root"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_property,
+                status_code: Some(if argv == failed_property { 5 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_property {
+                    "cache mode failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_property)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("LVM cache domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("SetProperty"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "lvs",
+                    "--reportformat",
+                    "json",
+                    "-a",
+                    "-o",
+                    "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent",
+                    "vg0/root",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["vgs", "--reportformat", "json"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["pvs", "--reportformat", "json"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "vg0/root", "--json"] && !command.mutates
         }));
     }
 

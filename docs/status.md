@@ -209,8 +209,8 @@ manual-review guidance, or non-ready command plans instead of guessing.
   failed-action domain recovery guidance, current-topology roll-forward review,
   read-only rollback precondition review for concrete risky actions, and
   ZFS/Btrfs snapshot lifecycle changes, LVM VG/volume/thin/PV changes, LUKS
-  mapper/header/keyslot/token changes, MD RAID member replacement, NVMe
-  namespace, iSCSI session, VDO lifecycle, and multipath map recovery
+  mapper/header/keyslot/token changes, cache lifecycle changes, MD RAID member
+  replacement, NVMe namespace, iSCSI session, VDO lifecycle, and multipath map recovery
   inspection, plus receipt files that bind reports to their invocation
   metadata, but safe automated rollback remains out of scope until broader
   topology-specific recovery proofs exist.
