@@ -181,6 +181,8 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
   succeeds and fake
   `mdadm /dev/md/root --replace /dev/disk/by-id/old-md-member --with /dev/disk/by-id/new-md-member`
   fails
+- an MD RAID member add where fake `mdadm --detail /dev/md/root` succeeds and
+  fake `mdadm /dev/md/root --add /dev/disk/by-id/nvme-spare` fails
 - a LUKS mapper open where fake `cryptsetup isLuks` succeeds and fake
   `cryptsetup open /dev/disk/by-id/archive-luks cryptarchive` fails
 - a LUKS format where fake target inspection succeeds and fake
@@ -354,6 +356,10 @@ The test verifies that the failed report and receipt preserve:
   `multipathMaps:root-map:replace-device:/dev/sdc`
 - the failed `multipathd del path /dev/sdc` command and non-zero status after
   successful multipath map inspection and replacement-path add
+- `partialExecutionRecovery.failedActionId` as
+  `mdRaids:root:add-device:/dev/disk/by-id/nvme-spare`
+- the failed `mdadm /dev/md/root --add /dev/disk/by-id/nvme-spare` command and
+  non-zero status after successful MD detail inspection
 - `partialExecutionRecovery.failedActionId` as
   `nfs.mounts:/srv/old:unmount`
 - the failed `umount /srv/old` command and non-zero status after NFS mount
@@ -891,7 +897,7 @@ LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
 target-side LUN LIO destroy, target-side LUN LIO grow/property not-ready,
 target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
 detach, target-side LUN tgt destroy, target-side LUN tgt grow/property not-ready, multipath
-resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS
+resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
 grow, VDO property, bcache property, and LVM cache property failed-command

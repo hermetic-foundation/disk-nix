@@ -177,7 +177,7 @@ behavior across real storage stacks.
   rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create, attach, detach, and destroy
   failures, Linux tgt create, attach, detach, and destroy failures, multipath
-  resize and replacement failures, MD RAID member replacement failure, LUKS
+  resize and replacement failures, MD RAID member add and replacement failures, LUKS
   open failure, partition grow failure, NFS remount failure, NFS unmount failure, swap label
   mutation failure, device-mapper rename failure, ZFS dataset rename failure,
   Btrfs snapshot clone failure, ZFS snapshot clone failure, LVM VG rename
@@ -257,7 +257,7 @@ added.
   target-side LUN LIO destroy, target-side LUN LIO grow/property not-ready,
   target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
   detach, target-side LUN tgt destroy, target-side LUN tgt grow/property
-  not-ready, multipath resize, multipath replace, MD RAID replace, LUKS open,
+  not-ready, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open,
   LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import,
   LUKS keyslot remove, LUKS token remove, partition grow, NFS
   remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO

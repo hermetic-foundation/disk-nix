@@ -3221,6 +3221,93 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$multipath_replace_receipt" >/dev/null
 
+md_add_tools="$tmpdir/fake-md-add-tools"
+mkdir -p "$md_add_tools"
+
+cat > "$md_add_tools/mdadm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "/dev/md/root --add /dev/disk/by-id/nvme-spare" ]]; then
+  echo "synthetic MD RAID add-member failure for disk-nix recovery coverage" >&2
+  exit 82
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$md_add_tools/mdadm"
+
+md_add_spec="$tmpdir/md-add-spec.json"
+md_add_json="$tmpdir/md-add-apply.json"
+md_add_report="$tmpdir/md-add-report.json"
+md_add_receipt="$tmpdir/md-add-receipt.json"
+
+jq -n '{
+  mdRaids: {
+    root: {
+      target: "/dev/md/root",
+      addDevices: ["/dev/disk/by-id/nvme-spare"]
+    }
+  }
+}' > "$md_add_spec"
+
+if PATH="$md_add_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$md_add_spec" \
+  --execute \
+  --report-out "$md_add_report" \
+  --receipt-out "$md_add_receipt" \
+  --json > "$md_add_json"; then
+  echo "expected synthetic MD RAID add-member failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["mdadm", "--detail", "/dev/md/root"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 82
+  and .executionResults[1].argv == ["mdadm", "/dev/md/root", "--add", "/dev/disk/by-id/nvme-spare"]
+  and (.executionResults[1].stderr | contains("synthetic MD RAID add-member failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "mdRaids:root:add-device:/dev/disk/by-id/nvme-spare"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["mdadm", "/dev/md/root", "--add", "/dev/disk/by-id/nvme-spare"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["mdRaids:root:add-device:/dev/disk/by-id/nvme-spare"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["mdadm", "--detail", "/dev/md/root"]))
+    and (.commands | any(.argv == ["cat", "/proc/mdstat"]))
+    and (.notes | any(contains("MD RAID member changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["mdadm", "--detail", "/dev/md/root"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["cat", "/proc/mdstat"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$md_add_json" >/dev/null
+
+cmp "$md_add_json" "$md_add_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "mdRaids:root:add-device:/dev/disk/by-id/nvme-spare"
+  and .report.partialExecutionRecovery.failedCommand == ["mdadm", "/dev/md/root", "--add", "/dev/disk/by-id/nvme-spare"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$md_add_receipt" >/dev/null
+
 md_replace_tools="$tmpdir/fake-md-replace-tools"
 mkdir -p "$md_replace_tools"
 
@@ -5176,4 +5263,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow/property not-ready, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow/property not-ready, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow/property not-ready, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow/property not-ready, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"

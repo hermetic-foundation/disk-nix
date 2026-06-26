@@ -297,7 +297,7 @@ Update rules:
   not-ready, target-side LUN tgt create, target-side LUN tgt attach,
   target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt
   grow/property not-ready, multipath resize, multipath replace, MD RAID
-  replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add,
+  add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add,
   LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow,
   NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM
   cache detach, VDO grow, VDO property, bcache property, and LVM cache property
