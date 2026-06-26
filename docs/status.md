@@ -246,9 +246,13 @@ inventory around an explicit non-ready provider handoff. `provider = "tgt"` or
 creation/removal, logical-unit creation/removal, and initiator-address
 bind/unbind commands when the reviewed `targetId`/`tid`, `lun`, backing object,
 and ACL values are declared; grow/property updates include native target
-inventory around the handoff. Other providers still use provider-labeled
-handoff commands and verification placeholders until concrete adapters are
-added.
+inventory around the handoff. `provider = "scst"` or `"scstadmin"` renders
+concrete SCST `scstadmin` inventory, backing-device open/close, target,
+initiator group, initiator, LUN map/unmap, target enable/removal, `resync_dev`,
+LUN attribute, and persistence commands when the reviewed target IQN, backing
+object, LUN, optional group, and initiators are declared. Other providers still
+use provider-labeled handoff commands and verification placeholders until
+concrete adapters are added.
 
 ## Remaining for feature complete
 

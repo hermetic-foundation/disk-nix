@@ -10924,6 +10924,20 @@ fn target_lun_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCom
     {
         return target_lun_tgt_commands(action, target);
     }
+    if target_lun_scst_provider(action)
+        && matches!(
+            action.operation,
+            Operation::Create
+                | Operation::Attach
+                | Operation::Detach
+                | Operation::Destroy
+                | Operation::Rescan
+                | Operation::Grow
+                | Operation::SetProperty
+        )
+    {
+        return target_lun_scst_commands(action, target);
+    }
 
     let operation = operation_name(action.operation);
     let desired_size = action.context.desired_size.as_deref();
@@ -10967,6 +10981,13 @@ fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec
             "verify Linux tgt target-side LUN inventory after tgtadm action",
         )];
     }
+    if target_lun_scst_provider(action) {
+        return vec![target_lun_scst_target_inventory_command(
+            action,
+            target,
+            "verify SCST target-side LUN inventory after scstadmin action",
+        )];
+    }
 
     let mut commands = vec![target_lun_inventory_command(
         action,
@@ -11006,6 +11027,15 @@ fn target_lun_tgt_provider(action: &PlannedAction) -> bool {
         matches!(
             provider.to_ascii_lowercase().as_str(),
             "tgt" | "linux-tgt" | "tgtadm"
+        )
+    })
+}
+
+fn target_lun_scst_provider(action: &PlannedAction) -> bool {
+    action.context.provider.as_deref().is_some_and(|provider| {
+        matches!(
+            provider.to_ascii_lowercase().as_str(),
+            "scst" | "linux-scst" | "iscsi-scst" | "scstadmin"
         )
     })
 }
@@ -11772,6 +11802,487 @@ fn target_lun_tgt_lun(action: &PlannedAction) -> (String, Vec<String>) {
             vec!["Linux tgt LUN number".to_string()],
         ),
     }
+}
+
+fn target_lun_scst_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCommand> {
+    let mut commands = vec![target_lun_scst_target_inventory_command(
+        action,
+        target,
+        "inspect SCST target-side inventory before scstadmin mutation",
+    )];
+    let device_name = target_lun_scst_device_name(action, target);
+
+    match action.operation {
+        Operation::Create => {
+            commands.push(target_lun_scst_open_device_command(
+                action,
+                &device_name,
+                "open the reviewed SCST backing device",
+            ));
+            commands.push(target_lun_scst_target_command(
+                target,
+                "add_target",
+                "create or ensure the reviewed SCST iSCSI target exists",
+            ));
+            target_lun_scst_initiator_group_commands(action, target, true, &mut commands);
+            commands.push(target_lun_scst_lun_command(
+                action,
+                target,
+                &device_name,
+                "add_lun",
+                "map the reviewed SCST device as a target LUN",
+            ));
+            commands.push(target_lun_scst_enable_target_command(
+                target,
+                "enable the reviewed SCST target after mapping",
+            ));
+            commands.push(target_lun_scst_write_config_command());
+        }
+        Operation::Attach => {
+            if action.context.device.is_some() {
+                commands.push(target_lun_scst_open_device_command(
+                    action,
+                    &device_name,
+                    "open an existing backing object as an SCST device",
+                ));
+                commands.push(target_lun_scst_lun_command(
+                    action,
+                    target,
+                    &device_name,
+                    "add_lun",
+                    "map the reviewed SCST device as a target LUN",
+                ));
+            }
+            target_lun_scst_initiator_group_commands(action, target, true, &mut commands);
+            commands.push(target_lun_scst_write_config_command());
+        }
+        Operation::Detach => {
+            target_lun_scst_initiator_group_commands(action, target, false, &mut commands);
+            commands.push(target_lun_scst_lun_command(
+                action,
+                target,
+                &device_name,
+                "rem_lun",
+                "unmap the reviewed SCST target LUN without closing the backing device",
+            ));
+            commands.push(target_lun_scst_write_config_command());
+        }
+        Operation::Destroy => {
+            target_lun_scst_initiator_group_commands(action, target, false, &mut commands);
+            commands.push(target_lun_scst_lun_command(
+                action,
+                target,
+                &device_name,
+                "rem_lun",
+                "unmap the reviewed SCST target LUN before target removal",
+            ));
+            commands.push(target_lun_scst_target_command(
+                target,
+                "rem_target",
+                "remove the reviewed SCST iSCSI target",
+            ));
+            commands.push(target_lun_scst_close_device_command(
+                action,
+                &device_name,
+                "close the reviewed SCST backing device after target removal",
+            ));
+            commands.push(target_lun_scst_write_config_command());
+        }
+        Operation::Rescan | Operation::Grow => {
+            commands.push(target_lun_scst_device_inventory_command(
+                action,
+                &device_name,
+                "inspect the reviewed SCST backing device before resync",
+            ));
+            commands.push(target_lun_scst_resync_device_command(
+                action,
+                &device_name,
+                "resync SCST cached backing-device size and notify initiators",
+            ));
+        }
+        Operation::SetProperty => {
+            commands.push(target_lun_scst_property_command(
+                action,
+                "update the reviewed SCST LUN attribute",
+            ));
+            commands.push(target_lun_scst_write_config_command());
+        }
+        _ => {}
+    }
+
+    commands.push(target_lun_scst_target_inventory_command(
+        action,
+        target,
+        "inspect SCST target-side inventory after scstadmin mutation",
+    ));
+    commands
+}
+
+fn target_lun_scst_target_inventory_command(
+    _action: &PlannedAction,
+    target: &str,
+    note: &str,
+) -> ExecutionCommand {
+    command_vec(
+        vec![
+            "scstadmin".to_string(),
+            "-list_target".to_string(),
+            target.to_string(),
+            "-driver".to_string(),
+            "iscsi".to_string(),
+        ],
+        false,
+        note,
+    )
+}
+
+fn target_lun_scst_device_inventory_command(
+    action: &PlannedAction,
+    device_name: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let (device_name, readiness, unresolved_inputs) = target_lun_scst_device_name_readiness(
+        action,
+        device_name,
+        "SCST device name for inventory",
+    );
+    command_vec_with_readiness(
+        vec![
+            "scstadmin".to_string(),
+            "-list_dev_attr".to_string(),
+            device_name,
+        ],
+        false,
+        readiness,
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_scst_target_command(target: &str, op: &str, note: &str) -> ExecutionCommand {
+    command_vec(
+        vec![
+            "scstadmin".to_string(),
+            format!("-{op}"),
+            target.to_string(),
+            "-driver".to_string(),
+            "iscsi".to_string(),
+        ],
+        true,
+        note,
+    )
+}
+
+fn target_lun_scst_enable_target_command(target: &str, note: &str) -> ExecutionCommand {
+    command_vec(
+        vec![
+            "scstadmin".to_string(),
+            "-enable_target".to_string(),
+            target.to_string(),
+            "-driver".to_string(),
+            "iscsi".to_string(),
+        ],
+        true,
+        note,
+    )
+}
+
+fn target_lun_scst_open_device_command(
+    action: &PlannedAction,
+    device_name: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let (device_name, mut unresolved_inputs) =
+        target_lun_scst_device_name_for_mutation(action, device_name);
+    let mut argv = vec![
+        "scstadmin".to_string(),
+        "-open_dev".to_string(),
+        device_name,
+        "-handler".to_string(),
+        "vdisk_blockio".to_string(),
+        "-attributes".to_string(),
+    ];
+    match action.context.device.as_deref() {
+        Some(device) => argv.push(format!("filename={device}")),
+        None => {
+            argv.push("filename=<backing-block-device-or-file>".to_string());
+            unresolved_inputs.push("SCST backing block device or file".to_string());
+        }
+    }
+    command_vec_with_readiness(
+        argv,
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_scst_close_device_command(
+    action: &PlannedAction,
+    device_name: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let (device_name, unresolved_inputs) =
+        target_lun_scst_device_name_for_mutation(action, device_name);
+    command_vec_with_readiness(
+        vec![
+            "scstadmin".to_string(),
+            "-close_dev".to_string(),
+            device_name,
+            "-handler".to_string(),
+            "vdisk_blockio".to_string(),
+        ],
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_scst_resync_device_command(
+    action: &PlannedAction,
+    device_name: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let (device_name, unresolved_inputs) =
+        target_lun_scst_device_name_for_mutation(action, device_name);
+    command_vec_with_readiness(
+        vec![
+            "scstadmin".to_string(),
+            "-resync_dev".to_string(),
+            device_name,
+        ],
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_scst_lun_command(
+    action: &PlannedAction,
+    target: &str,
+    device_name: &str,
+    op: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let (lun, mut unresolved_inputs) = target_lun_scst_lun(action);
+    let group = target_lun_scst_group(action);
+    let mut argv = vec![
+        "scstadmin".to_string(),
+        format!("-{op}"),
+        lun,
+        "-driver".to_string(),
+        "iscsi".to_string(),
+        "-target".to_string(),
+        target.to_string(),
+    ];
+    if let Some(group) = group.as_deref() {
+        argv.extend(["-group".to_string(), group.to_string()]);
+    }
+    if op == "add_lun" {
+        let (device_name, device_unresolved) =
+            target_lun_scst_device_name_for_mutation(action, device_name);
+        unresolved_inputs.extend(device_unresolved);
+        argv.extend(["-device".to_string(), device_name]);
+    }
+    command_vec_with_readiness(
+        argv,
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_scst_property_command(action: &PlannedAction, note: &str) -> ExecutionCommand {
+    let (lun, mut unresolved_inputs) = target_lun_scst_lun(action);
+    let target = action.context.target.as_deref().unwrap_or("<target>");
+    let group = target_lun_scst_group(action);
+    let property = match action.context.property.as_deref() {
+        Some(property) => property.to_string(),
+        None => {
+            unresolved_inputs.push("SCST LUN attribute name".to_string());
+            "<property>".to_string()
+        }
+    };
+    let value = match action.context.property_value.as_deref() {
+        Some(value) => value.to_string(),
+        None => {
+            unresolved_inputs.push("SCST LUN attribute value".to_string());
+            "<value>".to_string()
+        }
+    };
+    let mut argv = vec![
+        "scstadmin".to_string(),
+        "-set_lun_attr".to_string(),
+        lun,
+        "-driver".to_string(),
+        "iscsi".to_string(),
+        "-target".to_string(),
+        target.to_string(),
+    ];
+    if let Some(group) = group.as_deref() {
+        argv.extend(["-group".to_string(), group.to_string()]);
+    }
+    argv.extend(["-attributes".to_string(), format!("{property}={value}")]);
+
+    command_vec_with_readiness(
+        argv,
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_scst_initiator_group_commands(
+    action: &PlannedAction,
+    target: &str,
+    create: bool,
+    commands: &mut Vec<ExecutionCommand>,
+) {
+    let group = target_lun_scst_group(action);
+    let mut initiators = Vec::new();
+    if let Some(client) = action.context.client.as_deref() {
+        initiators.push(client.to_string());
+    }
+    initiators.extend(action.context.devices.iter().cloned());
+
+    if initiators.is_empty() {
+        return;
+    }
+
+    let group = group.unwrap_or_else(|| "disk-nix".to_string());
+    if create {
+        commands.push(command_vec(
+            vec![
+                "scstadmin".to_string(),
+                "-add_group".to_string(),
+                group.clone(),
+                "-driver".to_string(),
+                "iscsi".to_string(),
+                "-target".to_string(),
+                target.to_string(),
+            ],
+            true,
+            "create the reviewed SCST initiator group",
+        ));
+    }
+
+    for initiator in initiators {
+        commands.push(command_vec(
+            vec![
+                "scstadmin".to_string(),
+                if create { "-add_init" } else { "-rem_init" }.to_string(),
+                initiator,
+                "-driver".to_string(),
+                "iscsi".to_string(),
+                "-target".to_string(),
+                target.to_string(),
+                "-group".to_string(),
+                group.clone(),
+            ],
+            true,
+            if create {
+                "add the reviewed initiator to the SCST group"
+            } else {
+                "remove the reviewed initiator from the SCST group"
+            },
+        ));
+    }
+
+    if !create {
+        commands.push(command_vec(
+            vec![
+                "scstadmin".to_string(),
+                "-rem_group".to_string(),
+                group,
+                "-driver".to_string(),
+                "iscsi".to_string(),
+                "-target".to_string(),
+                target.to_string(),
+            ],
+            true,
+            "remove the reviewed SCST initiator group after unmapping",
+        ));
+    }
+}
+
+fn target_lun_scst_write_config_command() -> ExecutionCommand {
+    command_vec(
+        vec![
+            "scstadmin".to_string(),
+            "-write_config".to_string(),
+            "/etc/scst.conf".to_string(),
+        ],
+        true,
+        "persist reviewed SCST target configuration",
+    )
+}
+
+fn target_lun_scst_lun(action: &PlannedAction) -> (String, Vec<String>) {
+    match action.context.lun.as_deref() {
+        Some(lun) => (lun.to_string(), Vec::new()),
+        None => ("<lun>".to_string(), vec!["SCST LUN number".to_string()]),
+    }
+}
+
+fn target_lun_scst_group(action: &PlannedAction) -> Option<String> {
+    action.context.group.as_deref().map(ToString::to_string)
+}
+
+fn target_lun_scst_device_name_for_mutation(
+    action: &PlannedAction,
+    device_name: &str,
+) -> (String, Vec<String>) {
+    let (device_name, _, unresolved_inputs) = target_lun_scst_device_name_readiness(
+        action,
+        device_name,
+        "SCST device name or backing device",
+    );
+    (device_name, unresolved_inputs)
+}
+
+fn target_lun_scst_device_name_readiness(
+    action: &PlannedAction,
+    device_name: &str,
+    unresolved: &str,
+) -> (String, CommandReadiness, Vec<String>) {
+    if action.context.device.is_some() || action.context.name.is_some() {
+        (device_name.to_string(), CommandReadiness::Ready, Vec::new())
+    } else {
+        (
+            "<scst-device>".to_string(),
+            CommandReadiness::NeedsDomainImplementation,
+            vec![unresolved.to_string()],
+        )
+    }
+}
+
+fn target_lun_scst_device_name(action: &PlannedAction, target: &str) -> String {
+    target_lun_lio_backstore_name(action, target)
 }
 
 fn target_lun_inventory_command(
@@ -30632,6 +31143,301 @@ mod tests {
                 && command
                     .unresolved_inputs
                     .contains(&"Linux tgt initiator address or ALL ACL value".to_string())
+        }));
+    }
+
+    #[test]
+    fn target_lun_scst_provider_renders_concrete_scstadmin_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:scst.root": {
+                    "operation": "create",
+                    "provider": "scst",
+                    "source": "/dev/zvol/tank/root",
+                    "lun": 9,
+                    "group": "hosts",
+                    "client": "iqn.2026-06.example:host.primary",
+                    "initiators": [
+                      "iqn.2026-06.example:host.secondary"
+                    ]
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
+
+        let step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:scst.root:create")
+            .expect("SCST target-side LUN create command plan exists");
+        assert!(step.requires_manual_review);
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "scstadmin",
+                    "-open_dev",
+                    "_dev_zvol_tank_root",
+                    "-handler",
+                    "vdisk_blockio",
+                    "-attributes",
+                    "filename=/dev/zvol/tank/root",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "scstadmin",
+                    "-add_target",
+                    "iqn.2026-06.example:scst.root",
+                    "-driver",
+                    "iscsi",
+                ]
+                && command.mutates
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "scstadmin",
+                    "-add_group",
+                    "hosts",
+                    "-driver",
+                    "iscsi",
+                    "-target",
+                    "iqn.2026-06.example:scst.root",
+                ]
+                && command.mutates
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "scstadmin",
+                    "-add_init",
+                    "iqn.2026-06.example:host.primary",
+                    "-driver",
+                    "iscsi",
+                    "-target",
+                    "iqn.2026-06.example:scst.root",
+                    "-group",
+                    "hosts",
+                ]
+                && command.mutates
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "scstadmin",
+                    "-add_lun",
+                    "9",
+                    "-driver",
+                    "iscsi",
+                    "-target",
+                    "iqn.2026-06.example:scst.root",
+                    "-group",
+                    "hosts",
+                    "-device",
+                    "_dev_zvol_tank_root",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "scstadmin",
+                    "-enable_target",
+                    "iqn.2026-06.example:scst.root",
+                    "-driver",
+                    "iscsi",
+                ]
+                && command.mutates
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv == ["scstadmin", "-write_config", "/etc/scst.conf"] && command.mutates
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "targetluns:iqn.2026-06.example:scst.root:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "scstadmin",
+                            "-list_target",
+                            "iqn.2026-06.example:scst.root",
+                            "-driver",
+                            "iscsi",
+                        ]
+                        && !command.mutates
+                })
+        }));
+
+        let scstadmin = report
+            .tool_requirements
+            .iter()
+            .find(|requirement| requirement.tool == "scstadmin")
+            .expect("scstadmin tool requirement exists");
+        assert!(
+            scstadmin
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("provides scstadmin"))
+        );
+    }
+
+    #[test]
+    fn target_lun_scst_grow_and_property_use_native_scstadmin_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:scst.root": {
+                    "operation": "grow",
+                    "provider": "scst",
+                    "source": "/dev/zvol/tank/root",
+                    "desiredSize": "4TiB",
+                    "lun": 9,
+                    "group": "hosts",
+                    "properties": {
+                      "read_only": "0"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true,
+                "allowGrow": true,
+                "allowPropertyChanges": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
+
+        let grow = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:scst.root:grow")
+            .expect("SCST target-side LUN grow command plan exists");
+        assert!(grow.commands.iter().any(|command| {
+            command.argv == ["scstadmin", "-list_dev_attr", "_dev_zvol_tank_root"]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(grow.commands.iter().any(|command| {
+            command.argv == ["scstadmin", "-resync_dev", "_dev_zvol_tank_root"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+
+        let property = report
+            .command_plan
+            .iter()
+            .find(|step| {
+                step.action_id == "targetLuns:iqn.2026-06.example:scst.root:set-property:read_only"
+            })
+            .expect("SCST target-side LUN property command plan exists");
+        assert!(property.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "scstadmin",
+                    "-set_lun_attr",
+                    "9",
+                    "-driver",
+                    "iscsi",
+                    "-target",
+                    "iqn.2026-06.example:scst.root",
+                    "-group",
+                    "hosts",
+                    "-attributes",
+                    "read_only=0",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+    }
+
+    #[test]
+    fn target_lun_scst_provider_requires_reviewed_lun_and_backing_inputs() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:scst.root": {
+                    "operation": "create",
+                    "provider": "scst"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(!report.command_summary.all_commands_ready());
+
+        let step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:scst.root:create")
+            .expect("SCST target-side LUN create command plan exists");
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "scstadmin",
+                    "-open_dev",
+                    "iqn.2026-06.example_scst.root",
+                    "-handler",
+                    "vdisk_blockio",
+                    "-attributes",
+                    "filename=<backing-block-device-or-file>",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command
+                    .unresolved_inputs
+                    .contains(&"SCST backing block device or file".to_string())
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "scstadmin",
+                    "-add_lun",
+                    "<lun>",
+                    "-driver",
+                    "iscsi",
+                    "-target",
+                    "iqn.2026-06.example:scst.root",
+                    "-device",
+                    "iqn.2026-06.example_scst.root",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command
+                    .unresolved_inputs
+                    .contains(&"SCST LUN number".to_string())
         }));
     }
 

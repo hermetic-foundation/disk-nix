@@ -546,9 +546,12 @@ concrete Linux LIO `targetcli` inventory, backstore creation, target creation,
 LUN mapping, ACL mapping/unmapping, and persistence commands.
 `provider = "tgt"` or `"tgtadm"` renders concrete Linux tgt `tgtadm` target,
 logical-unit, and initiator-address bind/unbind commands when the reviewed
-`targetId`/`tid`, `lun`, backing object, and ACL values are declared. Other
-array providers remain explicit handoff plans until a provider adapter or
-reviewed runbook supplies concrete commands.
+`targetId`/`tid`, `lun`, backing object, and ACL values are declared.
+`provider = "scst"` or `"scstadmin"` renders concrete SCST `scstadmin`
+target, backing-device, initiator group, LUN, resync, property, and persistence
+commands when the reviewed target IQN, backing object, LUN, optional group, and
+initiators are declared. Other array providers remain explicit handoff plans
+until a provider adapter or reviewed runbook supplies concrete commands.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain. Btrfs snapshot declarations with `readOnly = true` render

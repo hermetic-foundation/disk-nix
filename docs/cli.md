@@ -1127,7 +1127,13 @@ concrete `tgtadm --mode logicalunit --op update --name ... --value ...`
 commands when `targetId`/`tid`, `lun`, property, and value are declared, while
 tgt grow still adds native target inventory around the non-ready provider
 handoff. Missing tgt-specific values leave only the affected commands non-ready
-with unresolved-input notes. Other providers render non-ready
+with unresolved-input notes. `provider = "scst"` or `"scstadmin"` renders
+concrete SCST `scstadmin` command plans for target inventory, backing-device
+open/close, target creation/removal, optional initiator group creation/removal,
+initiator add/remove, LUN map/unmap, target enablement, `resync_dev`, LUN
+attribute updates, and `write_config` persistence when the target IQN, backing
+object, LUN number, optional `group`/`initiatorGroup`, and initiators are
+declared. Other providers render non-ready
 `<target-lun-provider[:provider]>` placeholders with reviewed target, provider
 label, size, backing object, target id, LUN number, portal, and initiator inputs
 until an adapter or

@@ -449,7 +449,11 @@ Examples:
   `targetId`/`tid`, `lun`, property, and value are declared. tgt grow still
   renders native target inventory around the non-ready provider handoff.
   Missing tgt-specific inputs keep the affected commands non-ready with
-  explicit unresolved-input notes.
+  explicit unresolved-input notes. `provider = "scst"` or `"scstadmin"`
+  renders concrete SCST `scstadmin` inventory, `open_dev`, target, initiator
+  group, initiator, LUN map/unmap, target enable/removal, `resync_dev`, LUN
+  attribute, and `write_config` commands when the target IQN, backing object,
+  LUN number, optional `group`/`initiatorGroup`, and initiators are declared.
   Other providers still emit non-ready `<target-lun-provider[:provider]>`
   handoff commands carrying the target identity, provider label, desired size,
   backing object, target id, LUN number, portal, and initiators, plus read-only
@@ -646,6 +650,8 @@ Lifecycle objects may use:
   adapters such as Linux LIO `targetcli` and Linux tgt `tgtadm`
 - `targetId` or `tid`: Linux tgt numeric target id used by the `tgtadm`
   provider adapter
+- `group`, `groupName`, or `initiatorGroup`: provider-specific initiator group
+  name, currently used by SCST `scstadmin`
 - `level` or `raidLevel`: MD RAID level for reviewed array creation
 - `client`: NFS export client or network selector
 - `portal`: iSCSI target portal such as `192.0.2.10:3260`; `metadata.portal`

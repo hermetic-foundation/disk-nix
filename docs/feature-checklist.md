@@ -192,7 +192,12 @@ Update rules:
   requests render concrete reviewed
   `tgtadm --mode logicalunit --op update --name ... --value ...`
   commands when `targetId`/`tid`, `lun`, property, and value are declared, and
-  tgt grow remains an explicit non-ready provider handoff.
+  tgt grow remains an explicit non-ready provider handoff. SCST target-side
+  create/map/unmap/remove/rescan/grow/property requests now render concrete
+  reviewed `scstadmin` inventory, backing-device open/close, target, initiator
+  group, initiator, LUN map/unmap, target enable/removal, `resync_dev`, LUN
+  attribute, and persistence commands when the reviewed target IQN, backing
+  object, LUN, optional group, and initiators are declared.
   Provider handoffs carry declared `targetId`/`tid` and `lun` values. Other
   array/provider adapters still use provider-labeled non-ready commands and
   verification placeholders.

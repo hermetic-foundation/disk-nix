@@ -512,6 +512,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub lun: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<String>,
@@ -7792,6 +7794,17 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         target_id: metadata_string_field(
             object,
             &["targetId", "targetID", "target-id", "target_id", "tid"],
+        ),
+        group: metadata_string_field(
+            object,
+            &[
+                "group",
+                "groupName",
+                "group-name",
+                "initiatorGroup",
+                "initiator-group",
+                "initiator_group",
+            ],
         ),
         lun: metadata_string_field(
             object,

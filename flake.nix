@@ -2109,6 +2109,9 @@
             ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' ${./scripts/integration-failure-recovery-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'tgt property updates render' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'provider = "scst"' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'scstadmin' ${./docs/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'initiatorGroup' ${./docs/planning.md}
             runbooks=${./docs/operator-runbooks.md}
             for runbook in \
               "Device replacement" \
