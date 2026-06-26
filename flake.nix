@@ -91,6 +91,17 @@
           ];
           text = builtins.readFile ./scripts/integration-loop-smoke.sh;
         };
+        integrationBtrfsSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-btrfs-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.btrfs-progs
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-btrfs-smoke.sh;
+        };
         nixosModuleTest = pkgs.nixos [
           self.nixosModules.default
           {
@@ -1353,6 +1364,7 @@
         packages = {
           default = diskNix;
           disk-nix = diskNix;
+          integration-btrfs-smoke = integrationBtrfsSmoke;
           integration-loop-smoke = integrationLoopSmoke;
         };
 
@@ -1367,6 +1379,13 @@
             program = "${integrationLoopSmoke}/bin/disk-nix-integration-loop-smoke";
             meta = {
               description = "Root-only loop-backed disk-nix smoke integration harness";
+            };
+          };
+          integration-btrfs-smoke = {
+            type = "app";
+            program = "${integrationBtrfsSmoke}/bin/disk-nix-integration-btrfs-smoke";
+            meta = {
+              description = "Root-only Btrfs loop-backed disk-nix smoke integration harness";
             };
           };
         };
@@ -1398,6 +1417,15 @@
             ${pkgs.gnugrep}/bin/grep -q 'losetup --set-capacity' ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mkfs.ext4' ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'resize2fs' ${./scripts/integration-loop-smoke.sh}
+            touch "$out"
+          '';
+          integrationBtrfsSmoke = pkgs.runCommand "disk-nix-integration-btrfs-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'mkfs.btrfs' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'mount -t btrfs' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'btrfs", "scrub", "start", "-B"' ${./scripts/integration-btrfs-smoke.sh}
             touch "$out"
           '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''
