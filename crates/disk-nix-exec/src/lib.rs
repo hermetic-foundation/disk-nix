@@ -589,6 +589,29 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 | Operation::ReplaceDevice
                 | Operation::Rescan,
             Some("multipathMaps")
+        ) | (
+            Operation::Close
+                | Operation::Create
+                | Operation::Destroy
+                | Operation::Format
+                | Operation::Grow
+                | Operation::Open
+                | Operation::SetProperty,
+            Some("luks.devices")
+        ) | (
+            Operation::AddKey
+                | Operation::Create
+                | Operation::Destroy
+                | Operation::RemoveKey
+                | Operation::SetProperty,
+            Some("luksKeyslots")
+        ) | (
+            Operation::Create
+                | Operation::Destroy
+                | Operation::ImportToken
+                | Operation::RemoveToken
+                | Operation::SetProperty,
+            Some("luksTokens")
         )
     ) {
         return true;
@@ -895,6 +918,38 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             ));
         }
         (
+            Operation::Close
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Open
+            | Operation::SetProperty,
+            Some("luks.devices"),
+            _,
+        )
+        | (
+            Operation::AddKey
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::RemoveKey
+            | Operation::SetProperty,
+            Some("luksKeyslots"),
+            _,
+        )
+        | (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::ImportToken
+            | Operation::RemoveToken
+            | Operation::SetProperty,
+            Some("luksTokens"),
+            _,
+        ) => commands.extend(luks_recovery_inspection_commands(
+            step,
+            "inspect LUKS state before choosing roll-forward",
+        )),
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1076,6 +1131,37 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             ),
         ],
         (
+            Operation::Close
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Open
+            | Operation::SetProperty,
+            Some("luks.devices"),
+            _,
+        )
+        | (
+            Operation::AddKey
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::RemoveKey
+            | Operation::SetProperty,
+            Some("luksKeyslots"),
+            _,
+        )
+        | (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::ImportToken
+            | Operation::RemoveToken
+            | Operation::SetProperty,
+            Some("luksTokens"),
+            _,
+        ) => {
+            luks_recovery_inspection_commands(step, "confirm LUKS state before rollback decisions")
+        }
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1213,6 +1299,38 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             ));
         }
         (
+            Operation::Close
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Open
+            | Operation::SetProperty,
+            Some("luks.devices"),
+            _,
+        )
+        | (
+            Operation::AddKey
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::RemoveKey
+            | Operation::SetProperty,
+            Some("luksKeyslots"),
+            _,
+        )
+        | (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::ImportToken
+            | Operation::RemoveToken
+            | Operation::SetProperty,
+            Some("luksTokens"),
+            _,
+        ) => commands.extend(luks_recovery_inspection_commands(
+            step,
+            "inspect LUKS state after the failed command",
+        )),
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1333,6 +1451,39 @@ fn domain_recovery_notes(
             );
         }
         (
+            Operation::Close
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Open
+            | Operation::SetProperty,
+            Some("luks.devices"),
+        )
+        | (
+            Operation::AddKey
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::RemoveKey
+            | Operation::SetProperty,
+            Some("luksKeyslots"),
+        )
+        | (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::ImportToken
+            | Operation::RemoveToken
+            | Operation::SetProperty,
+            Some("luksTokens"),
+        ) => {
+            notes.push(
+                "for LUKS changes, inspect mapper status, header metadata, keyslots, tokens, and dependent consumers before retrying encryption operations".to_string(),
+            );
+            notes.push(
+                "keep header backups and alternate unlock paths available until the mapper and header metadata match the intended state".to_string(),
+            );
+        }
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1371,6 +1522,8 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
             "snapshot" => "snapshots",
             "filesystem" => "filesystems",
             "iscsisessions" => "iscsiSessions",
+            "lukskeyslots" => "luksKeyslots",
+            "lukstokens" => "luksTokens",
             "multipathmaps" => "multipathMaps",
             "nvmenamespaces" => "nvmeNamespaces",
             "vdovolumes" => "vdoVolumes",
@@ -1447,6 +1600,95 @@ fn multipath_map_target_from_step(step: &ExecutionStep) -> Option<&str> {
         }
         None
     })
+}
+
+fn luks_recovery_inspection_commands(
+    step: &ExecutionStep,
+    note: &'static str,
+) -> Vec<ExecutionCommand> {
+    let mut commands = Vec::new();
+    if let Some(device) = luks_device_from_step(step) {
+        commands.push(command(["cryptsetup", "luksDump", device], false, note));
+        commands.push(command(
+            ["disk-nix", "inspect", device, "--json"],
+            false,
+            note,
+        ));
+    }
+    if let Some(mapper) = luks_mapper_from_step(step) {
+        commands.push(command(["cryptsetup", "status", mapper], false, note));
+        commands.push(command(
+            ["disk-nix", "inspect", mapper, "--json"],
+            false,
+            note,
+        ));
+    }
+    commands
+}
+
+fn luks_mapper_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        if command.argv.first().is_none_or(|arg| arg != "cryptsetup") {
+            return None;
+        }
+        match command.argv.get(1).map(String::as_str) {
+            Some("close" | "resize" | "status") => command.argv.get(2).map(String::as_str),
+            Some("open") => command.argv.get(3).map(String::as_str),
+            _ => None,
+        }
+    })
+}
+
+fn luks_device_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        if command.argv.first().is_none_or(|arg| arg != "cryptsetup") {
+            return None;
+        }
+        match command.argv.get(1).map(String::as_str) {
+            Some("isLuks" | "luksDump" | "luksFormat" | "luksKillSlot" | "luksUUID") => {
+                command.argv.get(2).map(String::as_str)
+            }
+            Some("open") => command.argv.get(2).map(String::as_str),
+            Some("config" | "luksAddKey" | "luksChangeKey") => {
+                cryptsetup_positional_arg(command, 0)
+            }
+            Some("token") => command.argv.last().map(String::as_str),
+            _ => None,
+        }
+        .filter(|target| !target.starts_with('<'))
+    })
+}
+
+fn cryptsetup_positional_arg(command: &ExecutionCommand, index: usize) -> Option<&str> {
+    let mut skip_next = false;
+    let mut position = 0;
+    for arg in command.argv.iter().skip(2) {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if matches!(
+            arg.as_str(),
+            "--key-file"
+                | "--key-slot"
+                | "--json-file"
+                | "--priority"
+                | "--subsystem"
+                | "--token-id"
+                | "--uuid"
+        ) {
+            skip_next = true;
+            continue;
+        }
+        if arg.starts_with('-') {
+            continue;
+        }
+        if position == index {
+            return Some(arg.as_str());
+        }
+        position += 1;
+    }
+    None
 }
 
 fn iscsi_target_from_step(step: &ExecutionStep) -> Option<&str> {
@@ -24097,6 +24339,110 @@ mod tests {
             .expect("multipath rollback recovery review is reported");
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["disk-nix", "multipath", "--json"] && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_luks_open_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "luks": {
+                "devices": {
+                  "cryptarchive": {
+                    "name": "cryptarchive",
+                    "device": "/dev/disk/by-id/archive-luks",
+                    "operation": "open"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_open = [
+            "cryptsetup",
+            "open",
+            "/dev/disk/by-id/archive-luks",
+            "cryptarchive",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_open,
+                status_code: Some(if argv == failed_open { 2 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_open {
+                    "open failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success
+                && result.argv
+                    == [
+                        "cryptsetup",
+                        "open",
+                        "/dev/disk/by-id/archive-luks",
+                        "cryptarchive",
+                    ]
+        }));
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("LUKS domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Open"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/archive-luks"]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["cryptsetup", "status", "cryptarchive"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "disk-nix",
+                    "inspect",
+                    "/dev/disk/by-id/archive-luks",
+                    "--json",
+                ]
+                && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("LUKS changes"))
+        );
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("alternate unlock paths"))
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("LUKS roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["cryptsetup", "status", "cryptarchive"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("LUKS rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/archive-luks"]
+                && !command.mutates
         }));
     }
 
