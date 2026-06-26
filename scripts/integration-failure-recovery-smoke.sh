@@ -126,6 +126,114 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$receipt" >/dev/null
 
+lvm_grow_tools="$tmpdir/fake-lvm-grow-tools"
+mkdir -p "$lvm_grow_tools"
+
+cat > "$lvm_grow_tools/lvs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$lvm_grow_tools/vgs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$lvm_grow_tools/pvs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$lvm_grow_tools/lvextend" <<'EOF'
+#!/usr/bin/env bash
+echo "synthetic LVM grow failure for disk-nix recovery coverage" >&2
+exit 79
+EOF
+
+chmod +x "$lvm_grow_tools/lvs" "$lvm_grow_tools/vgs" "$lvm_grow_tools/pvs" "$lvm_grow_tools/lvextend"
+
+lvm_grow_spec="$tmpdir/lvm-grow-spec.json"
+lvm_grow_json="$tmpdir/lvm-grow-apply.json"
+lvm_grow_report="$tmpdir/lvm-grow-report.json"
+lvm_grow_receipt="$tmpdir/lvm-grow-receipt.json"
+
+jq -n '{
+  volumes: {
+    root: {
+      target: "vg0/root",
+      operation: "grow",
+      desiredSize: "50GiB"
+    }
+  },
+  apply: {
+    allowGrow: true
+  }
+}' > "$lvm_grow_spec"
+
+if PATH="$lvm_grow_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$lvm_grow_spec" \
+  --execute \
+  --report-out "$lvm_grow_report" \
+  --receipt-out "$lvm_grow_receipt" \
+  --json > "$lvm_grow_json"; then
+  echo "expected synthetic LVM grow failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["lvs", "--reportformat", "json", "vg0/root"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 79
+  and .executionResults[1].argv == ["lvextend", "--resizefs", "--size", "50GiB", "vg0/root"]
+  and (.executionResults[1].stderr | contains("synthetic LVM grow failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "volumes:root:grow"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["lvextend", "--resizefs", "--size", "50GiB", "vg0/root"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["volumes:root:grow"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "vg0/root"]))
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "vg0/root", "--json"]))
+    and (.notes | any(contains("LVM changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "vg0/root"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$lvm_grow_json" >/dev/null
+
+cmp "$lvm_grow_json" "$lvm_grow_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "volumes:root:grow"
+  and .report.partialExecutionRecovery.failedCommand == ["lvextend", "--resizefs", "--size", "50GiB", "vg0/root"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$lvm_grow_receipt" >/dev/null
+
 swap_label_tools="$tmpdir/fake-swap-label-tools"
 mkdir -p "$swap_label_tools"
 
@@ -3469,4 +3577,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"

@@ -277,9 +277,9 @@ Update rules:
   still needed for additional device replacement domains, broader degraded-array
   variants, additional cache variants, additional NVMe namespace variants,
   additional LUN flows, property mutation across more supported domains, and
-  failed-command recovery beyond the synthetic LVM-plus-filesystem, swap label,
-  device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot
-  clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace
+  failed-command recovery beyond the synthetic LVM-plus-filesystem, LVM grow,
+  swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
+  ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace
   grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,
   target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO
   detach, target-side LUN LIO destroy, target-side LUN tgt create,
