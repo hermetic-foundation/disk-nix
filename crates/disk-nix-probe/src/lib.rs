@@ -2575,6 +2575,8 @@ fn command_exists(tool: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use disk_nix_model::{NodeKind, Relationship, StorageGraph};
+
     use super::*;
 
     #[test]
@@ -2582,6 +2584,237 @@ mod tests {
         let result = ProbeResult::empty();
         assert!(result.graph.nodes.is_empty());
         assert!(result.reports.is_empty());
+    }
+
+    const SHARED_ISCSI_SESSION: &[u8] = br#"
+Target: iqn.2026-06.example:storage.shared
+    Current Portal: 10.0.0.10:3260,1
+    Persistent Portal: 10.0.0.10:3260,1
+    Target Portal Group Tag: 1
+    **********
+    Interface:
+    **********
+    Iface Name: default
+    Iface Transport: tcp
+    Iface Initiatorname: iqn.2026-06.client:node1
+    Iface IPaddress: 10.0.0.20
+    Iface Netdev: eno1
+    SID: 42
+    iSCSI Connection State: LOGGED IN
+    iSCSI Session State: LOGGED_IN
+    Internal iscsid Session State: NO CHANGE
+    HeaderDigest: None
+    DataDigest: None
+    MaxRecvDataSegmentLength: 262144
+    CID: 0
+    Connection State: LOGGED IN
+    Local Address: 10.0.0.20
+    Peer Address: 10.0.0.10
+    Host Number: 2  State: running
+    scsi2 Channel 00 Id 0 Lun: 1
+        Attached scsi disk sdb          State: running
+"#;
+
+    const SHARED_ISCSI_NODE: &[u8] = br#"
+Target: iqn.2026-06.example:storage.shared
+    Portal: 10.0.0.10:3260,1
+    Persistent Portal: 10.0.0.11:3260,1
+    TPGT: 1
+    Iface Name: default
+    Startup: automatic
+    Leading Login: Yes
+    AuthMethod: CHAP
+    Username: node-user
+    Password: outbound-secret
+    Username_in: target-user
+    Password_in: inbound-secret
+"#;
+
+    const SHARED_LSSCSI_LIST: &[u8] = br#"
+[2:0:0:1]    disk    LIO-ORG  shared-lun      4.0   /dev/sdb   /dev/sg2   100G
+  device_blocked=0
+  queue_depth=128
+  queue_type=simple
+  state=running
+  timeout=60
+[3:0:0:1]    disk    LIO-ORG  shared-lun      4.0   /dev/sdc   /dev/sg3   100G
+  device_blocked=0
+  queue_depth=128
+  queue_type=simple
+  state=running
+  timeout=60
+"#;
+
+    const SHARED_LSSCSI_TRANSPORT: &[u8] = br#"
+[2:0:0:1]    disk    iscsi:iqn.2026-06.example:storage.shared,t,0x1  /dev/sdb   /dev/sg2  /dev/disk/by-id/scsi-3600508b400105e210000900000490000  /dev/disk/by-id/wwn-0x600508b400105e210000900000490000  100G
+[3:0:0:1]    disk    iscsi:iqn.2026-06.example:storage.shared,t,0x2  /dev/sdc   /dev/sg3  /dev/disk/by-id/scsi-3600508b400105e210000900000490000  /dev/disk/by-id/wwn-0x600508b400105e210000900000490000  100G
+"#;
+
+    const SHARED_LSSCSI_UNIT: &[u8] = br#"
+[2:0:0:1]    disk    3600508b400105e210000900000490000  /dev/sdb   /dev/sg2  /dev/disk/by-id/scsi-3600508b400105e210000900000490000  /dev/disk/by-id/wwn-0x600508b400105e210000900000490000  100G
+[3:0:0:1]    disk    3600508b400105e210000900000490000  /dev/sdc   /dev/sg3  /dev/disk/by-id/scsi-3600508b400105e210000900000490000  /dev/disk/by-id/wwn-0x600508b400105e210000900000490000  100G
+"#;
+
+    const SHARED_MULTIPATH: &[u8] = br#"
+mpatha (3600508b400105e210000900000490000) dm-2 LIO-ORG,shared-lun
+size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
+|-+- policy='service-time 0' prio=50 status=active
+| `- 2:0:0:1 sdb 8:16 active ready running ghost
+`-+- policy='service-time 0' prio=10 status=enabled
+  `- 3:0:0:1 sdc 8:32 active ready running faulty shaky
+"#;
+
+    #[test]
+    fn shared_storage_fabric_fixture_links_iscsi_luns_and_multipath_paths() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            iscsi::normalize_iscsi_session_output(SHARED_ISCSI_SESSION)
+                .expect("iSCSI session fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            iscsi::normalize_iscsi_node_output(SHARED_ISCSI_NODE)
+                .expect("iSCSI node fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_list_output(SHARED_LSSCSI_LIST)
+                .expect("lsscsi list fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_transport_output(SHARED_LSSCSI_TRANSPORT)
+                .expect("lsscsi transport fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_unit_output(SHARED_LSSCSI_UNIT)
+                .expect("lsscsi unit fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            multipath::normalize_multipath_output(SHARED_MULTIPATH)
+                .expect("multipath fixture should parse"),
+        );
+
+        let session = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "iscsi-session:42")
+            .expect("logged-in iSCSI session should exist");
+        assert_eq!(session.kind, NodeKind::IscsiSession);
+        assert_has_property(session, "iscsi.session-state", "LOGGED_IN");
+        assert_has_property(session, "iscsi.portal-address", "10.0.0.10");
+        assert_has_property(session, "iscsi.host-number", "2");
+
+        let target = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "iscsi-target:iqn.2026-06.example:storage.shared")
+            .expect("configured iSCSI target should exist");
+        assert_eq!(target.kind, NodeKind::IscsiTarget);
+        assert_has_property(target, "iscsi.node-startup", "automatic");
+        assert_has_property(target, "iscsi.node-auth-password-configured", "true");
+        assert_has_property(target, "iscsi.node-auth-password-in-configured", "true");
+        assert!(
+            !target.properties.iter().any(|property| {
+                property.value == "outbound-secret" || property.value == "inbound-secret"
+            }),
+            "configured iSCSI node normalization must not leak CHAP secrets"
+        );
+
+        let scsi_lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:2:0:0:1")
+            .expect("host-visible SCSI LUN should exist");
+        assert_eq!(scsi_lun.kind, NodeKind::Lun);
+        assert_eq!(scsi_lun.size_bytes, Some(100_000_000_000));
+        assert_has_property(
+            scsi_lun,
+            "scsi.transport",
+            "iscsi:iqn.2026-06.example:storage.shared,t,0x1",
+        );
+        assert_has_property(scsi_lun, "scsi.queue-depth", "128");
+        assert_eq!(
+            scsi_lun.identity.wwn.as_deref(),
+            Some("/dev/disk/by-id/wwn-0x600508b400105e210000900000490000")
+        );
+
+        let map = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "multipath:mpatha")
+            .expect("multipath map should exist");
+        assert_eq!(map.kind, NodeKind::MultipathDevice);
+        assert_eq!(map.size_bytes, Some(100_000_000_000));
+        assert_has_property(map, "multipath.wwid", "3600508b400105e210000900000490000");
+        assert_has_property(map, "multipath.features", "1 queue_if_no_path");
+
+        let path_sdb = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdb")
+            .expect("first shared-storage path should exist");
+        assert_eq!(path_sdb.kind, NodeKind::PhysicalDisk);
+        assert_has_property(path_sdb, "scsi.address", "2:0:0:1");
+        assert_has_property(path_sdb, "multipath.group-status", "active");
+        assert_has_property(path_sdb, "multipath.path-flags", "ghost");
+
+        let path_sdc = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdc")
+            .expect("second shared-storage path should exist");
+        assert_has_property(path_sdc, "scsi.address", "3:0:0:1");
+        assert_has_property(path_sdc, "multipath.group-status", "enabled");
+        assert_has_property(path_sdc, "multipath.path-flags", "faulty shaky");
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "iscsi-session:42"
+                && edge.to.0 == "iscsi-target:iqn.2026-06.example:storage.shared"
+                && edge.relationship == Relationship::ImportedFrom
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "iscsi-lun:iqn.2026-06.example:storage.shared:1"
+                && edge.to.0 == "block:/dev/sdb"
+                && edge.relationship == Relationship::Backs
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "scsi-lun:2:0:0:1"
+                && edge.to.0 == "block:/dev/sdb"
+                && edge.relationship == Relationship::Backs
+        }));
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to.0 == "multipath:mpatha" && edge.relationship == Relationship::Backs
+                })
+                .count(),
+            2
+        );
+    }
+
+    fn merge_graph(target: &mut StorageGraph, source: StorageGraph) {
+        for node in source.nodes {
+            target.add_node(node);
+        }
+        for edge in source.edges {
+            target.add_edge(edge);
+        }
+    }
+
+    fn assert_has_property(node: &disk_nix_model::Node, key: &str, value: &str) {
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == key && property.value == value),
+            "{} should have property {key}={value}",
+            node.id.0
+        );
     }
 
     #[test]

@@ -84,8 +84,10 @@ Update rules:
 - [x] **Finished:** Loop devices, backing files, swap, zram, SMART telemetry,
   and network-storage identity views.
 - [ ] **Partial:** Real-world fixture coverage exists for many parser surfaces,
-  but still needs broader hardware, fabrics, degraded arrays, encrypted stacks,
-  clustered storage, and shared-storage samples.
+  including a cross-adapter shared-storage fixture that combines iSCSI session
+  and node data, host-visible SCSI LUNs, and multipath paths. It still needs
+  broader hardware, fabric variants, degraded arrays, encrypted stacks, and
+  clustered storage samples.
 
 ## Planning and apply safety
 

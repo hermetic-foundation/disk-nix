@@ -171,8 +171,11 @@ behavior across real storage stacks.
 Probe adapters normalize storage data from `lsblk`, `blkid`, `udevadm`,
 `findmnt`, `parted`, `smartctl`, filesystem-specific metadata tools, Btrfs,
 bcachefs, ZFS, LVM, VDO, device-mapper, LUKS, loop, zram, SCSI, iSCSI, NFS, MD
-RAID, multipath, and NVMe tooling. See [storage-scope.md](storage-scope.md) for
-the detailed field-level coverage.
+RAID, multipath, and NVMe tooling. Probe fixture coverage includes isolated
+adapter fixtures and a cross-adapter shared-storage regression fixture that
+combines iSCSI session/node data, host-visible SCSI LUNs, and multipath path
+state in one normalized graph. See [storage-scope.md](storage-scope.md) for the
+detailed field-level coverage.
 See [feature-checklist.md](feature-checklist.md) for a checklist view of
 finished, partial, and desired features.
 See [operator-runbooks.md](operator-runbooks.md) for high-risk replacement,
@@ -262,8 +265,9 @@ placeholders until concrete adapters are added.
   plus missing, failing, stderr-only, or empty-output storage tool version
   probes, and a machine-readable adapter remediation matrix for built-in
   adapters and sub-adapters.
-- More real-world fixture coverage from diverse hardware, fabrics, filesystems,
-  degraded arrays, encrypted stacks, and clustered or shared-storage setups.
+- More real-world fixture coverage from diverse hardware, additional fabric
+  variants, filesystems, degraded arrays, encrypted stacks, and clustered
+  storage setups.
 - Future spec-version field mappings. The parser validates version `1`,
   `disk-nix migrate` now emits a reviewable current-version normalization
   report, maps documented pre-version legacy aliases into version `1`, and
