@@ -654,6 +654,15 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 | Operation::Rescan
                 | Operation::SetProperty,
             Some("caches" | "lvmCaches")
+        ) | (
+            Operation::Create
+                | Operation::Deactivate
+                | Operation::Destroy
+                | Operation::Format
+                | Operation::Grow
+                | Operation::Rescan
+                | Operation::SetProperty,
+            Some("swaps")
         )
     ) {
         return true;
@@ -871,6 +880,20 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
         ) => commands.extend(cache_recovery_inspection_commands(
             step,
             "inspect cache state before choosing roll-forward",
+        )),
+        (
+            Operation::Create
+            | Operation::Deactivate
+            | Operation::Destroy
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("swaps"),
+            _,
+        ) => commands.extend(swap_recovery_inspection_commands(
+            step,
+            "inspect swap state before choosing roll-forward",
         )),
         (Operation::Destroy | Operation::RemoveDevice | Operation::Detach, Some("luns"), _) => {
             commands.push(command_vec(
@@ -1118,6 +1141,19 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             step,
             "confirm cache state before rollback decisions",
         ),
+        (
+            Operation::Create
+            | Operation::Deactivate
+            | Operation::Destroy
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("swaps"),
+            _,
+        ) => {
+            swap_recovery_inspection_commands(step, "confirm swap state before rollback decisions")
+        }
         (Operation::Destroy | Operation::RemoveDevice | Operation::Detach, Some("luns"), _) => {
             vec![
                 command_vec(
@@ -1383,6 +1419,20 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
         )),
         (
             Operation::Create
+            | Operation::Deactivate
+            | Operation::Destroy
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("swaps"),
+            _,
+        ) => commands.extend(swap_recovery_inspection_commands(
+            step,
+            "inspect swap state after the failed command",
+        )),
+        (
+            Operation::Create
             | Operation::Destroy
             | Operation::Grow
             | Operation::Start
@@ -1636,6 +1686,23 @@ fn domain_recovery_notes(
             );
         }
         (
+            Operation::Create
+            | Operation::Deactivate
+            | Operation::Destroy
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("swaps"),
+        ) => {
+            notes.push(
+                "for swap changes, inspect active swapon output, signature metadata, resume references, and backing storage before retrying format, resize, property, or teardown operations".to_string(),
+            );
+            notes.push(
+                "prefer adding temporary swap capacity before disabling or recreating active swap on memory-constrained systems".to_string(),
+            );
+        }
+        (
             Operation::Close
             | Operation::Create
             | Operation::Destroy
@@ -1779,6 +1846,11 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     }
     if matches!(command_step_collection(step), Some("caches" | "lvmCaches")) {
         if let Some(target) = cache_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if command_step_collection(step) == Some("swaps") {
+        if let Some(target) = swap_target_from_step(step) {
             return Some(target);
         }
     }
@@ -2095,6 +2167,65 @@ fn cache_target_from_step(step: &ExecutionStep) -> Option<&str> {
         }
         .filter(|target| !target.starts_with('<'))
     })
+}
+
+fn swap_recovery_inspection_commands(
+    step: &ExecutionStep,
+    note: &'static str,
+) -> Vec<ExecutionCommand> {
+    let mut commands = vec![command(
+        ["swapon", "--show", "--bytes", "--raw"],
+        false,
+        note,
+    )];
+    if let Some(target) = swap_target_from_step(step).or_else(|| {
+        step.action_id
+            .split(':')
+            .nth(1)
+            .filter(|target| target.starts_with('/'))
+    }) {
+        commands.push(command(["blkid", target], false, note));
+        commands.push(command(
+            ["disk-nix", "inspect", target, "--json"],
+            false,
+            note,
+        ));
+    } else {
+        commands.push(command(
+            ["disk-nix", "swap", "--json"],
+            false,
+            "inspect modeled swap inventory before retrying",
+        ));
+    }
+    commands
+}
+
+fn swap_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        match tool {
+            "fallocate" | "mkswap" | "swaplabel" | "swapoff" | "wipefs" => {
+                command.argv.last().map(String::as_str)
+            }
+            "swapon" if command.argv.get(1).is_none_or(|arg| arg != "--show") => {
+                command.argv.last().map(String::as_str)
+            }
+            "sh" if command.argv.get(1).is_some_and(|arg| arg == "-c") => {
+                swap_target_from_shell(command.argv.get(2)?)
+            }
+            _ => None,
+        }
+        .filter(|target| target.starts_with('/') && !target.starts_with("<"))
+    })
+}
+
+fn swap_target_from_shell(script: &str) -> Option<&str> {
+    let target = script.strip_prefix("swapoff ")?.split_whitespace().next()?;
+    target
+        .trim_matches('\'')
+        .trim_matches('"')
+        .strip_prefix("\\")
+        .or(Some(target.trim_matches('\'').trim_matches('"')))
 }
 
 fn snapshot_recovery_inspection_commands(
@@ -25494,6 +25625,89 @@ mod tests {
         }));
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "vg0/root", "--json"] && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_swap_label_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "swaps": {
+                "primary": {
+                  "device": "/dev/disk/by-label/swap-old",
+                  "properties": {
+                    "label": "swap-new"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_label = [
+            "swaplabel",
+            "--label",
+            "swap-new",
+            "/dev/disk/by-label/swap-old",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_label,
+                status_code: Some(if argv == failed_label { 5 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_label {
+                    "swap label failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_label)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("swap domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("SetProperty"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["swapon", "--show", "--bytes", "--raw"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["blkid", "/dev/disk/by-label/swap-old"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "disk-nix",
+                    "inspect",
+                    "/dev/disk/by-label/swap-old",
+                    "--json",
+                ]
+                && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("swap changes") && note.contains("resume"))
+        );
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("swap rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["blkid", "/dev/disk/by-label/swap-old"] && !command.mutates
         }));
     }
 

@@ -747,7 +747,7 @@ guidance that starts with a fresh
 `rollback-review` guidance for domains with inspectable rollback preconditions,
 such as ZFS rollback points, ZFS/Btrfs snapshot lifecycle changes, LVM snapshot
 merges, VG device migration, LVM VG/volume/thin/PV changes, cache lifecycle
-changes, LUKS
+changes, swap signature/activation changes, LUKS
 mapper/header/keyslot/token changes, MD RAID member replacement, NVMe namespace
 changes, iSCSI session login/logout, VDO lifecycle changes, multipath map
 changes, and host-side LUN detach. These commands remain read-only or
