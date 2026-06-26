@@ -1557,6 +1557,102 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_detach_receipt" >/dev/null
 
+vdo_grow_tools="$tmpdir/fake-vdo-grow-tools"
+mkdir -p "$vdo_grow_tools"
+
+cat > "$vdo_grow_tools/vdo" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "growLogical" ]]; then
+  echo "synthetic VDO grow failure for disk-nix recovery coverage" >&2
+  exit 82
+fi
+printf '{}\n'
+EOF
+
+cat > "$vdo_grow_tools/vdostats" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+chmod +x "$vdo_grow_tools/vdo" "$vdo_grow_tools/vdostats"
+
+vdo_grow_spec="$tmpdir/vdo-grow-spec.json"
+vdo_grow_json="$tmpdir/vdo-grow-apply.json"
+vdo_grow_report="$tmpdir/vdo-grow-report.json"
+vdo_grow_receipt="$tmpdir/vdo-grow-receipt.json"
+
+jq -n '{
+  vdoVolumes: {
+    archive: {
+      operation: "grow",
+      desiredSize: "4TiB"
+    }
+  },
+  apply: {
+    allowGrow: true
+  }
+}' > "$vdo_grow_spec"
+
+if PATH="$vdo_grow_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$vdo_grow_spec" \
+  --execute \
+  --report-out "$vdo_grow_report" \
+  --receipt-out "$vdo_grow_receipt" \
+  --json > "$vdo_grow_json"; then
+  echo "expected synthetic VDO grow failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["vdo", "status", "--name", "archive"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 82
+  and .executionResults[1].argv == ["vdo", "growLogical", "--name", "archive", "--vdoLogicalSize", "4TiB"]
+  and (.executionResults[1].stderr | contains("synthetic VDO grow failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "vdovolumes:archive:grow"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["vdo", "growLogical", "--name", "archive", "--vdoLogicalSize", "4TiB"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["vdovolumes:archive:grow"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["vdo", "status", "--name", "archive"]))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "archive"]))
+    and (.commands | any(.argv == ["disk-nix", "vdo", "--json"]))
+    and (.notes | any(contains("VDO lifecycle changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["vdo", "status", "--name", "archive"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "archive"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$vdo_grow_json" >/dev/null
+
+cmp "$vdo_grow_json" "$vdo_grow_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "vdovolumes:archive:grow"
+  and .report.partialExecutionRecovery.failedCommand == ["vdo", "growLogical", "--name", "archive", "--vdoLogicalSize", "4TiB"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$vdo_grow_receipt" >/dev/null
+
 vdo_property_tools="$tmpdir/fake-vdo-property-tools"
 mkdir -p "$vdo_property_tools"
 
@@ -1854,4 +1950,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"

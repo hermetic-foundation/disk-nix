@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for nineteen failed apply paths:
+fake storage tools ahead of `PATH` for twenty failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -134,6 +134,8 @@ fake storage tools ahead of `PATH` for nineteen failed apply paths:
   reviewed origin LV and cache pool
 - an LVM cache detach where fake `lvs` succeeds and fake
   `lvconvert --uncache` fails for the reviewed origin LV
+- a VDO logical grow where fake `vdo status --name archive` succeeds and fake
+  `vdo growLogical --name archive --vdoLogicalSize 4TiB` fails
 - a VDO property mutation where fake `disk-nix inspect archive` succeeds and
   fake `vdo changeWritePolicy --name archive --writePolicy sync` fails
 - a bcache property mutation where fake `disk-nix inspect /dev/bcache1`
@@ -672,5 +674,6 @@ behavior beyond the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace
 create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe
 namespace delete, target-side LUN LIO create, target-side LUN tgt create,
 multipath replace, MD RAID replace, LUKS open, iSCSI logout, iSCSI login, LVM
-cache attach, LVM cache detach, VDO property, bcache property, and LVM cache
-property failed-command paths, and broader destructive apply behavior.
+cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and
+LVM cache property failed-command paths, and broader destructive apply
+behavior.

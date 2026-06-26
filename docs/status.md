@@ -169,8 +169,8 @@ behavior across real storage stacks.
   delete failures, target-side LUN LIO and Linux tgt create failures,
   multipath replacement failure, MD RAID member replacement failure, LUKS open
   failure, iSCSI logout and login failures, LVM cache attach and detach
-  failures, VDO and bcache property mutation failures, and an LVM cache
-  property mutation failure, without touching real block devices.
+  failures, VDO grow failure, VDO and bcache property mutation failures, and an
+  LVM cache property mutation failure, without touching real block devices.
 
 ## Implemented probe coverage
 
@@ -231,8 +231,8 @@ placeholders until concrete adapters are added.
   namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace
   detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN
   tgt create, multipath replace, MD RAID replace, LUKS open, iSCSI logout,
-  iSCSI login, LVM cache attach, LVM cache detach, VDO property, bcache
-  property, and LVM cache property paths.
+  iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property,
+  bcache property, and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional
