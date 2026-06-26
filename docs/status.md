@@ -179,7 +179,8 @@ behavior across real storage stacks.
   delete failures, target-side LUN LIO create, attach, detach, and destroy
   failures, target-side LUN LIO grow not-ready, property, and rescan failures,
   Linux tgt create, attach, detach, and destroy failures, Linux tgt grow
-  not-ready, property, and rescan failures, SCST create failure, multipath
+  not-ready, property, and rescan failures, SCST create, attach, detach,
+  destroy, grow, property, and rescan failures, multipath
   resize and replacement failures, host-side LUN rescan failure, LVM VG
   replacement failure, ZFS pool replacement failure, MD RAID grow failure,
   MD RAID member add and replacement failures, LUKS open failure,
@@ -274,7 +275,10 @@ concrete adapters are added.
   target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
   detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
   concrete property rendering, target-side LUN tgt property, target-side LUN tgt
-  rescan, target-side LUN SCST create, host-side LUN rescan, multipath resize,
+  rescan, target-side LUN SCST create, target-side LUN SCST attach,
+  target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN
+  SCST grow, target-side LUN SCST property, target-side LUN SCST rescan,
+  host-side LUN rescan, multipath resize,
   multipath replace, LVM VG replacement, ZFS pool replacement, MD RAID grow,
   MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS
   grow, LUKS keyslot add,
