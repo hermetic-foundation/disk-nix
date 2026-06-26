@@ -1993,6 +1993,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'partiallySuppressed' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'bracketed IPv6 portals' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'CHAP secret redaction' ${./docs/status.md}
             runbooks=${./docs/operator-runbooks.md}
             for runbook in \
               "Device replacement" \

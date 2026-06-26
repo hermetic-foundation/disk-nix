@@ -866,6 +866,118 @@ Target: iqn.2026-06.example:storage.disk1
     }
 
     #[test]
+    fn normalizes_ipv6_session_and_concise_node_fixture() {
+        let session_graph = normalize_iscsi_session_output(
+            br#"
+Target: iqn.2026-06.example:storage.ipv6
+    Current Portal: [2001:db8::10]:3260,2
+    Persistent Portal: [2001:db8::11]:3260,2
+    Target Portal Group Tag: 2
+    SID: 44
+    iSCSI Connection State: LOGGED IN
+    iSCSI Session State: LOGGED_IN
+    Host Number: 8  State: running
+    scsi8 Channel 00 Id 1 Lun: 3
+        Attached scsi disk sdd          State: running
+"#,
+        )
+        .expect("IPv6 iSCSI session fixture should parse");
+        let session = session_graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "iscsi-session:44")
+            .expect("IPv6 iSCSI session should exist");
+        assert!(session.properties.iter().any(|property| {
+            property.key == "iscsi.portal" && property.value == "[2001:db8::10]:3260,2"
+        }));
+        assert!(session.properties.iter().any(|property| {
+            property.key == "iscsi.portal-address" && property.value == "2001:db8::10"
+        }));
+        assert!(
+            session
+                .properties
+                .iter()
+                .any(|property| property.key == "iscsi.portal-port" && property.value == "3260")
+        );
+        assert!(
+            session
+                .properties
+                .iter()
+                .any(|property| property.key == "iscsi.portal-tpgt" && property.value == "2")
+        );
+        assert!(session.properties.iter().any(|property| {
+            property.key == "iscsi.persistent-portal-address" && property.value == "2001:db8::11"
+        }));
+        assert!(
+            session
+                .properties
+                .iter()
+                .any(|property| property.key == "iscsi.host-number" && property.value == "8")
+        );
+        assert!(session_graph.nodes.iter().any(|node| {
+            node.kind == NodeKind::Lun
+                && node.id.0 == "iscsi-lun:iqn.2026-06.example:storage.ipv6:3"
+                && node.path.as_deref() == Some("/dev/sdd")
+                && node
+                    .properties
+                    .iter()
+                    .any(|property| property.key == "iscsi.scsi-id" && property.value == "1")
+        }));
+        assert!(session_graph.edges.iter().any(|edge| {
+            edge.from.0 == "iscsi-lun:iqn.2026-06.example:storage.ipv6:3"
+                && edge.to.0 == "block:/dev/sdd"
+                && edge.relationship == Relationship::Backs
+        }));
+
+        let node_graph = normalize_iscsi_node_output(
+            br#"
+[2001:db8::12]:3260,2 iqn.2026-06.example:storage.ipv6
+Target: iqn.2026-06.example:storage.chap
+    Portal: [2001:db8::13]:3260,3
+    node.startup: automatic
+    node.session.auth.authmethod: CHAP
+    node.session.auth.username: host-user
+    node.session.auth.password: []
+    node.session.auth.username_in: target-user
+    node.session.auth.password_in: inbound-secret
+"#,
+        )
+        .expect("IPv6 iSCSI node fixture should parse");
+        assert!(node_graph.nodes.iter().any(|node| {
+            node.id.0 == "iscsi-target:iqn.2026-06.example:storage.ipv6"
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-portal" && property.value == "[2001:db8::12]:3260,2"
+                })
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.node-portal-address" && property.value == "2001:db8::12"
+                })
+        }));
+        let chap_node = node_graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "iscsi-target:iqn.2026-06.example:storage.chap")
+            .expect("CHAP iSCSI node should exist");
+        assert!(chap_node.properties.iter().any(|property| {
+            property.key == "iscsi.node-auth-username" && property.value == "host-user"
+        }));
+        assert!(
+            !chap_node
+                .properties
+                .iter()
+                .any(|property| { property.key == "iscsi.node-auth-password-configured" })
+        );
+        assert!(chap_node.properties.iter().any(|property| {
+            property.key == "iscsi.node-auth-password-in-configured" && property.value == "true"
+        }));
+        assert!(
+            !chap_node
+                .properties
+                .iter()
+                .any(|property| property.value == "inbound-secret")
+        );
+    }
+
+    #[test]
     fn normalizes_configured_iscsi_nodes() {
         let graph = normalize_iscsi_node_output(
             br#"

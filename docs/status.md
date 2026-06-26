@@ -184,7 +184,9 @@ bcachefs, ZFS, LVM, VDO, device-mapper, LUKS, loop, zram, SCSI, iSCSI, NFS, MD
 RAID, multipath, and NVMe tooling. Probe fixture coverage includes isolated
 adapter fixtures and a cross-adapter shared-storage regression fixture that
 combines iSCSI session/node data, host-visible SCSI LUNs, and multipath path
-state in one normalized graph. Fixture coverage also includes a merged
+state in one normalized graph. The iSCSI fixture coverage also includes
+bracketed IPv6 portals, concise open-iscsi node records, attached LUN disks,
+and CHAP secret redaction checks. Fixture coverage also includes a merged
 degraded-MD-with-LUKS stack covering recovering array state, failed member
 metadata, active encrypted mapper status, backing edges, and LUKS header
 metadata, plus a clustered LVM over NVMe-oF fixture covering shared/clustered
