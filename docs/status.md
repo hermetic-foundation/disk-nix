@@ -243,9 +243,12 @@ added.
   swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
   namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
   LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
-  target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt
-  attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath
-  resize, multipath replace, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
+  target-side LUN LIO destroy, target-side LUN LIO grow/property not-ready,
+  target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
+  detach, target-side LUN tgt destroy, target-side LUN tgt grow/property
+  not-ready, multipath resize, multipath replace, MD RAID replace, LUKS open,
+  LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import,
+  LUKS keyslot remove, LUKS token remove, partition grow, NFS
   remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
   grow, VDO property, bcache property, and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply

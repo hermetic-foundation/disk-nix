@@ -150,6 +150,9 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
 - a target-side LUN destroy through the Linux LIO provider where fake
   `targetcli` inventory, ACL removal, LUN unmap, and target removal succeed and
   fake `targetcli /backstores/block delete _dev_zvol_tank_root` fails
+- a target-side LUN grow plus property update through the Linux LIO provider
+  where execute mode refuses the non-ready provider handoffs after rendering
+  concrete `targetcli` target and backstore inventory for review
 - a target-side LUN create through the Linux tgt provider where fake `tgtadm`
   inventory and target creation succeed and fake
   `tgtadm --lld iscsi --mode logicalunit --op new --tid 42 --lun 8 --backing-store /dev/zvol/tank/root`
@@ -165,6 +168,9 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
 - a target-side LUN destroy through the Linux tgt provider where fake `tgtadm`
   inventory, initiator unbind, and logical-unit delete succeed and fake
   `tgtadm --lld iscsi --mode target --op delete --tid 42` fails
+- a target-side LUN grow plus property update through the Linux tgt provider
+  where execute mode refuses the non-ready provider handoffs after rendering
+  concrete `tgtadm` target inventory for review
 - a multipath map resize where fake `multipath -ll /dev/mapper/mpatha` and
   fake `lsscsi -t -s` succeed and fake
   `multipathd resize map /dev/mapper/mpatha` fails
@@ -293,6 +299,9 @@ The test verifies that the failed report and receipt preserve:
 - the failed LIO `targetcli /backstores/block delete _dev_zvol_tank_root`
   command and non-zero status after target-side inventory, ACL removal, LUN
   unmap, and target removal
+- a LIO target-side grow/property `not-ready` report with zero execution
+  results, concrete target/backstore inventory commands, and provider handoff
+  commands marked `needs-domain-implementation`
 - `partialExecutionRecovery.failedActionId` as
   `targetluns:iqn.2026-06.example:tgt.root:destroy`
 - the failed Linux tgt `tgtadm --lld iscsi --mode target --op delete --tid 42`
@@ -306,6 +315,9 @@ The test verifies that the failed report and receipt preserve:
   `targetluns:iqn.2026-06.example:tgt.root:detach`
 - the failed Linux tgt `tgtadm --lld iscsi --mode logicalunit --op delete --tid 42 --lun 8`
   command and non-zero status after inventory and initiator unbind
+- a Linux tgt target-side grow/property `not-ready` report with zero execution
+  results, concrete target inventory commands, and provider handoff commands
+  marked `needs-domain-implementation`
 - `partialExecutionRecovery.failedActionId` as
   `luks.devices:cryptclosed:close`
 - the failed `cryptsetup close cryptclosed` command and non-zero status after
@@ -867,8 +879,9 @@ scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair,
 swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
-target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt
-attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath
+target-side LUN LIO destroy, target-side LUN LIO grow/property not-ready,
+target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
+detach, target-side LUN tgt destroy, target-side LUN tgt grow/property not-ready, multipath
 resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO

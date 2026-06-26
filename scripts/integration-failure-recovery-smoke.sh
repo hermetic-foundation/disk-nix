@@ -2808,6 +2808,206 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 2
 ' "$target_lun_tgt_destroy_receipt" >/dev/null
 
+target_lun_lio_grow_tools="$tmpdir/fake-target-lun-lio-grow-tools"
+mkdir -p "$target_lun_lio_grow_tools"
+
+cat > "$target_lun_lio_grow_tools/targetcli" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$target_lun_lio_grow_tools/<target-lun-provider:lio>" <<'EOF'
+#!/usr/bin/env bash
+echo "synthetic target-side LUN LIO grow handoff should stay not-ready" >&2
+exit 86
+EOF
+
+chmod +x "$target_lun_lio_grow_tools/targetcli" "$target_lun_lio_grow_tools/<target-lun-provider:lio>"
+
+target_lun_lio_grow_spec="$tmpdir/target-lun-lio-grow-spec.json"
+target_lun_lio_grow_json="$tmpdir/target-lun-lio-grow-apply.json"
+target_lun_lio_grow_report="$tmpdir/target-lun-lio-grow-report.json"
+target_lun_lio_grow_receipt="$tmpdir/target-lun-lio-grow-receipt.json"
+
+jq -n '{
+  spec: {
+    targetLuns: {
+      "iqn.2026-06.example:storage.root": {
+        operation: "grow",
+        provider: "lio",
+        source: "/dev/zvol/tank/root",
+        desiredSize: "4TiB",
+        lun: 7,
+        properties: {
+          "lio.writeCache": "off"
+        }
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$target_lun_lio_grow_spec"
+
+if PATH="$target_lun_lio_grow_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$target_lun_lio_grow_spec" \
+  --execute \
+  --report-out "$target_lun_lio_grow_report" \
+  --receipt-out "$target_lun_lio_grow_receipt" \
+  --json > "$target_lun_lio_grow_json"; then
+  echo "expected synthetic target-side LUN LIO grow/property handoff to stay not-ready" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "not-ready"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 2
+  and .commandSummary.commandCount == 8
+  and .commandSummary.needsDomainImplementationCount == 2
+  and (.executionResults | length) == 0
+  and (.messages | any(contains("execute refused")))
+  and (.commandPlan | any(
+    .actionId == "targetluns:iqn.2026-06.example:storage.root:grow"
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"] and .mutates == false))
+    and (.commands | any(.argv == ["targetcli", "/backstores/block/_dev_zvol_tank_root", "ls"] and .mutates == false))
+    and (.commands | any(
+      .argv == ["<target-lun-provider:lio>", "grow-lun", "--target", "iqn.2026-06.example:storage.root", "--provider", "lio", "--size", "4TiB", "--backing", "/dev/zvol/tank/root", "--lun", "7"]
+      and .mutates == true
+      and .readiness == "needs-domain-implementation"
+      and (.unresolvedInputs | index("lio target LUN provider implementation"))
+    ))
+  ))
+  and (.commandPlan | any(
+    .actionId == "targetLuns:iqn.2026-06.example:storage.root:set-property:lio.writeCache"
+    and (.commands | any(.argv == ["targetcli", "/backstores/block/_dev_zvol_tank_root", "ls"] and .mutates == false))
+    and (.commands | any(
+      .argv == ["<target-lun-provider:lio>", "set-lun-property", "--target", "iqn.2026-06.example:storage.root", "--provider", "lio", "--backing", "/dev/zvol/tank/root", "--lun", "7", "--property", "lio.writeCache", "--value", "off"]
+      and .mutates == true
+      and .readiness == "needs-domain-implementation"
+    ))
+  ))
+  and (.recoveryActions | any(
+    .kind == "resolve-inputs"
+    and (.notes | any(contains("need domain command implementation")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "inspect-current-state"
+    and (.notes | any(contains("non-ready command plans do not mutate storage")))
+  ))
+' "$target_lun_lio_grow_json" >/dev/null
+
+cmp "$target_lun_lio_grow_json" "$target_lun_lio_grow_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "not-ready"
+  and .report.commandSummary.needsDomainImplementationCount == 2
+  and (.report.executionResults | length) == 0
+' "$target_lun_lio_grow_receipt" >/dev/null
+
+target_lun_tgt_grow_tools="$tmpdir/fake-target-lun-tgt-grow-tools"
+mkdir -p "$target_lun_tgt_grow_tools"
+
+cat > "$target_lun_tgt_grow_tools/tgtadm" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$target_lun_tgt_grow_tools/<target-lun-provider:tgt>" <<'EOF'
+#!/usr/bin/env bash
+echo "synthetic target-side LUN tgt grow handoff should stay not-ready" >&2
+exit 87
+EOF
+
+chmod +x "$target_lun_tgt_grow_tools/tgtadm" "$target_lun_tgt_grow_tools/<target-lun-provider:tgt>"
+
+target_lun_tgt_grow_spec="$tmpdir/target-lun-tgt-grow-spec.json"
+target_lun_tgt_grow_json="$tmpdir/target-lun-tgt-grow-apply.json"
+target_lun_tgt_grow_report="$tmpdir/target-lun-tgt-grow-report.json"
+target_lun_tgt_grow_receipt="$tmpdir/target-lun-tgt-grow-receipt.json"
+
+jq -n '{
+  spec: {
+    targetLuns: {
+      "iqn.2026-06.example:tgt.root": {
+        operation: "grow",
+        provider: "tgt",
+        targetId: 42,
+        source: "/dev/zvol/tank/root",
+        desiredSize: "4TiB",
+        lun: 8,
+        properties: {
+          "tgt.writeCache": "off"
+        }
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$target_lun_tgt_grow_spec"
+
+if PATH="$target_lun_tgt_grow_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$target_lun_tgt_grow_spec" \
+  --execute \
+  --report-out "$target_lun_tgt_grow_report" \
+  --receipt-out "$target_lun_tgt_grow_receipt" \
+  --json > "$target_lun_tgt_grow_json"; then
+  echo "expected synthetic target-side LUN tgt grow/property handoff to stay not-ready" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "not-ready"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 2
+  and .commandSummary.commandCount == 6
+  and .commandSummary.needsDomainImplementationCount == 2
+  and (.executionResults | length) == 0
+  and (.messages | any(contains("execute refused")))
+  and (.commandPlan | any(
+    .actionId == "targetluns:iqn.2026-06.example:tgt.root:grow"
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42"] and .mutates == false))
+    and (.commands | any(
+      .argv == ["<target-lun-provider:tgt>", "grow-lun", "--target", "iqn.2026-06.example:tgt.root", "--provider", "tgt", "--size", "4TiB", "--backing", "/dev/zvol/tank/root", "--target-id", "42", "--lun", "8"]
+      and .mutates == true
+      and .readiness == "needs-domain-implementation"
+      and (.unresolvedInputs | index("tgt target LUN provider implementation"))
+    ))
+  ))
+  and (.commandPlan | any(
+    .actionId == "targetLuns:iqn.2026-06.example:tgt.root:set-property:tgt.writeCache"
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42"] and .mutates == false))
+    and (.commands | any(
+      .argv == ["<target-lun-provider:tgt>", "set-lun-property", "--target", "iqn.2026-06.example:tgt.root", "--provider", "tgt", "--backing", "/dev/zvol/tank/root", "--target-id", "42", "--lun", "8", "--property", "tgt.writeCache", "--value", "off"]
+      and .mutates == true
+      and .readiness == "needs-domain-implementation"
+    ))
+  ))
+  and (.recoveryActions | any(
+    .kind == "resolve-inputs"
+    and (.notes | any(contains("need domain command implementation")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "inspect-current-state"
+    and (.notes | any(contains("non-ready command plans do not mutate storage")))
+  ))
+' "$target_lun_tgt_grow_json" >/dev/null
+
+cmp "$target_lun_tgt_grow_json" "$target_lun_tgt_grow_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "not-ready"
+  and .report.commandSummary.needsDomainImplementationCount == 2
+  and (.report.executionResults | length) == 0
+' "$target_lun_tgt_grow_receipt" >/dev/null
+
 multipath_resize_tools="$tmpdir/fake-multipath-resize-tools"
 mkdir -p "$multipath_resize_tools"
 
@@ -4976,4 +5176,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow/property not-ready, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow/property not-ready, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
