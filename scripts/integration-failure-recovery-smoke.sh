@@ -1294,6 +1294,111 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$partition_grow_receipt" >/dev/null
 
+nfs_remount_tools="$tmpdir/fake-nfs-remount-tools"
+mkdir -p "$nfs_remount_tools"
+
+cat > "$nfs_remount_tools/findmnt" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$nfs_remount_tools/nfsstat" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$nfs_remount_tools/mount" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "-o remount,_netdev,ro,vers=4.2 /srv/tuned" ]]; then
+  echo "synthetic NFS remount failure for disk-nix recovery coverage" >&2
+  exit 80
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$nfs_remount_tools/findmnt" "$nfs_remount_tools/nfsstat" "$nfs_remount_tools/mount"
+
+nfs_remount_spec="$tmpdir/nfs-remount-spec.json"
+nfs_remount_json="$tmpdir/nfs-remount-apply.json"
+nfs_remount_report="$tmpdir/nfs-remount-report.json"
+nfs_remount_receipt="$tmpdir/nfs-remount-receipt.json"
+
+jq -n '{
+  nfs: {
+    mounts: {
+      "/srv/tuned": {
+        operation: "remount",
+        source: "nas.example.com:/srv/tuned",
+        options: ["_netdev", "ro", "vers=4.2"]
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$nfs_remount_spec"
+
+if PATH="$nfs_remount_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$nfs_remount_spec" \
+  --execute \
+  --report-out "$nfs_remount_report" \
+  --receipt-out "$nfs_remount_receipt" \
+  --json > "$nfs_remount_json"; then
+  echo "expected synthetic NFS remount failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["findmnt", "--json", "/srv/tuned"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 80
+  and .executionResults[1].argv == ["mount", "-o", "remount,_netdev,ro,vers=4.2", "/srv/tuned"]
+  and (.executionResults[1].stderr | contains("synthetic NFS remount failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "nfs.mounts:/srv/tuned:remount"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["mount", "-o", "remount,_netdev,ro,vers=4.2", "/srv/tuned"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["nfs.mounts:/srv/tuned:remount"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["findmnt", "--json", "/srv/tuned"]))
+    and (.commands | any(.argv == ["nfsstat", "-m", "/srv/tuned"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/srv/tuned", "--json"]))
+    and (.notes | any(contains("NFS changes")))
+    and (.notes | any(contains("negotiated mount options")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["nfsstat", "-m", "/srv/tuned"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["findmnt", "--json", "/srv/tuned"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$nfs_remount_json" >/dev/null
+
+cmp "$nfs_remount_json" "$nfs_remount_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "nfs.mounts:/srv/tuned:remount"
+  and .report.partialExecutionRecovery.failedCommand == ["mount", "-o", "remount,_netdev,ro,vers=4.2", "/srv/tuned"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$nfs_remount_receipt" >/dev/null
+
 iscsi_tools="$tmpdir/fake-iscsi-tools"
 mkdir -p "$iscsi_tools"
 
@@ -2056,4 +2161,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
