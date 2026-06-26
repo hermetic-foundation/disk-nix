@@ -3017,6 +3017,101 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$target_lun_lio_property_receipt" >/dev/null
 
+target_lun_lio_rescan_tools="$tmpdir/fake-target-lun-lio-rescan-tools"
+mkdir -p "$target_lun_lio_rescan_tools"
+
+cat > "$target_lun_lio_rescan_tools/targetcli" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "/iscsi/iqn.2026-06.example:storage.root ls" ]]; then
+  echo "synthetic target-side LUN LIO rescan inventory failure for disk-nix recovery coverage" >&2
+  exit 90
+fi
+printf '{}\n'
+exit 0
+EOF
+
+chmod +x "$target_lun_lio_rescan_tools/targetcli"
+
+target_lun_lio_rescan_spec="$tmpdir/target-lun-lio-rescan-spec.json"
+target_lun_lio_rescan_json="$tmpdir/target-lun-lio-rescan-apply.json"
+target_lun_lio_rescan_report="$tmpdir/target-lun-lio-rescan-report.json"
+target_lun_lio_rescan_receipt="$tmpdir/target-lun-lio-rescan-receipt.json"
+
+jq -n '{
+  spec: {
+    targetLuns: {
+      "iqn.2026-06.example:storage.root": {
+        operation: "rescan",
+        provider: "lio"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$target_lun_lio_rescan_spec"
+
+if PATH="$target_lun_lio_rescan_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$target_lun_lio_rescan_spec" \
+  --execute \
+  --report-out "$target_lun_lio_rescan_report" \
+  --receipt-out "$target_lun_lio_rescan_receipt" \
+  --json > "$target_lun_lio_rescan_json"; then
+  echo "expected synthetic target-side LUN LIO rescan failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 1
+  and .commandSummary.commandCount == 2
+  and .commandSummary.needsDomainImplementationCount == 0
+  and (.executionResults | length) == 1
+  and .executionResults[0].success == false
+  and .executionResults[0].statusCode == 90
+  and .executionResults[0].argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+  and (.executionResults[0].stderr | contains("synthetic target-side LUN LIO rescan inventory failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:storage.root:rescan"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["targetluns:iqn.2026-06.example:storage.root:rescan"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["targetcli", "/iscsi", "ls"]))
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+    and (.notes | any(contains("target-side LUN changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["targetcli", "/iscsi", "ls"]))
+  ))
+' "$target_lun_lio_rescan_json" >/dev/null
+
+cmp "$target_lun_lio_rescan_json" "$target_lun_lio_rescan_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:storage.root:rescan"
+  and .report.partialExecutionRecovery.failedCommand == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$target_lun_lio_rescan_receipt" >/dev/null
+
 target_lun_tgt_grow_tools="$tmpdir/fake-target-lun-tgt-grow-tools"
 mkdir -p "$target_lun_tgt_grow_tools"
 
@@ -3219,6 +3314,102 @@ jq -e '
   and .report.partialExecutionRecovery.failedCommand == ["tgtadm", "--lld", "iscsi", "--mode", "logicalunit", "--op", "update", "--tid", "42", "--lun", "8", "--name", "tgt.writeCache", "--value", "off"]
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$target_lun_tgt_property_receipt" >/dev/null
+
+target_lun_tgt_rescan_tools="$tmpdir/fake-target-lun-tgt-rescan-tools"
+mkdir -p "$target_lun_tgt_rescan_tools"
+
+cat > "$target_lun_tgt_rescan_tools/tgtadm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "--lld iscsi --mode target --op show --tid 42" ]]; then
+  echo "synthetic target-side LUN tgt rescan inventory failure for disk-nix recovery coverage" >&2
+  exit 91
+fi
+printf '{}\n'
+exit 0
+EOF
+
+chmod +x "$target_lun_tgt_rescan_tools/tgtadm"
+
+target_lun_tgt_rescan_spec="$tmpdir/target-lun-tgt-rescan-spec.json"
+target_lun_tgt_rescan_json="$tmpdir/target-lun-tgt-rescan-apply.json"
+target_lun_tgt_rescan_report="$tmpdir/target-lun-tgt-rescan-report.json"
+target_lun_tgt_rescan_receipt="$tmpdir/target-lun-tgt-rescan-receipt.json"
+
+jq -n '{
+  spec: {
+    targetLuns: {
+      "iqn.2026-06.example:tgt.root": {
+        operation: "rescan",
+        provider: "tgt",
+        targetId: 42
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$target_lun_tgt_rescan_spec"
+
+if PATH="$target_lun_tgt_rescan_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$target_lun_tgt_rescan_spec" \
+  --execute \
+  --report-out "$target_lun_tgt_rescan_report" \
+  --receipt-out "$target_lun_tgt_rescan_receipt" \
+  --json > "$target_lun_tgt_rescan_json"; then
+  echo "expected synthetic target-side LUN tgt rescan failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 1
+  and .commandSummary.commandCount == 2
+  and .commandSummary.needsDomainImplementationCount == 0
+  and (.executionResults | length) == 1
+  and .executionResults[0].success == false
+  and .executionResults[0].statusCode == 91
+  and .executionResults[0].argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42"]
+  and (.executionResults[0].stderr | contains("synthetic target-side LUN tgt rescan inventory failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:tgt.root:rescan"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["targetluns:iqn.2026-06.example:tgt.root:rescan"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["targetcli", "/iscsi", "ls"]))
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:tgt.root", "ls"]))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+    and (.notes | any(contains("target-side LUN changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+  ))
+' "$target_lun_tgt_rescan_json" >/dev/null
+
+cmp "$target_lun_tgt_rescan_json" "$target_lun_tgt_rescan_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:tgt.root:rescan"
+  and .report.partialExecutionRecovery.failedCommand == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$target_lun_tgt_rescan_receipt" >/dev/null
 
 multipath_resize_tools="$tmpdir/fake-multipath-resize-tools"
 mkdir -p "$multipath_resize_tools"
@@ -5475,4 +5666,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"

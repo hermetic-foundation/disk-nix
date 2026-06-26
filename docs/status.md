@@ -176,16 +176,16 @@ behavior across real storage stacks.
   failure, LUKS keyslot remove failure, LUKS token remove failure, and ZFS
   rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create, attach, detach, and destroy
-  failures, target-side LUN LIO grow not-ready and property failures, Linux tgt
-  create, attach, detach, and destroy failures, Linux tgt grow not-ready and
-  property failures, multipath resize and replacement failures, MD RAID member
-  add and replacement failures, LUKS open failure, partition grow failure, NFS
-  remount failure, NFS unmount failure, swap label mutation failure,
-  device-mapper rename failure, ZFS dataset rename failure, Btrfs snapshot clone
-  failure, ZFS snapshot clone failure, LVM VG rename failure, iSCSI logout and
-  login failures, LVM cache attach and detach failures, VDO grow failure, VDO
-  and bcache property mutation failures, and an LVM cache property mutation
-  failure, without touching real block devices.
+  failures, target-side LUN LIO grow not-ready, property, and rescan failures,
+  Linux tgt create, attach, detach, and destroy failures, Linux tgt grow
+  not-ready, property, and rescan failures, multipath resize and replacement
+  failures, MD RAID member add and replacement failures, LUKS open failure,
+  partition grow failure, NFS remount failure, NFS unmount failure, swap label
+  mutation failure, device-mapper rename failure, ZFS dataset rename failure,
+  Btrfs snapshot clone failure, ZFS snapshot clone failure, LVM VG rename
+  failure, iSCSI logout and login failures, LVM cache attach and detach
+  failures, VDO grow failure, VDO and bcache property mutation failures, and an
+  LVM cache property mutation failure, without touching real block devices.
 
 ## Implemented probe coverage
 
@@ -260,13 +260,13 @@ added.
   namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
   LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
   target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete
-  property rendering, target-side LUN LIO property, target-side LUN tgt create,
-  target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt
-  destroy, target-side LUN tgt grow not-ready with concrete property rendering,
-  target-side LUN tgt property, multipath resize, multipath replace, MD RAID
-  add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow,
-  LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove,
-  partition grow, NFS
+  property rendering, target-side LUN LIO property, target-side LUN LIO rescan,
+  target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
+  detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
+  concrete property rendering, target-side LUN tgt property, target-side LUN tgt
+  rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID
+  replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add,
+  LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
   remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
   grow, VDO property, bcache property, and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
