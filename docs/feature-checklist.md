@@ -317,7 +317,7 @@ Update rules:
   grow not-ready with concrete property rendering, target-side LUN tgt property,
   target-side LUN tgt rescan, target-side LUN SCST create, host-side LUN
   rescan, multipath resize, multipath replace, LVM VG replacement, ZFS pool
-  replacement, MD RAID add-member, MD RAID remove-member, MD RAID replace,
+  replacement, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace,
   LUKS open, LUKS format, LUKS close, LUKS grow,
   LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove,
   partition grow,

@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for sixty-two failed apply paths:
+fake storage tools ahead of `PATH` for sixty-three failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -210,6 +210,8 @@ fake storage tools ahead of `PATH` for sixty-two failed apply paths:
 - an LVM volume group PV replacement where fake `pvs` inspections and
   `vgextend vg0 /dev/disk/by-id/new-pv` succeed and fake
   `pvmove /dev/disk/by-id/old-pv /dev/disk/by-id/new-pv` fails
+- an MD RAID grow where fake `mdadm --detail /dev/md/root` succeeds and fake
+  `mdadm --grow /dev/md/root --size max` fails
 - an MD RAID member replacement where fake `mdadm --detail /dev/md/root`
   succeeds and fake
   `mdadm /dev/md/root --replace /dev/disk/by-id/old-md-member --with /dev/disk/by-id/new-md-member`
@@ -996,7 +998,7 @@ target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
 detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
 concrete property rendering, target-side LUN tgt property, target-side LUN tgt
 rescan, target-side LUN SCST create, host-side LUN rescan, multipath
-resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
+resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
 create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command

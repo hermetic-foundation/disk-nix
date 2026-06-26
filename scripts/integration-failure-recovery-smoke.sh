@@ -4335,6 +4335,93 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$multipath_replace_receipt" >/dev/null
 
+md_grow_tools="$tmpdir/fake-md-grow-tools"
+mkdir -p "$md_grow_tools"
+
+cat > "$md_grow_tools/mdadm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "--grow /dev/md/root --size max" ]]; then
+  echo "synthetic MD RAID grow failure for disk-nix recovery coverage" >&2
+  exit 88
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$md_grow_tools/mdadm"
+
+md_grow_spec="$tmpdir/md-grow-spec.json"
+md_grow_json="$tmpdir/md-grow-apply.json"
+md_grow_report="$tmpdir/md-grow-report.json"
+md_grow_receipt="$tmpdir/md-grow-receipt.json"
+
+jq -n '{
+  mdRaids: {
+    root: {
+      target: "/dev/md/root",
+      operation: "grow",
+      desiredSize: "max"
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowGrow: true
+  }
+}' > "$md_grow_spec"
+
+if PATH="$md_grow_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$md_grow_spec" \
+  --execute \
+  --report-out "$md_grow_report" \
+  --receipt-out "$md_grow_receipt" \
+  --json > "$md_grow_json"; then
+  echo "expected synthetic MD RAID grow failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 3
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["mdadm", "--detail", "/dev/md/root"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 88
+  and .executionResults[1].argv == ["mdadm", "--grow", "/dev/md/root", "--size", "max"]
+  and (.executionResults[1].stderr | contains("synthetic MD RAID grow failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "mdraids:root:grow"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["mdadm", "--grow", "/dev/md/root", "--size", "max"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["mdraids:root:grow"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "review-execution-failure"
+    and (.notes | any(contains("mdraids:root:grow")))
+    and (.notes | any(contains("mdadm --grow /dev/md/root --size max")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "inspect-current-state"
+    and (.commands | any(.argv == ["disk-nix", "probe-status", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "topology", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "resume-after-fix"))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$md_grow_json" >/dev/null
+
+cmp "$md_grow_json" "$md_grow_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "mdraids:root:grow"
+  and .report.partialExecutionRecovery.failedCommand == ["mdadm", "--grow", "/dev/md/root", "--size", "max"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$md_grow_receipt" >/dev/null
+
 md_add_tools="$tmpdir/fake-md-add-tools"
 mkdir -p "$md_add_tools"
 
@@ -7662,4 +7749,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, host-side LUN rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, host-side LUN rescan, multipath resize, multipath replace, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"

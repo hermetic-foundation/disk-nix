@@ -181,8 +181,8 @@ behavior across real storage stacks.
   Linux tgt create, attach, detach, and destroy failures, Linux tgt grow
   not-ready, property, and rescan failures, SCST create failure, multipath
   resize and replacement failures, host-side LUN rescan failure, LVM VG
-  replacement failure, ZFS pool replacement failure, MD RAID member add and
-  replacement failures, LUKS open failure,
+  replacement failure, ZFS pool replacement failure, MD RAID grow failure,
+  MD RAID member add and replacement failures, LUKS open failure,
   partition grow failure, NFS remount failure, NFS unmount failure, swap label
   mutation failure, device-mapper rename failure, ZFS dataset rename failure,
   Btrfs snapshot clone failure, ZFS snapshot clone failure, LVM VG rename
@@ -275,8 +275,8 @@ concrete adapters are added.
   detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
   concrete property rendering, target-side LUN tgt property, target-side LUN tgt
   rescan, target-side LUN SCST create, host-side LUN rescan, multipath resize,
-  multipath replace, LVM VG replacement, ZFS pool replacement, MD RAID
-  remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS
+  multipath replace, LVM VG replacement, ZFS pool replacement, MD RAID grow,
+  MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS
   grow, LUKS keyslot add,
   LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
   remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach,
