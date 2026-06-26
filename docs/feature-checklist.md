@@ -188,8 +188,10 @@ Update rules:
 - [ ] **Partial:** Multi-action reconciliation now emits
   `topologyComparison.reconciliationGroups` with shared identities, planned
   action ids, suppressed action ids, counts, and partially-suppressed group
-  flags before command rendering, but more command-rendering gates are still
-  needed for complex grouped mutations.
+  flags before command rendering. Group identities now include NFS export/client
+  mount relationships, device-mapper consumers, backing-file/loop relationships,
+  and host-visible LUN detach coverage, but more command-rendering gates are
+  still needed for complex grouped mutations.
 - [ ] **Partial:** More cross-domain reconciliation is needed for grouped
   updates such as iSCSI LUN refresh, multipath refresh, partition growth,
   LUKS/LVM resize, and filesystem growth.

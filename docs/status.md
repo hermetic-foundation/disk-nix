@@ -217,7 +217,9 @@ placeholders until concrete adapters are added.
   comparison now emits `reconciliationGroups` so related actions sharing a
   target, backing object, portal, path, mountpoint, or parent identity expose
   planned and suppressed action ids plus partially-suppressed group flags before
-  commands are rendered.
+  commands are rendered. Grouping also normalizes NFS client sources back to
+  exported paths and device-mapper consumers back to mapper names so export/mount
+  and dm/filesystem reconciliation are visible together.
 - Runtime graph-path dependency ordering for multi-layer changes. The planner
   now applies coarse layer ordering and reports inferred dependency edges from
   declared identities and direct or multi-hop current-topology graph paths,

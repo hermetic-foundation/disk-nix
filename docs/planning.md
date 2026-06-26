@@ -775,7 +775,10 @@ suppressed actions are removed. Each group records all action ids, remaining
 planned action ids, suppressed action ids, counts, and whether the group is
 partially suppressed. `partiallySuppressed = true` means command rendering will
 continue with only part of a related group; automation should re-review the
-remaining planned actions against the fresh topology before executing.
+remaining planned actions against the fresh topology before executing. Group
+identities include normalized NFS export paths derived from client mount sources
+and normalized device-mapper names derived from `/dev/mapper/*` consumers so
+cross-domain export/mount and dm/filesystem changes are reported together.
 Absent mountpoints for mount actions remain actionable with mount-required
 diagnostics rather than generic missing-target diagnostics.
 

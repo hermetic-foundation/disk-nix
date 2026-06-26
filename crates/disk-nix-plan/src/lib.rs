@@ -1511,7 +1511,68 @@ fn topology_reconciliation_groups_for_actions(
 fn action_reconciliation_group_identities(action: &PlannedAction) -> BTreeSet<String> {
     let mut identities = action_dependency_identities(action);
     identities.extend(action_dependency_inputs(action));
+    insert_cross_domain_reconciliation_aliases(&mut identities, action);
     identities
+}
+
+fn insert_cross_domain_reconciliation_aliases(
+    identities: &mut BTreeSet<String>,
+    action: &PlannedAction,
+) {
+    match action.context.collection.as_deref() {
+        Some("exports") => {
+            insert_nfs_export_alias(identities, action.context.target.as_deref());
+            insert_nfs_export_alias(identities, action.context.name.as_deref());
+        }
+        Some("nfs.mounts") => {
+            insert_nfs_source_alias(identities, action.context.device.as_deref());
+            insert_nfs_export_alias(identities, action.context.device.as_deref());
+        }
+        Some("dmMaps") => {
+            insert_dm_map_alias(identities, action.context.target.as_deref());
+            insert_dm_map_alias(identities, action.context.name.as_deref());
+            insert_dm_map_alias(identities, action.context.rename_to.as_deref());
+        }
+        Some("filesystems" | "swaps" | "luks.devices" | "physicalVolumes" | "vdoVolumes") => {
+            insert_dm_map_alias(identities, action.context.target.as_deref());
+            insert_dm_map_alias(identities, action.context.device.as_deref());
+        }
+        _ => {}
+    }
+}
+
+fn insert_nfs_source_alias(identities: &mut BTreeSet<String>, value: Option<&str>) {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    identities.insert(format!("nfs-source:{value}"));
+}
+
+fn insert_nfs_export_alias(identities: &mut BTreeSet<String>, value: Option<&str>) {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    let export_path = value
+        .rsplit_once(':')
+        .map(|(_server, path)| path)
+        .unwrap_or(value)
+        .trim();
+    if export_path.starts_with('/') {
+        identities.insert(format!("nfs-export:{export_path}"));
+    }
+}
+
+fn insert_dm_map_alias(identities: &mut BTreeSet<String>, value: Option<&str>) {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    if let Some(name) = value.strip_prefix("/dev/mapper/") {
+        if !name.is_empty() {
+            identities.insert(format!("dm-map:{name}"));
+        }
+    } else if !value.starts_with("/dev/") && !value.contains('/') {
+        identities.insert(format!("dm-map:{value}"));
+    }
 }
 
 fn insert_lvm_parent_identities(identities: &mut BTreeSet<String>, value: Option<&str>) {
@@ -26027,6 +26088,199 @@ mod tests {
         assert_eq!(json["summary"]["partiallySuppressedGroupCount"], 1);
         assert_eq!(json["reconciliationGroups"][0]["identity"], lun_path);
         assert_eq!(json["reconciliationGroups"][0]["partiallySuppressed"], true);
+    }
+
+    #[test]
+    fn topology_comparison_groups_nfs_export_and_client_mount_reconciliation() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "exports": {
+                "/srv/share": {
+                  "operation": "export",
+                  "client": "192.0.2.0/24",
+                  "options": "rw,sync,no_subtree_check"
+                }
+              },
+              "nfs": {
+                "mounts": {
+                  "/mnt/share": {
+                    "operation": "mount",
+                    "source": "nas.example.com:/srv/share",
+                    "fsType": "nfs4"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "nfs-export:/srv/share:192.0.2.0/24",
+                NodeKind::NfsExport,
+                "/srv/share",
+            )
+            .with_property("nfs.export", "/srv/share")
+            .with_property("nfs.export-client", "192.0.2.0/24")
+            .with_property("nfs.exportfs", "true")
+            .with_property("nfs.export-option-rw", "true")
+            .with_property("nfs.export-option-sync", "true")
+            .with_property("nfs.export-option-no-subtree-check", "true"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.partially_suppressed_group_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert_eq!(plan.actions[0].id, "nfs.mounts:/mnt/share:mount");
+
+        let group = comparison
+            .reconciliation_groups
+            .iter()
+            .find(|group| group.identity == "nfs-export:/srv/share")
+            .expect("NFS export and mount reconciliation group exists");
+        assert_eq!(
+            group.planned_action_ids,
+            vec!["nfs.mounts:/mnt/share:mount"]
+        );
+        assert_eq!(
+            group.suppressed_action_ids,
+            vec!["exports:/srv/share:export"]
+        );
+        assert!(group.partially_suppressed);
+    }
+
+    #[test]
+    fn topology_comparison_groups_device_mapper_and_filesystem_reconciliation() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "dmMaps": {
+                "cryptdata": {
+                  "operation": "destroy",
+                  "target": "cryptdata"
+                }
+              },
+              "filesystems": {
+                "data": {
+                  "operation": "unmount",
+                  "mountpoint": "/data",
+                  "device": "/dev/mapper/cryptdata",
+                  "fsType": "xfs"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("dm:cryptdata", NodeKind::DeviceMapper, "cryptdata")
+                .with_path("/dev/mapper/cryptdata")
+                .with_property("dm.open-count", "0"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 3);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert!(comparison.summary.partially_suppressed_group_count >= 1);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "dmmaps:cryptdata:destroy")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "filesystems:data:unmount")
+        );
+
+        let group = comparison
+            .reconciliation_groups
+            .iter()
+            .find(|group| group.identity == "dm-map:cryptdata")
+            .expect("device-mapper and filesystem reconciliation group exists");
+        assert!(
+            group
+                .planned_action_ids
+                .iter()
+                .any(|action_id| action_id == "dmmaps:cryptdata:destroy")
+        );
+        assert!(
+            group
+                .suppressed_action_ids
+                .iter()
+                .any(|action_id| action_id == "filesystems:data:unmount")
+        );
+        assert!(group.partially_suppressed);
+    }
+
+    #[test]
+    fn topology_comparison_groups_backing_file_and_loop_reconciliation() {
+        let backing_path = "/var/lib/images/root.img";
+        let plan = plan_from_json_bytes(
+            br#"{
+              "backingFiles": {
+                "/var/lib/images/root.img": {
+                  "operation": "create",
+                  "desiredSize": "8GiB"
+                }
+              },
+              "loopDevices": {
+                "/dev/loop10": {
+                  "operation": "create",
+                  "device": "/var/lib/images/root.img"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new(
+                "backing-file:/var/lib/images/root.img",
+                NodeKind::BackingFile,
+                backing_path,
+            )
+            .with_path(backing_path)
+            .with_size_bytes(8 * 1024 * 1024 * 1024),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.partially_suppressed_group_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert_eq!(plan.actions[0].id, "loopdevices:/dev/loop10:create");
+
+        let group = comparison
+            .reconciliation_groups
+            .iter()
+            .find(|group| group.identity == backing_path)
+            .expect("backing file and loop reconciliation group exists");
+        assert_eq!(
+            group.planned_action_ids,
+            vec!["loopdevices:/dev/loop10:create"]
+        );
+        assert_eq!(
+            group.suppressed_action_ids,
+            vec!["backingfiles:/var/lib/images/root.img:create"]
+        );
+        assert!(group.partially_suppressed);
     }
 
     #[test]
