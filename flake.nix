@@ -1785,6 +1785,30 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-nvme-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
           '';
+          documentation = pkgs.runCommand "disk-nix-documentation-check" { } ''
+            checklist=${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'docs/feature-checklist.md' ${./README.md}
+            ${pkgs.gnugrep}/bin/grep -q 'feature-checklist.md' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Status labels:' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'Update rules:' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q '\*\*Finished:\*\*' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q '\*\*Partial:\*\*' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q '\*\*Desired:\*\*' "$checklist"
+            for section in \
+              Foundation \
+              "Read-only storage awareness" \
+              "Planning and apply safety" \
+              "Lifecycle operations" \
+              "Current-topology reconciliation" \
+              "Recovery guidance" \
+              "NixOS integration" \
+              "Testing and proof" \
+              Documentation
+            do
+              ${pkgs.gnugrep}/bin/grep -q "^## $section$" "$checklist"
+            done
+            touch "$out"
+          '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''
             simplePlan=$(mktemp)
             lifecyclePlan=$(mktemp)
