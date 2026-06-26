@@ -901,6 +901,7 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                     | Operation::Destroy
                     | Operation::Detach
                     | Operation::Grow
+                    | Operation::SetProperty
                     | Operation::Rescan,
                 Some("targetLuns")
             )
@@ -1232,7 +1233,8 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             | Operation::Destroy
             | Operation::Detach
             | Operation::Grow
-            | Operation::Rescan,
+            | Operation::Rescan
+            | Operation::SetProperty,
             Some("targetLuns"),
             Some(target),
         ) => commands.extend(target_lun_recovery_inspection_commands(
@@ -1588,7 +1590,8 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             | Operation::Destroy
             | Operation::Detach
             | Operation::Grow
-            | Operation::Rescan,
+            | Operation::Rescan
+            | Operation::SetProperty,
             Some("targetLuns"),
             Some(target),
         ) => target_lun_recovery_inspection_commands(
@@ -1927,7 +1930,8 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             | Operation::Destroy
             | Operation::Detach
             | Operation::Grow
-            | Operation::Rescan,
+            | Operation::Rescan
+            | Operation::SetProperty,
             Some("targetLuns"),
             Some(target),
         ) => commands.extend(target_lun_recovery_inspection_commands(
@@ -2277,7 +2281,8 @@ fn domain_recovery_notes(
             | Operation::Destroy
             | Operation::Detach
             | Operation::Grow
-            | Operation::Rescan,
+            | Operation::Rescan
+            | Operation::SetProperty,
             Some("targetLuns"),
         ) => {
             notes.push(
@@ -2472,7 +2477,7 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
             "multipathmaps" => "multipathMaps",
             "nvmenamespaces" => "nvmeNamespaces",
             "physicalvolumes" => "physicalVolumes",
-            "targetluns" => "targetLuns",
+            "targetLuns" | "targetluns" => "targetLuns",
             "thinpools" => "thinPools",
             "volumegroups" => "volumeGroups",
             "vdovolumes" => "vdoVolumes",
@@ -3730,7 +3735,11 @@ fn target_lun_target_from_step(step: &ExecutionStep) -> Option<&str> {
     step.action_id
         .strip_prefix("targetluns:")
         .or_else(|| step.action_id.strip_prefix("targetLuns:"))
-        .and_then(|rest| rest.rsplit_once(':').map(|(target, _)| target))
+        .and_then(|rest| {
+            rest.split_once(":set-property:")
+                .map(|(target, _)| target)
+                .or_else(|| rest.rsplit_once(':').map(|(target, _)| target))
+        })
         .filter(|target| !target.is_empty())
 }
 
@@ -29961,6 +29970,100 @@ mod tests {
                 .iter()
                 .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints)
         );
+    }
+
+    #[test]
+    fn failed_target_lun_lio_property_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:storage.root": {
+                    "provider": "lio",
+                    "source": "/dev/zvol/tank/root",
+                    "lun": 7,
+                    "properties": {
+                      "lio.writeCache": "off"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_property = [
+            "targetcli",
+            "/backstores/block/_dev_zvol_tank_root",
+            "set",
+            "attribute",
+            "emulate_write_cache=0",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_property,
+                status_code: Some(if argv == failed_property { 88 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_property {
+                    "target LUN property failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert_eq!(
+            report
+                .partial_execution_recovery
+                .as_ref()
+                .expect("partial execution recovery is reported")
+                .failed_action_id,
+            "targetLuns:iqn.2026-06.example:storage.root:set-property:lio.writeCache"
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("target-side LUN property domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("SetProperty"));
+        assert!(
+            domain_recovery.commands.iter().any(|command| {
+                command.argv == ["targetcli", "/iscsi", "ls"] && !command.mutates
+            })
+        );
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.notes.iter().any(|note| {
+            note.contains("target-side LUN changes") && note.contains("provider inventory")
+        }));
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("target-side LUN property roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+                && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("target-side LUN property rollback recovery review is reported");
+        assert!(rollback.commands.iter().all(|command| !command.mutates));
     }
 
     #[test]

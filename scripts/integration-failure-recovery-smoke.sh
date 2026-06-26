@@ -2913,6 +2913,110 @@ jq -e '
   and (.report.executionResults | length) == 0
 ' "$target_lun_lio_grow_receipt" >/dev/null
 
+target_lun_lio_property_tools="$tmpdir/fake-target-lun-lio-property-tools"
+mkdir -p "$target_lun_lio_property_tools"
+
+cat > "$target_lun_lio_property_tools/targetcli" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "/backstores/block/_dev_zvol_tank_root set attribute emulate_write_cache=0" ]]; then
+  echo "synthetic target-side LUN LIO property failure for disk-nix recovery coverage" >&2
+  exit 88
+fi
+printf '{}\n'
+exit 0
+EOF
+
+chmod +x "$target_lun_lio_property_tools/targetcli"
+
+target_lun_lio_property_spec="$tmpdir/target-lun-lio-property-spec.json"
+target_lun_lio_property_json="$tmpdir/target-lun-lio-property-apply.json"
+target_lun_lio_property_report="$tmpdir/target-lun-lio-property-report.json"
+target_lun_lio_property_receipt="$tmpdir/target-lun-lio-property-receipt.json"
+
+jq -n '{
+  spec: {
+    targetLuns: {
+      "iqn.2026-06.example:storage.root": {
+        provider: "lio",
+        source: "/dev/zvol/tank/root",
+        lun: 7,
+        properties: {
+          "lio.writeCache": "off"
+        }
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$target_lun_lio_property_spec"
+
+if PATH="$target_lun_lio_property_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$target_lun_lio_property_spec" \
+  --execute \
+  --report-out "$target_lun_lio_property_report" \
+  --receipt-out "$target_lun_lio_property_receipt" \
+  --json > "$target_lun_lio_property_json"; then
+  echo "expected synthetic target-side LUN LIO property failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 1
+  and .commandSummary.commandCount == 5
+  and .commandSummary.needsDomainImplementationCount == 0
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["targetcli", "/backstores/block/_dev_zvol_tank_root", "ls"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 88
+  and .executionResults[2].argv == ["targetcli", "/backstores/block/_dev_zvol_tank_root", "set", "attribute", "emulate_write_cache=0"]
+  and (.executionResults[2].stderr | contains("synthetic target-side LUN LIO property failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "targetLuns:iqn.2026-06.example:storage.root:set-property:lio.writeCache"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["targetcli", "/backstores/block/_dev_zvol_tank_root", "set", "attribute", "emulate_write_cache=0"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["targetLuns:iqn.2026-06.example:storage.root:set-property:lio.writeCache"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["targetcli", "/iscsi", "ls"]))
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+    and (.notes | any(contains("target-side LUN changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["targetcli", "/iscsi", "ls"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$target_lun_lio_property_json" >/dev/null
+
+cmp "$target_lun_lio_property_json" "$target_lun_lio_property_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "targetLuns:iqn.2026-06.example:storage.root:set-property:lio.writeCache"
+  and .report.partialExecutionRecovery.failedCommand == ["targetcli", "/backstores/block/_dev_zvol_tank_root", "set", "attribute", "emulate_write_cache=0"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$target_lun_lio_property_receipt" >/dev/null
+
 target_lun_tgt_grow_tools="$tmpdir/fake-target-lun-tgt-grow-tools"
 mkdir -p "$target_lun_tgt_grow_tools"
 
@@ -3012,6 +3116,109 @@ jq -e '
   and .report.commandSummary.needsDomainImplementationCount == 1
   and (.report.executionResults | length) == 0
 ' "$target_lun_tgt_grow_receipt" >/dev/null
+
+target_lun_tgt_property_tools="$tmpdir/fake-target-lun-tgt-property-tools"
+mkdir -p "$target_lun_tgt_property_tools"
+
+cat > "$target_lun_tgt_property_tools/tgtadm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "--lld iscsi --mode logicalunit --op update --tid 42 --lun 8 --name tgt.writeCache --value off" ]]; then
+  echo "synthetic target-side LUN tgt property failure for disk-nix recovery coverage" >&2
+  exit 89
+fi
+printf '{}\n'
+exit 0
+EOF
+
+chmod +x "$target_lun_tgt_property_tools/tgtadm"
+
+target_lun_tgt_property_spec="$tmpdir/target-lun-tgt-property-spec.json"
+target_lun_tgt_property_json="$tmpdir/target-lun-tgt-property-apply.json"
+target_lun_tgt_property_report="$tmpdir/target-lun-tgt-property-report.json"
+target_lun_tgt_property_receipt="$tmpdir/target-lun-tgt-property-receipt.json"
+
+jq -n '{
+  spec: {
+    targetLuns: {
+      "iqn.2026-06.example:tgt.root": {
+        provider: "tgt",
+        targetId: 42,
+        source: "/dev/zvol/tank/root",
+        lun: 8,
+        properties: {
+          "tgt.writeCache": "off"
+        }
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$target_lun_tgt_property_spec"
+
+if PATH="$target_lun_tgt_property_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$target_lun_tgt_property_spec" \
+  --execute \
+  --report-out "$target_lun_tgt_property_report" \
+  --receipt-out "$target_lun_tgt_property_receipt" \
+  --json > "$target_lun_tgt_property_json"; then
+  echo "expected synthetic target-side LUN tgt property failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 1
+  and .commandSummary.commandCount == 3
+  and .commandSummary.needsDomainImplementationCount == 0
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 89
+  and .executionResults[1].argv == ["tgtadm", "--lld", "iscsi", "--mode", "logicalunit", "--op", "update", "--tid", "42", "--lun", "8", "--name", "tgt.writeCache", "--value", "off"]
+  and (.executionResults[1].stderr | contains("synthetic target-side LUN tgt property failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "targetLuns:iqn.2026-06.example:tgt.root:set-property:tgt.writeCache"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["tgtadm", "--lld", "iscsi", "--mode", "logicalunit", "--op", "update", "--tid", "42", "--lun", "8", "--name", "tgt.writeCache", "--value", "off"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["targetLuns:iqn.2026-06.example:tgt.root:set-property:tgt.writeCache"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["targetcli", "/iscsi", "ls"]))
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:tgt.root", "ls"]))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+    and (.notes | any(contains("target-side LUN changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$target_lun_tgt_property_json" >/dev/null
+
+cmp "$target_lun_tgt_property_json" "$target_lun_tgt_property_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "targetLuns:iqn.2026-06.example:tgt.root:set-property:tgt.writeCache"
+  and .report.partialExecutionRecovery.failedCommand == ["tgtadm", "--lld", "iscsi", "--mode", "logicalunit", "--op", "update", "--tid", "42", "--lun", "8", "--name", "tgt.writeCache", "--value", "off"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$target_lun_tgt_property_receipt" >/dev/null
 
 multipath_resize_tools="$tmpdir/fake-multipath-resize-tools"
 mkdir -p "$multipath_resize_tools"
@@ -5268,4 +5475,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, multipath resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"

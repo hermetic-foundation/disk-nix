@@ -153,6 +153,10 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
 - a target-side LUN grow plus property update through the Linux LIO provider
   where execute mode refuses the non-ready provider handoffs after rendering
   concrete `targetcli` target and backstore inventory for review
+- a target-side LUN property update through the Linux LIO provider where fake
+  target and backstore inventory succeeds and fake
+  `targetcli /backstores/block/_dev_zvol_tank_root set attribute emulate_write_cache=0`
+  fails
 - a target-side LUN create through the Linux tgt provider where fake `tgtadm`
   inventory and target creation succeed and fake
   `tgtadm --lld iscsi --mode logicalunit --op new --tid 42 --lun 8 --backing-store /dev/zvol/tank/root`
@@ -172,6 +176,10 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
   where execute mode refuses the non-ready grow handoff after rendering
   concrete `tgtadm` target inventory and a ready
   `tgtadm --mode logicalunit --op update` property command for review
+- a target-side LUN property update through the Linux tgt provider where fake
+  target inventory succeeds and fake
+  `tgtadm --lld iscsi --mode logicalunit --op update --tid 42 --lun 8 --name tgt.writeCache --value off`
+  fails
 - a multipath map resize where fake `multipath -ll /dev/mapper/mpatha` and
   fake `lsscsi -t -s` succeed and fake
   `multipathd resize map /dev/mapper/mpatha` fails
@@ -896,9 +904,10 @@ swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS 
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
 target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete
-property rendering, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
-detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
-concrete property rendering, multipath
+property rendering, target-side LUN LIO property, target-side LUN tgt create,
+target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt
+destroy, target-side LUN tgt grow not-ready with concrete property rendering,
+target-side LUN tgt property, multipath
 resize, multipath replace, MD RAID add-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
