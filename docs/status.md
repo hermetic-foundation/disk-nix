@@ -228,6 +228,9 @@ placeholders, but concrete array adapters remain future work.
   apply runs. Apply reports now expose generic recovery actions, targeted
   failed-action domain recovery guidance, current-topology roll-forward review,
   read-only rollback precondition review for concrete risky actions, and
+  `partialExecutionRecovery` sequencing with completed actions, failed action,
+  failed command, retry/review actions, remaining actions, completed mutating
+  command counts, and fresh-topology review notes. They also include
   ZFS/Btrfs snapshot lifecycle changes, ZFS pool/dataset/zvol lifecycle
   changes, LVM VG/volume/thin/PV changes, LUKS mapper/header/keyslot/token
   changes, filesystem lifecycle updates, cache lifecycle changes, swap

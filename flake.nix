@@ -2308,6 +2308,11 @@
               and .executionResults[1].statusCode == 73
               and .executionResults[1].argv == ["truncate", "--size", "1M", $target]
               and (.executionResults[1].stderr | contains("synthetic truncate failure"))
+              and .partialExecutionRecovery.failedPhase == "command"
+              and .partialExecutionRecovery.failedCommand == ["truncate", "--size", "1M", $target]
+              and .partialExecutionRecovery.completedMutatingCommandCount == 0
+              and (.partialExecutionRecovery.retryReviewActionIds | length == 1)
+              and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
               and (.messages[] | contains("execute failed: stopped after 2 command result(s)"))
               and (.recoveryActions | any(.kind == "review-execution-failure"))
               and (.recoveryActions | any(.kind == "inspect-current-state"))
@@ -2321,6 +2326,7 @@
               and .executeRequested == true
               and .report.status == "failed"
               and .report.executionResults[1].argv == ["truncate", "--size", "1M", $target]
+              and .report.partialExecutionRecovery.failedCommand == ["truncate", "--size", "1M", $target]
               and (.report.recoveryActions | any(.kind == "review-execution-failure"))
             ' "$failingApplyReceipt"
 
@@ -2367,6 +2373,10 @@
               and .executionResults[1].success == false
               and .executionResults[1].statusCode == 74
               and (.executionResults[1].stderr | contains("synthetic zfs rollback failure"))
+              and .partialExecutionRecovery.failedPhase == "command"
+              and .partialExecutionRecovery.failedCommand == ["zfs", "rollback", "tank/home@before"]
+              and .partialExecutionRecovery.completedMutatingCommandCount == 0
+              and (.partialExecutionRecovery.retryReviewActionIds | index("snapshot:tank/home@before:rollback") != null)
               and (.recoveryActions | any(
                 .kind == "domain-recovery"
                 and (.commands | any(.argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "tank/home@before"]))

@@ -41,6 +41,8 @@ pub struct ExecutionReport {
     pub verification_plan: Vec<VerificationStep>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub execution_results: Vec<ExecutionCommandResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partial_execution_recovery: Option<PartialExecutionRecovery>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recovery_actions: Vec<RecoveryAction>,
     pub messages: Vec<String>,
@@ -115,6 +117,19 @@ pub struct ExecutionCommandResult {
     pub status_code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialExecutionRecovery {
+    pub completed_action_ids: Vec<String>,
+    pub failed_action_id: String,
+    pub failed_phase: ExecutionPhase,
+    pub failed_command: Vec<String>,
+    pub retry_review_action_ids: Vec<String>,
+    pub remaining_action_ids: Vec<String>,
+    pub completed_mutating_command_count: usize,
+    pub notes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -251,6 +266,7 @@ fn prepare_execution_with_runner_and_tool_checker(
             verification_summary,
             verification_plan,
             execution_results: Vec::new(),
+            partial_execution_recovery: None,
             recovery_actions: Vec::new(),
             messages: vec![format!("apply policy blocked {blocked_count} action(s)")],
         });
@@ -272,6 +288,7 @@ fn prepare_execution_with_runner_and_tool_checker(
             command_plan,
             verification_plan,
             execution_results: Vec::new(),
+            partial_execution_recovery: None,
             recovery_actions: Vec::new(),
         }),
         ExecutionMode::Execute => {
@@ -286,6 +303,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                     verification_summary,
                     verification_plan,
                     execution_results: Vec::new(),
+                    partial_execution_recovery: None,
                     recovery_actions: Vec::new(),
                     messages: vec![
                         "execute refused: every planned command must be ready before mutating storage"
@@ -306,6 +324,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                     verification_summary,
                     verification_plan,
                     execution_results: Vec::new(),
+                    partial_execution_recovery: None,
                     recovery_actions: Vec::new(),
                     messages: vec![format!(
                         "execute refused: current topology comparison reported {graph_dependency_conflict_count} graph dependency conflict(s); split the plan or review ordering before mutating storage"
@@ -323,6 +342,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                     verification_summary,
                     verification_plan,
                     execution_results: Vec::new(),
+                    partial_execution_recovery: None,
                     recovery_actions: Vec::new(),
                     messages: vec![format!(
                         "execute refused: required tool(s) are not available: {missing_tools_message}"
@@ -346,6 +366,8 @@ fn prepare_execution_with_runner_and_tool_checker(
                 )],
                 _ => Vec::new(),
             };
+            let partial_execution_recovery =
+                partial_execution_recovery_for_results(status, &command_plan, &execution_results);
 
             attach_recovery_actions(ExecutionReport {
                 apply,
@@ -357,6 +379,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                 verification_summary,
                 verification_plan,
                 execution_results,
+                partial_execution_recovery,
                 recovery_actions: Vec::new(),
                 messages,
             })
@@ -376,6 +399,80 @@ fn missing_tools_message(tool_requirements: &[ToolRequirement]) -> Option<String
 fn graph_dependency_conflict_count(comparison: Option<&TopologyComparison>) -> usize {
     comparison.map_or(0, |comparison| {
         comparison.summary.graph_dependency_conflict_count
+    })
+}
+
+fn partial_execution_recovery_for_results(
+    status: ExecutionStatus,
+    command_plan: &[ExecutionStep],
+    execution_results: &[ExecutionCommandResult],
+) -> Option<PartialExecutionRecovery> {
+    if status != ExecutionStatus::Failed {
+        return None;
+    }
+    let failed = execution_results.iter().find(|result| !result.success)?;
+    let failed_index = command_plan
+        .iter()
+        .position(|step| step.action_id == failed.action_id);
+    let completed_action_ids = command_plan
+        .iter()
+        .take(failed_index.unwrap_or(command_plan.len()))
+        .filter(|step| {
+            step.commands.iter().all(|command| {
+                execution_results.iter().any(|result| {
+                    result.phase == ExecutionPhase::Command
+                        && result.action_id == step.action_id
+                        && result.argv == command.argv
+                        && result.success
+                })
+            })
+        })
+        .map(|step| step.action_id.clone())
+        .collect::<Vec<_>>();
+    let retry_review_action_ids = failed_index
+        .map(|index| {
+            command_plan
+                .iter()
+                .skip(index)
+                .map(|step| step.action_id.clone())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec![failed.action_id.clone()]);
+    let remaining_action_ids = failed_index
+        .map(|index| {
+            command_plan
+                .iter()
+                .skip(index + 1)
+                .map(|step| step.action_id.clone())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let completed_mutating_command_count = execution_results
+        .iter()
+        .take_while(|result| result.action_id != failed.action_id || result.argv != failed.argv)
+        .filter(|result| {
+            result.success
+                && result.phase == ExecutionPhase::Command
+                && command_plan_command_by_result(command_plan, result)
+                    .is_some_and(|command| command.mutates)
+        })
+        .count();
+
+    Some(PartialExecutionRecovery {
+        completed_action_ids,
+        failed_action_id: failed.action_id.clone(),
+        failed_phase: failed.phase,
+        failed_command: failed.argv.clone(),
+        retry_review_action_ids,
+        remaining_action_ids,
+        completed_mutating_command_count,
+        notes: vec![
+            "treat completed actions as changed until fresh topology proves otherwise".to_string(),
+            "review the failed action and remaining actions against current topology before resuming"
+                .to_string(),
+            "remove, suppress, or split already-satisfied actions before retrying mutating commands"
+                .to_string(),
+        ],
     })
 }
 
@@ -763,8 +860,14 @@ fn command_plan_command<'a>(
     report: &'a ExecutionReport,
     result: &ExecutionCommandResult,
 ) -> Option<&'a ExecutionCommand> {
-    report
-        .command_plan
+    command_plan_command_by_result(&report.command_plan, result)
+}
+
+fn command_plan_command_by_result<'a>(
+    command_plan: &'a [ExecutionStep],
+    result: &ExecutionCommandResult,
+) -> Option<&'a ExecutionCommand> {
+    command_plan
         .iter()
         .find(|step| step.action_id == result.action_id)?
         .commands
@@ -27120,6 +27223,86 @@ mod tests {
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "/", "--json"] && !command.mutates
         }));
+    }
+
+    #[test]
+    fn failed_multi_layer_apply_reports_partial_execution_recovery_sequence() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "volumes": {
+                "vg0/root": {
+                  "operation": "grow",
+                  "target": "vg0/root",
+                  "desiredSize": "50GiB"
+                }
+              },
+              "filesystems": {
+                "root": {
+                  "operation": "grow",
+                  "device": "vg0/root",
+                  "fsType": "ext4",
+                  "desiredSize": "50GiB",
+                  "resizePolicy": "grow-only"
+                }
+              },
+              "apply": {
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            let failed = argv.first().is_some_and(|tool| tool == "resize2fs");
+            CommandRunResult {
+                success: !failed,
+                status_code: Some(if failed { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if failed {
+                    "filesystem resize failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        let partial = report
+            .partial_execution_recovery
+            .as_ref()
+            .expect("partial execution recovery should be reported");
+        assert_eq!(
+            partial.completed_action_ids,
+            vec!["volumes:vg0/root:grow".to_string()]
+        );
+        assert_eq!(partial.failed_action_id, "filesystem:root:grow");
+        assert_eq!(partial.failed_phase, ExecutionPhase::Command);
+        assert_eq!(partial.failed_command[0], "resize2fs");
+        assert_eq!(
+            partial.retry_review_action_ids,
+            vec!["filesystem:root:grow".to_string()]
+        );
+        assert!(partial.remaining_action_ids.is_empty());
+        assert_eq!(partial.completed_mutating_command_count, 1);
+        assert!(
+            partial.notes.iter().any(|note| {
+                note.contains("completed actions") && note.contains("fresh topology")
+            })
+        );
+
+        let json = serde_json::to_value(&report).expect("report serializes");
+        assert_eq!(
+            json["partialExecutionRecovery"]["completedActionIds"][0],
+            "volumes:vg0/root:grow"
+        );
+        assert_eq!(
+            json["partialExecutionRecovery"]["failedActionId"],
+            "filesystem:root:grow"
+        );
+        assert_eq!(
+            json["partialExecutionRecovery"]["retryReviewActionIds"][0],
+            "filesystem:root:grow"
+        );
     }
 
     #[test]

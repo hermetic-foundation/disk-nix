@@ -786,6 +786,14 @@ changes, loop-device, backing-file, and device-mapper map changes, and
 NFS export and client mount changes, and host-side LUN detach. These commands
 remain read-only or manual-only; disk-nix does not automatically roll back
 storage because rollback safety is domain- and topology-specific.
+Failed execution reports also include `partialExecutionRecovery`, a
+machine-readable sequence summary for partially completed apply runs. It records
+completed action ids, the failed action id, failed phase and command,
+retry/review action ids, remaining action ids, the number of completed mutating
+commands, and notes requiring fresh topology comparison before resuming. This is
+intended for multi-layer workflows where lower layers may already have changed
+before a later filesystem, mapper, volume, LUN, or network-storage command
+failed.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

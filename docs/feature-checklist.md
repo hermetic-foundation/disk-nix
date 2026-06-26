@@ -199,9 +199,13 @@ Update rules:
   replacement, NVMe namespaces, iSCSI sessions, VDO, multipath, loop devices,
   backing files, device-mapper maps, NFS exports/client mounts, and
   host-visible LUN detach.
-- [ ] **Partial:** Domain-specific recovery recipes exist for many failed
-  actions, but partially completed multi-layer apply runs still need deeper
-  recipes.
+- [x] **Finished:** Domain-specific recovery recipes cover failed actions and
+  partially completed multi-layer apply runs. Failed execution reports include
+  `partialExecutionRecovery` with completed action ids, failed action id, failed
+  phase and command, retry/review action ids, remaining action ids, completed
+  mutating command count, and fresh-topology review notes, alongside
+  domain-specific recovery, roll-forward, rollback-precondition, verification,
+  and recovery-point preservation actions.
 - [ ] **Desired:** Proven automatic rollback recipes per topology and domain.
 
 ## NixOS integration
