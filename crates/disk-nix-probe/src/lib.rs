@@ -2836,6 +2836,86 @@ Digests:
       ]
     }"#;
 
+    const NVME_TCP_MULTIPATH_LIST: &[u8] = br#"{
+      "Devices": [
+        {
+          "Name": "/dev/nvme4n1",
+          "GenericDevice": "/dev/ng4n1",
+          "ModelNumber": "NVMe/TCP Array Namespace",
+          "SerialNumber": "NVMETCP001",
+          "Firmware": "4.2",
+          "Index": 4,
+          "Namespace": 1,
+          "NSID": 1,
+          "NamespaceUUID": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+          "NGUID": "aaaaaaaa11111111bbbbbbbb22222222",
+          "SubSystem": "nqn.2014-08.org.nvmexpress:uuid:nvme-tcp-array",
+          "Controller": "nvme4",
+          "Transport": "tcp",
+          "Address": "traddr=198.51.100.10,trsvcid=4420,host_traddr=198.51.100.20",
+          "ControllerID": 41,
+          "NamespaceSize": 800000000000,
+          "NamespaceUsage": 640000000000,
+          "NamespaceCapacity": 800000000000,
+          "LBAFormat": "0: 4096B + 0B",
+          "MaximumLBA": 195312500,
+          "SectorSize": 4096,
+          "ANAState": "optimized"
+        }
+      ]
+    }"#;
+
+    const NVME_TCP_MULTIPATH_SUBSYSTEMS: &[u8] = br#"{
+      "Subsystems": [
+        {
+          "Name": "nvme-subsys4",
+          "NQN": "nqn.2014-08.org.nvmexpress:uuid:nvme-tcp-array",
+          "HostNQN": "nqn.2014-08.org.nvmexpress:host:multipath-node",
+          "Paths": [
+            {
+              "Name": "nvme4",
+              "Transport": "tcp",
+              "Address": "traddr=198.51.100.10,trsvcid=4420",
+              "HostTRADDR": "198.51.100.20",
+              "HostIface": "ens5f0",
+              "State": "live",
+              "ANAState": "optimized",
+              "Namespaces": [
+                {
+                  "Name": "/dev/nvme4n1",
+                  "NSID": 1
+                }
+              ]
+            },
+            {
+              "Name": "nvme5",
+              "Transport": "tcp",
+              "Address": "traddr=198.51.100.11,trsvcid=4420",
+              "HostTRADDR": "198.51.100.21",
+              "HostIface": "ens5f1",
+              "State": "reconnecting",
+              "ANAState": "inaccessible",
+              "Namespaces": [
+                {
+                  "Name": "/dev/nvme5n1",
+                  "NSID": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }"#;
+
+    const NVME_TCP_MULTIPATH: &[u8] = br#"
+mpathnvme (uuid.aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee) dm-9 NVME,Array
+size=800G features='1 queue_if_no_path' hwhandler='0' wp=rw
+|-+- policy='service-time 0' prio=50 status=active
+| `- nvme4n1 259:12 active ready running optimized
+`-+- policy='service-time 0' prio=1 status=enabled
+  `- nvme5n1 259:13 failed faulty offline inaccessible
+"#;
+
     const CLUSTERED_LVM_PVS: &[u8] = br#"{
       "report": [{
         "pv": [{
@@ -3333,6 +3413,110 @@ Device                         1K-blocks     Used Available Use% Space saving%
                 .iter()
                 .filter(|edge| {
                     edge.to.0 == "multipath:mpathfc" && edge.relationship == Relationship::Backs
+                })
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn nvme_tcp_multipath_fixture_preserves_native_path_state() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            nvme::normalize_nvme_list_json(NVME_TCP_MULTIPATH_LIST)
+                .expect("NVMe/TCP list fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            nvme::normalize_nvme_subsystems_json(NVME_TCP_MULTIPATH_SUBSYSTEMS)
+                .expect("NVMe/TCP subsystem fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            multipath::normalize_multipath_output(NVME_TCP_MULTIPATH)
+                .expect("NVMe/TCP multipath fixture should parse"),
+        );
+
+        let namespace = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/nvme4n1")
+            .expect("primary NVMe/TCP namespace should exist");
+        assert_eq!(namespace.kind, NodeKind::NvmeNamespace);
+        assert_eq!(namespace.size_bytes, Some(800_000_000_000));
+        assert_eq!(
+            namespace.usage.as_ref().and_then(|usage| usage.used_bytes),
+            Some(640_000_000_000)
+        );
+        assert_has_property(namespace, "nvme.transport", "tcp");
+        assert_has_property(namespace, "nvme.ana-state", "optimized");
+        assert_has_property(namespace, "multipath.group-status", "active");
+        assert_has_property(namespace, "multipath.path-flags", "optimized");
+
+        let failed_namespace = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/nvme5n1")
+            .expect("failed NVMe/TCP namespace path should exist");
+        assert_eq!(failed_namespace.kind, NodeKind::NvmeNamespace);
+        assert_has_property(failed_namespace, "nvme.controller", "nvme5");
+        assert_has_property(failed_namespace, "multipath.group-status", "enabled");
+        assert_has_property(failed_namespace, "multipath.dm-state", "failed");
+        assert_has_property(failed_namespace, "multipath.checker-state", "faulty");
+        assert_has_property(failed_namespace, "multipath.online-state", "offline");
+        assert_has_property(failed_namespace, "multipath.path-flags", "inaccessible");
+
+        let controller = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nvme-controller:nvme4")
+            .expect("live NVMe/TCP controller should exist");
+        assert_eq!(controller.kind, NodeKind::NvmeController);
+        assert_has_property(controller, "nvme.transport", "tcp");
+        assert_has_property(controller, "nvme.host-iface", "ens5f0");
+        assert_has_property(controller, "nvme.path-state", "live");
+        assert_has_property(controller, "nvme.ana-state", "optimized");
+
+        let failed_controller = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nvme-controller:nvme5")
+            .expect("failed NVMe/TCP controller should exist");
+        assert_has_property(failed_controller, "nvme.host-iface", "ens5f1");
+        assert_has_property(failed_controller, "nvme.path-state", "reconnecting");
+        assert_has_property(failed_controller, "nvme.ana-state", "inaccessible");
+
+        let map = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "multipath:mpathnvme")
+            .expect("native NVMe multipath map should exist");
+        assert_eq!(map.kind, NodeKind::MultipathDevice);
+        assert_eq!(map.size_bytes, Some(800_000_000_000));
+        assert_has_property(
+            map,
+            "multipath.wwid",
+            "uuid.aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        );
+        assert_has_property(map, "multipath.vendor-product", "NVME,Array");
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "nvme-subsystem:nvme-subsys4"
+                && edge.to.0 == "nvme-controller:nvme4"
+                && edge.relationship == Relationship::Contains
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "nvme-controller:nvme5"
+                && edge.to.0 == "block:/dev/nvme5n1"
+                && edge.relationship == Relationship::Contains
+        }));
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to.0 == "multipath:mpathnvme" && edge.relationship == Relationship::Backs
                 })
                 .count(),
             2

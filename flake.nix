@@ -2118,6 +2118,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'iser-rdma0' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q '2001:db8:40::10' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q 'FC transport WWPN pairs' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'NVMe/TCP multipath fixture' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'NVMe/TCP multipath fixture' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme_tcp_multipath_fixture_preserves_native_path_state' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'uuid.aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'SAS enclosure fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'non-block SES enclosure records' ${./docs/status.md}

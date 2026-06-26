@@ -244,7 +244,9 @@ The current probe layer normalizes:
   state, ANA state, and controller-to-namespace relationships, plus Fibre
   Channel multipath paths with FC transport WWPN pairs, SCSI unit names, ALUA
   path groups, active/standby state, failed path metadata, and multipath backing
-  edges. iSCSI parser fixtures also cover bracketed IPv6 portals, concise
+  edges, plus native NVMe/TCP multipath paths with live and reconnecting fabrics
+  controllers, optimized and inaccessible ANA states, failed path metadata, and
+  multipath backing edges. iSCSI parser fixtures also cover bracketed IPv6 portals, concise
   open-iscsi node records, attached LUN disks, iSER/RDMA session transport over
   InfiniBand netdevs, and CHAP password-presence redaction without serializing
   secret material.
