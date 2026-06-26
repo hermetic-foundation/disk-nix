@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for thirty-one failed apply paths:
+fake storage tools ahead of `PATH` for thirty-two failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -125,6 +125,10 @@ fake storage tools ahead of `PATH` for thirty-one failed apply paths:
 - a target-side LUN create through the Linux LIO provider where fake
   `targetcli` inventory, backstore creation, and target creation succeed and
   fake `targetcli /iscsi/iqn.2026-06.example:storage.root/tpg1/luns create /backstores/block/_dev_zvol_tank_root lun=7`
+  fails
+- a target-side LUN attach through the Linux LIO provider where fake
+  `targetcli` inventory and LUN mapping succeed and fake
+  `targetcli /iscsi/iqn.2026-06.example:storage.root/tpg1/acls create iqn.2026-06.example:host.primary`
   fails
 - a target-side LUN destroy through the Linux LIO provider where fake
   `targetcli` inventory, ACL removal, LUN unmap, and target removal succeed and
@@ -206,6 +210,10 @@ The test verifies that the failed report and receipt preserve:
   `targetluns:iqn.2026-06.example:storage.root:create`
 - the failed LIO `targetcli .../tpg1/luns create` command and non-zero status
   after target-side inventory, backstore creation, and target creation
+- `partialExecutionRecovery.failedActionId` as
+  `targetluns:iqn.2026-06.example:storage.root:attach`
+- the failed LIO `targetcli .../tpg1/acls create` command and non-zero status
+  after target-side inventory and LUN mapping
 - `partialExecutionRecovery.failedActionId` as
   `targetluns:iqn.2026-06.example:storage.root:destroy`
 - the failed LIO `targetcli /backstores/block delete _dev_zvol_tank_root`
@@ -711,9 +719,9 @@ behavior beyond the synthetic LVM-plus-filesystem, swap label, device-mapper
 rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG
 rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
-LIO create, target-side LUN LIO destroy, target-side LUN tgt create,
-target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID
-replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login,
-LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property,
-and LVM cache property failed-command paths, and broader destructive apply
-behavior.
+LIO create, target-side LUN LIO attach, target-side LUN LIO destroy,
+target-side LUN tgt create, target-side LUN tgt destroy, multipath resize,
+multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount,
+iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO
+property, bcache property, and LVM cache property failed-command paths, and
+broader destructive apply behavior.
