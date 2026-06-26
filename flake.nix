@@ -3071,7 +3071,6 @@
             pkgs.rustfmt
             pkgs.rust-analyzer
             pkgs.pkg-config
-            pkgs.jujutsu
             pkgs.just
             formatProgram
           ];
