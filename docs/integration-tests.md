@@ -190,6 +190,9 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
 - a multipath path replacement where fake `multipath -ll /dev/mapper/mpatha`
   and fake `multipathd add path /dev/sdd` succeed and fake
   `multipathd del path /dev/sdc` fails
+- an LVM volume group PV replacement where fake `pvs` inspections and
+  `vgextend vg0 /dev/disk/by-id/new-pv` succeed and fake
+  `pvmove /dev/disk/by-id/old-pv /dev/disk/by-id/new-pv` fails
 - an MD RAID member replacement where fake `mdadm --detail /dev/md/root`
   succeeds and fake
   `mdadm /dev/md/root --replace /dev/disk/by-id/old-md-member --with /dev/disk/by-id/new-md-member`
@@ -913,7 +916,7 @@ additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
 scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair,
-swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
+swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
 target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete

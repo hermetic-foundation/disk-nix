@@ -1429,6 +1429,140 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_vg_rename_receipt" >/dev/null
 
+lvm_vg_replace_tools="$tmpdir/fake-lvm-vg-replace-tools"
+mkdir -p "$lvm_vg_replace_tools"
+lvm_vg_replace_disk_nix="$(command -v "$disk_nix_bin")"
+
+cat > "$lvm_vg_replace_tools/vgs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$lvm_vg_replace_tools/pvs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$lvm_vg_replace_tools/lvs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$lvm_vg_replace_tools/vgextend" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$lvm_vg_replace_tools/pvmove" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "/dev/disk/by-id/old-pv /dev/disk/by-id/new-pv" ]]; then
+  echo "synthetic LVM VG replacement pvmove failure for disk-nix recovery coverage" >&2
+  exit 81
+fi
+printf '{}\n'
+EOF
+
+cat > "$lvm_vg_replace_tools/vgreduce" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$lvm_vg_replace_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$lvm_vg_replace_disk_nix" "\$@"
+EOF
+
+chmod +x "$lvm_vg_replace_tools/vgs" "$lvm_vg_replace_tools/pvs" "$lvm_vg_replace_tools/lvs" "$lvm_vg_replace_tools/vgextend" "$lvm_vg_replace_tools/pvmove" "$lvm_vg_replace_tools/vgreduce" "$lvm_vg_replace_tools/disk-nix"
+
+lvm_vg_replace_spec="$tmpdir/lvm-vg-replace-spec.json"
+lvm_vg_replace_json="$tmpdir/lvm-vg-replace-apply.json"
+lvm_vg_replace_report="$tmpdir/lvm-vg-replace-report.json"
+lvm_vg_replace_receipt="$tmpdir/lvm-vg-replace-receipt.json"
+
+jq -n '{
+  volumeGroups: {
+    vg0: {
+      target: "vg0",
+      replaceDevices: {
+        "/dev/disk/by-id/old-pv": "/dev/disk/by-id/new-pv"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowDeviceReplacement: true
+  }
+}' > "$lvm_vg_replace_spec"
+
+if PATH="$lvm_vg_replace_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$lvm_vg_replace_spec" \
+  --execute \
+  --report-out "$lvm_vg_replace_report" \
+  --receipt-out "$lvm_vg_replace_receipt" \
+  --json > "$lvm_vg_replace_json"; then
+  echo "expected synthetic LVM VG replacement failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 5
+  and (.executionResults | length) == 4
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["pvs", "--reportformat", "json", "/dev/disk/by-id/old-pv"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["pvs", "--reportformat", "json", "/dev/disk/by-id/new-pv"]
+  and .executionResults[2].success == true
+  and .executionResults[2].argv == ["vgextend", "vg0", "/dev/disk/by-id/new-pv"]
+  and .executionResults[3].success == false
+  and .executionResults[3].statusCode == 81
+  and .executionResults[3].argv == ["pvmove", "/dev/disk/by-id/old-pv", "/dev/disk/by-id/new-pv"]
+  and (.executionResults[3].stderr | contains("synthetic LVM VG replacement pvmove failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "volumeGroups:vg0:replace-device:/dev/disk/by-id/old-pv"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["pvmove", "/dev/disk/by-id/old-pv", "/dev/disk/by-id/new-pv"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["volumeGroups:vg0:replace-device:/dev/disk/by-id/old-pv"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 1
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json", "/dev/disk/by-id/old-pv"]))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-a"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/old-pv", "--json"]))
+    and (.notes | any(contains("LVM changes")))
+    and (.notes | any(contains("pvmove")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json", "/dev/disk/by-id/old-pv"]))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "vg0", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json", "/dev/disk/by-id/old-pv"]))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$lvm_vg_replace_json" >/dev/null
+
+cmp "$lvm_vg_replace_json" "$lvm_vg_replace_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "volumeGroups:vg0:replace-device:/dev/disk/by-id/old-pv"
+  and .report.partialExecutionRecovery.failedCommand == ["pvmove", "/dev/disk/by-id/old-pv", "/dev/disk/by-id/new-pv"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
+' "$lvm_vg_replace_receipt" >/dev/null
+
 rollback_tools="$tmpdir/fake-rollback-tools"
 mkdir -p "$rollback_tools"
 
@@ -5956,4 +6090,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO grow, VDO property, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO grow, VDO property, bcache property, bcache rescan, and LVM cache property failures"
