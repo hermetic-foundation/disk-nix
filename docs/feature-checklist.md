@@ -297,7 +297,7 @@ Update rules:
   variants, additional cache variants, additional NVMe namespace variants,
   additional LUN flows, property mutation across more supported domains, and
   failed-command recovery beyond the synthetic LVM-plus-filesystem, LVM grow,
-  XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check,
+  XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, filesystem trim, filesystem check,
   filesystem repair, swap label, device-mapper rename, ZFS dataset rename,
   Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace
   grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,

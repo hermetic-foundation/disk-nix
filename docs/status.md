@@ -170,7 +170,7 @@ behavior across real storage stacks.
   failed-command receipts, roll-forward review, rollback review,
   snapshot-preservation, and domain-recovery reporting for a layered
   LVM-plus-filesystem apply failure, LVM grow failure, XFS grow failure, Btrfs
-  scrub failure, Btrfs rebalance failure, filesystem trim failure, filesystem
+  scrub failure, Btrfs rebalance failure, Btrfs device replacement failure, filesystem trim failure, filesystem
   check failure, filesystem repair failure, LUKS format failure, LUKS close
   failure, LUKS grow failure, LUKS keyslot add failure, LUKS token import
   failure, LUKS keyslot remove failure, LUKS token remove failure, and ZFS
@@ -256,7 +256,7 @@ added.
   additional cache variants, additional NVMe namespace variants, additional LUN
   flows, property mutation across more supported domains, and failed-command
   recovery beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
-  scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair,
+  scrub, Btrfs rebalance, Btrfs device replacement, filesystem trim, filesystem check, filesystem repair,
   swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
   namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
   LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach,

@@ -536,6 +536,114 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$btrfs_rebalance_receipt" >/dev/null
 
+btrfs_replace_tools="$tmpdir/fake-btrfs-replace-tools"
+mkdir -p "$btrfs_replace_tools"
+btrfs_replace_disk_nix="$(command -v "$disk_nix_bin")"
+
+cat > "$btrfs_replace_tools/findmnt" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$btrfs_replace_tools/btrfs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "replace start /dev/disk/by-id/old-btrfs-device /dev/disk/by-id/new-btrfs-device /data" ]]; then
+  echo "synthetic Btrfs device replacement failure for disk-nix recovery coverage" >&2
+  exit 84
+fi
+printf '{}\n'
+EOF
+
+cat > "$btrfs_replace_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$btrfs_replace_disk_nix" "\$@"
+EOF
+
+chmod +x "$btrfs_replace_tools/findmnt" "$btrfs_replace_tools/btrfs" "$btrfs_replace_tools/disk-nix"
+
+btrfs_replace_spec="$tmpdir/btrfs-replace-spec.json"
+btrfs_replace_json="$tmpdir/btrfs-replace-apply.json"
+btrfs_replace_report="$tmpdir/btrfs-replace-report.json"
+btrfs_replace_receipt="$tmpdir/btrfs-replace-receipt.json"
+
+jq -n '{
+  filesystems: {
+    data: {
+      mountpoint: "/data",
+      fsType: "btrfs",
+      replaceDevices: {
+        "/dev/disk/by-id/old-btrfs-device": "/dev/disk/by-id/new-btrfs-device"
+      }
+    }
+  },
+  apply: {
+    allowDeviceReplacement: true
+  }
+}' > "$btrfs_replace_spec"
+
+if PATH="$btrfs_replace_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$btrfs_replace_spec" \
+  --execute \
+  --report-out "$btrfs_replace_report" \
+  --receipt-out "$btrfs_replace_receipt" \
+  --json > "$btrfs_replace_json"; then
+  echo "expected synthetic Btrfs device replacement failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 2
+  and .commandSummary.commandCount == 3
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "filesystem:data:inspect"
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/data"]
+  and .executionResults[1].success == true
+  and .executionResults[1].actionId == "filesystems:data:replace-device:/dev/disk/by-id/old-btrfs-device"
+  and .executionResults[1].argv == ["disk-nix", "inspect", "/data"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 84
+  and .executionResults[2].argv == ["btrfs", "replace", "start", "/dev/disk/by-id/old-btrfs-device", "/dev/disk/by-id/new-btrfs-device", "/data"]
+  and (.executionResults[2].stderr | contains("synthetic Btrfs device replacement failure"))
+  and .partialExecutionRecovery.completedActionIds == ["filesystem:data:inspect"]
+  and .partialExecutionRecovery.failedActionId == "filesystems:data:replace-device:/dev/disk/by-id/old-btrfs-device"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["btrfs", "replace", "start", "/dev/disk/by-id/old-btrfs-device", "/dev/disk/by-id/new-btrfs-device", "/data"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["filesystems:data:replace-device:/dev/disk/by-id/old-btrfs-device"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["disk-nix", "inspect", "data", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "topology", "--json"]))
+    and (.notes | any(contains("failed Command command")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "inspect", "data", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/data", "--json"]))
+    and (.commands | any(.argv == ["btrfs", "filesystem", "usage", "-b", "/data"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$btrfs_replace_json" >/dev/null
+
+cmp "$btrfs_replace_json" "$btrfs_replace_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.completedActionIds == ["filesystem:data:inspect"]
+  and .report.partialExecutionRecovery.failedActionId == "filesystems:data:replace-device:/dev/disk/by-id/old-btrfs-device"
+  and .report.partialExecutionRecovery.failedCommand == ["btrfs", "replace", "start", "/dev/disk/by-id/old-btrfs-device", "/dev/disk/by-id/new-btrfs-device", "/data"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$btrfs_replace_receipt" >/dev/null
+
 filesystem_trim_tools="$tmpdir/fake-filesystem-trim-tools"
 mkdir -p "$filesystem_trim_tools"
 
@@ -6090,4 +6198,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO grow, VDO property, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO grow, VDO property, bcache property, bcache rescan, and LVM cache property failures"

@@ -104,6 +104,10 @@ fake storage tools ahead of `PATH` for fifty failed apply paths:
 - a Btrfs scrub where fake `btrfs scrub start -B /data` fails
 - a Btrfs rebalance where fake
   `btrfs balance start -dusage=50 -musage=75 /data` fails
+- a Btrfs device replacement where fake `disk-nix inspect /data` succeeds and
+  fake
+  `btrfs replace start /dev/disk/by-id/old-btrfs-device /dev/disk/by-id/new-btrfs-device /data`
+  fails
 - a filesystem trim where fake `disk-nix inspect /scratch` succeeds and fake
   `fstrim -v /scratch` fails
 - an ext4 filesystem check where fake `disk-nix inspect /home` succeeds and
@@ -915,7 +919,7 @@ behavior, broader VDO create/grow/start/stop/property/remove behavior,
 additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
-scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair,
+scrub, Btrfs rebalance, Btrfs device replacement, filesystem trim, filesystem check, filesystem repair,
 swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
