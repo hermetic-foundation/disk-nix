@@ -1829,6 +1829,9 @@
             ${pkgs.gnugrep}/bin/grep -q '\*\*Partial:\*\*' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '\*\*Desired:\*\*' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Operator runbooks for high-risk workflows' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' ${./docs/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'partiallySuppressed' ${./docs/cli.md}
             runbooks=${./docs/operator-runbooks.md}
             for runbook in \
               "Device replacement" \

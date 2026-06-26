@@ -688,7 +688,12 @@ namespace attach/detach, mount, unmount, remount, NFS export/unexport, VDO
 destroy, VDO start, VDO stop, backing-file create/grow, MD assemble, Btrfs
 subvolume destroy, ZFS dataset/zvol destroy, generic snapshot destroy, ZFS
 pool import, LVM cache detach, and property actions that have no warning diagnostics are suppressed from the actionable plan and counted as
-`topologyComparison.summary.suppressedActionCount`; inactive LVM objects,
+`topologyComparison.summary.suppressedActionCount`.
+`topologyComparison.reconciliationGroups` groups related actions that share a
+target, backing object, portal, path, mountpoint, or parent identity before
+suppression, records all action ids plus remaining planned and suppressed
+action ids, and marks `partiallySuppressed` when command rendering will proceed
+with only part of a related group; inactive LVM objects,
 still-active LVM deactivation targets, still-exported LVM volume groups,
 inactive LUKS open targets, active LUKS close targets, still-present LUKS
 keyslots/tokens selected for removal, loop devices mapped to different backing

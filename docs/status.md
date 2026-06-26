@@ -210,7 +210,11 @@ placeholders until concrete adapters are added.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional
-  operation types and multi-action groups before command rendering.
+  operation types and multi-action groups before command rendering. Topology
+  comparison now emits `reconciliationGroups` so related actions sharing a
+  target, backing object, portal, path, mountpoint, or parent identity expose
+  planned and suppressed action ids plus partially-suppressed group flags before
+  commands are rendered.
 - Runtime graph-path dependency ordering for multi-layer changes. The planner
   now applies coarse layer ordering and reports inferred dependency edges from
   declared identities and direct or multi-hop current-topology graph paths,

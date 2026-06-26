@@ -769,6 +769,13 @@ assemble, Btrfs subvolume destroy, ZFS dataset/zvol destroy, ZFS pool import,
 LVM volume-group import/export, and set-property actions with no warning diagnostics are
 suppressed from the actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
+`topologyComparison.reconciliationGroups` summarizes related actions that share
+a concrete target, backing, portal, mountpoint, path, or parent identity before
+suppressed actions are removed. Each group records all action ids, remaining
+planned action ids, suppressed action ids, counts, and whether the group is
+partially suppressed. `partiallySuppressed = true` means command rendering will
+continue with only part of a related group; automation should re-review the
+remaining planned actions against the fresh topology before executing.
 Absent mountpoints for mount actions remain actionable with mount-required
 diagnostics rather than generic missing-target diagnostics.
 

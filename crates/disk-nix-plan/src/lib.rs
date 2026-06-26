@@ -195,6 +195,8 @@ pub struct TopologyComparison {
     pub summary: TopologyComparisonSummary,
     pub diagnostics: Vec<TopologyDiagnostic>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reconciliation_groups: Vec<TopologyReconciliationGroup>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub graph_dependency_conflict_resolutions: Vec<GraphDependencyConflictResolution>,
 }
 
@@ -212,6 +214,10 @@ pub struct TopologyComparisonSummary {
     pub graph_dependency_edge_count: usize,
     #[serde(default)]
     pub graph_dependency_conflict_count: usize,
+    #[serde(default)]
+    pub reconciliation_group_count: usize,
+    #[serde(default)]
+    pub partially_suppressed_group_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -224,6 +230,20 @@ pub struct TopologyDiagnostic {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current: Option<CurrentNodeSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopologyReconciliationGroup {
+    pub identity: String,
+    pub action_ids: Vec<String>,
+    pub planned_action_ids: Vec<String>,
+    pub suppressed_action_ids: Vec<String>,
+    pub action_count: usize,
+    pub planned_count: usize,
+    pub suppressed_count: usize,
+    pub partially_suppressed: bool,
+    pub recommendation: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -833,6 +853,13 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
 
     let suppressed_action_ids = already_satisfied_action_ids(&plan.actions, &diagnostics);
     let suppressed_action_count = suppressed_action_ids.len();
+    let reconciliation_groups =
+        topology_reconciliation_groups_for_actions(&plan.actions, &suppressed_action_ids);
+    let reconciliation_group_count = reconciliation_groups.len();
+    let partially_suppressed_group_count = reconciliation_groups
+        .iter()
+        .filter(|group| group.partially_suppressed)
+        .count();
 
     if suppressed_action_count > 0 {
         plan.actions
@@ -948,11 +975,14 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
         suppressed_action_count,
         graph_dependency_edge_count,
         graph_dependency_conflict_count,
+        reconciliation_group_count,
+        partially_suppressed_group_count,
     };
 
     plan.topology_comparison = Some(TopologyComparison {
         summary,
         diagnostics,
+        reconciliation_groups,
         graph_dependency_conflict_resolutions,
     });
     plan
@@ -1415,6 +1445,72 @@ fn action_dependency_identities(action: &PlannedAction) -> BTreeSet<String> {
     if action.context.collection.as_deref() == Some("iscsiSessions") {
         insert_identity(&mut identities, action.context.portal.as_deref());
     }
+    identities
+}
+
+fn topology_reconciliation_groups_for_actions(
+    actions: &[PlannedAction],
+    suppressed_action_ids: &[String],
+) -> Vec<TopologyReconciliationGroup> {
+    let suppressed: BTreeSet<&str> = suppressed_action_ids.iter().map(String::as_str).collect();
+    let mut groups: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for action in actions {
+        for identity in action_reconciliation_group_identities(action) {
+            groups
+                .entry(identity)
+                .or_default()
+                .insert(action.id.clone());
+        }
+    }
+
+    groups
+        .into_iter()
+        .filter_map(|(identity, action_ids)| {
+            if action_ids.len() < 2 {
+                return None;
+            }
+            let action_ids: Vec<String> = action_ids.into_iter().collect();
+            let suppressed_action_ids: Vec<String> = action_ids
+                .iter()
+                .filter(|action_id| suppressed.contains(action_id.as_str()))
+                .cloned()
+                .collect();
+            let planned_action_ids: Vec<String> = action_ids
+                .iter()
+                .filter(|action_id| !suppressed.contains(action_id.as_str()))
+                .cloned()
+                .collect();
+            let action_count = action_ids.len();
+            let planned_count = planned_action_ids.len();
+            let suppressed_count = suppressed_action_ids.len();
+            let partially_suppressed = planned_count > 0 && suppressed_count > 0;
+            Some(TopologyReconciliationGroup {
+                identity,
+                action_ids,
+                planned_action_ids,
+                suppressed_action_ids,
+                action_count,
+                planned_count,
+                suppressed_count,
+                partially_suppressed,
+                recommendation: if partially_suppressed {
+                    "review the remaining planned actions against the fresh topology because related actions in this identity group were already satisfied and suppressed"
+                        .to_string()
+                } else if suppressed_count == action_count {
+                    "all actions in this identity group were already satisfied and suppressed before command rendering"
+                        .to_string()
+                } else {
+                    "related actions share this identity and remain planned together before command rendering"
+                        .to_string()
+                },
+            })
+        })
+        .collect()
+}
+
+fn action_reconciliation_group_identities(action: &PlannedAction) -> BTreeSet<String> {
+    let mut identities = action_dependency_identities(action);
+    identities.extend(action_dependency_inputs(action));
     identities
 }
 
@@ -25871,6 +25967,66 @@ mod tests {
             diagnostic.action_id == "luns:iqn.2026-06.example:storage/root:0:attach"
                 && diagnostic.kind == TopologyDiagnosticKind::LunAttachAlreadySatisfied
         }));
+    }
+
+    #[test]
+    fn topology_comparison_reports_partially_suppressed_reconciliation_groups() {
+        let lun_path = "/dev/disk/by-path/ip-192.0.2.10-lun-0";
+        let plan = plan_from_json_bytes(
+            br#"{
+              "luns": {
+                "attach-root": {
+                  "operation": "attach",
+                  "device": "/dev/disk/by-path/ip-192.0.2.10-lun-0"
+                },
+                "grow-root": {
+                  "operation": "grow",
+                  "device": "/dev/disk/by-path/ip-192.0.2.10-lun-0",
+                  "desiredSize": "200GiB"
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("lun:0", NodeKind::Lun, "0")
+                .with_path(lun_path)
+                .with_size_bytes(100 * 1024 * 1024 * 1024)
+                .with_property("iscsi.attached-disk", "sdb"),
+        );
+
+        let plan = compare_plan_with_topology(plan, &graph);
+        let comparison = plan
+            .topology_comparison
+            .as_ref()
+            .expect("comparison should be present");
+
+        assert_eq!(comparison.summary.action_count, 2);
+        assert_eq!(comparison.summary.suppressed_action_count, 1);
+        assert_eq!(comparison.summary.reconciliation_group_count, 1);
+        assert_eq!(comparison.summary.partially_suppressed_group_count, 1);
+        assert_eq!(plan.actions.len(), 1);
+        assert_eq!(plan.actions[0].id, "luns:grow-root:grow");
+
+        let group = comparison
+            .reconciliation_groups
+            .iter()
+            .find(|group| group.identity == lun_path)
+            .expect("shared LUN path reconciliation group exists");
+        assert_eq!(group.action_count, 2);
+        assert_eq!(group.planned_count, 1);
+        assert_eq!(group.suppressed_count, 1);
+        assert!(group.partially_suppressed);
+        assert_eq!(group.planned_action_ids, vec!["luns:grow-root:grow"]);
+        assert_eq!(group.suppressed_action_ids, vec!["luns:attach-root:attach"]);
+        assert!(group.recommendation.contains("fresh topology"));
+
+        let json = serde_json::to_value(comparison).expect("comparison serializes");
+        assert_eq!(json["summary"]["reconciliationGroupCount"], 1);
+        assert_eq!(json["summary"]["partiallySuppressedGroupCount"], 1);
+        assert_eq!(json["reconciliationGroups"][0]["identity"], lun_path);
+        assert_eq!(json["reconciliationGroups"][0]["partiallySuppressed"], true);
     }
 
     #[test]
