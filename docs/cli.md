@@ -1112,8 +1112,9 @@ target-side allocation or capacity changes, while `operation = "attach"` and
 can set `provider`, `storageProvider`, or `arrayProvider` to label the intended
 adapter. `provider = "lio"` renders concrete Linux LIO `targetcli` command
 plans for inventory, backstore creation, target creation, LUN mapping, ACL
-mapping/unmapping, and `saveconfig` when the target IQN, backing object, LUN
-number, and initiators are declared. Other providers render non-ready
+mapping/unmapping, target removal, reviewed backstore removal, and `saveconfig`
+when the target IQN, backing object, LUN number, and initiators are declared.
+Other providers render non-ready
 `<target-lun-provider[:provider]>` placeholders with reviewed target, provider
 label, size, backing object, portal, and initiator inputs until an adapter or
 reviewed runbook supplies concrete commands. Host-side `luns`,

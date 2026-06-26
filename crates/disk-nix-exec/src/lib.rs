@@ -10723,7 +10723,11 @@ fn target_lun_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCom
     if target_lun_lio_provider(action)
         && matches!(
             action.operation,
-            Operation::Create | Operation::Attach | Operation::Detach | Operation::Rescan
+            Operation::Create
+                | Operation::Attach
+                | Operation::Detach
+                | Operation::Destroy
+                | Operation::Rescan
         )
     {
         return target_lun_lio_commands(action, target);
@@ -10856,15 +10860,34 @@ fn target_lun_lio_commands(action: &PlannedAction, target: &str) -> Vec<Executio
         }
         Operation::Detach => {
             target_lun_lio_acl_commands(action, &tpg, false, &mut commands);
+            commands.push(target_lun_lio_lun_delete_command(
+                &tpg,
+                &lun,
+                "unmap the reviewed LIO target LUN without deleting the backstore",
+            ));
+            commands.push(target_lun_lio_saveconfig_command());
+        }
+        Operation::Destroy => {
+            target_lun_lio_acl_commands(action, &tpg, false, &mut commands);
+            commands.push(target_lun_lio_lun_delete_command(
+                &tpg,
+                &lun,
+                "unmap the reviewed LIO target LUN before target removal",
+            ));
             commands.push(command_vec(
                 vec![
                     "targetcli".to_string(),
-                    format!("{tpg}/luns"),
+                    "/iscsi".to_string(),
                     "delete".to_string(),
-                    lun,
+                    target.to_string(),
                 ],
                 true,
-                "unmap the reviewed LIO target LUN without deleting the backstore",
+                "remove the reviewed LIO iSCSI target",
+            ));
+            commands.push(target_lun_lio_backstore_delete_command(
+                action,
+                &backstore,
+                "remove the reviewed LIO block backstore after target removal",
             ));
             commands.push(target_lun_lio_saveconfig_command());
         }
@@ -10962,6 +10985,47 @@ fn target_lun_lio_lun_create_command(
         } else {
             CommandReadiness::NeedsDomainImplementation
         },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_lio_lun_delete_command(tpg: &str, lun: &str, note: &str) -> ExecutionCommand {
+    command_vec(
+        vec![
+            "targetcli".to_string(),
+            format!("{tpg}/luns"),
+            "delete".to_string(),
+            lun.to_string(),
+        ],
+        true,
+        note,
+    )
+}
+
+fn target_lun_lio_backstore_delete_command(
+    action: &PlannedAction,
+    backstore: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let (backstore, readiness, unresolved_inputs) = if action.context.device.is_some() {
+        (backstore.to_string(), CommandReadiness::Ready, Vec::new())
+    } else {
+        (
+            "<backstore-name>".to_string(),
+            CommandReadiness::NeedsDomainImplementation,
+            vec!["LIO backstore name or backing device for removal".to_string()],
+        )
+    };
+    command_vec_with_readiness(
+        vec![
+            "targetcli".to_string(),
+            "/backstores/block".to_string(),
+            "delete".to_string(),
+            backstore,
+        ],
+        true,
+        readiness,
         unresolved_inputs,
         note,
     )
@@ -28643,6 +28707,145 @@ mod tests {
                 .iter()
                 .any(|hint| hint.contains("pkgs.targetcli-fb"))
         );
+    }
+
+    #[test]
+    fn target_lun_lio_destroy_renders_concrete_targetcli_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:storage.root": {
+                    "destroy": true,
+                    "provider": "lio",
+                    "source": "/dev/zvol/tank/root",
+                    "lun": 7,
+                    "client": "iqn.2026-06.example:host.primary",
+                    "initiators": [
+                      "iqn.2026-06.example:host.secondary"
+                    ]
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowOffline": true,
+                "backupVerified": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
+
+        let step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:storage.root:destroy")
+            .expect("LIO target-side LUN destroy command plan exists");
+        assert!(step.requires_manual_review);
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "targetcli",
+                    "/iscsi/iqn.2026-06.example:storage.root/tpg1/acls",
+                    "delete",
+                    "iqn.2026-06.example:host.primary",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "targetcli",
+                    "/iscsi/iqn.2026-06.example:storage.root/tpg1/luns",
+                    "delete",
+                    "7",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "targetcli",
+                    "/iscsi",
+                    "delete",
+                    "iqn.2026-06.example:storage.root",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "targetcli",
+                    "/backstores/block",
+                    "delete",
+                    "_dev_zvol_tank_root",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["targetcli", "saveconfig"] && command.mutates)
+        );
+    }
+
+    #[test]
+    fn target_lun_lio_destroy_requires_backstore_identity_for_backstore_removal() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:storage.root": {
+                    "destroy": true,
+                    "provider": "lio",
+                    "lun": 7
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowOffline": true,
+                "backupVerified": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 2);
+        assert!(!report.command_summary.all_commands_ready());
+
+        let step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:storage.root:destroy")
+            .expect("LIO target-side LUN destroy command plan exists");
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "targetcli",
+                    "/backstores/block",
+                    "delete",
+                    "<backstore-name>",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command
+                    .unresolved_inputs
+                    .contains(&"LIO backstore name or backing device for removal".to_string())
+        }));
     }
 
     #[test]

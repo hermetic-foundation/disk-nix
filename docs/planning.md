@@ -432,8 +432,9 @@ Examples:
   declarations can set `provider`, `storageProvider`, or `arrayProvider` to
   label the intended array adapter. `provider = "lio"` renders concrete
   `targetcli` inventory, backstore creation, target creation, LUN mapping,
-  ACL mapping/unmapping, and `saveconfig` commands for Linux LIO targets when
-  the target IQN, backing object, LUN number, and initiators are declared.
+  ACL mapping/unmapping, target removal, reviewed backstore removal, and
+  `saveconfig` commands for Linux LIO targets when the target IQN, backing
+  object, LUN number, and initiators are declared.
   Other providers still emit non-ready `<target-lun-provider[:provider]>`
   handoff commands carrying the target identity, provider label, desired size,
   backing object, portal, and initiators, plus read-only inventory verification
