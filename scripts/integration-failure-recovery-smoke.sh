@@ -3504,6 +3504,104 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$luks_token_import_receipt" >/dev/null
 
+luks_keyslot_remove_tools="$tmpdir/fake-luks-keyslot-remove-tools"
+mkdir -p "$luks_keyslot_remove_tools"
+
+cat > "$luks_keyslot_remove_tools/cryptsetup" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "luksKillSlot /dev/disk/by-id/root-luks 6" ]]; then
+  echo "synthetic LUKS keyslot remove failure for disk-nix recovery coverage" >&2
+  exit 87
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$luks_keyslot_remove_tools/cryptsetup"
+
+luks_keyslot_remove_spec="$tmpdir/luks-keyslot-remove-spec.json"
+luks_keyslot_remove_json="$tmpdir/luks-keyslot-remove-apply.json"
+luks_keyslot_remove_report="$tmpdir/luks-keyslot-remove-report.json"
+luks_keyslot_remove_receipt="$tmpdir/luks-keyslot-remove-receipt.json"
+
+jq -n '{
+  luksKeyslots: {
+    rootRemove: {
+      operation: "remove-key",
+      device: "/dev/disk/by-id/root-luks",
+      slot: "6"
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowPotentialDataLoss: true,
+    requireBackup: false,
+    requireConfirmation: false
+  }
+}' > "$luks_keyslot_remove_spec"
+
+if PATH="$luks_keyslot_remove_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$luks_keyslot_remove_spec" \
+  --execute \
+  --report-out "$luks_keyslot_remove_report" \
+  --receipt-out "$luks_keyslot_remove_receipt" \
+  --json > "$luks_keyslot_remove_json"; then
+  echo "expected synthetic LUKS keyslot remove failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 87
+  and .executionResults[1].argv == ["cryptsetup", "luksKillSlot", "/dev/disk/by-id/root-luks", "6"]
+  and (.executionResults[1].stderr | contains("synthetic LUKS keyslot remove failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "lukskeyslots:rootremove:remove-key"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["cryptsetup", "luksKillSlot", "/dev/disk/by-id/root-luks", "6"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["lukskeyslots:rootremove:remove-key"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/root-luks", "--json"]))
+    and (.notes | any(contains("LUKS changes")))
+    and (.notes | any(contains("keyslots")))
+    and (.notes | any(contains("alternate unlock paths")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/root-luks", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/root-luks"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/root-luks", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$luks_keyslot_remove_json" >/dev/null
+
+cmp "$luks_keyslot_remove_json" "$luks_keyslot_remove_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "lukskeyslots:rootremove:remove-key"
+  and .report.partialExecutionRecovery.failedCommand == ["cryptsetup", "luksKillSlot", "/dev/disk/by-id/root-luks", "6"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$luks_keyslot_remove_receipt" >/dev/null
+
 partition_grow_tools="$tmpdir/fake-partition-grow-tools"
 mkdir -p "$partition_grow_tools"
 
@@ -4477,4 +4575,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS keyslot add, LUKS token import, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS keyslot add, LUKS token import, LUKS keyslot remove, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"

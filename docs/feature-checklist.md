@@ -286,7 +286,7 @@ Update rules:
   detach, target-side LUN LIO destroy, target-side LUN tgt create,
   target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt
   destroy, multipath resize, multipath replace, MD RAID replace, LUKS open,
-  LUKS close, LUKS keyslot add, LUKS token import, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM
+  LUKS close, LUKS keyslot add, LUKS token import, LUKS keyslot remove, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM
   cache detach, VDO grow, VDO property, bcache property, and LVM cache property
   paths.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
