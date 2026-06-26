@@ -230,13 +230,18 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 
 When enabled, it:
 
-- creates a temporary 128 MiB backing file
+- creates a temporary 512 MiB backing file
 - attaches it to the next available `/dev/loop*`
-- creates a temporary LVM physical volume and volume group
+- creates a temporary LVM physical volume, volume group, logical volume, thin
+  pool, thin volume, and snapshot
 - verifies `disk-nix inspect <vg> --json` sees the volume group
-- executes a `volumeGroups.<name>.operation = "rescan"` apply plan
+- executes `volumeGroups.<name>.operation = "rescan"`,
+  `volumes.<vg/lv>.operation = "rescan"`,
+  `thinPools.<vg/pool>.operation = "rescan"`, and
+  `lvmSnapshots.<vg/snapshot>.operation = "rescan"` apply plans
 - verifies the generated JSON report was written and the rendered
-  `pvscan --cache`, `vgscan`, and `vgchange --refresh <vg>` commands succeeded
+  `pvscan --cache`, `vgscan`, `vgchange --refresh <vg>`, and LVM `lvs`
+  inventory commands succeeded
 - removes the temporary volume group, wipes the physical volume metadata,
   detaches the loop device, and removes the backing file during cleanup
 

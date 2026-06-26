@@ -1694,7 +1694,11 @@
             ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'pvcreate --force --yes' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'vgcreate' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'lvcreate --yes --type thin-pool' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'lvcreate --yes --snapshot' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'vgchange", "--refresh"' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'thinpools:" + $thinpool + ":rescan' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'lvmsnapshots:" + $snapshot + ":rescan' ${./scripts/integration-lvm-smoke.sh}
             touch "$out"
           '';
           integrationMdraidSmoke = pkgs.runCommand "disk-nix-integration-mdraid-smoke-check" { } ''
