@@ -279,7 +279,8 @@ Update rules:
   additional LUN flows, property mutation across more supported domains, and
   failed-command recovery beyond the synthetic LVM-plus-filesystem, LVM grow,
   XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check,
-  swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace
+  filesystem repair, swap label, device-mapper rename, ZFS dataset rename,
+  Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace
   grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,
   target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO
   detach, target-side LUN LIO destroy, target-side LUN tgt create,

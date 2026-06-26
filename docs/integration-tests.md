@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for forty-one failed apply paths:
+fake storage tools ahead of `PATH` for forty-two failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -108,6 +108,8 @@ fake storage tools ahead of `PATH` for forty-one failed apply paths:
   `fstrim -v /scratch` fails
 - an ext4 filesystem check where fake `disk-nix inspect /home` succeeds and
   fake `e2fsck -n /dev/disk/by-label/home` fails
+- a Btrfs filesystem repair where fake target and mount-state inspections
+  succeed and fake `btrfs check --repair /dev/disk/by-label/data` fails
 - a swap label mutation where fake
   `swaplabel --label swap-new /dev/disk/by-label/swap-old` fails
 - a device-mapper rename where fake `dmsetup info` and `dmsetup deps` succeed
@@ -221,6 +223,9 @@ The test verifies that the failed report and receipt preserve:
 - `partialExecutionRecovery.failedActionId` as `filesystems:home:check`
 - the failed `e2fsck -n /dev/disk/by-label/home` command and non-zero status
   after successful filesystem target inspection
+- `partialExecutionRecovery.failedActionId` as `filesystems:data:repair`
+- the failed `btrfs check --repair /dev/disk/by-label/data` command and
+  non-zero status after target and mount-state inspection
 - `partialExecutionRecovery.failedActionId` as
   `snapshot:tank/home@before:rollback`
 - the failed `zfs rollback tank/home@before` command and non-zero status
@@ -768,8 +773,8 @@ behavior, broader VDO create/grow/start/stop/property/remove behavior,
 additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
-scrub, Btrfs rebalance, filesystem trim, filesystem check, swap label,
-device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
+scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair,
+swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
 target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt

@@ -734,6 +734,114 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$filesystem_check_receipt" >/dev/null
 
+filesystem_repair_tools="$tmpdir/fake-filesystem-repair-tools"
+mkdir -p "$filesystem_repair_tools"
+
+cat > "$filesystem_repair_tools/findmnt" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$filesystem_repair_tools/btrfs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "check --repair /dev/disk/by-label/data" ]]; then
+  echo "synthetic filesystem repair failure for disk-nix recovery coverage" >&2
+  exit 85
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$filesystem_repair_tools/findmnt" "$filesystem_repair_tools/btrfs"
+
+filesystem_repair_spec="$tmpdir/filesystem-repair-spec.json"
+filesystem_repair_json="$tmpdir/filesystem-repair-apply.json"
+filesystem_repair_report="$tmpdir/filesystem-repair-report.json"
+filesystem_repair_receipt="$tmpdir/filesystem-repair-receipt.json"
+
+jq -n '{
+  filesystems: {
+    data: {
+      mountpoint: "/data",
+      device: "/dev/disk/by-label/data",
+      fsType: "btrfs",
+      operation: "repair"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$filesystem_repair_spec"
+
+if PATH="$filesystem_repair_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$filesystem_repair_spec" \
+  --execute \
+  --report-out "$filesystem_repair_report" \
+  --receipt-out "$filesystem_repair_receipt" \
+  --json > "$filesystem_repair_json"; then
+  echo "expected synthetic filesystem repair failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 2
+  and .commandSummary.commandCount == 4
+  and .commandSummary.mutatingCount == 1
+  and (.executionResults | length) == 4
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "filesystem:data:inspect"
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/data"]
+  and .executionResults[1].success == true
+  and .executionResults[1].actionId == "filesystems:data:repair"
+  and .executionResults[1].argv == ["disk-nix", "inspect", "/data"]
+  and .executionResults[2].success == true
+  and .executionResults[2].actionId == "filesystems:data:repair"
+  and .executionResults[2].argv == ["findmnt", "--json", "--target", "/data"]
+  and .executionResults[3].success == false
+  and .executionResults[3].statusCode == 85
+  and .executionResults[3].argv == ["btrfs", "check", "--repair", "/dev/disk/by-label/data"]
+  and (.executionResults[3].stderr | contains("synthetic filesystem repair failure"))
+  and .partialExecutionRecovery.completedActionIds == ["filesystem:data:inspect"]
+  and .partialExecutionRecovery.failedActionId == "filesystems:data:repair"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["btrfs", "check", "--repair", "/dev/disk/by-label/data"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["filesystems:data:repair"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["findmnt", "--json", "--target", "/data"]))
+    and (.commands | any(.argv == ["blkid", "/dev/disk/by-label/data"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-label/data", "--json"]))
+    and (.notes | any(contains("filesystem changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "topology", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["blkid", "/dev/disk/by-label/data"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$filesystem_repair_json" >/dev/null
+
+cmp "$filesystem_repair_json" "$filesystem_repair_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.completedActionIds == ["filesystem:data:inspect"]
+  and .report.partialExecutionRecovery.failedActionId == "filesystems:data:repair"
+  and .report.partialExecutionRecovery.failedCommand == ["btrfs", "check", "--repair", "/dev/disk/by-label/data"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$filesystem_repair_receipt" >/dev/null
+
 swap_label_tools="$tmpdir/fake-swap-label-tools"
 mkdir -p "$swap_label_tools"
 
@@ -4077,4 +4185,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
