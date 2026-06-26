@@ -1157,6 +1157,103 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_detach_receipt" >/dev/null
 
+vdo_property_tools="$tmpdir/fake-vdo-property-tools"
+mkdir -p "$vdo_property_tools"
+
+cat > "$vdo_property_tools/vdo" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "changeWritePolicy" ]]; then
+  echo "synthetic VDO property failure for disk-nix recovery coverage" >&2
+  exit 86
+fi
+printf '{}\n'
+EOF
+
+cat > "$vdo_property_tools/vdostats" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+chmod +x "$vdo_property_tools/vdo" "$vdo_property_tools/vdostats"
+
+vdo_property_spec="$tmpdir/vdo-property-spec.json"
+vdo_property_json="$tmpdir/vdo-property-apply.json"
+vdo_property_report="$tmpdir/vdo-property-report.json"
+vdo_property_receipt="$tmpdir/vdo-property-receipt.json"
+
+jq -n '{
+  vdoVolumes: {
+    archive: {
+      properties: {
+        writePolicy: "sync"
+      }
+    }
+  },
+  apply: {
+    allowPropertyChanges: true
+  }
+}' > "$vdo_property_spec"
+
+if PATH="$vdo_property_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$vdo_property_spec" \
+  --execute \
+  --report-out "$vdo_property_report" \
+  --receipt-out "$vdo_property_receipt" \
+  --json > "$vdo_property_json"; then
+  echo "expected synthetic VDO property failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["disk-nix", "inspect", "archive"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 86
+  and .executionResults[1].argv == ["vdo", "changeWritePolicy", "--name", "archive", "--writePolicy", "sync"]
+  and (.executionResults[1].stderr | contains("synthetic VDO property failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "vdoVolumes:archive:set-property:writePolicy"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["vdo", "changeWritePolicy", "--name", "archive", "--writePolicy", "sync"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["vdoVolumes:archive:set-property:writePolicy"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["vdo", "status", "--name", "archive"]))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "archive"]))
+    and (.commands | any(.argv == ["disk-nix", "vdo", "--json"]))
+    and (.notes | any(contains("VDO lifecycle changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["vdo", "status", "--name", "archive"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["vdostats", "--human-readable", "archive"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$vdo_property_json" >/dev/null
+
+cmp "$vdo_property_json" "$vdo_property_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "vdoVolumes:archive:set-property:writePolicy"
+  and .report.partialExecutionRecovery.failedCommand == ["vdo", "changeWritePolicy", "--name", "archive", "--writePolicy", "sync"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$vdo_property_receipt" >/dev/null
+
 lvm_cache_tools="$tmpdir/fake-lvm-cache-tools"
 mkdir -p "$lvm_cache_tools"
 
@@ -1248,4 +1345,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property, and LVM cache property failures"

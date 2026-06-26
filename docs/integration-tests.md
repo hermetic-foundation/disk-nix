@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for thirteen failed apply paths:
+fake storage tools ahead of `PATH` for fourteen failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -121,6 +121,8 @@ fake storage tools ahead of `PATH` for thirteen failed apply paths:
   reviewed origin LV and cache pool
 - an LVM cache detach where fake `lvs` succeeds and fake
   `lvconvert --uncache` fails for the reviewed origin LV
+- a VDO property mutation where fake `disk-nix inspect archive` succeeds and
+  fake `vdo changeWritePolicy --name archive --writePolicy sync` fails
 - an LVM cache property mutation where fake `lvchange --cachemode` fails for a
   reviewed origin LV
 
@@ -176,6 +178,10 @@ The test verifies that the failed report and receipt preserve:
   `lvmCaches:vg0/root:remove-device:vg0/root-cache`
 - the failed `lvconvert --uncache vg0/root` command and non-zero status after
   successful cache-state inspection
+- `partialExecutionRecovery.failedActionId` as
+  `vdoVolumes:archive:set-property:writePolicy`
+- the failed `vdo changeWritePolicy --name archive --writePolicy sync` command
+  and non-zero status after target inspection
 - `partialExecutionRecovery.failedActionId` as
   `lvmCaches:vg0/root:set-property:lvm.cache-mode`
 - the failed `lvchange --cachemode writethrough vg0/root` command and non-zero
@@ -645,5 +651,5 @@ mutation across more supported domains, recovery behavior beyond the synthetic
 LVM-plus-filesystem, ZFS rollback, NVMe namespace create, NVMe namespace grow,
 NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,
 target-side LUN LIO create, iSCSI logout, iSCSI login, LVM cache attach, LVM
-cache detach, and LVM cache property failed-command paths, and broader
+cache detach, VDO property, and LVM cache property failed-command paths, and broader
 destructive apply behavior.

@@ -167,8 +167,9 @@ behavior across real storage stacks.
   reporting for both a layered LVM-plus-filesystem apply failure and a ZFS
   rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create failure, iSCSI logout and login
-  failures, LVM cache attach and detach failures, and an LVM cache property
-  mutation failure, without touching real block devices.
+  failures, LVM cache attach and detach failures, a VDO property mutation
+  failure, and an LVM cache property mutation failure, without touching real
+  block devices.
 
 ## Implemented probe coverage
 
@@ -227,7 +228,7 @@ placeholders until concrete adapters are added.
   the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace create, NVMe
   namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace
   delete, target-side LUN LIO create, iSCSI logout, iSCSI login, LVM cache
-  attach, LVM cache detach, and LVM cache property paths.
+  attach, LVM cache detach, VDO property, and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional

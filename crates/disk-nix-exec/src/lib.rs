@@ -727,6 +727,7 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
             Operation::Create
                 | Operation::Destroy
                 | Operation::Grow
+                | Operation::SetProperty
                 | Operation::Start
                 | Operation::Stop,
             Some("vdoVolumes")
@@ -1295,6 +1296,7 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             Operation::Create
             | Operation::Destroy
             | Operation::Grow
+            | Operation::SetProperty
             | Operation::Start
             | Operation::Stop,
             Some("vdoVolumes"),
@@ -1652,6 +1654,7 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             Operation::Create
             | Operation::Destroy
             | Operation::Grow
+            | Operation::SetProperty
             | Operation::Start
             | Operation::Stop,
             Some("vdoVolumes"),
@@ -1980,6 +1983,7 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
             Operation::Create
             | Operation::Destroy
             | Operation::Grow
+            | Operation::SetProperty
             | Operation::Start
             | Operation::Stop,
             Some("vdoVolumes"),
@@ -2302,6 +2306,7 @@ fn domain_recovery_notes(
             Operation::Create
             | Operation::Destroy
             | Operation::Grow
+            | Operation::SetProperty
             | Operation::Start
             | Operation::Stop,
             Some("vdoVolumes"),
@@ -28006,6 +28011,109 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "vg0/root", "--json"] && !command.mutates
         }));
+    }
+
+    #[test]
+    fn failed_vdo_property_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "vdoVolumes": {
+                "archive": {
+                  "properties": {
+                    "writePolicy": "sync"
+                  }
+                }
+              },
+              "apply": {
+                "allowPropertyChanges": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_property = [
+            "vdo",
+            "changeWritePolicy",
+            "--name",
+            "archive",
+            "--writePolicy",
+            "sync",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_property,
+                status_code: Some(if argv == failed_property { 86 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_property {
+                    "VDO write policy failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_property)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("VDO domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("SetProperty"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["vdo", "status", "--name", "archive"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["vdostats", "--human-readable", "archive"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery.commands.iter().any(|command| {
+                command.argv == ["disk-nix", "vdo", "--json"] && !command.mutates
+            })
+        );
+        assert!(domain_recovery.notes.iter().any(|note| {
+            note.contains("VDO lifecycle changes") && note.contains("operating mode")
+        }));
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("VDO roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["vdo", "status", "--name", "archive"] && !command.mutates
+        }));
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "disk-nix",
+                    "apply",
+                    "--spec",
+                    "<spec>",
+                    "--probe-current",
+                    "--json",
+                ]
+                && command.readiness == CommandReadiness::ManualOnly
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("VDO rollback recovery review is reported");
+        assert!(rollback.commands.iter().all(|command| !command.mutates));
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["vdostats", "--human-readable", "archive"] && !command.mutates
+        }));
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints)
+        );
     }
 
     #[test]
