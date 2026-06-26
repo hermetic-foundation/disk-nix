@@ -144,10 +144,13 @@ behavior across real storage stacks.
   multipath, ZFS pools/datasets/zvols/snapshots, LVM PV/VG/LV/thin/cache
   identities, VDO volumes, loop devices, cache identities, iSCSI sessions, LUN
   host paths, NVMe namespaces, and NFS export path/client pairs.
-- A root-only, explicitly enabled loop-backed smoke integration harness that
-  creates a temporary backing file, attaches a loop device, writes an ext4
-  signature, verifies real `inspect --json`, executes a safe loop rescan apply,
-  and cleans up the temporary device.
+- Root-only, explicitly enabled smoke integration harnesses for loop devices,
+  Btrfs, bcachefs, LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, and
+  NVMe. The self-contained loop-backed harnesses create disposable backing
+  files or arrays, verify real `inspect --json`, execute reviewed apply plans,
+  and clean up temporary devices. Lab-hardware harnesses for NFS, VDO, iSCSI,
+  multipath, and NVMe require explicit environment-selected existing targets
+  and exercise non-destructive refresh or remount paths.
 
 ## Implemented probe coverage
 
@@ -176,10 +179,12 @@ manual-review guidance, or non-ready command plans instead of guessing.
 
 ## Remaining for feature complete
 
-- Broader integration tests that exercise LUKS, LVM, Btrfs, bcachefs, ZFS, MD
-  RAID, multipath, iSCSI, NFS, VDO, and NVMe where host support is available.
-- A VM-based destructive test harness that validates apply behavior on isolated
-  disposable disks before trusting production mutations.
+- Broader destructive and failure-path integration tests beyond the smoke
+  suite, including device replacement, rollback, failed-command recovery,
+  degraded arrays, cache attach/detach, namespace creation/deletion, LUN
+  login/logout flows, and property mutation across supported domains.
+- A deeper VM-based destructive test harness that validates multi-layer apply
+  behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional
   operation types and multi-action groups before command rendering.
 - Runtime graph-path dependency ordering for multi-layer changes. The planner
