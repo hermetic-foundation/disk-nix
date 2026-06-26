@@ -104,7 +104,9 @@ storage tool version probes, and preflight check summaries so CI, operators, and
 bug reports can tie adapter failures to the distribution, privilege context, and
 tool-output variant that produced them. The checks report whether probing is
 running as root, count missing or failing storage tools, list the affected
-tools, and emit remediation text. With `--json`, preflight output is wrapped as
+tools, treat successful version probes with no output as failures, accept the
+first non-empty version line from stdout or stderr, and emit remediation text.
+With `--json`, preflight output is wrapped as
 `{ environment, preflightChecks, reports }`; without `--preflight`,
 `probe-status --json` keeps the stable adapter-report array shape.
 

@@ -234,9 +234,9 @@ concrete array adapters remain future work.
   adapter-specific tool/package, privilege-surface, inaccessible-data, and
   parse-fixture hints, plus opt-in `probe-status --preflight` OS, kernel,
   effective UID, storage tool version context, and structured preflight checks
-  for root privilege plus missing or failing storage tools. Live preflight
-  coverage against every distribution and tool-output variant still needs
-  expansion.
+  for root privilege plus missing, failing, stderr-only, or empty-output storage
+  tool version probes. Live preflight coverage against every distribution and
+  tool-output variant still needs expansion.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
 - Future spec-version field mappings. The parser validates version `1`,

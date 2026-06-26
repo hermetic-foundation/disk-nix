@@ -241,8 +241,9 @@ Update rules:
   for multi-layer apply behavior on isolated disposable disks are still needed.
 - [ ] **Partial:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
-  checks for root privilege plus missing or failing storage tools, but live
-  checks across distributions and tool-output variants need expansion.
+  checks for root privilege plus missing, failing, stderr-only, and empty-output
+  storage tool version probes, but live checks across distributions and
+  tool-output variants need expansion.
 
 ## Documentation
 

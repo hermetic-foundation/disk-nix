@@ -2299,7 +2299,7 @@ fn command_stdout_first_line(command: &str, args: &[&str]) -> Result<String, Str
                 .find(|line| !line.is_empty())
                 .unwrap_or("");
             if line.is_empty() {
-                Ok(format!("{command} returned no version text"))
+                Err(format!("{command} {:?} returned no version text", args))
             } else {
                 Ok(line.to_string())
             }
@@ -5512,8 +5512,8 @@ mod tests {
 
     use super::{
         ProbePreflightEnvironment, ProbeStatusPreflightReport, ToolVersionReport,
-        ToolVersionStatus, apply_receipt, confirmation_file_accepts, consumer_count,
-        is_backing_file_node, is_bcachefs_node, is_btrfs_node, is_cache_node,
+        ToolVersionStatus, apply_receipt, command_stdout_first_line, confirmation_file_accepts,
+        consumer_count, is_backing_file_node, is_bcachefs_node, is_btrfs_node, is_cache_node,
         is_complex_filesystem_node, is_device_node, is_dm_node, is_encryption_node,
         is_filesystem_node, is_iscsi_node, is_loop_node, is_lun_node, is_lvm_node, is_mapping_node,
         is_multipath_node, is_network_storage_node, is_nfs_node, is_nvme_node, is_partition_node,
@@ -5620,6 +5620,27 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
                 .as_deref()
                 .is_some_and(|message| message.contains("not found"))
         );
+    }
+
+    #[test]
+    fn probe_preflight_command_version_output_handles_common_variants() {
+        let stdout = command_stdout_first_line("sh", &["-c", "printf 'tool 1.0\\n'"])
+            .expect("stdout version text should parse");
+        assert_eq!(stdout, "tool 1.0");
+
+        let stderr = command_stdout_first_line("sh", &["-c", "printf 'tool 2.0\\n' >&2"])
+            .expect("stderr version text should parse");
+        assert_eq!(stderr, "tool 2.0");
+
+        let empty = command_stdout_first_line("sh", &["-c", ":"])
+            .expect_err("empty successful version output should fail preflight");
+        assert!(empty.contains("returned no version text"));
+
+        let nonzero =
+            command_stdout_first_line("sh", &["-c", "printf 'bad version\\n' >&2; exit 2"])
+                .expect_err("nonzero version command should fail preflight");
+        assert!(nonzero.contains("failed with status"));
+        assert!(nonzero.contains("bad version"));
     }
 
     #[test]
