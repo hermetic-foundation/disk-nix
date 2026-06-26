@@ -613,90 +613,100 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 | Operation::SetProperty,
             Some("luksTokens")
         ) | (
-            Operation::AddDevice
-                | Operation::Check
-                | Operation::Format
-                | Operation::Grow
-                | Operation::Mount
-                | Operation::Rebalance
-                | Operation::RemoveDevice
-                | Operation::Remount
-                | Operation::Repair
-                | Operation::Rescan
-                | Operation::Scrub
-                | Operation::SetProperty
-                | Operation::Shrink
-                | Operation::Trim
-                | Operation::Unmount,
-            Some("filesystems")
-        ) | (
-            Operation::Activate
-                | Operation::Create
-                | Operation::Deactivate
-                | Operation::Destroy
-                | Operation::Grow
-                | Operation::Rename
-                | Operation::Rescan
-                | Operation::Shrink,
-            Some("volumes" | "thinPools" | "physicalVolumes")
-        ) | (
-            Operation::Activate
-                | Operation::AddDevice
-                | Operation::Create
-                | Operation::Deactivate
-                | Operation::Destroy
-                | Operation::Export
-                | Operation::Grow
-                | Operation::Import
-                | Operation::RemoveDevice
-                | Operation::Rename
-                | Operation::ReplaceDevice
-                | Operation::Rescan,
-            Some("volumeGroups")
-        ) | (
-            Operation::AddDevice
-                | Operation::Create
-                | Operation::Destroy
-                | Operation::Export
-                | Operation::Grow
-                | Operation::Import
-                | Operation::Promote
-                | Operation::Rebalance
-                | Operation::RemoveDevice
-                | Operation::Rename
-                | Operation::ReplaceDevice
-                | Operation::Rescan
-                | Operation::Scrub
-                | Operation::SetProperty,
-            Some("pools" | "datasets" | "zvols")
-        ) | (
-            Operation::Clone
-                | Operation::Create
-                | Operation::Destroy
-                | Operation::Rename
-                | Operation::Rescan
-                | Operation::Rollback
-                | Operation::SetProperty,
-            Some("snapshots")
-        ) | (
-            Operation::AddDevice
-                | Operation::Create
-                | Operation::Destroy
-                | Operation::RemoveDevice
-                | Operation::ReplaceDevice
-                | Operation::Rescan
-                | Operation::SetProperty,
-            Some("caches" | "lvmCaches")
-        ) | (
-            Operation::Create
-                | Operation::Deactivate
-                | Operation::Destroy
-                | Operation::Format
-                | Operation::Grow
-                | Operation::Rescan
-                | Operation::SetProperty,
-            Some("swaps")
-        )
+            Operation::Create | Operation::Grow | Operation::Rescan,
+            Some("partitions")
+        ) | (Operation::Create | Operation::Rescan, Some("disks"))
+            | (
+                Operation::AddDevice
+                    | Operation::Check
+                    | Operation::Format
+                    | Operation::Grow
+                    | Operation::Mount
+                    | Operation::Rebalance
+                    | Operation::RemoveDevice
+                    | Operation::Remount
+                    | Operation::Repair
+                    | Operation::Rescan
+                    | Operation::Scrub
+                    | Operation::SetProperty
+                    | Operation::Shrink
+                    | Operation::Trim
+                    | Operation::Unmount,
+                Some("filesystems")
+            )
+            | (
+                Operation::Activate
+                    | Operation::Create
+                    | Operation::Deactivate
+                    | Operation::Destroy
+                    | Operation::Grow
+                    | Operation::Rename
+                    | Operation::Rescan
+                    | Operation::Shrink,
+                Some("volumes" | "thinPools" | "physicalVolumes")
+            )
+            | (
+                Operation::Activate
+                    | Operation::AddDevice
+                    | Operation::Create
+                    | Operation::Deactivate
+                    | Operation::Destroy
+                    | Operation::Export
+                    | Operation::Grow
+                    | Operation::Import
+                    | Operation::RemoveDevice
+                    | Operation::Rename
+                    | Operation::ReplaceDevice
+                    | Operation::Rescan,
+                Some("volumeGroups")
+            )
+            | (
+                Operation::AddDevice
+                    | Operation::Create
+                    | Operation::Destroy
+                    | Operation::Export
+                    | Operation::Grow
+                    | Operation::Import
+                    | Operation::Promote
+                    | Operation::Rebalance
+                    | Operation::RemoveDevice
+                    | Operation::Rename
+                    | Operation::ReplaceDevice
+                    | Operation::Rescan
+                    | Operation::Scrub
+                    | Operation::SetProperty,
+                Some("pools" | "datasets" | "zvols")
+            )
+            | (
+                Operation::Clone
+                    | Operation::Create
+                    | Operation::Destroy
+                    | Operation::Rename
+                    | Operation::Rescan
+                    | Operation::Rollback
+                    | Operation::SetProperty,
+                Some("snapshots")
+            )
+            | (
+                Operation::AddDevice
+                    | Operation::Create
+                    | Operation::Destroy
+                    | Operation::RemoveDevice
+                    | Operation::ReplaceDevice
+                    | Operation::Rescan
+                    | Operation::SetProperty,
+                Some("caches" | "lvmCaches")
+            )
+            | (
+                Operation::Create
+                    | Operation::Deactivate
+                    | Operation::Destroy
+                    | Operation::Format
+                    | Operation::Grow
+                    | Operation::Rescan
+                    | Operation::SetProperty,
+                Some("swaps")
+            )
     ) {
         return true;
     }
@@ -870,6 +880,13 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
                 false,
                 "inspect LVM origin, snapshot, and merge state before roll-forward",
             ));
+        }
+        (Operation::Create | Operation::Grow | Operation::Rescan, Some("partitions"), _)
+        | (Operation::Create | Operation::Rescan, Some("disks"), _) => {
+            commands.extend(partition_recovery_inspection_commands(
+                step,
+                "inspect partition table state before choosing roll-forward",
+            ))
         }
         (
             Operation::AddDevice
@@ -1172,6 +1189,13 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             false,
             "confirm the LVM snapshot and origin state before retrying merge rollback",
         )],
+        (Operation::Create | Operation::Grow | Operation::Rescan, Some("partitions"), _)
+        | (Operation::Create | Operation::Rescan, Some("disks"), _) => {
+            partition_recovery_inspection_commands(
+                step,
+                "confirm partition table state before rollback decisions",
+            )
+        }
         (
             Operation::AddDevice
             | Operation::Check
@@ -1468,6 +1492,13 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
                 false,
                 "inspect LVM snapshot and merge state before deciding whether to retry",
             ));
+        }
+        (Operation::Create | Operation::Grow | Operation::Rescan, Some("partitions"), _)
+        | (Operation::Create | Operation::Rescan, Some("disks"), _) => {
+            commands.extend(partition_recovery_inspection_commands(
+                step,
+                "inspect partition table state after the failed command",
+            ))
         }
         (
             Operation::AddDevice
@@ -1798,6 +1829,15 @@ fn domain_recovery_notes(
                 "keep the origin, snapshot, and VG metadata backups intact until the merge outcome is verified".to_string(),
             );
         }
+        (Operation::Create | Operation::Grow | Operation::Rescan, Some("partitions"))
+        | (Operation::Create | Operation::Rescan, Some("disks")) => {
+            notes.push(
+                "for partition-table changes, inspect disk identity, partition geometry, kernel reread state, and dependent LUKS, LVM, filesystem, and mount consumers before retrying".to_string(),
+            );
+            notes.push(
+                "preserve partition table captures and avoid formatting or resizing upper layers until the kernel and modeled topology agree on the new geometry".to_string(),
+            );
+        }
         (
             Operation::AddDevice
             | Operation::Check
@@ -2072,6 +2112,13 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     }
     if command_step_collection(step) == Some("filesystems") {
         if let Some(target) = filesystem_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if matches!(command_step_collection(step), Some("disks" | "partitions")) {
+        if let Some(target) =
+            partition_disk_from_step(step).or_else(|| partition_target_from_step(step))
+        {
             return Some(target);
         }
     }
@@ -2700,6 +2747,95 @@ fn filesystem_source_from_step(step: &ExecutionStep) -> Option<&str> {
 
         Some(source)
             .filter(|source| source.starts_with('/') && !source.starts_with("<") && *source != "/")
+    })
+}
+
+fn partition_recovery_inspection_commands(
+    step: &ExecutionStep,
+    note: &'static str,
+) -> Vec<ExecutionCommand> {
+    let disk = partition_disk_from_step(step).or_else(|| {
+        step.action_id
+            .split(':')
+            .nth(1)
+            .filter(|target| target.starts_with('/'))
+    });
+    let partition = partition_target_from_step(step);
+    let mut commands = Vec::new();
+
+    if let Some(disk) = disk {
+        commands.push(command(["parted", "-lm", disk], false, note));
+        commands.push(command(
+            ["lsblk", "--json", "--bytes", "--output-all", disk],
+            false,
+            note,
+        ));
+        commands.push(command(
+            ["disk-nix", "inspect", disk, "--json"],
+            false,
+            note,
+        ));
+    } else {
+        commands.push(command(
+            ["parted", "-lm"],
+            false,
+            "inspect all partition tables before retrying",
+        ));
+        commands.push(command(
+            ["lsblk", "--json", "--bytes", "--output-all"],
+            false,
+            "inspect kernel disk and partition inventory before retrying",
+        ));
+    }
+
+    if let Some(partition) = partition {
+        commands.push(command(
+            ["disk-nix", "inspect", partition, "--json"],
+            false,
+            note,
+        ));
+    }
+
+    commands
+}
+
+fn partition_disk_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        let tool = command.argv.first()?.as_str();
+        let disk = match tool {
+            "parted" => match command.argv.get(1).map(String::as_str) {
+                Some("-s") => command.argv.get(2).map(String::as_str),
+                Some("-lm") => command.argv.get(2).map(String::as_str),
+                _ => command.argv.last().map(String::as_str),
+            },
+            "partprobe" => command.argv.get(1).map(String::as_str),
+            "blockdev" if command.argv.get(1).is_some_and(|arg| arg == "--rereadpt") => {
+                command.argv.get(2).map(String::as_str)
+            }
+            "growpart" => command.argv.get(1).map(String::as_str),
+            _ => None,
+        }?;
+
+        Some(disk).filter(|disk| {
+            disk.starts_with('/') && !disk.starts_with('<') && !disk.starts_with('-')
+        })
+    })
+}
+
+fn partition_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        if command
+            .argv
+            .get(0..2)
+            .is_some_and(|args| args == ["disk-nix", "inspect"])
+        {
+            return command
+                .argv
+                .get(2)
+                .map(String::as_str)
+                .filter(|target| target.starts_with('/') && !target.starts_with('<'));
+        }
+        None
     })
 }
 
@@ -26337,6 +26473,111 @@ mod tests {
             .expect("filesystem rollback recovery review is reported");
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "/", "--json"] && !command.mutates
+        }));
+    }
+
+    #[test]
+    fn failed_partition_growth_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "partitions": {
+                "root": {
+                  "operation": "grow",
+                  "target": "/dev/disk/by-id/nvme-root-part2",
+                  "device": "/dev/disk/by-id/nvme-root",
+                  "partitionNumber": 2,
+                  "end": "100%"
+                }
+              },
+              "apply": {
+                "allowOffline": true,
+                "allowGrow": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_resize = [
+            "parted",
+            "-s",
+            "/dev/disk/by-id/nvme-root",
+            "resizepart",
+            "2",
+            "100%",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_resize,
+                status_code: Some(if argv == failed_resize { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_resize {
+                    "resizepart failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_resize)
+        );
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("partition domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Grow"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["parted", "-lm", "/dev/disk/by-id/nvme-root"] && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "lsblk",
+                    "--json",
+                    "--bytes",
+                    "--output-all",
+                    "/dev/disk/by-id/nvme-root",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "inspect", "/dev/disk/by-id/nvme-root", "--json"]
+                && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("partition-table changes") && note.contains("kernel"))
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("partition roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["parted", "-lm", "/dev/disk/by-id/nvme-root"] && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("partition rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "lsblk",
+                    "--json",
+                    "--bytes",
+                    "--output-all",
+                    "/dev/disk/by-id/nvme-root",
+                ]
+                && !command.mutates
         }));
     }
 
