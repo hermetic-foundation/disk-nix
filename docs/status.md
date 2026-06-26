@@ -184,7 +184,7 @@ behavior across real storage stacks.
   partition grow failure, NFS remount failure, NFS unmount failure, swap label
   mutation failure, device-mapper rename failure, ZFS dataset rename failure,
   Btrfs snapshot clone failure, ZFS snapshot clone failure, LVM VG rename
-  failure, iSCSI logout and login failures, LVM cache attach, detach,
+  failure, iSCSI logout, login, and rescan failures, LVM cache attach, detach,
   replacement, and rescan failures, VDO create, rescan, logical-grow,
   physical-grow, start, stop, and remove failures, bcache replacement failure,
   VDO and bcache property mutation failures, bcache rescan failure, and an LVM
@@ -270,8 +270,8 @@ added.
   rescan, multipath resize, multipath replace, LVM VG replacement, ZFS pool replacement, MD RAID add-member, MD RAID
   remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add,
   LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
-  remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach,
-  LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical
+  remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach,
+  LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical
   grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property,
   bcache replacement, bcache property, bcache rescan, and LVM cache property
   paths.

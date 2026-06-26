@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for fifty-nine failed apply paths:
+fake storage tools ahead of `PATH` for sixty failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -249,6 +249,7 @@ fake storage tools ahead of `PATH` for fifty-nine failed apply paths:
   target and portal
 - an iSCSI session login where fake `iscsiadm --mode discovery` succeeds and
   fake `iscsiadm --login` fails for the reviewed target and portal
+- an iSCSI session rescan where fake `iscsiadm --mode session --rescan` fails
 - an LVM cache attach where fake `lvconvert --type cache` fails for the
   reviewed origin LV and cache pool
 - an LVM cache detach where fake `lvs` succeeds and fake
@@ -430,6 +431,10 @@ The test verifies that the failed report and receipt preserve:
   `iscsisessions:iqn.2026-06.example:storage.root:login`
 - the failed `iscsiadm --mode node --targetname iqn.2026-06.example:storage.root --portal 192.0.2.10:3260 --login` command
   and non-zero status after successful discovery
+- `partialExecutionRecovery.failedActionId` as
+  `iscsisessions:iqn.2026-06.example:storage.root:rescan`
+- the failed `iscsiadm --mode session --rescan` command and non-zero status
+  with generic recovery and recovery-point preservation actions
 - `partialExecutionRecovery.failedActionId` as
   `lvmCaches:vg0/root:add-device:vg0/root-cache`
 - the failed `lvconvert --type cache --cachepool vg0/root-cache vg0/root`
@@ -978,6 +983,6 @@ concrete property rendering, target-side LUN tgt property, target-side LUN tgt
 rescan, multipath
 resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
-remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
+remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
 create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
 paths, and broader destructive apply behavior.

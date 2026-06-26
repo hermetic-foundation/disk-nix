@@ -5656,6 +5656,97 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$iscsi_login_receipt" >/dev/null
 
+iscsi_rescan_tools="$tmpdir/fake-iscsi-rescan-tools"
+mkdir -p "$iscsi_rescan_tools"
+iscsi_rescan_disk_nix="$(command -v "$disk_nix_bin")"
+
+cat > "$iscsi_rescan_tools/iscsiadm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "--mode session --rescan" ]]; then
+  echo "synthetic iscsi rescan failure for disk-nix recovery coverage" >&2
+  exit 93
+fi
+printf 'tcp: [1] 192.0.2.10:3260,1 iqn.2026-06.example:storage.root\n'
+EOF
+
+cat > "$iscsi_rescan_tools/lsscsi" <<'EOF'
+#!/usr/bin/env bash
+printf '[0:0:0:0] disk fake target /dev/sda 1GiB\n'
+EOF
+
+cat > "$iscsi_rescan_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$iscsi_rescan_disk_nix" "\$@"
+EOF
+
+chmod +x "$iscsi_rescan_tools/iscsiadm" "$iscsi_rescan_tools/lsscsi" "$iscsi_rescan_tools/disk-nix"
+
+iscsi_rescan_spec="$tmpdir/iscsi-rescan-spec.json"
+iscsi_rescan_json="$tmpdir/iscsi-rescan-apply.json"
+iscsi_rescan_report="$tmpdir/iscsi-rescan-report.json"
+iscsi_rescan_receipt="$tmpdir/iscsi-rescan-receipt.json"
+
+jq -n '{
+  iscsiSessions: {
+    "iqn.2026-06.example:storage.root": {
+      operation: "rescan"
+    }
+  }
+}' > "$iscsi_rescan_spec"
+
+if PATH="$iscsi_rescan_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$iscsi_rescan_spec" \
+  --execute \
+  --report-out "$iscsi_rescan_report" \
+  --receipt-out "$iscsi_rescan_receipt" \
+  --json > "$iscsi_rescan_json"; then
+  echo "expected synthetic iSCSI rescan failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 1
+  and .commandSummary.commandCount == 3
+  and .commandSummary.mutatingCount == 1
+  and .commandSummary.manualReviewCount == 1
+  and .commandSummary.readyCount == 3
+  and (.executionResults | length) == 1
+  and .executionResults[0].success == false
+  and .executionResults[0].statusCode == 93
+  and .executionResults[0].actionId == "iscsisessions:iqn.2026-06.example:storage.root:rescan"
+  and .executionResults[0].argv == ["iscsiadm", "--mode", "session", "--rescan"]
+  and (.executionResults[0].stderr | contains("synthetic iscsi rescan failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "iscsisessions:iqn.2026-06.example:storage.root:rescan"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["iscsiadm", "--mode", "session", "--rescan"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["iscsisessions:iqn.2026-06.example:storage.root:rescan"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(.kind == "review-execution-failure"))
+  and (.recoveryActions | any(
+    .kind == "inspect-current-state"
+    and (.commands | any(.argv == ["disk-nix", "probe-status", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "topology", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "resume-after-fix"))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$iscsi_rescan_json" >/dev/null
+
+cmp "$iscsi_rescan_json" "$iscsi_rescan_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "iscsisessions:iqn.2026-06.example:storage.root:rescan"
+  and .report.partialExecutionRecovery.failedCommand == ["iscsiadm", "--mode", "session", "--rescan"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$iscsi_rescan_receipt" >/dev/null
+
 lvm_cache_attach_tools="$tmpdir/fake-lvm-cache-attach-tools"
 mkdir -p "$lvm_cache_attach_tools"
 
@@ -7334,4 +7425,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
