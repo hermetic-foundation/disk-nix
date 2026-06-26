@@ -167,14 +167,14 @@ behavior across real storage stacks.
   reporting for both a layered LVM-plus-filesystem apply failure and a ZFS
   rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create and destroy failures, Linux tgt
-  create failures, multipath resize and replacement failures, MD RAID member
-  replacement failure, LUKS open failure, partition grow failure, NFS remount
-  failure, swap label mutation failure, device-mapper rename failure, ZFS
-  dataset rename failure, Btrfs snapshot clone failure, ZFS snapshot clone
-  failure, LVM VG rename failure, iSCSI logout and login failures, LVM cache
-  attach and detach failures, VDO grow failure, VDO and bcache property
-  mutation failures, and an LVM cache property mutation failure, without
-  touching real block devices.
+  create and destroy failures, multipath resize and replacement failures, MD
+  RAID member replacement failure, LUKS open failure, partition grow failure,
+  NFS remount failure, swap label mutation failure, device-mapper rename
+  failure, ZFS dataset rename failure, Btrfs snapshot clone failure, ZFS
+  snapshot clone failure, LVM VG rename failure, iSCSI logout and login
+  failures, LVM cache attach and detach failures, VDO grow failure, VDO and
+  bcache property mutation failures, and an LVM cache property mutation
+  failure, without touching real block devices.
 
 ## Implemented probe coverage
 
@@ -236,10 +236,10 @@ placeholders until concrete adapters are added.
   rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
   namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
   LUN LIO create, target-side LUN LIO destroy, target-side LUN tgt create,
-  multipath resize, multipath replace, MD RAID replace, LUKS open, partition
-  grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache
-  detach, VDO grow, VDO property, bcache property, and LVM cache property
-  paths.
+  target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID
+  replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login,
+  LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property,
+  and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional
