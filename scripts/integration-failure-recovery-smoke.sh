@@ -896,6 +896,99 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$multipath_replace_receipt" >/dev/null
 
+md_replace_tools="$tmpdir/fake-md-replace-tools"
+mkdir -p "$md_replace_tools"
+
+cat > "$md_replace_tools/mdadm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "/dev/md/root --replace /dev/disk/by-id/old-md-member --with /dev/disk/by-id/new-md-member" ]]; then
+  echo "synthetic MD RAID replace failure for disk-nix recovery coverage" >&2
+  exit 86
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$md_replace_tools/mdadm"
+
+md_replace_spec="$tmpdir/md-replace-spec.json"
+md_replace_json="$tmpdir/md-replace-apply.json"
+md_replace_report="$tmpdir/md-replace-report.json"
+md_replace_receipt="$tmpdir/md-replace-receipt.json"
+
+jq -n '{
+  mdRaids: {
+    root: {
+      target: "/dev/md/root",
+      replaceDevices: {
+        "/dev/disk/by-id/old-md-member": "/dev/disk/by-id/new-md-member"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowDeviceReplacement: true
+  }
+}' > "$md_replace_spec"
+
+if PATH="$md_replace_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$md_replace_spec" \
+  --execute \
+  --report-out "$md_replace_report" \
+  --receipt-out "$md_replace_receipt" \
+  --json > "$md_replace_json"; then
+  echo "expected synthetic MD RAID replace failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["mdadm", "--detail", "/dev/md/root"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 86
+  and .executionResults[1].argv == ["mdadm", "/dev/md/root", "--replace", "/dev/disk/by-id/old-md-member", "--with", "/dev/disk/by-id/new-md-member"]
+  and (.executionResults[1].stderr | contains("synthetic MD RAID replace failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "mdRaids:root:replace-device:/dev/disk/by-id/old-md-member"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["mdadm", "/dev/md/root", "--replace", "/dev/disk/by-id/old-md-member", "--with", "/dev/disk/by-id/new-md-member"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["mdRaids:root:replace-device:/dev/disk/by-id/old-md-member"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["mdadm", "--detail", "/dev/md/root"]))
+    and (.commands | any(.argv == ["cat", "/proc/mdstat"]))
+    and (.notes | any(contains("MD RAID member changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["mdadm", "--detail", "/dev/md/root"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["cat", "/proc/mdstat"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$md_replace_json" >/dev/null
+
+cmp "$md_replace_json" "$md_replace_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "mdRaids:root:replace-device:/dev/disk/by-id/old-md-member"
+  and .report.partialExecutionRecovery.failedCommand == ["mdadm", "/dev/md/root", "--replace", "/dev/disk/by-id/old-md-member", "--with", "/dev/disk/by-id/new-md-member"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$md_replace_receipt" >/dev/null
+
 iscsi_tools="$tmpdir/fake-iscsi-tools"
 mkdir -p "$iscsi_tools"
 
@@ -1453,4 +1546,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, multipath replace, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, multipath replace, MD RAID replace, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property, and LVM cache property failures"

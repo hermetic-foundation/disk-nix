@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for fifteen failed apply paths:
+fake storage tools ahead of `PATH` for sixteen failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -116,6 +116,10 @@ fake storage tools ahead of `PATH` for fifteen failed apply paths:
 - a multipath path replacement where fake `multipath -ll /dev/mapper/mpatha`
   and fake `multipathd add path /dev/sdd` succeed and fake
   `multipathd del path /dev/sdc` fails
+- an MD RAID member replacement where fake `mdadm --detail /dev/md/root`
+  succeeds and fake
+  `mdadm /dev/md/root --replace /dev/disk/by-id/old-md-member --with /dev/disk/by-id/new-md-member`
+  fails
 - an iSCSI session logout where fake `iscsiadm --logout` fails for the reviewed
   target and portal
 - an iSCSI session login where fake `iscsiadm --mode discovery` succeeds and
@@ -649,14 +653,16 @@ integration paths. Feature completion still needs disposable VM or lab-host
 tests for broader LUKS format/grow/keyslot/token behavior, broader LVM
 LV/thin/cache/device-topology behavior, additional device replacement domains,
 broader bcachefs multi-device and member-topology behavior, broader ZFS
-vdev/dataset/zvol/snapshot behavior, broader MD RAID grow/member-topology
-behavior, broader multipath path add/remove/flush/grow/failure behavior,
+vdev/dataset/zvol/snapshot behavior, broader MD RAID grow/member-topology and
+degraded-array variant behavior, broader multipath path
+add/remove/flush/grow/failure behavior,
 broader iSCSI LUN failure behavior, broader NFS server/export/unmount/failure
 behavior, broader VDO create/grow/start/stop/property/remove behavior,
 additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace
 create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe
-namespace delete, target-side LUN LIO create, multipath replace, iSCSI logout,
-iSCSI login, LVM cache attach, LVM cache detach, VDO property, and LVM cache
-property failed-command paths, and broader destructive apply behavior.
+namespace delete, target-side LUN LIO create, multipath replace, MD RAID
+replace, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
+property, and LVM cache property failed-command paths, and broader destructive
+apply behavior.
