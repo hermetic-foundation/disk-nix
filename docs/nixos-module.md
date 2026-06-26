@@ -99,15 +99,24 @@ The module also writes `/etc/disk-nix/declarative-handoff.nix`. This is a
 reviewable Nix module snippet containing the native steady-state declarations
 derived from active disk-nix options, including `fileSystems`, `swapDevices`,
 `zramSwap`, initrd LUKS devices, supported filesystems, NFS exports, iSCSI
-settings, and native storage service flags. It is intentionally not imported
-automatically. Operators should review it after successful imperative mutation
-and copy the relevant declarations into their real NixOS configuration.
+settings, and native storage service flags. It is intentionally not imported by
+default. Operators should review it after successful imperative mutation and
+copy the relevant declarations into their real NixOS configuration, or enable
+the guarded auto-import option described below.
 The module also writes `/etc/disk-nix/declarative-handoff-import.patch`, a
 reviewable patch skeleton that adds the handoff module to an `imports` list.
 The patch is indexed in `/etc/disk-nix/steady-state.json` as
-`declarativeHandoff.importPatch`; it is never applied automatically because
-importing the handoff module changes the declarative storage state that NixOS
-will enforce.
+`declarativeHandoff.importPatch`.
+
+`services.disk-nix.apply.declarativeHandoff.autoImport.enable = true` applies
+that import patch automatically after a successful `disk-nix apply --execute`
+service run. It requires `apply.execute = true`, backs up the configured NixOS
+configuration file to `backupDirectory`, skips the edit when the handoff module
+is already imported, and then applies
+`/etc/disk-nix/declarative-handoff-import.patch` to `configurationPath`.
+Defaults are `/etc/nixos/configuration.nix` and `/var/backups/disk-nix`.
+`steady-state.json` records the auto-import setting, target configuration path,
+and backup directory under `declarativeHandoff.autoImport`.
 
 `toolPackages` defaults to the storage tools used by the probe and executor
 adapters, including bash shell wrappers, coreutils file helpers, Btrfs,

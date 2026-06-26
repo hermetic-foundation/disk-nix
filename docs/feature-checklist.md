@@ -239,11 +239,14 @@ Update rules:
   storage domains.
 - [x] **Finished:** Service enablement and boot/initrd integration hints for
   supported storage declarations.
-- [ ] **Partial:** The module generates a reviewable
+- [x] **Finished:** The module generates a reviewable
   `/etc/disk-nix/declarative-handoff.nix` Nix module snippet and
   `/etc/disk-nix/declarative-handoff-import.patch` review patch after
-  evaluation, but automatic editing of the user's declarative NixOS
-  configuration after successful imperative mutation is still not implemented.
+  evaluation. It can also opt in to guarded automatic editing after successful
+  imperative mutation with
+  `services.disk-nix.apply.declarativeHandoff.autoImport.enable = true`, which
+  requires `apply.execute = true`, backs up the configured NixOS configuration
+  file, skips already-imported configurations, and applies the import patch.
 - [x] **Finished:** Steady-state synthesis for lifecycle-managed resources after
   mutation. `/etc/disk-nix/steady-state.json` includes a `lifecycleManaged`
   index for active disk-nix declarations across supported storage domains,

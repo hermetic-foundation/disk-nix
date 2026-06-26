@@ -244,12 +244,16 @@ added.
   group records action ids, edge counts, graph-derived edge counts, phases,
   directions, and review guidance for applying the connected mutation as one
   ordered group or splitting it into independently verified passes.
-- Automated editing of declarative NixOS configuration after successful
-  mutation is still not implemented. The module now emits a
+- Guarded automatic editing of declarative NixOS configuration after successful
+  mutation. The module emits a
   `declarativeHandoff` index for mounts, crypttab/LUKS, swap, NFS exports,
   iSCSI boot/session state, generated files, and a reviewable
   `/etc/disk-nix/declarative-handoff.nix` Nix module snippet plus a reviewable
-  `/etc/disk-nix/declarative-handoff-import.patch` skeleton. It also emits a
+  `/etc/disk-nix/declarative-handoff-import.patch` skeleton. When
+  `services.disk-nix.apply.declarativeHandoff.autoImport.enable = true` and
+  `apply.execute = true`, the apply service backs up the configured NixOS
+  configuration file, skips already-imported configurations, and applies the
+  generated import patch only after `disk-nix apply --execute` succeeds. It also emits a
   `lifecycleManaged` steady-state index for active disk-nix lifecycle
   declarations across filesystems, swap, LUKS, NFS, LVM, VDO, dm, MD RAID,
   multipath, ZFS, Btrfs, caches, LUNs, iSCSI sessions, disks, partitions, and
