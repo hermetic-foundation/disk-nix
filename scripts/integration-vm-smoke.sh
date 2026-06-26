@@ -34,7 +34,7 @@ MSG
   fi
 fi
 
-default_harnesses="loop btrfs luks lvm mdraid"
+default_harnesses="loop btrfs bcachefs luks lvm mdraid"
 harnesses="${DISK_NIX_VM_HARNESSES:-$default_harnesses}"
 
 run_harness() {
@@ -44,6 +44,9 @@ run_harness() {
       ;;
     btrfs)
       disk-nix-integration-btrfs-smoke
+      ;;
+    bcachefs)
+      disk-nix-integration-bcachefs-smoke
       ;;
     luks)
       disk-nix-integration-luks-smoke

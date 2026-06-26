@@ -35,8 +35,8 @@ The VM suite refuses to run unless:
 For controlled lab automation where VM detection is unavailable but isolation
 is provided externally, set `DISK_NIX_INTEGRATION_ASSUME_VM=1`.
 
-By default the suite runs the loop, Btrfs, LUKS, LVM, and MD RAID smoke
-harnesses. To run a subset:
+By default the suite runs the loop, Btrfs, bcachefs, LUKS, LVM, and MD RAID
+smoke harnesses. To run a subset:
 
 ```sh
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
@@ -114,6 +114,40 @@ To test a development build without `nix run`, set `DISK_NIX_BIN`:
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   DISK_NIX_BIN=target/debug/disk-nix \
   ./scripts/integration-btrfs-smoke.sh
+```
+
+## bcachefs loop-backed smoke test
+
+The repository also includes a root-only bcachefs loop-backed harness:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-bcachefs-smoke
+```
+
+When enabled, it:
+
+- creates a temporary 512 MiB backing file
+- attaches it to the next available `/dev/loop*`
+- formats the temporary loop device with bcachefs
+- mounts the filesystem in the temporary directory
+- verifies `disk-nix inspect <mountpoint> --json` sees bcachefs topology
+- executes a `filesystems.<name>.operation = "scrub"` apply plan
+- verifies the generated JSON report was written and the rendered
+  `bcachefs scrub <mountpoint>` command succeeded
+- unmounts, detaches the loop device, and removes the backing file during
+  cleanup
+
+This test intentionally formats and mounts only the temporary backing file it
+creates. It still requires destructive opt-in because it uses real loop, mount,
+and bcachefs tooling.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-bcachefs-smoke.sh
 ```
 
 ## LUKS loop-backed smoke test
@@ -222,16 +256,17 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 
 `nix flake check` does not run destructive integration tests. It does validate
 that the loop smoke harnesses parse, remain opt-in, and still contain the
-expected loop, filesystem setup, resize, mount, scrub, LUKS format, LUKS open,
-LUKS close, LVM create, LVM rescan, MD RAID create, MD RAID rescan, and VM
-orchestration guard steps. This keeps the harnesses available and packaged
-while preserving safe default checks.
+expected loop, filesystem setup, resize, mount, Btrfs scrub, bcachefs format,
+bcachefs scrub, LUKS format, LUKS open, LUKS close, LVM create, LVM rescan, MD
+RAID create, MD RAID rescan, and VM orchestration guard steps. This keeps the
+harnesses available and packaged while preserving safe default checks.
 
 ## Remaining integration coverage
 
 The VM smoke suite and targeted loop tests are only the first host-backed
 integration paths. Feature completion still needs disposable VM or lab-host
 tests for broader LUKS format/grow/keyslot/token behavior, broader LVM
-LV/thin/cache/device-topology behavior, bcachefs, ZFS, broader MD RAID
-grow/member-topology behavior, multipath, iSCSI, NFS, VDO, NVMe namespace
-operations, failure recovery, and broader destructive apply behavior.
+LV/thin/cache/device-topology behavior, broader bcachefs multi-device and
+member-topology behavior, ZFS, broader MD RAID grow/member-topology behavior,
+multipath, iSCSI, NFS, VDO, NVMe namespace operations, failure recovery, and
+broader destructive apply behavior.

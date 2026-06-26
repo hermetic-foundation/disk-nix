@@ -102,6 +102,17 @@
           ];
           text = builtins.readFile ./scripts/integration-btrfs-smoke.sh;
         };
+        integrationBcachefsSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-bcachefs-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.bcachefs-tools
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-bcachefs-smoke.sh;
+        };
         integrationLuksSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-luks-smoke";
           runtimeInputs = [
@@ -140,6 +151,7 @@
           runtimeInputs = [
             integrationLoopSmoke
             integrationBtrfsSmoke
+            integrationBcachefsSmoke
             integrationLuksSmoke
             integrationLvmSmoke
             integrationMdraidSmoke
@@ -162,6 +174,7 @@
                 "dm_mod"
                 "md_mod"
                 "raid1"
+                "bcachefs"
               ];
               environment.systemPackages = [ integrationVmSmoke ];
             };
@@ -1433,6 +1446,7 @@
         packages = {
           default = diskNix;
           disk-nix = diskNix;
+          integration-bcachefs-smoke = integrationBcachefsSmoke;
           integration-btrfs-smoke = integrationBtrfsSmoke;
           integration-luks-smoke = integrationLuksSmoke;
           integration-lvm-smoke = integrationLvmSmoke;
@@ -1460,6 +1474,13 @@
             program = "${integrationBtrfsSmoke}/bin/disk-nix-integration-btrfs-smoke";
             meta = {
               description = "Root-only Btrfs loop-backed disk-nix smoke integration harness";
+            };
+          };
+          integration-bcachefs-smoke = {
+            type = "app";
+            program = "${integrationBcachefsSmoke}/bin/disk-nix-integration-bcachefs-smoke";
+            meta = {
+              description = "Root-only bcachefs loop-backed disk-nix smoke integration harness";
             };
           };
           integration-luks-smoke = {
@@ -1530,6 +1551,15 @@
             ${pkgs.gnugrep}/bin/grep -q 'btrfs", "scrub", "start", "-B"' ${./scripts/integration-btrfs-smoke.sh}
             touch "$out"
           '';
+          integrationBcachefsSmoke = pkgs.runCommand "disk-nix-integration-bcachefs-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'bcachefs format' ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'mount -t bcachefs' ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'bcachefs", "scrub"' ${./scripts/integration-bcachefs-smoke.sh}
+            touch "$out"
+          '';
           integrationLuksSmoke = pkgs.runCommand "disk-nix-integration-luks-smoke-check" { } ''
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-luks-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-luks-smoke.sh}
@@ -1563,6 +1593,7 @@
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_ASSUME_VM ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'systemd-detect-virt --quiet --vm' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-loop-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-bcachefs-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-mdraid-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
           '';
