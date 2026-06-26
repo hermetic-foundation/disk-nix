@@ -1923,6 +1923,13 @@
               and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".operation == "login"
               and (.changes | any(. == "mapped legacy field fileSystems to filesystems"))
               and (.changes | any(. == "mapped legacy field luksDevices to luks.devices"))
+              and (.legacyMappings | any(.source == "fileSystems" and .target == "filesystems" and .scope == "top-level"))
+              and (.legacyMappings | any(.source == "spec.fileSystems" and .target == "spec.filesystems" and .scope == "spec"))
+              and (.legacyMappings | any(.source == "iscsiSessions" and .target == "iscsi.sessions" and .scope == "top-level"))
+              and (.appliedMappings | length == 5)
+              and (.appliedMappings | any(.source == "fileSystems" and .target == "filesystems" and .scope == "top-level"))
+              and (.appliedMappings | any(.source == "luksDevices" and .target == "luks.devices" and .scope == "top-level"))
+              and (.appliedMappings | any(.source == "iscsiSessions" and .target == "iscsi.sessions" and .scope == "top-level"))
             ' "$legacyMigration"
             jq -e '
               ."$schema" == "https://json-schema.org/draft/2020-12/schema"

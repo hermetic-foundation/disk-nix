@@ -352,9 +352,19 @@ struct MigrationReport {
     source_version: Option<u64>,
     target_version: u64,
     migrated: bool,
+    legacy_mappings: Vec<LegacyMigrationMapping>,
+    applied_mappings: Vec<LegacyMigrationMapping>,
     changes: Vec<String>,
     warnings: Vec<String>,
     spec: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyMigrationMapping {
+    source: String,
+    target: String,
+    scope: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1541,7 +1551,13 @@ fn migration_report_from_json_bytes(bytes: &[u8]) -> Result<MigrationReport, App
 
     let mut changes = Vec::new();
     let mut warnings = Vec::new();
-    apply_legacy_pre_version_mappings(&mut value, source_version, &mut changes)?;
+    let mut applied_mappings = Vec::new();
+    apply_legacy_pre_version_mappings(
+        &mut value,
+        source_version,
+        &mut changes,
+        &mut applied_mappings,
+    )?;
     ensure_object_version(&mut value, "version", target_version, &mut changes)?;
     if let Some(spec) = value.get_mut("spec") {
         ensure_object_version(spec, "spec.version", target_version, &mut changes)?;
@@ -1569,6 +1585,8 @@ fn migration_report_from_json_bytes(bytes: &[u8]) -> Result<MigrationReport, App
         migrated: !changes
             .iter()
             .any(|change| change == "spec already declares the current supported contract version"),
+        legacy_mappings: legacy_pre_version_mappings(),
+        applied_mappings,
         changes,
         warnings,
         spec: value,
@@ -1579,13 +1597,14 @@ fn apply_legacy_pre_version_mappings(
     value: &mut Value,
     source_version: Option<u64>,
     changes: &mut Vec<String>,
+    applied_mappings: &mut Vec<LegacyMigrationMapping>,
 ) -> Result<(), AppError> {
     if source_version.is_some() {
         return Ok(());
     }
-    normalize_legacy_pre_version_container(value, "", changes)?;
+    normalize_legacy_pre_version_container(value, "", changes, applied_mappings)?;
     if let Some(spec) = value.get_mut("spec") {
-        normalize_legacy_pre_version_container(spec, "spec.", changes)?;
+        normalize_legacy_pre_version_container(spec, "spec.", changes, applied_mappings)?;
     }
     Ok(())
 }
@@ -1594,12 +1613,51 @@ fn normalize_legacy_pre_version_container(
     value: &mut Value,
     prefix: &str,
     changes: &mut Vec<String>,
+    applied_mappings: &mut Vec<LegacyMigrationMapping>,
 ) -> Result<(), AppError> {
-    rename_legacy_field(value, prefix, "fileSystems", "filesystems", changes)?;
-    rename_legacy_field(value, prefix, "swapDevices", "swaps", changes)?;
-    move_legacy_nested_field(value, prefix, "luksDevices", "luks", "devices", changes)?;
-    move_legacy_nested_field(value, prefix, "nfsMounts", "nfs", "mounts", changes)?;
-    move_legacy_nested_field(value, prefix, "iscsiSessions", "iscsi", "sessions", changes)?;
+    rename_legacy_field(
+        value,
+        prefix,
+        "fileSystems",
+        "filesystems",
+        changes,
+        applied_mappings,
+    )?;
+    rename_legacy_field(
+        value,
+        prefix,
+        "swapDevices",
+        "swaps",
+        changes,
+        applied_mappings,
+    )?;
+    move_legacy_nested_field(
+        value,
+        prefix,
+        "luksDevices",
+        "luks",
+        "devices",
+        changes,
+        applied_mappings,
+    )?;
+    move_legacy_nested_field(
+        value,
+        prefix,
+        "nfsMounts",
+        "nfs",
+        "mounts",
+        changes,
+        applied_mappings,
+    )?;
+    move_legacy_nested_field(
+        value,
+        prefix,
+        "iscsiSessions",
+        "iscsi",
+        "sessions",
+        changes,
+        applied_mappings,
+    )?;
     Ok(())
 }
 
@@ -1609,6 +1667,7 @@ fn rename_legacy_field(
     legacy: &str,
     current: &str,
     changes: &mut Vec<String>,
+    applied_mappings: &mut Vec<LegacyMigrationMapping>,
 ) -> Result<(), AppError> {
     let Value::Object(object) = value else {
         return Ok(());
@@ -1628,6 +1687,7 @@ fn rename_legacy_field(
     changes.push(format!(
         "mapped legacy field {prefix}{legacy} to {prefix}{current}"
     ));
+    applied_mappings.push(legacy_mapping(prefix, legacy, current));
     Ok(())
 }
 
@@ -1638,6 +1698,7 @@ fn move_legacy_nested_field(
     parent: &str,
     child: &str,
     changes: &mut Vec<String>,
+    applied_mappings: &mut Vec<LegacyMigrationMapping>,
 ) -> Result<(), AppError> {
     let Value::Object(object) = value else {
         return Ok(());
@@ -1671,7 +1732,37 @@ fn move_legacy_nested_field(
     changes.push(format!(
         "mapped legacy field {prefix}{legacy} to {prefix}{parent}.{child}"
     ));
+    applied_mappings.push(legacy_mapping(prefix, legacy, &format!("{parent}.{child}")));
     Ok(())
+}
+
+fn legacy_mapping(prefix: &str, source: &str, target: &str) -> LegacyMigrationMapping {
+    LegacyMigrationMapping {
+        source: format!("{prefix}{source}"),
+        target: format!("{prefix}{target}"),
+        scope: if prefix.is_empty() {
+            "top-level".to_string()
+        } else {
+            prefix.trim_end_matches('.').to_string()
+        },
+    }
+}
+
+fn legacy_pre_version_mappings() -> Vec<LegacyMigrationMapping> {
+    ["", "spec."]
+        .into_iter()
+        .flat_map(|prefix| {
+            [
+                ("fileSystems", "filesystems"),
+                ("swapDevices", "swaps"),
+                ("luksDevices", "luks.devices"),
+                ("nfsMounts", "nfs.mounts"),
+                ("iscsiSessions", "iscsi.sessions"),
+            ]
+            .into_iter()
+            .map(move |(source, target)| legacy_mapping(prefix, source, target))
+        })
+        .collect()
 }
 
 fn migration_source_version(value: &Value) -> Result<Option<u64>, AppError> {
@@ -1736,6 +1827,26 @@ fn print_migration_report(output: &mut impl Write, report: &MigrationReport) -> 
     writeln!(output, "Changes:")?;
     for change in &report.changes {
         writeln!(output, "- {change}")?;
+    }
+    writeln!(output, "Legacy mappings:")?;
+    for mapping in &report.legacy_mappings {
+        writeln!(
+            output,
+            "- {} -> {} ({})",
+            mapping.source, mapping.target, mapping.scope
+        )?;
+    }
+    writeln!(output, "Applied mappings:")?;
+    if report.applied_mappings.is_empty() {
+        writeln!(output, "- none")?;
+    } else {
+        for mapping in &report.applied_mappings {
+            writeln!(
+                output,
+                "- {} -> {} ({})",
+                mapping.source, mapping.target, mapping.scope
+            )?;
+        }
     }
     writeln!(output, "Warnings:")?;
     for warning in &report.warnings {
@@ -5420,6 +5531,20 @@ mod tests {
         storage_tool_version_report, usage_details, usage_percent, zfs_child_count,
     };
 
+    fn assert_mapping(
+        mappings: &[super::LegacyMigrationMapping],
+        source: &str,
+        target: &str,
+        scope: &str,
+    ) {
+        assert!(
+            mappings.iter().any(|mapping| {
+                mapping.source == source && mapping.target == target && mapping.scope == scope
+            }),
+            "missing mapping {source} -> {target} ({scope}) in {mappings:?}"
+        );
+    }
+
     #[test]
     fn confirmation_file_accepts_exact_token_line() {
         assert!(confirmation_file_accepts("disk-nix confirm\n"));
@@ -5779,6 +5904,56 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
 
         assert!(report.migrated);
         assert_eq!(report.spec["version"], 1);
+        assert_eq!(report.legacy_mappings.len(), 10);
+        assert_mapping(
+            &report.legacy_mappings,
+            "fileSystems",
+            "filesystems",
+            "top-level",
+        );
+        assert_mapping(
+            &report.legacy_mappings,
+            "spec.fileSystems",
+            "spec.filesystems",
+            "spec",
+        );
+        assert_mapping(
+            &report.legacy_mappings,
+            "iscsiSessions",
+            "iscsi.sessions",
+            "top-level",
+        );
+        assert_eq!(report.applied_mappings.len(), 5);
+        assert_mapping(
+            &report.applied_mappings,
+            "fileSystems",
+            "filesystems",
+            "top-level",
+        );
+        assert_mapping(
+            &report.applied_mappings,
+            "swapDevices",
+            "swaps",
+            "top-level",
+        );
+        assert_mapping(
+            &report.applied_mappings,
+            "luksDevices",
+            "luks.devices",
+            "top-level",
+        );
+        assert_mapping(
+            &report.applied_mappings,
+            "nfsMounts",
+            "nfs.mounts",
+            "top-level",
+        );
+        assert_mapping(
+            &report.applied_mappings,
+            "iscsiSessions",
+            "iscsi.sessions",
+            "top-level",
+        );
         assert!(report.spec.get("fileSystems").is_none());
         assert!(report.spec.get("swapDevices").is_none());
         assert!(report.spec.get("luksDevices").is_none());
@@ -5840,6 +6015,20 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(report.migrated);
         assert_eq!(report.spec["version"], 1);
         assert_eq!(report.spec["spec"]["version"], 1);
+        assert_eq!(report.legacy_mappings.len(), 10);
+        assert_eq!(report.applied_mappings.len(), 2);
+        assert_mapping(
+            &report.applied_mappings,
+            "spec.fileSystems",
+            "spec.filesystems",
+            "spec",
+        );
+        assert_mapping(
+            &report.applied_mappings,
+            "spec.nfsMounts",
+            "spec.nfs.mounts",
+            "spec",
+        );
         assert!(report.spec["spec"].get("fileSystems").is_none());
         assert!(report.spec["spec"].get("nfsMounts").is_none());
         assert_eq!(report.spec["spec"]["filesystems"]["root"]["fsType"], "xfs");
@@ -5900,6 +6089,8 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         .expect("explicit current-version spec should stay metadata-only");
 
         assert!(!report.migrated);
+        assert_eq!(report.legacy_mappings.len(), 10);
+        assert!(report.applied_mappings.is_empty());
         assert!(report.spec.get("fileSystems").is_some());
         assert!(report.spec.get("filesystems").is_none());
         assert!(
@@ -5927,6 +6118,8 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
 
         assert_eq!(report.source_version, Some(1));
         assert!(!report.migrated);
+        assert_eq!(report.legacy_mappings.len(), 10);
+        assert!(report.applied_mappings.is_empty());
         assert!(
             report
                 .changes
@@ -5990,6 +6183,11 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         let output = String::from_utf8(output).expect("migration output is utf8");
         assert!(output.contains("Migration: None -> 1"));
         assert!(output.contains("migrated: true"));
+        assert!(output.contains("Legacy mappings:"));
+        assert!(output.contains("- fileSystems -> filesystems (top-level)"));
+        assert!(output.contains("- spec.fileSystems -> spec.filesystems (spec)"));
+        assert!(output.contains("Applied mappings:"));
+        assert!(output.contains("- none"));
         assert!(output.contains("Migrated spec:"));
         assert!(output.contains(r#""version": 1"#));
     }

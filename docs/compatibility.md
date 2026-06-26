@@ -77,9 +77,12 @@ version metadata. For unversioned legacy documents it also maps documented
 pre-version field names into the current contract: `fileSystems` to
 `filesystems`, `swapDevices` to `swaps`, `luksDevices` to `luks.devices`,
 `nfsMounts` to `nfs.mounts`, and `iscsiSessions` to `iscsi.sessions`.
-Explicit version `1` documents are not silently rewritten through those legacy
-aliases. Future or conflicting versions remain hard errors until their field
-mappings, examples, tests, and safety notes are implemented.
+The migration report includes a machine-readable `legacyMappings` matrix for
+both direct specs and wrapper `spec.*` documents, plus `appliedMappings` for the
+aliases actually rewritten in that run. Explicit version `1` documents are not
+silently rewritten through those legacy aliases. Future or conflicting versions
+remain hard errors until their field mappings, examples, tests, and safety notes
+are implemented.
 
 ## JSON output contracts
 

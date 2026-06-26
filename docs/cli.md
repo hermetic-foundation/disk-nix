@@ -187,9 +187,11 @@ to current version `1` locations: `fileSystems` to `filesystems`,
 `swapDevices` to `swaps`, `luksDevices` to `luks.devices`, `nfsMounts` to
 `nfs.mounts`, and `iscsiSessions` to `iscsi.sessions`. Explicit version `1`
 documents are not silently rewritten through these legacy aliases. Migration
-validates the migrated document with the planner parser and reports warnings
-that storage mutations are not applied. Future or conflicting versions are
-rejected instead of being guessed.
+validates the migrated document with the planner parser, reports the complete
+`legacyMappings` matrix for direct specs and NixOS-module wrapper `spec.*`
+documents, and records the run-specific `appliedMappings` audit trail. It also
+reports warnings that storage mutations are not applied. Future or conflicting
+versions are rejected instead of being guessed.
 
 ## Focused Views
 

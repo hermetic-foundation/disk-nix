@@ -241,7 +241,8 @@ concrete array adapters remain future work.
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
 - Future spec-version field mappings. The parser validates version `1`,
   `disk-nix migrate` now emits a reviewable current-version normalization
-  report and maps documented pre-version legacy aliases into version `1`. The
-  compatibility policy documents migration and deprecation expectations, but no
-  future-version field mapping exists yet because no version `2` contract
-  exists.
+  report, maps documented pre-version legacy aliases into version `1`, and
+  reports both the supported legacy mapping matrix and the mappings applied in a
+  specific run. The compatibility policy documents migration and deprecation
+  expectations, but no future-version field mapping exists yet because no
+  version `2` contract exists.

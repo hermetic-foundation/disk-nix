@@ -44,7 +44,8 @@ Update rules:
   inspection.
 - [x] **Finished:** Parser and fixture tests for probe adapters.
 - [ ] **Partial:** Migration maps documented unversioned legacy aliases into
-  version `1`; future version-to-version mappings still need a version `2`
+  version `1` with a machine-readable legacy mapping matrix and applied-mapping
+  audit trail; future version-to-version mappings still need a version `2`
   contract before they can be finished.
 
 ## Read-only storage awareness
