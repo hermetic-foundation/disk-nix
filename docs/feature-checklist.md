@@ -245,6 +245,6 @@ Update rules:
 - [x] **Finished:** Feature status documentation.
 - [x] **Finished:** Feature checklist for finished, partial, and desired work.
 - [x] **Finished:** README and status documentation link to this checklist.
-- [ ] **Desired:** Operator runbooks for high-risk workflows such as
+- [x] **Finished:** Operator runbooks for high-risk workflows such as
   replacement, rollback, recovery, degraded-array handling, and shared-storage
   changes.

@@ -1788,12 +1788,26 @@
           documentation = pkgs.runCommand "disk-nix-documentation-check" { } ''
             checklist=${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'docs/feature-checklist.md' ${./README.md}
+            ${pkgs.gnugrep}/bin/grep -q 'docs/operator-runbooks.md' ${./README.md}
             ${pkgs.gnugrep}/bin/grep -q 'feature-checklist.md' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'operator-runbooks.md' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'Status labels:' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Update rules:' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '\*\*Finished:\*\*' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '\*\*Partial:\*\*' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '\*\*Desired:\*\*' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'Operator runbooks for high-risk workflows' "$checklist"
+            runbooks=${./docs/operator-runbooks.md}
+            for runbook in \
+              "Device replacement" \
+              Rollback \
+              "Failed apply recovery" \
+              "Degraded arrays and pools" \
+              "Shared storage and network storage" \
+              "Change record"
+            do
+              ${pkgs.gnugrep}/bin/grep -q "^## $runbook$" "$runbooks"
+            done
             for section in \
               Foundation \
               "Read-only storage awareness" \

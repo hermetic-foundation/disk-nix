@@ -38,6 +38,8 @@ See [docs/feature-checklist.md](docs/feature-checklist.md) for a checklist of
 finished and desired features.
 See [docs/integration-tests.md](docs/integration-tests.md) for the opt-in
 host-backed integration harness.
+See [docs/operator-runbooks.md](docs/operator-runbooks.md) for high-risk
+replacement, rollback, recovery, degraded-array, and shared-storage workflows.
 
 ## Development
 
