@@ -66,6 +66,9 @@ run_harness() {
     vdo)
       disk-nix-integration-vdo-smoke
       ;;
+    iscsi)
+      disk-nix-integration-iscsi-smoke
+      ;;
     *)
       echo "unknown VM integration harness: $1" >&2
       exit 2

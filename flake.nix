@@ -178,6 +178,18 @@
           ];
           text = builtins.readFile ./scripts/integration-vdo-smoke.sh;
         };
+        integrationIscsiSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-iscsi-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.gnugrep
+            pkgs.jq
+            pkgs.lsscsi
+            pkgs.openiscsi
+          ];
+          text = builtins.readFile ./scripts/integration-iscsi-smoke.sh;
+        };
         integrationVmSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-vm-smoke";
           runtimeInputs = [
@@ -190,6 +202,7 @@
             integrationZfsSmoke
             integrationNfsSmoke
             integrationVdoSmoke
+            integrationIscsiSmoke
             pkgs.systemd
           ];
           text = builtins.readFile ./scripts/integration-vm-smoke.sh;
@@ -1489,6 +1502,7 @@
           integration-zfs-smoke = integrationZfsSmoke;
           integration-nfs-smoke = integrationNfsSmoke;
           integration-vdo-smoke = integrationVdoSmoke;
+          integration-iscsi-smoke = integrationIscsiSmoke;
           integration-vm-smoke = integrationVmSmoke;
           integration-vm-test = integrationVmTest;
           integration-loop-smoke = integrationLoopSmoke;
@@ -1561,6 +1575,13 @@
             program = "${integrationVdoSmoke}/bin/disk-nix-integration-vdo-smoke";
             meta = {
               description = "Root-only VDO disk-nix smoke integration harness";
+            };
+          };
+          integration-iscsi-smoke = {
+            type = "app";
+            program = "${integrationIscsiSmoke}/bin/disk-nix-integration-iscsi-smoke";
+            meta = {
+              description = "Root-only iSCSI session disk-nix smoke integration harness";
             };
           };
           integration-vm-smoke = {
@@ -1675,6 +1696,16 @@
             ${pkgs.gnugrep}/bin/grep -q 'vdostats", "--human-readable"' ${./scripts/integration-vdo-smoke.sh}
             touch "$out"
           '';
+          integrationIscsiSmoke = pkgs.runCommand "disk-nix-integration-iscsi-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_ISCSI_TARGET ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'iscsiadm --mode session' ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'lsscsi -t -s' ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'iscsiadm", "--mode", "session", "--rescan"' ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'lsscsi", "-t", "-s"' ${./scripts/integration-iscsi-smoke.sh}
+            touch "$out"
+          '';
           integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vm-smoke.sh}
@@ -1686,6 +1717,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-zfs-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-nfs-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-vdo-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-iscsi-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
           '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''

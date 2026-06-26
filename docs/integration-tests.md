@@ -63,6 +63,12 @@ with `DISK_NIX_VM_HARNESSES=vdo` when the guest has an existing disposable VDO
 volume named by `DISK_NIX_VDO_NAME`. It is not part of the default VM suite
 because the flake VM test does not yet provision a VDO volume.
 
+The iSCSI harness is packaged with the VM suite and can be selected explicitly
+with `DISK_NIX_VM_HARNESSES=iscsi` when the guest has an existing disposable
+iSCSI session for the target named by `DISK_NIX_ISCSI_TARGET`. It is not part
+of the default VM suite because the flake VM test does not yet provision an
+iSCSI target.
+
 ## Loop-backed smoke test
 
 The repository includes a root-only loop-backed smoke harness:
@@ -376,6 +382,41 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-vdo-smoke.sh
 ```
 
+## iSCSI session smoke test
+
+The repository also includes a root-only iSCSI harness for existing lab
+sessions:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_ISCSI_TARGET=iqn.2026-06.example:storage.root \
+  nix run .#integration-iscsi-smoke
+```
+
+When enabled, it:
+
+- verifies `iscsiadm --mode session` reports the selected target
+- verifies `lsscsi -t -s` can read host-visible transport inventory
+- verifies `disk-nix inspect <target> --json` sees iSCSI topology
+- executes an `iscsiSessions.<target>.operation = "rescan"` apply plan
+- verifies the rendered `iscsiadm --mode session --rescan`,
+  `lsscsi -t -s`, and `disk-nix inspect <target> --json` commands succeeded
+- verifies the generated JSON report was written
+
+This test does not discover, log in to, log out from, grow, attach, detach, or
+remove an iSCSI target or LUN. It still requires destructive opt-in because it
+performs a real session rescan and is intended for disposable lab hosts where
+the named session can be safely refreshed.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_ISCSI_TARGET=iqn.2026-06.example:storage.root \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-iscsi-smoke.sh
+```
+
 ## Flake coverage
 
 `nix flake check` does not run destructive integration tests. It does validate
@@ -384,8 +425,8 @@ expected loop, filesystem setup, resize, mount, Btrfs scrub, bcachefs format,
 bcachefs scrub, LUKS format, LUKS open, LUKS close, LVM create, LVM rescan, MD
 RAID create, MD RAID rescan, ZFS pool create, ZFS scrub, NFS mount, NFS rescan,
 NFS remount, VDO status, VDO stats, VDO rescan, and VM orchestration guard
-steps. This keeps the harnesses available and packaged while preserving safe
-default checks.
+steps, and iSCSI session rescan. This keeps the harnesses available and
+packaged while preserving safe default checks.
 
 ## Remaining integration coverage
 
@@ -394,7 +435,7 @@ integration paths. Feature completion still needs disposable VM or lab-host
 tests for broader LUKS format/grow/keyslot/token behavior, broader LVM
 LV/thin/cache/device-topology behavior, broader bcachefs multi-device and
 member-topology behavior, broader ZFS vdev/dataset/zvol/snapshot behavior,
-broader MD RAID grow/member-topology behavior, multipath, iSCSI, broader NFS
-server/export/unmount/failure behavior, broader VDO create/grow/start/stop/
-property/remove behavior, NVMe namespace operations, failure recovery, and
-broader destructive apply behavior.
+broader MD RAID grow/member-topology behavior, multipath, broader iSCSI
+login/logout/LUN/failure behavior, broader NFS server/export/unmount/failure
+behavior, broader VDO create/grow/start/stop/property/remove behavior, NVMe
+namespace operations, failure recovery, and broader destructive apply behavior.
