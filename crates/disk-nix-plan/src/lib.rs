@@ -2557,7 +2557,7 @@ fn current_zram_property_value(property: &str, node: &Node) -> Option<String> {
         ZramPropertyKind::CompressionRatio => {
             property_value_from_node(node, "zram.compression-ratio")
                 .or_else(|| property_value_from_node(node, "zram.ratio"))
-                .map(|value| normalize_decimal_property(value))
+                .map(normalize_decimal_property)
         }
         ZramPropertyKind::Priority => {
             property_value_from_node(node, "swap.priority").and_then(normalize_swap_priority)
