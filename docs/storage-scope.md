@@ -241,10 +241,12 @@ The current probe layer normalizes:
   health, error, temperature, lifetime usage, and power telemetry.
   Cross-adapter fixture coverage includes clustered LVM on an NVMe-oF namespace
   with shared VG metadata, sanlock lock hints, remote LV activity, fabrics path
-  state, ANA state, and controller-to-namespace relationships. iSCSI parser
-  fixtures also cover bracketed IPv6 portals, concise open-iscsi node records,
-  attached LUN disks, and CHAP password-presence redaction without serializing
-  secret material.
+  state, ANA state, and controller-to-namespace relationships, plus Fibre
+  Channel multipath paths with FC transport WWPN pairs, SCSI unit names, ALUA
+  path groups, active/standby state, failed path metadata, and multipath backing
+  edges. iSCSI parser fixtures also cover bracketed IPv6 portals, concise
+  open-iscsi node records, attached LUN disks, and CHAP password-presence
+  redaction without serializing secret material.
 
 Probe-status remediation is adapter-aware. Missing-tool reports include the
 likely tool names and Nix packages, including PATH and `ENOENT` command launch

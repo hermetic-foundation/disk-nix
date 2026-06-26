@@ -2664,6 +2664,40 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
   `- 3:0:0:1 sdc 8:32 active ready running faulty shaky
 "#;
 
+    const FC_LSSCSI_LIST: &[u8] = br#"
+[6:0:2:12]   disk    DGC      VRAID            0532  /dev/sdd   /dev/sg4   2.00T
+  device_blocked=0
+  queue_depth=64
+  queue_type=simple
+  state=running
+  timeout=60
+[7:0:3:12]   disk    DGC      VRAID            0532  /dev/sde   /dev/sg5   2.00T
+  device_blocked=0
+  queue_depth=64
+  queue_type=simple
+  state=blocked
+  timeout=60
+"#;
+
+    const FC_LSSCSI_TRANSPORT: &[u8] = br#"
+[6:0:2:12]   disk    fc:0x5006016841e0abcd,0x5006016041e0abcd           /dev/sdd   /dev/sg4  /dev/disk/by-id/scsi-36006016041e05d00c8b7f0a0d7a4ee11  /dev/disk/by-id/wwn-0x6006016041e05d00c8b7f0a0d7a4ee11  2.00T
+[7:0:3:12]   disk    fc:0x5006016841e0abce,0x5006016041e0abce           /dev/sde   /dev/sg5  /dev/disk/by-id/scsi-36006016041e05d00c8b7f0a0d7a4ee11  /dev/disk/by-id/wwn-0x6006016041e05d00c8b7f0a0d7a4ee11  2.00T
+"#;
+
+    const FC_LSSCSI_UNIT: &[u8] = br#"
+[6:0:2:12]   disk    36006016041e05d00c8b7f0a0d7a4ee11                  /dev/sdd   /dev/sg4  /dev/disk/by-id/scsi-36006016041e05d00c8b7f0a0d7a4ee11  /dev/disk/by-id/wwn-0x6006016041e05d00c8b7f0a0d7a4ee11  2.00T
+[7:0:3:12]   disk    36006016041e05d00c8b7f0a0d7a4ee11                  /dev/sde   /dev/sg5  /dev/disk/by-id/scsi-36006016041e05d00c8b7f0a0d7a4ee11  /dev/disk/by-id/wwn-0x6006016041e05d00c8b7f0a0d7a4ee11  2.00T
+"#;
+
+    const FC_MULTIPATH: &[u8] = br#"
+mpathfc (36006016041e05d00c8b7f0a0d7a4ee11) dm-7 DGC,VRAID
+size=2.0T features='2 queue_if_no_path pg_init_retries 50' hwhandler='1 alua' wp=rw
+|-+- policy='service-time 0' prio=50 status=active
+| `- 6:0:2:12 sdd 8:48 active ready running
+`-+- policy='service-time 0' prio=10 status=enabled
+  `- 7:0:3:12 sde 8:64 failed faulty offline standby
+"#;
+
     const ENCRYPTED_DEGRADED_MDSTAT: &[u8] = br#"
 Personalities : [raid1]
 md127 : active raid1 nvme1n1p2[1](F) nvme0n1p2[0]
@@ -3017,6 +3051,133 @@ Digests:
                 .iter()
                 .filter(|edge| {
                     edge.to.0 == "multipath:mpatha" && edge.relationship == Relationship::Backs
+                })
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn fibre_channel_multipath_fixture_preserves_transport_and_path_state() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_list_output(FC_LSSCSI_LIST)
+                .expect("FC lsscsi list fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_transport_output(FC_LSSCSI_TRANSPORT)
+                .expect("FC lsscsi transport fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_unit_output(FC_LSSCSI_UNIT)
+                .expect("FC lsscsi unit fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            multipath::normalize_multipath_output(FC_MULTIPATH)
+                .expect("FC multipath fixture should parse"),
+        );
+
+        let primary_lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:6:0:2:12")
+            .expect("primary FC LUN should exist");
+        assert_eq!(primary_lun.kind, NodeKind::Lun);
+        assert_eq!(primary_lun.size_bytes, Some(2_000_000_000_000));
+        assert_has_property(
+            primary_lun,
+            "scsi.transport",
+            "fc:0x5006016841e0abcd,0x5006016041e0abcd",
+        );
+        assert_has_property(
+            primary_lun,
+            "scsi.unit-name",
+            "36006016041e05d00c8b7f0a0d7a4ee11",
+        );
+        assert_eq!(
+            primary_lun.identity.wwn.as_deref(),
+            Some("/dev/disk/by-id/wwn-0x6006016041e05d00c8b7f0a0d7a4ee11")
+        );
+
+        let standby_lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:7:0:3:12")
+            .expect("standby FC LUN should exist");
+        assert_has_property(standby_lun, "scsi.state", "blocked");
+        assert_has_property(
+            standby_lun,
+            "scsi.transport",
+            "fc:0x5006016841e0abce,0x5006016041e0abce",
+        );
+
+        let map = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "multipath:mpathfc")
+            .expect("FC multipath map should exist");
+        assert_eq!(map.kind, NodeKind::MultipathDevice);
+        assert_eq!(map.size_bytes, Some(2_000_000_000_000));
+        assert_has_property(map, "multipath.wwid", "36006016041e05d00c8b7f0a0d7a4ee11");
+        assert_has_property(map, "multipath.vendor-product", "DGC,VRAID");
+        assert_has_property(map, "multipath.hwhandler", "1 alua");
+        assert_has_property(
+            map,
+            "multipath.features",
+            "2 queue_if_no_path pg_init_retries 50",
+        );
+
+        let active_path = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdd")
+            .expect("active FC path should exist");
+        assert_eq!(active_path.kind, NodeKind::PhysicalDisk);
+        assert_has_property(
+            active_path,
+            "scsi.transport",
+            "fc:0x5006016841e0abcd,0x5006016041e0abcd",
+        );
+        assert_has_property(active_path, "multipath.group-status", "active");
+        assert_has_property(active_path, "multipath.checker-state", "ready");
+        assert_has_property(active_path, "multipath.online-state", "running");
+
+        let standby_path = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sde")
+            .expect("standby FC path should exist");
+        assert_has_property(
+            standby_path,
+            "scsi.transport",
+            "fc:0x5006016841e0abce,0x5006016041e0abce",
+        );
+        assert_has_property(standby_path, "multipath.group-status", "enabled");
+        assert_has_property(standby_path, "multipath.dm-state", "failed");
+        assert_has_property(standby_path, "multipath.checker-state", "faulty");
+        assert_has_property(standby_path, "multipath.online-state", "offline");
+        assert_has_property(standby_path, "multipath.path-flags", "standby");
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "scsi-lun:6:0:2:12"
+                && edge.to.0 == "block:/dev/sdd"
+                && edge.relationship == Relationship::Backs
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "scsi-lun:7:0:3:12"
+                && edge.to.0 == "block:/dev/sde"
+                && edge.relationship == Relationship::Backs
+        }));
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to.0 == "multipath:mpathfc" && edge.relationship == Relationship::Backs
                 })
                 .count(),
             2

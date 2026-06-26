@@ -193,7 +193,10 @@ degraded-MD-with-LUKS stack covering recovering array state, failed member
 metadata, active encrypted mapper status, backing edges, and LUKS header
 metadata, plus a clustered LVM over NVMe-oF fixture covering shared/clustered
 VG metadata, sanlock lock hints, remote LV activity, NVMe fabrics controller
-paths, ANA state, and namespace-to-controller edges. See
+paths, ANA state, and namespace-to-controller edges, plus a Fibre Channel
+multipath fixture covering FC transport WWPN pairs, SCSI unit names, ALUA path
+groups, active/standby path state, failed path metadata, and multipath backing
+edges. See
 [storage-scope.md](storage-scope.md) for the
 detailed field-level coverage.
 See [feature-checklist.md](feature-checklist.md) for a checklist view of
