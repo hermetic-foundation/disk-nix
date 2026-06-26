@@ -1833,6 +1833,8 @@
             lifecycleValidateReport=$(mktemp)
             emptySpec=$(mktemp)
             emptyExecute=$(mktemp)
+            legacySpec=$(mktemp)
+            legacyMigration=$(mktemp)
             schema=$(mktemp)
             scriptOut=$(mktemp)
 
@@ -1856,6 +1858,58 @@
             fi
             ${diskNix}/bin/disk-nix schema > "$schema"
             cmp "$schema" ${diskNix}/share/disk-nix/schema/disk-nix-spec.schema.json
+            cat > "$legacySpec" <<'EOF'
+            {
+              "fileSystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "ext4"
+                }
+              },
+              "swapDevices": {
+                "swap": {
+                  "device": "/dev/disk/by-label/swap",
+                  "operation": "rescan"
+                }
+              },
+              "luksDevices": {
+                "cryptroot": {
+                  "device": "/dev/disk/by-id/luks-root",
+                  "operation": "open"
+                }
+              },
+              "nfsMounts": {
+                "/srv/shared": {
+                  "source": "nas.example.com:/srv/shared",
+                  "operation": "mount"
+                }
+              },
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "portal": "192.0.2.10:3260",
+                  "operation": "login"
+                }
+              }
+            }
+            EOF
+            ${diskNix}/bin/disk-nix migrate --spec "$legacySpec" --json > "$legacyMigration"
+            jq -e '
+              .targetVersion == 1
+              and .migrated == true
+              and .spec.version == 1
+              and (.spec | has("fileSystems") | not)
+              and (.spec | has("swapDevices") | not)
+              and (.spec | has("luksDevices") | not)
+              and (.spec | has("nfsMounts") | not)
+              and (.spec | has("iscsiSessions") | not)
+              and .spec.filesystems.root.mountpoint == "/"
+              and .spec.swaps.swap.operation == "rescan"
+              and .spec.luks.devices.cryptroot.operation == "open"
+              and .spec.nfs.mounts."/srv/shared".source == "nas.example.com:/srv/shared"
+              and .spec.iscsi.sessions."iqn.2026-06.example:storage.root".operation == "login"
+              and (.changes | any(. == "mapped legacy field fileSystems to filesystems"))
+              and (.changes | any(. == "mapped legacy field luksDevices to luks.devices"))
+            ' "$legacyMigration"
             jq -e '
               ."$schema" == "https://json-schema.org/draft/2020-12/schema"
               and .properties.version.const == 1

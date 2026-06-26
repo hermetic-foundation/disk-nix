@@ -170,11 +170,16 @@ disk-nix migrate --spec ./examples/lifecycle-update.json
 disk-nix migrate --spec ./examples/lifecycle-update.json --json
 ```
 
-For the current version `1` contract, migration is metadata-only. It adds
-explicit `version = 1` fields to direct specs and NixOS-module wrapper specs
-when they are omitted, validates the migrated document with the planner parser,
-and reports warnings that no lifecycle semantics were rewritten. Future or
-conflicting versions are rejected instead of being guessed.
+For the current version `1` contract, migration adds explicit `version = 1`
+fields to direct specs and NixOS-module wrapper specs when they are omitted.
+For unversioned legacy documents it also maps documented pre-version field names
+to current version `1` locations: `fileSystems` to `filesystems`,
+`swapDevices` to `swaps`, `luksDevices` to `luks.devices`, `nfsMounts` to
+`nfs.mounts`, and `iscsiSessions` to `iscsi.sessions`. Explicit version `1`
+documents are not silently rewritten through these legacy aliases. Migration
+validates the migrated document with the planner parser and reports warnings
+that storage mutations are not applied. Future or conflicting versions are
+rejected instead of being guessed.
 
 ## Focused Views
 

@@ -232,6 +232,7 @@ manual-review guidance, or non-ready command plans instead of guessing.
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
 - Future spec-version field mappings. The parser validates version `1`,
   `disk-nix migrate` now emits a reviewable current-version normalization
-  report, and the compatibility policy documents migration and deprecation
-  expectations, but no version-to-version field mapping exists yet because no
-  version `2` contract exists.
+  report and maps documented pre-version legacy aliases into version `1`. The
+  compatibility policy documents migration and deprecation expectations, but no
+  future-version field mapping exists yet because no version `2` contract
+  exists.

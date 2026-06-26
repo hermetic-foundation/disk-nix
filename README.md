@@ -162,7 +162,10 @@ those artifacts directly.
 and automation. The current contract is version `1`; omitted versions are
 treated as version `1`, and unsupported future versions are rejected before
 planning. `migrate --spec` renders a reviewable migration report and normalized
-version `1` spec without applying storage changes. The Nix package also installs it at
+version `1` spec without applying storage changes. For unversioned legacy
+documents it also maps documented pre-version field names such as
+`fileSystems`, `swapDevices`, `luksDevices`, `nfsMounts`, and `iscsiSessions`
+to their current version `1` locations. The Nix package also installs it at
 `share/disk-nix/schema/disk-nix-spec.schema.json`.
 
 See [docs/cli.md](docs/cli.md) for the command reference and JSON contracts,

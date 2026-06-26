@@ -43,8 +43,9 @@ Update rules:
 - [x] **Finished:** CLI subcommands for focused storage views and object
   inspection.
 - [x] **Finished:** Parser and fixture tests for probe adapters.
-- [ ] **Desired:** Version-to-version spec migration mappings beyond version
-  `1`.
+- [ ] **Partial:** Migration maps documented unversioned legacy aliases into
+  version `1`; future version-to-version mappings still need a version `2`
+  contract before they can be finished.
 
 ## Read-only storage awareness
 

@@ -73,10 +73,13 @@ report with advice over guessing.
 
 `disk-nix migrate --spec <file>` is the supported migration entry point. For
 the version `1` contract it emits a report plus a normalized spec with explicit
-version metadata and performs no semantic rewrites. This gives automation a
-stable command to call before future version-to-version mappings exist. Future
-or conflicting versions remain hard errors until their field mappings, examples,
-tests, and safety notes are implemented.
+version metadata. For unversioned legacy documents it also maps documented
+pre-version field names into the current contract: `fileSystems` to
+`filesystems`, `swapDevices` to `swaps`, `luksDevices` to `luks.devices`,
+`nfsMounts` to `nfs.mounts`, and `iscsiSessions` to `iscsi.sessions`.
+Explicit version `1` documents are not silently rewritten through those legacy
+aliases. Future or conflicting versions remain hard errors until their field
+mappings, examples, tests, and safety notes are implemented.
 
 ## JSON output contracts
 

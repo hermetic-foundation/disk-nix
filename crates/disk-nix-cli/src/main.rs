@@ -1444,6 +1444,7 @@ fn migration_report_from_json_bytes(bytes: &[u8]) -> Result<MigrationReport, App
 
     let mut changes = Vec::new();
     let mut warnings = Vec::new();
+    apply_legacy_pre_version_mappings(&mut value, source_version, &mut changes)?;
     ensure_object_version(&mut value, "version", target_version, &mut changes)?;
     if let Some(spec) = value.get_mut("spec") {
         ensure_object_version(spec, "spec.version", target_version, &mut changes)?;
@@ -1456,7 +1457,7 @@ fn migration_report_from_json_bytes(bytes: &[u8]) -> Result<MigrationReport, App
             .to_string(),
     );
     warnings.push(
-        "version 1 migration is intentionally metadata-only and does not rewrite lifecycle semantics"
+        "version 1 migration only normalizes metadata and documented legacy pre-versioned field names"
             .to_string(),
     );
 
@@ -1475,6 +1476,105 @@ fn migration_report_from_json_bytes(bytes: &[u8]) -> Result<MigrationReport, App
         warnings,
         spec: value,
     })
+}
+
+fn apply_legacy_pre_version_mappings(
+    value: &mut Value,
+    source_version: Option<u64>,
+    changes: &mut Vec<String>,
+) -> Result<(), AppError> {
+    if source_version.is_some() {
+        return Ok(());
+    }
+    normalize_legacy_pre_version_container(value, "", changes)?;
+    if let Some(spec) = value.get_mut("spec") {
+        normalize_legacy_pre_version_container(spec, "spec.", changes)?;
+    }
+    Ok(())
+}
+
+fn normalize_legacy_pre_version_container(
+    value: &mut Value,
+    prefix: &str,
+    changes: &mut Vec<String>,
+) -> Result<(), AppError> {
+    rename_legacy_field(value, prefix, "fileSystems", "filesystems", changes)?;
+    rename_legacy_field(value, prefix, "swapDevices", "swaps", changes)?;
+    move_legacy_nested_field(value, prefix, "luksDevices", "luks", "devices", changes)?;
+    move_legacy_nested_field(value, prefix, "nfsMounts", "nfs", "mounts", changes)?;
+    move_legacy_nested_field(value, prefix, "iscsiSessions", "iscsi", "sessions", changes)?;
+    Ok(())
+}
+
+fn rename_legacy_field(
+    value: &mut Value,
+    prefix: &str,
+    legacy: &str,
+    current: &str,
+    changes: &mut Vec<String>,
+) -> Result<(), AppError> {
+    let Value::Object(object) = value else {
+        return Ok(());
+    };
+    if !object.contains_key(legacy) {
+        return Ok(());
+    }
+    if object.contains_key(current) {
+        return Err(AppError::Message(format!(
+            "legacy field {prefix}{legacy} conflicts with current field {prefix}{current}"
+        )));
+    }
+    let Some(mapped) = object.remove(legacy) else {
+        return Ok(());
+    };
+    object.insert(current.to_string(), mapped);
+    changes.push(format!(
+        "mapped legacy field {prefix}{legacy} to {prefix}{current}"
+    ));
+    Ok(())
+}
+
+fn move_legacy_nested_field(
+    value: &mut Value,
+    prefix: &str,
+    legacy: &str,
+    parent: &str,
+    child: &str,
+    changes: &mut Vec<String>,
+) -> Result<(), AppError> {
+    let Value::Object(object) = value else {
+        return Ok(());
+    };
+    if !object.contains_key(legacy) {
+        return Ok(());
+    }
+
+    if object
+        .get(parent)
+        .and_then(Value::as_object)
+        .is_some_and(|parent| parent.contains_key(child))
+    {
+        return Err(AppError::Message(format!(
+            "legacy field {prefix}{legacy} conflicts with current field {prefix}{parent}.{child}"
+        )));
+    }
+
+    let Some(mapped) = object.remove(legacy) else {
+        return Ok(());
+    };
+    let parent_value = object
+        .entry(parent.to_string())
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    let Value::Object(parent_object) = parent_value else {
+        return Err(AppError::Message(format!(
+            "legacy field {prefix}{legacy} cannot be mapped because {prefix}{parent} is not an object"
+        )));
+    };
+    parent_object.insert(child.to_string(), mapped);
+    changes.push(format!(
+        "mapped legacy field {prefix}{legacy} to {prefix}{parent}.{child}"
+    ));
+    Ok(())
 }
 
 fn migration_source_version(value: &Value) -> Result<Option<u64>, AppError> {
@@ -5120,6 +5220,177 @@ mod tests {
                 .changes
                 .iter()
                 .any(|change| change == "set spec.version to 1")
+        );
+    }
+
+    #[test]
+    fn migration_report_maps_legacy_pre_version_aliases() {
+        let report = migration_report_from_json_bytes(
+            br#"{
+              "fileSystems": {
+                "root": {
+                  "mountpoint": "/",
+                  "fsType": "ext4"
+                }
+              },
+              "swapDevices": {
+                "swap": {
+                  "device": "/dev/disk/by-label/swap",
+                  "operation": "rescan"
+                }
+              },
+              "luksDevices": {
+                "cryptroot": {
+                  "device": "/dev/disk/by-id/luks-root",
+                  "operation": "open"
+                }
+              },
+              "nfsMounts": {
+                "/srv/shared": {
+                  "source": "nas.example.com:/srv/shared",
+                  "operation": "mount"
+                }
+              },
+              "iscsiSessions": {
+                "iqn.2026-06.example:storage.root": {
+                  "portal": "192.0.2.10:3260",
+                  "operation": "login"
+                }
+              }
+            }"#,
+        )
+        .expect("legacy aliases should migrate");
+
+        assert!(report.migrated);
+        assert_eq!(report.spec["version"], 1);
+        assert!(report.spec.get("fileSystems").is_none());
+        assert!(report.spec.get("swapDevices").is_none());
+        assert!(report.spec.get("luksDevices").is_none());
+        assert!(report.spec.get("nfsMounts").is_none());
+        assert!(report.spec.get("iscsiSessions").is_none());
+        assert_eq!(report.spec["filesystems"]["root"]["mountpoint"], "/");
+        assert_eq!(report.spec["swaps"]["swap"]["operation"], "rescan");
+        assert_eq!(
+            report.spec["luks"]["devices"]["cryptroot"]["operation"],
+            "open"
+        );
+        assert_eq!(
+            report.spec["nfs"]["mounts"]["/srv/shared"]["source"],
+            "nas.example.com:/srv/shared"
+        );
+        assert_eq!(
+            report.spec["iscsi"]["sessions"]["iqn.2026-06.example:storage.root"]["operation"],
+            "login"
+        );
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| { change == "mapped legacy field fileSystems to filesystems" })
+        );
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| { change == "mapped legacy field luksDevices to luks.devices" })
+        );
+    }
+
+    #[test]
+    fn migration_report_maps_legacy_wrapper_aliases_inside_spec() {
+        let report = migration_report_from_json_bytes(
+            br#"{
+              "spec": {
+                "fileSystems": {
+                  "root": {
+                    "mountpoint": "/",
+                    "fsType": "xfs"
+                  }
+                },
+                "nfsMounts": {
+                  "/srv/shared": {
+                    "source": "nas.example.com:/srv/shared",
+                    "operation": "mount"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("legacy wrapper aliases should migrate");
+
+        assert!(report.migrated);
+        assert_eq!(report.spec["version"], 1);
+        assert_eq!(report.spec["spec"]["version"], 1);
+        assert!(report.spec["spec"].get("fileSystems").is_none());
+        assert!(report.spec["spec"].get("nfsMounts").is_none());
+        assert_eq!(report.spec["spec"]["filesystems"]["root"]["fsType"], "xfs");
+        assert_eq!(
+            report.spec["spec"]["nfs"]["mounts"]["/srv/shared"]["source"],
+            "nas.example.com:/srv/shared"
+        );
+        assert!(report.changes.iter().any(|change| {
+            change == "mapped legacy field spec.fileSystems to spec.filesystems"
+        }));
+        assert!(
+            report.changes.iter().any(|change| {
+                change == "mapped legacy field spec.nfsMounts to spec.nfs.mounts"
+            })
+        );
+    }
+
+    #[test]
+    fn migration_report_rejects_conflicting_legacy_aliases() {
+        let error = migration_report_from_json_bytes(
+            br#"{
+              "fileSystems": {
+                "legacy": {
+                  "mountpoint": "/legacy",
+                  "fsType": "ext4"
+                }
+              },
+              "filesystems": {
+                "current": {
+                  "mountpoint": "/current",
+                  "fsType": "xfs"
+                }
+              }
+            }"#,
+        )
+        .expect_err("conflicting aliases should be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("legacy field fileSystems conflicts with current field filesystems")
+        );
+    }
+
+    #[test]
+    fn migration_report_does_not_rewrite_explicit_current_version_aliases() {
+        let report = migration_report_from_json_bytes(
+            br#"{
+              "version": 1,
+              "fileSystems": {
+                "legacy": {
+                  "mountpoint": "/legacy",
+                  "fsType": "ext4"
+                }
+              }
+            }"#,
+        )
+        .expect("explicit current-version spec should stay metadata-only");
+
+        assert!(!report.migrated);
+        assert!(report.spec.get("fileSystems").is_some());
+        assert!(report.spec.get("filesystems").is_none());
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| change.contains("already declares"))
         );
     }
 
