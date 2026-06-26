@@ -1090,6 +1090,104 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$md_replace_receipt" >/dev/null
 
+luks_open_tools="$tmpdir/fake-luks-open-tools"
+mkdir -p "$luks_open_tools"
+
+cat > "$luks_open_tools/cryptsetup" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "open /dev/disk/by-id/archive-luks cryptarchive" ]]; then
+  echo "synthetic LUKS open failure for disk-nix recovery coverage" >&2
+  exit 83
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$luks_open_tools/cryptsetup"
+
+luks_open_spec="$tmpdir/luks-open-spec.json"
+luks_open_json="$tmpdir/luks-open-apply.json"
+luks_open_report="$tmpdir/luks-open-report.json"
+luks_open_receipt="$tmpdir/luks-open-receipt.json"
+
+jq -n '{
+  luks: {
+    devices: {
+      cryptarchive: {
+        name: "cryptarchive",
+        device: "/dev/disk/by-id/archive-luks",
+        operation: "open"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$luks_open_spec"
+
+if PATH="$luks_open_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$luks_open_spec" \
+  --execute \
+  --report-out "$luks_open_report" \
+  --receipt-out "$luks_open_receipt" \
+  --json > "$luks_open_json"; then
+  echo "expected synthetic LUKS open failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 3
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/dev/disk/by-id/archive-luks"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["cryptsetup", "isLuks", "/dev/disk/by-id/archive-luks"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 83
+  and .executionResults[2].argv == ["cryptsetup", "open", "/dev/disk/by-id/archive-luks", "cryptarchive"]
+  and (.executionResults[2].stderr | contains("synthetic LUKS open failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "luks.devices:cryptarchive:open"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["cryptsetup", "open", "/dev/disk/by-id/archive-luks", "cryptarchive"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["luks.devices:cryptarchive:open"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/archive-luks"]))
+    and (.commands | any(.argv == ["cryptsetup", "status", "cryptarchive"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-id/archive-luks", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "cryptarchive", "--json"]))
+    and (.notes | any(contains("LUKS changes")))
+    and (.notes | any(contains("alternate unlock paths")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["cryptsetup", "status", "cryptarchive"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["cryptsetup", "luksDump", "/dev/disk/by-id/archive-luks"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$luks_open_json" >/dev/null
+
+cmp "$luks_open_json" "$luks_open_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "luks.devices:cryptarchive:open"
+  and .report.partialExecutionRecovery.failedCommand == ["cryptsetup", "open", "/dev/disk/by-id/archive-luks", "cryptarchive"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$luks_open_receipt" >/dev/null
+
 iscsi_tools="$tmpdir/fake-iscsi-tools"
 mkdir -p "$iscsi_tools"
 
@@ -1756,4 +1854,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property, bcache property, and LVM cache property failures"
