@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for eighty-six failed apply paths:
+fake storage tools ahead of `PATH` for eighty-seven failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -101,6 +101,8 @@ fake storage tools ahead of `PATH` for eighty-six failed apply paths:
   and fake `lvextend --resizefs --size 50GiB vg0/root` fails
 - an LVM thin-pool create where fake `vgs --reportformat json` succeeds and
   fake `lvcreate --type thin-pool --size 100GiB --name newpool vg0` fails
+- an LVM thin-pool grow where fake thin-pool `lvs` inspection succeeds and
+  fake `lvextend --size 500GiB vg0/thinpool` fails
 - an XFS filesystem grow where fake `disk-nix inspect /` succeeds and fake
   `xfs_growfs /` fails
 - a Btrfs scrub where fake `btrfs scrub start -B /data` fails
@@ -351,6 +353,9 @@ The test verifies that the failed report and receipt preserve:
 - `partialExecutionRecovery.failedActionId` as `thinpools:vg0/newpool:create`
 - the failed `lvcreate --type thin-pool --size 100GiB --name newpool vg0`
   command and non-zero status after successful VG inspection
+- `partialExecutionRecovery.failedActionId` as `thinpools:vg0/thinpool:grow`
+- the failed `lvextend --size 500GiB vg0/thinpool` command and non-zero
+  status after successful thin-pool inspection
 - `partialExecutionRecovery.failedActionId` as `filesystem:root:grow`
 - the failed `xfs_growfs /` command and non-zero status after successful
   filesystem target inspection
@@ -1070,7 +1075,7 @@ broader iSCSI LUN failure behavior, broader NFS server/client variant failure
 behavior, broader VDO create/rescan/logical-grow/physical-grow/start/stop/property/remove behavior,
 additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
-behavior beyond the synthetic LVM-plus-filesystem, LVM grow, LVM thin-pool create, XFS grow, Btrfs
+behavior beyond the synthetic LVM-plus-filesystem, LVM grow, LVM thin-pool create, LVM thin-pool grow, XFS grow, Btrfs
 scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement,
 filesystem trim, filesystem check, filesystem repair, filesystem property,
 swap label, zram rescan, zram property inventory, loop rescan, backing-file rescan, backing-file grow, backing-file create, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,

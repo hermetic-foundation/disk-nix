@@ -170,7 +170,7 @@ behavior across real storage stacks.
   failed-command receipts, roll-forward review, rollback review,
   snapshot-preservation, and domain-recovery reporting for a layered
   LVM-plus-filesystem apply failure, LVM grow failure, LVM thin-pool create
-  failure, XFS grow failure, Btrfs
+  failure, LVM thin-pool grow failure, XFS grow failure, Btrfs
   scrub failure, Btrfs rebalance failure, Btrfs device replacement failure,
   bcachefs replacement failure, filesystem trim failure, filesystem
   check failure, filesystem repair failure, filesystem property failure,
@@ -280,7 +280,7 @@ concrete adapters are added.
   variants,
   additional cache variants, additional NVMe namespace variants, additional LUN
   flows, property mutation across more supported domains, and failed-command
-  recovery beyond the synthetic LVM-plus-filesystem, LVM grow, LVM thin-pool create, XFS grow, Btrfs
+  recovery beyond the synthetic LVM-plus-filesystem, LVM grow, LVM thin-pool create, LVM thin-pool grow, XFS grow, Btrfs
   scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement,
   filesystem trim, filesystem check, filesystem repair, filesystem property,
   swap label, zram rescan, zram property inventory, loop rescan,

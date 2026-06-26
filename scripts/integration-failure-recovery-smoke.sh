@@ -332,6 +332,119 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_thin_create_receipt" >/dev/null
 
+lvm_thin_grow_tools="$tmpdir/fake-lvm-thin-grow-tools"
+mkdir -p "$lvm_thin_grow_tools"
+
+cat > "$lvm_thin_grow_tools/lvs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$lvm_thin_grow_tools/vgs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$lvm_thin_grow_tools/pvs" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$lvm_thin_grow_tools/lvextend" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "--size 500GiB vg0/thinpool" ]]; then
+  echo "synthetic LVM thin-pool grow failure for disk-nix recovery coverage" >&2
+  exit 85
+fi
+printf '{}\n'
+exit 0
+EOF
+
+chmod +x "$lvm_thin_grow_tools/lvs" "$lvm_thin_grow_tools/vgs" "$lvm_thin_grow_tools/pvs" "$lvm_thin_grow_tools/lvextend"
+
+lvm_thin_grow_spec="$tmpdir/lvm-thin-grow-spec.json"
+lvm_thin_grow_json="$tmpdir/lvm-thin-grow-apply.json"
+lvm_thin_grow_report="$tmpdir/lvm-thin-grow-report.json"
+lvm_thin_grow_receipt="$tmpdir/lvm-thin-grow-receipt.json"
+
+jq -n '{
+  thinPools: {
+    "vg0/thinpool": {
+      operation: "grow",
+      desiredSize: "500GiB"
+    }
+  },
+  apply: {
+    allowGrow: true
+  }
+}' > "$lvm_thin_grow_spec"
+
+if PATH="$lvm_thin_grow_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$lvm_thin_grow_spec" \
+  --execute \
+  --report-out "$lvm_thin_grow_report" \
+  --receipt-out "$lvm_thin_grow_receipt" \
+  --json > "$lvm_thin_grow_json"; then
+  echo "expected synthetic LVM thin-pool grow failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and .commandSummary.mutatingCount == 1
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["lvs", "--reportformat", "json", "-o", "lv_name,lv_size,data_percent,metadata_percent,seg_monitor", "vg0/thinpool"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 85
+  and .executionResults[1].argv == ["lvextend", "--size", "500GiB", "vg0/thinpool"]
+  and (.executionResults[1].stderr | contains("synthetic LVM thin-pool grow failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "thinpools:vg0/thinpool:grow"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["lvextend", "--size", "500GiB", "vg0/thinpool"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["thinpools:vg0/thinpool:grow"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "vg0/thinpool"]))
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "vg0/thinpool", "--json"]))
+    and (.notes | any(contains("LVM changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "vg0/thinpool"]))
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-o", "lv_name,lv_size,data_percent,metadata_percent,seg_monitor", "vg0/thinpool"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$lvm_thin_grow_json" >/dev/null
+
+cmp "$lvm_thin_grow_json" "$lvm_thin_grow_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "thinpools:vg0/thinpool:grow"
+  and .report.partialExecutionRecovery.failedCommand == ["lvextend", "--size", "500GiB", "vg0/thinpool"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$lvm_thin_grow_receipt" >/dev/null
+
 xfs_grow_tools="$tmpdir/fake-xfs-grow-tools"
 mkdir -p "$xfs_grow_tools"
 
@@ -9561,4 +9674,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, LVM thin-pool create, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, filesystem property, swap label, zram rescan, zram property inventory, loop rescan, backing-file rescan, backing-file grow, backing-file create, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID create, MD RAID assemble, MD RAID stop, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, LVM thin-pool create, LVM thin-pool grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, filesystem property, swap label, zram rescan, zram property inventory, loop rescan, backing-file rescan, backing-file grow, backing-file create, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID create, MD RAID assemble, MD RAID stop, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
