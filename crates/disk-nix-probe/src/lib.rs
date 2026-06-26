@@ -2219,14 +2219,23 @@ fn run_report(command: &str, args: &[&str]) -> Result<Vec<u8>, String> {
 
 fn probe_category_for_message(message: &str) -> ProbeIssueCategory {
     let lower = message.to_ascii_lowercase();
-    if lower.contains("not found") || lower.contains("no such file") {
+    if lower.contains("not found")
+        || lower.contains("no such file")
+        || lower.contains("enoent")
+        || lower.contains("not in path")
+        || lower.contains("not in $path")
+    {
         ProbeIssueCategory::MissingTool
     } else if lower.contains("permission denied")
         || lower.contains("access denied")
         || lower.contains("operation not permitted")
         || lower.contains("not permitted")
+        || lower.contains("only root")
         || lower.contains("must be root")
+        || lower.contains("are you root")
         || lower.contains("requires root")
+        || lower.contains("requires superuser")
+        || lower.contains("need superuser")
         || lower.contains("insufficient privileges")
         || lower.contains("insufficient privilege")
     {
@@ -2629,5 +2638,32 @@ mod tests {
         assert!(json.contains("device-mapper state"));
         assert!(json.contains("open-iscsi"));
         assert!(json.contains("nvme-cli"));
+    }
+
+    #[test]
+    fn probe_issue_classifier_handles_common_real_world_messages() {
+        for message in [
+            "sh: zpool: command not found",
+            "executable file not found in $PATH",
+            "failed to run lvs: ENOENT",
+            "No such file or directory (os error 2)",
+        ] {
+            assert_eq!(
+                probe_category_for_message(message),
+                ProbeIssueCategory::MissingTool
+            );
+        }
+
+        for message in [
+            "only root can use this command",
+            "requires superuser privileges",
+            "are you root?",
+            "cannot open /dev/mapper/control: Operation not permitted",
+        ] {
+            assert_eq!(
+                probe_category_for_message(message),
+                ProbeIssueCategory::PermissionDenied
+            );
+        }
     }
 }

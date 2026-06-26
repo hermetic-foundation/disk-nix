@@ -241,12 +241,13 @@ The current probe layer normalizes:
   health, error, temperature, lifetime usage, and power telemetry
 
 Probe-status remediation is adapter-aware. Missing-tool reports include the
-likely tool names and Nix packages; permission and inaccessible-data reports
-call out concrete surfaces such as device-mapper/LVM metadata, ZFS imports,
-iSCSI state, NVMe sysfs/controller access, multipathd state, MD RAID metadata,
-VDO management state, and mounted Btrfs/NFS surfaces. LVM probing may report
-`partial` when the process lacks permission to talk to device-mapper. That
-should not prevent the rest of discovery from succeeding.
+likely tool names and Nix packages, including PATH and `ENOENT` command launch
+failures; permission and inaccessible-data reports call out concrete surfaces
+such as device-mapper/LVM metadata, ZFS imports, iSCSI state, NVMe
+sysfs/controller access, multipathd state, MD RAID metadata, VDO management
+state, and mounted Btrfs/NFS surfaces. LVM probing may report `partial` when
+the process lacks permission to talk to device-mapper. That should not prevent
+the rest of discovery from succeeding.
 
 ## Advice examples
 
