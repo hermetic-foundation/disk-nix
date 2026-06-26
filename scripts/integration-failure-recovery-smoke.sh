@@ -1375,6 +1375,112 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 2
 ' "$target_lun_lio_receipt" >/dev/null
 
+target_lun_lio_destroy_tools="$tmpdir/fake-target-lun-lio-destroy-tools"
+mkdir -p "$target_lun_lio_destroy_tools"
+
+cat > "$target_lun_lio_destroy_tools/targetcli" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "/backstores/block delete _dev_zvol_tank_root" ]]; then
+  echo "synthetic target-side LUN LIO destroy backstore failure for disk-nix recovery coverage" >&2
+  exit 83
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$target_lun_lio_destroy_tools/targetcli"
+
+target_lun_lio_destroy_spec="$tmpdir/target-lun-lio-destroy-spec.json"
+target_lun_lio_destroy_json="$tmpdir/target-lun-lio-destroy-apply.json"
+target_lun_lio_destroy_report="$tmpdir/target-lun-lio-destroy-report.json"
+target_lun_lio_destroy_receipt="$tmpdir/target-lun-lio-destroy-receipt.json"
+
+jq -n '{
+  spec: {
+    targetLuns: {
+      "iqn.2026-06.example:storage.root": {
+        destroy: true,
+        provider: "lio",
+        source: "/dev/zvol/tank/root",
+        lun: 7,
+        client: "iqn.2026-06.example:host.primary"
+      }
+    }
+  },
+  apply: {
+    allowDestructive: true,
+    allowOffline: true,
+    backupVerified: true
+  }
+}' > "$target_lun_lio_destroy_spec"
+
+if PATH="$target_lun_lio_destroy_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$target_lun_lio_destroy_spec" \
+  --execute \
+  --report-out "$target_lun_lio_destroy_report" \
+  --receipt-out "$target_lun_lio_destroy_receipt" \
+  --json > "$target_lun_lio_destroy_json"; then
+  echo "expected synthetic target-side LUN LIO destroy failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 7
+  and (.executionResults | length) == 5
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root/tpg1/acls", "delete", "iqn.2026-06.example:host.primary"]
+  and .executionResults[2].success == true
+  and .executionResults[2].argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root/tpg1/luns", "delete", "7"]
+  and .executionResults[3].success == true
+  and .executionResults[3].argv == ["targetcli", "/iscsi", "delete", "iqn.2026-06.example:storage.root"]
+  and .executionResults[4].success == false
+  and .executionResults[4].statusCode == 83
+  and .executionResults[4].argv == ["targetcli", "/backstores/block", "delete", "_dev_zvol_tank_root"]
+  and (.executionResults[4].stderr | contains("synthetic target-side LUN LIO destroy backstore failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:storage.root:destroy"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["targetcli", "/backstores/block", "delete", "_dev_zvol_tank_root"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["targetluns:iqn.2026-06.example:storage.root:destroy"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 3
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["targetcli", "/iscsi", "ls"]))
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+    and (.notes | any(contains("target-side LUN changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$target_lun_lio_destroy_json" >/dev/null
+
+cmp "$target_lun_lio_destroy_json" "$target_lun_lio_destroy_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:storage.root:destroy"
+  and .report.partialExecutionRecovery.failedCommand == ["targetcli", "/backstores/block", "delete", "_dev_zvol_tank_root"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 3
+' "$target_lun_lio_destroy_receipt" >/dev/null
+
 target_lun_tgt_tools="$tmpdir/fake-target-lun-tgt-tools"
 mkdir -p "$target_lun_tgt_tools"
 
@@ -2853,4 +2959,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO destroy, target-side LUN tgt create, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
