@@ -126,6 +126,115 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$receipt" >/dev/null
 
+swap_label_tools="$tmpdir/fake-swap-label-tools"
+mkdir -p "$swap_label_tools"
+
+cat > "$swap_label_tools/swaplabel" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "--label swap-new /dev/disk/by-label/swap-old" ]]; then
+  echo "synthetic swap label failure for disk-nix recovery coverage" >&2
+  exit 75
+fi
+printf '{}\n'
+EOF
+
+cat > "$swap_label_tools/swapon" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$swap_label_tools/blkid" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+chmod +x "$swap_label_tools/swaplabel" "$swap_label_tools/swapon" "$swap_label_tools/blkid"
+
+swap_label_spec="$tmpdir/swap-label-spec.json"
+swap_label_json="$tmpdir/swap-label-apply.json"
+swap_label_report="$tmpdir/swap-label-report.json"
+swap_label_receipt="$tmpdir/swap-label-receipt.json"
+
+jq -n '{
+  swaps: {
+    primary: {
+      device: "/dev/disk/by-label/swap-old",
+      properties: {
+        label: "swap-new"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$swap_label_spec"
+
+if PATH="$swap_label_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$swap_label_spec" \
+  --execute \
+  --report-out "$swap_label_report" \
+  --receipt-out "$swap_label_receipt" \
+  --json > "$swap_label_json"; then
+  echo "expected synthetic swap label failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 3
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "swaps:primary:inspect"
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/dev/disk/by-label/swap-old"]
+  and .executionResults[1].success == true
+  and .executionResults[1].actionId == "swaps:primary:set-property:label"
+  and .executionResults[1].argv == ["disk-nix", "inspect", "/dev/disk/by-label/swap-old"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 75
+  and .executionResults[2].argv == ["swaplabel", "--label", "swap-new", "/dev/disk/by-label/swap-old"]
+  and (.executionResults[2].stderr | contains("synthetic swap label failure"))
+  and .partialExecutionRecovery.completedActionIds == ["swaps:primary:inspect"]
+  and .partialExecutionRecovery.failedActionId == "swaps:primary:set-property:label"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["swaplabel", "--label", "swap-new", "/dev/disk/by-label/swap-old"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["swaps:primary:set-property:label"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["swapon", "--show", "--bytes", "--raw"]))
+    and (.commands | any(.argv == ["blkid", "/dev/disk/by-label/swap-old"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/disk/by-label/swap-old", "--json"]))
+    and (.notes | any(contains("swap changes")))
+    and (.notes | any(contains("resume")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["swapon", "--show", "--bytes", "--raw"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["blkid", "/dev/disk/by-label/swap-old"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$swap_label_json" >/dev/null
+
+cmp "$swap_label_json" "$swap_label_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.completedActionIds == ["swaps:primary:inspect"]
+  and .report.partialExecutionRecovery.failedActionId == "swaps:primary:set-property:label"
+  and .report.partialExecutionRecovery.failedCommand == ["swaplabel", "--label", "swap-new", "/dev/disk/by-label/swap-old"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$swap_label_receipt" >/dev/null
+
 rollback_tools="$tmpdir/fake-rollback-tools"
 mkdir -p "$rollback_tools"
 
@@ -2161,4 +2270,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
