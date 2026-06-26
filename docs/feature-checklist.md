@@ -112,9 +112,29 @@ Update rules:
 - [x] **Finished:** LVM-backed VDO fixture merges native VDO status, vdostats
   usage, verbose VDO block counters, LVM VDO LV metadata, VDO segment policy,
   and backing-pool dependency edges.
-- [ ] **Partial:** Broader real-world fixture coverage still needs additional
-  hardware samples, additional fabric variants, and clustered storage samples
-  from more real systems.
+- [ ] **Partial:** Real-world fixture coverage still needs additional physical
+  Fibre Channel samples from more adapters, switch zoning layouts, ALUA states,
+  and failed-path conditions.
+- [ ] **Partial:** Real-world fixture coverage still needs additional NVMe-oF
+  samples beyond the current NVMe/TCP multipath fixture, including RoCE,
+  Fibre Channel transport, namespace sharing, ANA transitions, and controller
+  loss/reconnect cases.
+- [ ] **Partial:** Real-world fixture coverage still needs additional iSCSI
+  samples for multi-portal sessions, mutual CHAP, discovery authentication,
+  replacement LUN identity changes, and logout/login churn.
+- [ ] **Partial:** Real-world fixture coverage still needs additional
+  server/client NFS samples for NFSv4 referrals, pNFS, export reload behavior,
+  client remount drift, and Kerberos policy variants.
+- [ ] **Partial:** Real-world fixture coverage still needs additional
+  clustered storage samples for clustered LVM, shared VG locking, remote LV
+  activity, and split-brain or lock-manager failure states.
+- [ ] **Partial:** Real-world fixture coverage still needs additional hardware
+  enclosure and array samples covering SAS enclosure fixture variants, SES
+  failures, vendor LUN metadata, and array-backed multipath identity drift.
+- [ ] **Partial:** Real-world fixture coverage still needs additional VDO
+  samples beyond the current LVM-backed VDO fixture, including physical-space
+  pressure, index rebuild state, dedupe/compression policy drift, and VDO
+  start/stop failure states.
 
 ## Planning and apply safety
 
@@ -150,12 +170,24 @@ Update rules:
 - [x] **Finished:** Apply reports provide recovery guidance, current-topology
   roll-forward review, read-only rollback precondition review, and recovery
   point preservation actions.
-- [ ] **Desired:** Production-grade automatic rollback execution engine remains
-  intentionally unimplemented until rollback safety proofs and topology-specific
-  recipes are strong enough.
-- [ ] **Desired:** Automatic rollback must have per-domain safety gates,
-  idempotency checks, post-failure topology probes, and refusal behavior for
-  ambiguous or data-loss-prone states before it can be enabled.
+- [ ] **Desired:** Automatic rollback needs a stable rollback recipe schema
+  that separates read-only validation, reversible mutations, destructive
+  mutations, and operator-only handoff steps.
+- [ ] **Desired:** Automatic rollback needs an execution engine that can replay
+  only proven-safe rollback steps after a failed apply and bind the result to
+  the original receipt and fresh topology probe.
+- [ ] **Desired:** Automatic rollback needs per-domain safety gates for
+  filesystems, LUKS, LVM, MD RAID, ZFS, Btrfs, bcachefs, NFS, iSCSI,
+  multipath, NVMe, target LUNs, VDO, bcache, loop devices, backing files, swap,
+  and zram.
+- [ ] **Desired:** Automatic rollback needs idempotency checks for already
+  rolled-back, partially rolled-back, and externally modified topology states.
+- [ ] **Desired:** Automatic rollback needs post-failure topology probes that
+  compare expected, pre-apply, failed-apply, and current topology before any
+  rollback mutation runs.
+- [ ] **Desired:** Automatic rollback needs refusal behavior for ambiguous
+  rollback points, active consumers, stale identity data, missing tools, and
+  any path with plausible data-loss risk.
 
 ## Lifecycle operations
 
@@ -219,10 +251,23 @@ Update rules:
   object, LUN, optional group, and initiators are declared.
 - [x] **Finished:** Provider handoffs carry declared `targetId`/`tid` and
   `lun` values.
-- [ ] **Partial:** LIO and tgt grow remain explicit non-ready provider handoffs
-  instead of fully native grow implementations.
-- [ ] **Partial:** Other target array/provider adapters still use
-  provider-labeled non-ready commands and verification placeholders.
+- [ ] **Partial:** LIO target-side LUN grow needs a fully native implementation
+  that validates the backing object, expands or refreshes the exported
+  backstore where supported, persists target state, and verifies initiator-visible
+  capacity.
+- [ ] **Partial:** tgt target-side LUN grow needs a fully native implementation
+  that validates the backing object, refreshes exported logical-unit capacity
+  where supported, persists target state, and verifies initiator-visible
+  capacity.
+- [ ] **Partial:** Other target provider adapters need a provider capability
+  contract for create, grow, map, unmap, remove, rescan, property mutation,
+  persistence, verification, and refusal behavior.
+- [ ] **Partial:** Array-backed target providers need concrete adapter models
+  for vendor or site-specific LUN identity, capacity, mapping, masking, and
+  snapshot or clone handoff data.
+- [ ] **Partial:** Target provider verification placeholders need executable
+  probes for post-change target state, initiator visibility, multipath refresh,
+  and consumer safety checks.
 - [x] **Finished:** Multi-layer lifecycle groups such as LUN refresh,
   multipath refresh, partition growth, LUKS/LVM resize, and filesystem growth
   are exposed through graph-derived dependency ordering, reverse recovery edges,
@@ -278,11 +323,30 @@ Update rules:
 - [x] **Finished:** Failed apply reports include domain-specific recovery,
   current-topology roll-forward review, read-only rollback-precondition
   commands, verification actions, and recovery-point preservation actions.
-- [ ] **Desired:** Proven automatic rollback recipes still need per-topology
-  and per-domain execution recipes with fixtures or integration proof.
+- [ ] **Desired:** Proven automatic rollback recipes need filesystem-level
+  recipes and fixtures for grow, mount/remount, property mutation, scrub,
+  repair, and failed-check recovery boundaries.
+- [ ] **Desired:** Proven automatic rollback recipes need block-stack recipes
+  and fixtures for partition, LUKS, LVM, MD RAID, device-mapper, loop,
+  backing-file, swap, and zram mutations.
+- [ ] **Desired:** Proven automatic rollback recipes need advanced storage
+  recipes and fixtures for ZFS, Btrfs, bcachefs, bcache, LVM cache, VDO, and
+  snapshot or clone operations.
+- [ ] **Desired:** Proven automatic rollback recipes need network-storage
+  recipes and fixtures for NFS, iSCSI, multipath, NVMe-oF, host-side LUNs, and
+  target-side LUN providers.
+- [ ] **Desired:** Automatic rollback recipes need integration proof that a
+  failed apply can re-probe topology, choose a proven rollback recipe, run it,
+  verify data-preserving state, and emit a rollback receipt.
 - [ ] **Desired:** Automatic rollback recipes need negative tests proving
-  refusal when rollback points, topology, consumers, or data-loss risk are
-  ambiguous.
+  refusal when rollback points are missing, stale, or not bound to the failed
+  apply receipt.
+- [ ] **Desired:** Automatic rollback recipes need negative tests proving
+  refusal when current topology differs from both expected and failed-apply
+  topology in ways the recipe cannot prove safe.
+- [ ] **Desired:** Automatic rollback recipes need negative tests proving
+  refusal when active consumers, mounted filesystems, open encrypted mappings,
+  exported LUNs, or data-loss-prone operations make rollback unsafe.
 
 ## NixOS integration
 
@@ -343,23 +407,45 @@ Update rules:
   remount/unmount/export/unexport, iSCSI logout/login/rescan, LVM cache
   attach/detach/replacement/rescan/property, VDO lifecycle/property, and bcache
   replacement/property/rescan paths.
-- [ ] **Partial:** Broader destructive/failure-path integration tests still
-  need additional real or VM-backed device replacement domains and broader
-  degraded-array variants beyond synthetic command failures.
-- [ ] **Partial:** Broader destructive/failure-path integration tests still
-  need additional cache variants, NVMe namespace variants, LUN flows, and
-  property mutation across more supported domains.
-- [ ] **Partial:** Broader destructive/failure-path integration tests still
-  need lab-host or VM-backed execution for more destructive apply behavior, not
-  only fake-tool synthetic command failures.
+- [ ] **Partial:** Destructive integration tests need real or VM-backed device
+  replacement coverage for MD RAID, ZFS pools, Btrfs filesystems, bcachefs,
+  bcache, LVM cache, and multipath-backed stacks.
+- [ ] **Partial:** Destructive integration tests need broader degraded-array
+  variants covering missing members, stale superblocks, replacement races,
+  partial rebuilds, failed detach, and failed reattach behavior.
+- [ ] **Partial:** Destructive integration tests need VM-backed cache mutation
+  coverage for LVM cache attach/detach/replacement/property, bcache
+  replacement/property/rescan, and cache-device failure states.
+- [ ] **Partial:** Destructive integration tests need VM-backed NVMe namespace
+  coverage for create, grow, attach, detach, delete, controller reconnect, and
+  namespace identity drift.
+- [ ] **Partial:** Destructive integration tests need VM-backed LUN flow
+  coverage for host-side rescan, multipath resize, multipath add/remove/flush,
+  target-side map/unmap, and target-side destroy refusal paths.
+- [ ] **Partial:** Destructive integration tests need property mutation
+  coverage across filesystems, LUKS, LVM, ZFS, Btrfs, VDO, bcache, NFS,
+  target LUNs, loop devices, backing files, swap, and zram.
+- [ ] **Partial:** Destructive integration tests need failure injection for
+  partially completed apply runs using real or VM-backed commands, not only
+  fake-tool synthetic command failures.
 - [x] **Finished:** Default VM suite includes the synthetic failure-recovery
   harness.
 - [x] **Finished:** Disposable loop/LUKS/LVM/ext4 layered VM grow harness
   executes `resize2fs` through disk-nix after an LV extension, then
   unmounts/deactivates the stack, executes a disk-nix LUKS close plan, reopens
   the mapper, remounts the LV, and verifies sentinel data survived.
-- [ ] **Partial:** Deeper destructive VM tests are still needed for broader
-  multi-domain mutation, failure, rollback-review, and recovery behavior.
+- [ ] **Partial:** Deeper destructive VM tests need multi-domain mutation
+  scenarios that combine partition growth, LUKS growth, LVM changes, filesystem
+  growth, and mount/remount verification in one apply run.
+- [ ] **Partial:** Deeper destructive VM tests need injected command failures
+  after one or more successful mutating commands, with assertions for recovery
+  reports, remaining action ids, and fresh-topology review.
+- [ ] **Partial:** Deeper destructive VM tests need rollback-review assertions
+  that verify rollback precondition commands, recovery-point preservation
+  guidance, and refusal to automate unsafe rollback.
+- [ ] **Partial:** Deeper destructive VM tests need data-survival assertions
+  across failed and resumed apply runs for layered block, filesystem, cache,
+  and network-storage scenarios.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
   checks for root privilege plus missing, failing, stderr-only, and empty-output
