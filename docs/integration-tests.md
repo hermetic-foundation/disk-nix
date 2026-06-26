@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for fifty-five failed apply paths:
+fake storage tools ahead of `PATH` for fifty-six failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -264,6 +264,9 @@ fake storage tools ahead of `PATH` for fifty-five failed apply paths:
   `vdo start --name warmArchive` fails
 - a VDO stop where fake `vdo status --name coldArchive` succeeds and fake
   `vdo stop --name coldArchive` fails
+- a VDO remove where fake `vdo status --name old-cache` succeeds and fake
+  `vdo remove --name old-cache` fails after the reviewed destructive gate is
+  enabled
 - a VDO property mutation where fake `disk-nix inspect archive` succeeds and
   fake `vdo changeWritePolicy --name archive --writePolicy sync` fails
 - a bcache cache replacement where fake `disk-nix inspect /dev/bcache0`
@@ -430,6 +433,10 @@ The test verifies that the failed report and receipt preserve:
   `vdoVolumes:archive:set-property:writePolicy`
 - the failed `vdo changeWritePolicy --name archive --writePolicy sync` command
   and non-zero status after target inspection
+- `partialExecutionRecovery.failedActionId` as
+  `vdovolumes:old-cache:destroy`
+- the failed `vdo remove --name old-cache` command and non-zero status after
+  successful status inspection
 - `partialExecutionRecovery.failedActionId` as
   `lvmCaches:vg0/root:set-property:lvm.cache-mode`
 - the failed `lvchange --cachemode writethrough vg0/root` command and non-zero
@@ -949,5 +956,5 @@ rescan, multipath
 resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
-grow, VDO start, VDO stop, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
+grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
 paths, and broader destructive apply behavior.
