@@ -1852,6 +1852,7 @@
             ${diskNix}/bin/disk-nix --help | grep -- 'swap'
             ${diskNix}/bin/disk-nix --help | grep -- 'iscsi'
             ${diskNix}/bin/disk-nix --help | grep -- 'nfs'
+            ${diskNix}/bin/disk-nix probe-status --help | grep -- '--preflight'
             if grep -R -E 'executor-unavailable|does not mutate storage yet|future mutating executor|future `btrfs device remove`|does not run mutating storage commands directly|non-executed command' ${./README.md} ${./docs}; then
               echo "stale executor documentation found" >&2
               exit 1

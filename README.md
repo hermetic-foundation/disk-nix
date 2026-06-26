@@ -77,6 +77,7 @@ disk-nix topology
 disk-nix topology --json
 disk-nix probe-status
 disk-nix probe-status --json
+disk-nix probe-status --preflight --json
 disk-nix capabilities
 disk-nix capabilities --json
 disk-nix migrate --spec ./examples/lifecycle-update.json

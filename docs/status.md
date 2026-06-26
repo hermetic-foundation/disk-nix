@@ -224,10 +224,11 @@ manual-review guidance, or non-ready command plans instead of guessing.
   topology-specific recovery proofs exist.
 - Deeper privilege and tool availability diagnostics for every adapter and
   command renderer, including distributions where tools have different output
-  formats. Probe reports now expose structured degradation categories plus
+  formats. Probe reports now expose structured degradation categories,
   adapter-specific tool/package, privilege-surface, inaccessible-data, and
-  parse-fixture hints, but live preflight checks against every distribution and
-  tool-output variant still need expansion.
+  parse-fixture hints, plus opt-in `probe-status --preflight` OS, kernel,
+  effective UID, and storage tool version context, but live preflight checks
+  against every distribution and tool-output variant still need expansion.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
 - Future spec-version field mappings. The parser validates version `1`,

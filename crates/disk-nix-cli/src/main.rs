@@ -2,9 +2,10 @@
 
 use std::{
     collections::{BTreeSet, VecDeque},
-    fmt,
+    fmt, fs,
     io::{self, Write},
     os::unix::fs::PermissionsExt,
+    process::Command as ProcessCommand,
     process::ExitCode,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -61,6 +62,9 @@ enum Command {
         /// Emit JSON probe reports.
         #[arg(long)]
         json: bool,
+        /// Include OS, kernel, and storage tool version preflight context.
+        #[arg(long)]
+        preflight: bool,
     },
     /// Show modeled storage operation capabilities and risk classes.
     Capabilities {
@@ -355,6 +359,41 @@ struct MigrationReport {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct ProbeStatusPreflightReport {
+    environment: ProbePreflightEnvironment,
+    reports: Vec<disk_nix_probe::ProbeReport>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProbePreflightEnvironment {
+    os_id: Option<String>,
+    os_version_id: Option<String>,
+    os_pretty_name: Option<String>,
+    kernel_release: Option<String>,
+    effective_uid: Option<String>,
+    tool_versions: Vec<ToolVersionReport>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ToolVersionReport {
+    tool: String,
+    status: ToolVersionStatus,
+    version: Option<String>,
+    message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum ToolVersionStatus {
+    Available,
+    Unavailable,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ApplyReceipt {
     receipt_version: u64,
     command: String,
@@ -401,18 +440,35 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             )?;
             Ok(())
         }
-        Command::ProbeStatus { json } => {
+        Command::ProbeStatus { json, preflight } => {
             let probe = LinuxProbe::new();
             let result = probe
                 .collect()
                 .map_err(|error| AppError::Message(error.to_string()))?;
             if json {
-                writeln!(
-                    output,
-                    "{}",
-                    serde_json::to_string_pretty(&result.reports)
-                        .map_err(|error| AppError::Message(error.to_string()))?
-                )?;
+                if preflight {
+                    let report = ProbeStatusPreflightReport {
+                        environment: collect_probe_preflight_environment(),
+                        reports: result.reports,
+                    };
+                    writeln!(
+                        output,
+                        "{}",
+                        serde_json::to_string_pretty(&report)
+                            .map_err(|error| AppError::Message(error.to_string()))?
+                    )?;
+                } else {
+                    writeln!(
+                        output,
+                        "{}",
+                        serde_json::to_string_pretty(&result.reports)
+                            .map_err(|error| AppError::Message(error.to_string()))?
+                    )?;
+                }
+            } else if preflight {
+                let environment = collect_probe_preflight_environment();
+                print_probe_preflight_environment(output, &environment)?;
+                print_probe_reports(output, &result.reports)?;
             } else {
                 print_probe_reports(output, &result.reports)?;
             }
@@ -1917,6 +1973,194 @@ fn print_topology_summary(
     writeln!(output)?;
     print_probe_reports(output, &result.reports)?;
 
+    Ok(())
+}
+
+fn collect_probe_preflight_environment() -> ProbePreflightEnvironment {
+    let os_release = fs::read_to_string("/etc/os-release")
+        .ok()
+        .map(|contents| parse_os_release(&contents))
+        .unwrap_or_default();
+    ProbePreflightEnvironment {
+        os_id: os_release
+            .iter()
+            .find(|(key, _)| key == "ID")
+            .map(|(_, value)| value.clone()),
+        os_version_id: os_release
+            .iter()
+            .find(|(key, _)| key == "VERSION_ID")
+            .map(|(_, value)| value.clone()),
+        os_pretty_name: os_release
+            .iter()
+            .find(|(key, _)| key == "PRETTY_NAME")
+            .map(|(_, value)| value.clone()),
+        kernel_release: command_stdout_first_line("uname", &["-r"]).ok(),
+        effective_uid: command_stdout_first_line("id", &["-u"]).ok(),
+        tool_versions: storage_tool_version_reports(),
+    }
+}
+
+fn parse_os_release(contents: &str) -> Vec<(String, String)> {
+    contents
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                return None;
+            }
+            let (key, value) = line.split_once('=')?;
+            Some((key.to_string(), unquote_os_release_value(value)))
+        })
+        .collect()
+}
+
+fn unquote_os_release_value(value: &str) -> String {
+    let value = value.trim();
+    if value.len() >= 2
+        && ((value.starts_with('"') && value.ends_with('"'))
+            || (value.starts_with('\'') && value.ends_with('\'')))
+    {
+        value[1..value.len() - 1]
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\")
+    } else {
+        value.to_string()
+    }
+}
+
+fn storage_tool_version_reports() -> Vec<ToolVersionReport> {
+    [
+        ("lsblk", &["--version"][..]),
+        ("blkid", &["--version"][..]),
+        ("findmnt", &["--version"][..]),
+        ("parted", &["--version"][..]),
+        ("smartctl", &["--version"][..]),
+        ("cryptsetup", &["--version"][..]),
+        ("dmsetup", &["version"][..]),
+        ("lvm", &["version"][..]),
+        ("vdo", &["--version"][..]),
+        ("zpool", &["--version"][..]),
+        ("zfs", &["--version"][..]),
+        ("btrfs", &["--version"][..]),
+        ("bcachefs", &["version"][..]),
+        ("lsscsi", &["--version"][..]),
+        ("iscsiadm", &["--version"][..]),
+        ("exportfs", &["--version"][..]),
+        ("nfsstat", &["--version"][..]),
+        ("mdadm", &["--version"][..]),
+        ("multipath", &["-h"][..]),
+        ("nvme", &["version"][..]),
+    ]
+    .into_iter()
+    .map(|(tool, args)| storage_tool_version_report(tool, args))
+    .collect()
+}
+
+fn storage_tool_version_report(tool: &str, args: &[&str]) -> ToolVersionReport {
+    match command_stdout_first_line(tool, args) {
+        Ok(version) => ToolVersionReport {
+            tool: tool.to_string(),
+            status: ToolVersionStatus::Available,
+            version: Some(version),
+            message: None,
+        },
+        Err(message) if message.contains("not found") || message.contains("No such file") => {
+            ToolVersionReport {
+                tool: tool.to_string(),
+                status: ToolVersionStatus::Unavailable,
+                version: None,
+                message: Some(message),
+            }
+        }
+        Err(message) => ToolVersionReport {
+            tool: tool.to_string(),
+            status: ToolVersionStatus::Failed,
+            version: None,
+            message: Some(message),
+        },
+    }
+}
+
+fn command_stdout_first_line(command: &str, args: &[&str]) -> Result<String, String> {
+    match ProcessCommand::new(command).args(args).output() {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let line = stdout
+                .lines()
+                .chain(stderr.lines())
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .unwrap_or("");
+            if line.is_empty() {
+                Ok(format!("{command} returned no version text"))
+            } else {
+                Ok(line.to_string())
+            }
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let detail = stderr
+                .lines()
+                .chain(stdout.lines())
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .unwrap_or("command returned a non-zero status");
+            Err(format!(
+                "{command} {:?} failed with status {}: {detail}",
+                args, output.status
+            ))
+        }
+        Err(error) => Err(format!("{command} not found or failed to run: {error}")),
+    }
+}
+
+fn print_probe_preflight_environment(
+    output: &mut impl Write,
+    environment: &ProbePreflightEnvironment,
+) -> io::Result<()> {
+    writeln!(output, "Preflight environment:")?;
+    writeln!(
+        output,
+        "  os: {}",
+        environment.os_pretty_name.as_deref().unwrap_or("-")
+    )?;
+    writeln!(
+        output,
+        "  os-id: {}",
+        environment.os_id.as_deref().unwrap_or("-")
+    )?;
+    writeln!(
+        output,
+        "  os-version-id: {}",
+        environment.os_version_id.as_deref().unwrap_or("-")
+    )?;
+    writeln!(
+        output,
+        "  kernel: {}",
+        environment.kernel_release.as_deref().unwrap_or("-")
+    )?;
+    writeln!(
+        output,
+        "  effective-uid: {}",
+        environment.effective_uid.as_deref().unwrap_or("-")
+    )?;
+    writeln!(output, "  storage tools:")?;
+    for tool in &environment.tool_versions {
+        let status = match tool.status {
+            ToolVersionStatus::Available => "available",
+            ToolVersionStatus::Unavailable => "unavailable",
+            ToolVersionStatus::Failed => "failed",
+        };
+        let detail = tool
+            .version
+            .as_deref()
+            .or(tool.message.as_deref())
+            .unwrap_or("-");
+        writeln!(output, "    {:<12} {:<12} {}", tool.tool, status, detail)?;
+    }
+    writeln!(output)?;
     Ok(())
 }
 
@@ -5023,21 +5267,23 @@ mod tests {
     use serde_json::Value;
 
     use super::{
-        apply_receipt, confirmation_file_accepts, consumer_count, is_backing_file_node,
-        is_bcachefs_node, is_btrfs_node, is_cache_node, is_complex_filesystem_node, is_device_node,
-        is_dm_node, is_encryption_node, is_filesystem_node, is_iscsi_node, is_loop_node,
-        is_lun_node, is_lvm_node, is_mapping_node, is_multipath_node, is_network_storage_node,
-        is_nfs_node, is_nvme_node, is_partition_node, is_pool_node, is_raid_node, is_snapshot_node,
-        is_swap_node, is_vdo_node, is_volume_node, is_zfs_node, is_zram_node, iscsi_lun_count,
-        member_count, migration_report_from_json_bytes, mount_details, nfs_mount_count,
-        print_backing_files, print_bcachefs, print_btrfs, print_cache, print_complex_filesystems,
-        print_devices, print_dm, print_encryption, print_filesystems, print_filtered_json,
-        print_inspect, print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm,
-        print_mappings, print_migration_report, print_mounts, print_multipath,
-        print_network_storage, print_nfs, print_nvme, print_partitions, print_pools,
+        ProbePreflightEnvironment, ProbeStatusPreflightReport, ToolVersionReport,
+        ToolVersionStatus, apply_receipt, confirmation_file_accepts, consumer_count,
+        is_backing_file_node, is_bcachefs_node, is_btrfs_node, is_cache_node,
+        is_complex_filesystem_node, is_device_node, is_dm_node, is_encryption_node,
+        is_filesystem_node, is_iscsi_node, is_loop_node, is_lun_node, is_lvm_node, is_mapping_node,
+        is_multipath_node, is_network_storage_node, is_nfs_node, is_nvme_node, is_partition_node,
+        is_pool_node, is_raid_node, is_snapshot_node, is_swap_node, is_vdo_node, is_volume_node,
+        is_zfs_node, is_zram_node, iscsi_lun_count, member_count, migration_report_from_json_bytes,
+        mount_details, nfs_mount_count, parse_os_release, print_backing_files, print_bcachefs,
+        print_btrfs, print_cache, print_complex_filesystems, print_devices, print_dm,
+        print_encryption, print_filesystems, print_filtered_json, print_inspect,
+        print_inspect_json, print_iscsi, print_loop, print_luns, print_lvm, print_mappings,
+        print_migration_report, print_mounts, print_multipath, print_network_storage, print_nfs,
+        print_nvme, print_partitions, print_pools, print_probe_preflight_environment,
         print_probe_reports, print_raid, print_snapshots, print_swap, print_usage, print_vdo,
         print_volumes, print_zfs, print_zram, script_refusal_message, snapshot_source,
-        usage_details, usage_percent, zfs_child_count,
+        storage_tool_version_report, usage_details, usage_percent, zfs_child_count,
     };
 
     #[test]
@@ -5060,6 +5306,127 @@ mod tests {
         assert!(output.contains("permission-denied"));
         assert!(output.contains("remediation:"));
         assert!(output.contains("privileges"));
+    }
+
+    #[test]
+    fn probe_preflight_parses_os_release_fields() {
+        let fields = parse_os_release(
+            r#"
+ID=nixos
+VERSION_ID="26.05"
+PRETTY_NAME="NixOS 26.05 (Hermetic)"
+# ignored
+"#,
+        );
+
+        assert_eq!(
+            fields
+                .iter()
+                .find(|(key, _)| key == "ID")
+                .map(|(_, value)| value.as_str()),
+            Some("nixos")
+        );
+        assert_eq!(
+            fields
+                .iter()
+                .find(|(key, _)| key == "VERSION_ID")
+                .map(|(_, value)| value.as_str()),
+            Some("26.05")
+        );
+        assert_eq!(
+            fields
+                .iter()
+                .find(|(key, _)| key == "PRETTY_NAME")
+                .map(|(_, value)| value.as_str()),
+            Some("NixOS 26.05 (Hermetic)")
+        );
+    }
+
+    #[test]
+    fn probe_preflight_tool_version_reports_missing_tools() {
+        let report = storage_tool_version_report(
+            "disk-nix-definitely-missing-tool-for-test",
+            &["--version"],
+        );
+
+        assert_eq!(
+            report.tool,
+            "disk-nix-definitely-missing-tool-for-test".to_string()
+        );
+        assert_eq!(report.status, ToolVersionStatus::Unavailable);
+        assert!(report.version.is_none());
+        assert!(
+            report
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("not found"))
+        );
+    }
+
+    #[test]
+    fn probe_preflight_human_output_includes_environment_and_tools() {
+        let environment = ProbePreflightEnvironment {
+            os_id: Some("nixos".to_string()),
+            os_version_id: Some("26.05".to_string()),
+            os_pretty_name: Some("NixOS 26.05".to_string()),
+            kernel_release: Some("6.12.0".to_string()),
+            effective_uid: Some("0".to_string()),
+            tool_versions: vec![
+                ToolVersionReport {
+                    tool: "lsblk".to_string(),
+                    status: ToolVersionStatus::Available,
+                    version: Some("lsblk from util-linux 2.41".to_string()),
+                    message: None,
+                },
+                ToolVersionReport {
+                    tool: "zpool".to_string(),
+                    status: ToolVersionStatus::Unavailable,
+                    version: None,
+                    message: Some("zpool not found or failed to run".to_string()),
+                },
+            ],
+        };
+
+        let mut output = Vec::new();
+        print_probe_preflight_environment(&mut output, &environment)
+            .expect("preflight environment renders");
+        let output = String::from_utf8(output).expect("preflight output is utf8");
+        assert!(output.contains("Preflight environment:"));
+        assert!(output.contains("NixOS 26.05"));
+        assert!(output.contains("effective-uid: 0"));
+        assert!(output.contains("lsblk"));
+        assert!(output.contains("zpool"));
+        assert!(output.contains("unavailable"));
+    }
+
+    #[test]
+    fn probe_preflight_json_wraps_environment_and_reports() {
+        let report = ProbeStatusPreflightReport {
+            environment: ProbePreflightEnvironment {
+                os_id: Some("nixos".to_string()),
+                os_version_id: Some("26.05".to_string()),
+                os_pretty_name: Some("NixOS 26.05".to_string()),
+                kernel_release: Some("6.12.0".to_string()),
+                effective_uid: Some("0".to_string()),
+                tool_versions: vec![ToolVersionReport {
+                    tool: "lsblk".to_string(),
+                    status: ToolVersionStatus::Available,
+                    version: Some("lsblk from util-linux 2.41".to_string()),
+                    message: None,
+                }],
+            },
+            reports: vec![ProbeReport {
+                adapter: "lsblk".to_string(),
+                status: ProbeStatus::Available,
+                message: Some("normalized graph nodes".to_string()),
+            }],
+        };
+
+        let json = serde_json::to_value(&report).expect("preflight report serializes");
+        assert_eq!(json["environment"]["osId"], "nixos");
+        assert_eq!(json["environment"]["toolVersions"][0]["tool"], "lsblk");
+        assert_eq!(json["reports"][0]["adapter"], "lsblk");
+        assert_eq!(json["reports"][0]["category"], "none");
     }
 
     #[test]

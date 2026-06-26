@@ -233,8 +233,9 @@ Update rules:
   login/logout flows, and property mutation.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
   for multi-layer apply behavior on isolated disposable disks are still needed.
-- [ ] **Partial:** Probe-status diagnostics exist, but live preflight checks
-  across distributions and tool-output variants need expansion.
+- [ ] **Partial:** Probe-status diagnostics include adapter remediation and
+  opt-in OS, kernel, effective UID, and tool-version preflight context, but live
+  checks across distributions and tool-output variants need expansion.
 
 ## Documentation
 
