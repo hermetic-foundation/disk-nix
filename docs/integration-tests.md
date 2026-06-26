@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for twelve failed apply paths:
+fake storage tools ahead of `PATH` for thirteen failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -109,6 +109,10 @@ fake storage tools ahead of `PATH` for twelve failed apply paths:
   succeeds and fake `nvme detach-ns /dev/nvme3 --namespace-id 8 --controllers 0x3` fails
 - an NVMe namespace destroy where fake `nvme detach-ns` succeeds and fake
   `nvme delete-ns /dev/nvme4 --namespace-id 9` fails
+- a target-side LUN create through the Linux LIO provider where fake
+  `targetcli` inventory, backstore creation, and target creation succeed and
+  fake `targetcli /iscsi/iqn.2026-06.example:storage.root/tpg1/luns create /backstores/block/_dev_zvol_tank_root lun=7`
+  fails
 - an iSCSI session logout where fake `iscsiadm --logout` fails for the reviewed
   target and portal
 - an iSCSI session login where fake `iscsiadm --mode discovery` succeeds and
@@ -152,6 +156,10 @@ The test verifies that the failed report and receipt preserve:
   `nvmenamespaces:/dev/nvme4:destroy`
 - the failed `nvme delete-ns /dev/nvme4 --namespace-id 9` command and
   non-zero status
+- `partialExecutionRecovery.failedActionId` as
+  `targetluns:iqn.2026-06.example:storage.root:create`
+- the failed LIO `targetcli .../tpg1/luns create` command and non-zero status
+  after target-side inventory, backstore creation, and target creation
 - `partialExecutionRecovery.failedActionId` as
   `iscsisessions:iqn.2026-06.example:storage.old:logout`
 - the failed `iscsiadm --mode node --targetname iqn.2026-06.example:storage.old --portal 192.0.2.11:3260 --logout` command
@@ -635,6 +643,7 @@ create/grow/start/stop/property/remove behavior, additional NVMe namespace
 variant failure behavior, additional cache variant failure behavior, property
 mutation across more supported domains, recovery behavior beyond the synthetic
 LVM-plus-filesystem, ZFS rollback, NVMe namespace create, NVMe namespace grow,
-NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, iSCSI
-logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property
-failed-command paths, and broader destructive apply behavior.
+NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,
+target-side LUN LIO create, iSCSI logout, iSCSI login, LVM cache attach, LVM
+cache detach, and LVM cache property failed-command paths, and broader
+destructive apply behavior.

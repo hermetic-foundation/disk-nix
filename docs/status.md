@@ -166,9 +166,9 @@ behavior across real storage stacks.
   review, rollback review, snapshot-preservation, and domain-recovery
   reporting for both a layered LVM-plus-filesystem apply failure and a ZFS
   rollback failure, plus NVMe namespace create, grow, attach, detach, and
-  delete failures, iSCSI logout and login failures, LVM cache attach and
-  detach failures, and an LVM cache property mutation failure, without touching
-  real block devices.
+  delete failures, target-side LUN LIO create failure, iSCSI logout and login
+  failures, LVM cache attach and detach failures, and an LVM cache property
+  mutation failure, without touching real block devices.
 
 ## Implemented probe coverage
 
@@ -222,12 +222,12 @@ placeholders until concrete adapters are added.
 
 - Broader destructive and failure-path integration tests beyond the smoke
   suite, including device replacement, degraded arrays, additional cache
-  variants, additional NVMe namespace variants, LUN flows, property mutation
-  across more supported domains, and failed-command recovery beyond the
-  synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace create, NVMe
+  variants, additional NVMe namespace variants, additional LUN flows, property
+  mutation across more supported domains, and failed-command recovery beyond
+  the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace create, NVMe
   namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace
-  delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and
-  LVM cache property paths.
+  delete, target-side LUN LIO create, iSCSI logout, iSCSI login, LVM cache
+  attach, LVM cache detach, and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional

@@ -685,6 +685,109 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$nvme_receipt" >/dev/null
 
+target_lun_lio_tools="$tmpdir/fake-target-lun-lio-tools"
+mkdir -p "$target_lun_lio_tools"
+
+cat > "$target_lun_lio_tools/targetcli" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "/iscsi/iqn.2026-06.example:storage.root/tpg1/luns create /backstores/block/_dev_zvol_tank_root lun=7" ]]; then
+  echo "synthetic target-side LUN LIO create failure for disk-nix recovery coverage" >&2
+  exit 85
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$target_lun_lio_tools/targetcli"
+
+target_lun_lio_spec="$tmpdir/target-lun-lio-spec.json"
+target_lun_lio_json="$tmpdir/target-lun-lio-apply.json"
+target_lun_lio_report="$tmpdir/target-lun-lio-report.json"
+target_lun_lio_receipt="$tmpdir/target-lun-lio-receipt.json"
+
+jq -n '{
+  spec: {
+    targetLuns: {
+      "iqn.2026-06.example:storage.root": {
+        operation: "create",
+        provider: "lio",
+        source: "/dev/zvol/tank/root",
+        lun: 7,
+        portal: "192.0.2.10:3260",
+        client: "iqn.2026-06.example:host.primary"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$target_lun_lio_spec"
+
+if PATH="$target_lun_lio_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$target_lun_lio_spec" \
+  --execute \
+  --report-out "$target_lun_lio_report" \
+  --receipt-out "$target_lun_lio_receipt" \
+  --json > "$target_lun_lio_json"; then
+  echo "expected synthetic target-side LUN LIO create failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 7
+  and (.executionResults | length) == 4
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["targetcli", "/iscsi", "ls"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["targetcli", "/backstores/block", "create", "name=_dev_zvol_tank_root", "dev=/dev/zvol/tank/root"]
+  and .executionResults[2].success == true
+  and .executionResults[2].argv == ["targetcli", "/iscsi", "create", "iqn.2026-06.example:storage.root"]
+  and .executionResults[3].success == false
+  and .executionResults[3].statusCode == 85
+  and .executionResults[3].argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root/tpg1/luns", "create", "/backstores/block/_dev_zvol_tank_root", "lun=7"]
+  and (.executionResults[3].stderr | contains("synthetic target-side LUN LIO create failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:storage.root:create"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root/tpg1/luns", "create", "/backstores/block/_dev_zvol_tank_root", "lun=7"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["targetluns:iqn.2026-06.example:storage.root:create"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 2
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["targetcli", "/iscsi", "ls"]))
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["multipath", "-ll"]))
+    and (.notes | any(contains("target-side LUN changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$target_lun_lio_json" >/dev/null
+
+cmp "$target_lun_lio_json" "$target_lun_lio_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "targetluns:iqn.2026-06.example:storage.root:create"
+  and .report.partialExecutionRecovery.failedCommand == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root/tpg1/luns", "create", "/backstores/block/_dev_zvol_tank_root", "lun=7"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 2
+' "$target_lun_lio_receipt" >/dev/null
+
 iscsi_tools="$tmpdir/fake-iscsi-tools"
 mkdir -p "$iscsi_tools"
 
@@ -1145,4 +1248,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, and LVM cache property failures"

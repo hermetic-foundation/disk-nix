@@ -894,6 +894,15 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                     | Operation::Grow,
                 Some("nvmeNamespaces")
             )
+            | (
+                Operation::Attach
+                    | Operation::Create
+                    | Operation::Destroy
+                    | Operation::Detach
+                    | Operation::Grow
+                    | Operation::Rescan,
+                Some("targetLuns")
+            )
     ) {
         return true;
     }
@@ -1215,6 +1224,19 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
         ) => commands.extend(swap_recovery_inspection_commands(
             step,
             "inspect swap state before choosing roll-forward",
+        )),
+        (
+            Operation::Attach
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Detach
+            | Operation::Grow
+            | Operation::Rescan,
+            Some("targetLuns"),
+            Some(target),
+        ) => commands.extend(target_lun_recovery_inspection_commands(
+            Some(target),
+            "inspect target-side LUN provider and host-visible path state before choosing roll-forward",
         )),
         (Operation::Destroy | Operation::RemoveDevice | Operation::Detach, Some("luns"), _) => {
             commands.push(command_vec(
@@ -1558,6 +1580,19 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
         ) => {
             swap_recovery_inspection_commands(step, "confirm swap state before rollback decisions")
         }
+        (
+            Operation::Attach
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Detach
+            | Operation::Grow
+            | Operation::Rescan,
+            Some("targetLuns"),
+            Some(target),
+        ) => target_lun_recovery_inspection_commands(
+            Some(target),
+            "confirm target-side LUN provider and host-visible path state before rollback decisions",
+        ),
         (Operation::Destroy | Operation::RemoveDevice | Operation::Detach, Some("luns"), _) => {
             vec![
                 command_vec(
@@ -1883,6 +1918,19 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
                 "inspect multipath maps after the failed session command",
             ));
         }
+        (
+            Operation::Attach
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Detach
+            | Operation::Grow
+            | Operation::Rescan,
+            Some("targetLuns"),
+            Some(target),
+        ) => commands.extend(target_lun_recovery_inspection_commands(
+            Some(target),
+            "inspect target-side LUN provider and host-visible path state after the failed command",
+        )),
         (
             Operation::Create
             | Operation::Destroy
@@ -2220,6 +2268,22 @@ fn domain_recovery_notes(
             );
         }
         (
+            Operation::Attach
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Detach
+            | Operation::Grow
+            | Operation::Rescan,
+            Some("targetLuns"),
+        ) => {
+            notes.push(
+                "for target-side LUN changes, inspect provider inventory, target mappings, host-visible SCSI paths, and multipath maps before retrying".to_string(),
+            );
+            notes.push(
+                "stage host-side luns, iSCSI sessions, and multipath rescans only after the target reports the intended mapping and capacity".to_string(),
+            );
+        }
+        (
             Operation::Create
             | Operation::Destroy
             | Operation::Grow
@@ -2403,6 +2467,7 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
             "multipathmaps" => "multipathMaps",
             "nvmenamespaces" => "nvmeNamespaces",
             "physicalvolumes" => "physicalVolumes",
+            "targetluns" => "targetLuns",
             "thinpools" => "thinPools",
             "volumegroups" => "volumeGroups",
             "vdovolumes" => "vdoVolumes",
@@ -2423,6 +2488,11 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     }
     if command_step_collection(step) == Some("iscsiSessions") {
         if let Some(target) = iscsi_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if command_step_collection(step) == Some("targetLuns") {
+        if let Some(target) = target_lun_target_from_step(step) {
             return Some(target);
         }
     }
@@ -3651,6 +3721,14 @@ fn nvme_controller_target_from_step(step: &ExecutionStep) -> Option<&str> {
     })
 }
 
+fn target_lun_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.action_id
+        .strip_prefix("targetluns:")
+        .or_else(|| step.action_id.strip_prefix("targetLuns:"))
+        .and_then(|rest| rest.rsplit_once(':').map(|(target, _)| target))
+        .filter(|target| !target.is_empty())
+}
+
 fn failed_result_notes(result: &ExecutionCommandResult) -> Vec<String> {
     let mut notes = vec![
         format!(
@@ -3666,6 +3744,39 @@ fn failed_result_notes(result: &ExecutionCommandResult) -> Vec<String> {
         notes.push(format!("stderr: {}", result.stderr.trim()));
     }
     notes
+}
+
+fn target_lun_recovery_inspection_commands(
+    target: Option<&str>,
+    note: &str,
+) -> Vec<ExecutionCommand> {
+    let mut commands = vec![
+        command_vec(["targetcli", "/iscsi", "ls"], false, note),
+        command_vec(
+            [
+                "tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show",
+            ],
+            false,
+            note,
+        ),
+        lsscsi_lun_inventory_command(note),
+        command_vec(["multipath", "-ll"], false, note),
+    ];
+    if let Some(target) = target {
+        commands.insert(
+            1,
+            command_vec(
+                vec![
+                    "targetcli".to_string(),
+                    format!("/iscsi/{target}"),
+                    "ls".to_string(),
+                ],
+                false,
+                note,
+            ),
+        );
+    }
+    commands
 }
 
 fn state_inspection_commands() -> Vec<ExecutionCommand> {
@@ -29112,6 +29223,140 @@ mod tests {
                 .remediation
                 .iter()
                 .any(|hint| hint.contains("pkgs.targetcli-fb"))
+        );
+    }
+
+    #[test]
+    fn failed_target_lun_lio_create_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:storage.root": {
+                    "operation": "create",
+                    "provider": "lio",
+                    "source": "/dev/zvol/tank/root",
+                    "lun": 7,
+                    "portal": "192.0.2.10:3260",
+                    "client": "iqn.2026-06.example:host.primary"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_lun_create = [
+            "targetcli",
+            "/iscsi/iqn.2026-06.example:storage.root/tpg1/luns",
+            "create",
+            "/backstores/block/_dev_zvol_tank_root",
+            "lun=7",
+        ];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_lun_create,
+                status_code: Some(if argv == failed_lun_create { 85 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_lun_create {
+                    "target LUN mapping failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success
+                && result.argv
+                    == [
+                        "targetcli",
+                        "/iscsi/iqn.2026-06.example:storage.root/tpg1/luns",
+                        "create",
+                        "/backstores/block/_dev_zvol_tank_root",
+                        "lun=7",
+                    ]
+        }));
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("target-side LUN domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Create"));
+        assert!(
+            domain_recovery.commands.iter().any(|command| {
+                command.argv == ["targetcli", "/iscsi", "ls"] && !command.mutates
+            })
+        );
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show",
+                ]
+                && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
+        );
+        assert!(domain_recovery.notes.iter().any(|note| {
+            note.contains("target-side LUN changes") && note.contains("provider inventory")
+        }));
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("target-side LUN roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+                && !command.mutates
+        }));
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "disk-nix",
+                    "apply",
+                    "--spec",
+                    "<spec>",
+                    "--probe-current",
+                    "--json",
+                ]
+                && command.readiness == CommandReadiness::ManualOnly
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("target-side LUN rollback recovery review is reported");
+        assert!(rollback.commands.iter().all(|command| !command.mutates));
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show",
+                ]
+                && !command.mutates
+        }));
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints)
         );
     }
 
