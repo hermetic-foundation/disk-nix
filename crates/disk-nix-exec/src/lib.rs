@@ -4004,6 +4004,25 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
     let desired_size = action.context.desired_size.as_deref();
 
     match action.operation {
+        Operation::Create
+        | Operation::Grow
+        | Operation::Attach
+        | Operation::Detach
+        | Operation::Destroy
+        | Operation::SetProperty
+        | Operation::Rescan
+            if collection == Some("targetLuns") || action.id.starts_with("targetLuns:") =>
+        {
+            (
+                target_lun_verification_commands(action, target),
+                vec![
+                    "target-side provider inventory shows the reviewed LUN identity, initiator mapping, and capacity"
+                        .to_string(),
+                    "host-side LUN and multipath consumers are refreshed only after provider verification"
+                        .to_string(),
+                ],
+            )
+        }
         Operation::Grow
             if collection == Some("filesystems") || action.id.starts_with("filesystem:") =>
         {
@@ -7267,6 +7286,27 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 true,
             )
         }
+        Operation::Create
+        | Operation::Grow
+        | Operation::Attach
+        | Operation::Detach
+        | Operation::Destroy
+        | Operation::SetProperty
+        | Operation::Rescan
+            if collection == Some("targetLuns") || action.id.starts_with("targetLuns:") =>
+        {
+            let target = target.unwrap_or("<target-lun>");
+            (
+                target_lun_commands(action, target),
+                vec![
+                    "target-side LUN work is provider-specific and stays non-ready until an array adapter or reviewed runbook renders concrete commands"
+                        .to_string(),
+                    "run host-side luns, iscsiSessions, and multipath rescans only after the target reports the intended mapping and capacity"
+                        .to_string(),
+                ],
+                true,
+            )
+        }
         Operation::Grow | Operation::Rescan
             if collection == Some("iscsiSessions") || action.id.starts_with("iscsiSessions:") =>
         {
@@ -10520,6 +10560,127 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             true,
         ),
     }
+}
+
+fn target_lun_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCommand> {
+    let operation = operation_name(action.operation);
+    let desired_size = action.context.desired_size.as_deref();
+    vec![
+        target_lun_inventory_command(
+            target,
+            "inspect target-side LUN inventory before provider mutation",
+        ),
+        target_lun_provider_command(action, target, &operation, desired_size),
+        target_lun_inventory_command(
+            target,
+            "inspect target-side LUN inventory after provider mutation",
+        ),
+    ]
+}
+
+fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCommand> {
+    let mut commands = vec![target_lun_inventory_command(
+        target,
+        "verify target-side LUN inventory after provider action",
+    )];
+    if let Some(portal) = action.context.portal.as_deref() {
+        commands.push(command_vec_with_readiness(
+            vec![
+                "<target-lun-provider>".to_string(),
+                "show-mapping".to_string(),
+                "--portal".to_string(),
+                portal.to_string(),
+                "--target".to_string(),
+                target.to_string(),
+            ],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["target LUN provider implementation"],
+            "verify target-side portal mapping after provider action",
+        ));
+    }
+    commands
+}
+
+fn target_lun_inventory_command(target: &str, note: &str) -> ExecutionCommand {
+    command_vec_with_readiness(
+        vec![
+            "<target-lun-provider>".to_string(),
+            "show-lun".to_string(),
+            "--target".to_string(),
+            target.to_string(),
+        ],
+        false,
+        CommandReadiness::NeedsDomainImplementation,
+        ["target LUN provider implementation"],
+        note,
+    )
+}
+
+fn target_lun_provider_command(
+    action: &PlannedAction,
+    target: &str,
+    operation: &str,
+    desired_size: Option<&str>,
+) -> ExecutionCommand {
+    let provider_operation = match action.operation {
+        Operation::Create => "create-lun",
+        Operation::Grow => "grow-lun",
+        Operation::Attach => "map-lun",
+        Operation::Detach => "unmap-lun",
+        Operation::Destroy => "destroy-lun",
+        Operation::SetProperty => "set-lun-property",
+        Operation::Rescan => "refresh-lun",
+        _ => operation,
+    };
+    let mut argv = vec![
+        "<target-lun-provider>".to_string(),
+        provider_operation.to_string(),
+        "--target".to_string(),
+        target.to_string(),
+    ];
+    let mut unresolved_inputs = vec!["target LUN provider implementation".to_string()];
+    if matches!(action.operation, Operation::Create | Operation::Grow) {
+        match desired_size {
+            Some(size) => {
+                argv.push("--size".to_string());
+                argv.push(size.to_string());
+            }
+            None => unresolved_inputs.push("desired LUN size".to_string()),
+        }
+    }
+    if let Some(backing) = action.context.device.as_deref() {
+        argv.push("--backing".to_string());
+        argv.push(backing.to_string());
+    }
+    if let Some(portal) = action.context.portal.as_deref() {
+        argv.push("--portal".to_string());
+        argv.push(portal.to_string());
+    }
+    if let Some(client) = action.context.client.as_deref() {
+        argv.push("--initiator".to_string());
+        argv.push(client.to_string());
+    }
+    for initiator in &action.context.devices {
+        argv.push("--initiator".to_string());
+        argv.push(initiator.clone());
+    }
+    if let Some(property) = action.context.property.as_deref() {
+        argv.push("--property".to_string());
+        argv.push(property.to_string());
+    }
+    if let Some(value) = action.context.property_value.as_deref() {
+        argv.push("--value".to_string());
+        argv.push(value.to_string());
+    }
+
+    command_vec_with_readiness(
+        argv,
+        action.operation != Operation::Rescan,
+        CommandReadiness::NeedsDomainImplementation,
+        unresolved_inputs,
+        &format!("render provider-specific target-side LUN {operation} command"),
+    )
 }
 
 fn unimplemented_action_command(
@@ -27616,6 +27777,108 @@ mod tests {
                         ]
                         && command.readiness == CommandReadiness::Ready
                 })
+        }));
+    }
+
+    #[test]
+    fn target_lun_lifecycle_renders_provider_handoff_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "array-a/root": {
+                    "operation": "create",
+                    "desiredSize": "2TiB",
+                    "source": "pool-a/volumes/root",
+                    "portal": "192.0.2.10:3260",
+                    "client": "iqn.2026-06.example:host.primary",
+                    "initiators": [
+                      "iqn.2026-06.example:host.secondary"
+                    ]
+                  },
+                  "array-a/root-grow": {
+                    "operation": "grow",
+                    "target": "array-a/root",
+                    "desiredSize": "3TiB"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 6);
+        assert!(!report.command_summary.all_commands_ready());
+
+        let create = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:array-a/root:create")
+            .expect("target-side LUN create command plan exists");
+        assert!(create.requires_manual_review);
+        assert!(create.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "<target-lun-provider>",
+                    "create-lun",
+                    "--target",
+                    "array-a/root",
+                    "--size",
+                    "2TiB",
+                    "--backing",
+                    "pool-a/volumes/root",
+                    "--portal",
+                    "192.0.2.10:3260",
+                    "--initiator",
+                    "iqn.2026-06.example:host.primary",
+                    "--initiator",
+                    "iqn.2026-06.example:host.secondary",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command
+                    .unresolved_inputs
+                    .contains(&"target LUN provider implementation".to_string())
+        }));
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "targetluns:array-a/root:create"
+                && step.commands.iter().any(|command| {
+                    command.argv
+                        == [
+                            "<target-lun-provider>",
+                            "show-mapping",
+                            "--portal",
+                            "192.0.2.10:3260",
+                            "--target",
+                            "array-a/root",
+                        ]
+                        && !command.mutates
+                })
+        }));
+
+        let grow = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:array-a/root-grow:grow")
+            .expect("target-side LUN grow command plan exists");
+        assert!(grow.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "<target-lun-provider>",
+                    "grow-lun",
+                    "--target",
+                    "array-a/root",
+                    "--size",
+                    "3TiB",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::NeedsDomainImplementation
         }));
     }
 

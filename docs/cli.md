@@ -1064,9 +1064,14 @@ SCSI path devices before reloading multipath. Legacy LUN `create` and
 `destroy` map to the same command plans.
 Attach, rescan, grow, and detach remain non-ready until stable paths are
 declared through `device`, `path`, `devices`, `paths`, or `devicePaths`.
-Target-side array
-provisioning or deletion must be handled outside the host plan unless a future
-target adapter is added.
+Target-side array provisioning is modeled separately through `targetLuns`.
+`targetLuns.<name>.operation = "create"` and `operation = "grow"` render
+provider-specific `<target-lun-provider>` placeholders with reviewed target,
+size, backing object, portal, and initiator inputs. `operation = "attach"` and
+`operation = "detach"` model target-side mapping and unmapping. These commands
+remain non-ready until an array adapter or reviewed runbook supplies concrete
+provider commands; host-side `luns`, `iscsiSessions`, and `multipathMaps`
+rescans should follow target-side verification.
 The capability inventory advertises iSCSI login/logout, LUN attach/detach, and
 NVMe namespace attach/detach as host lifecycle operations, distinct from
 target-side LUN provisioning or destructive namespace deletion.

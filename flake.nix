@@ -1992,6 +1992,7 @@
               and (."$defs".specBody.properties.pools["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.datasets["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.luns["$ref"] == "#/$defs/lifecycleMap")
+              and (."$defs".specBody.properties.targetLuns["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.nvmeNamespaces["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.iscsiSessions["$ref"] == "#/$defs/lifecycleMap")
               and (."$defs".specBody.properties.exports["$ref"] == "#/$defs/lifecycleMap")

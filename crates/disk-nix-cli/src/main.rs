@@ -1044,6 +1044,9 @@ fn spec_schema() -> serde_json::Value {
             "luns": {
                 "$ref": "#/$defs/lifecycleMap"
             },
+            "targetLuns": {
+                "$ref": "#/$defs/lifecycleMap"
+            },
             "nvmeNamespaces": {
                 "$ref": "#/$defs/lifecycleMap"
             },
@@ -1098,6 +1101,7 @@ fn spec_schema() -> serde_json::Value {
                     "datasets": { "$ref": "#/$defs/lifecycleMap" },
                     "zvols": { "$ref": "#/$defs/lifecycleMap" },
                     "luns": { "$ref": "#/$defs/lifecycleMap" },
+                    "targetLuns": { "$ref": "#/$defs/lifecycleMap" },
                     "nvmeNamespaces": { "$ref": "#/$defs/lifecycleMap" },
                     "iscsiSessions": { "$ref": "#/$defs/lifecycleMap" },
                     "exports": { "$ref": "#/$defs/lifecycleMap" },
@@ -1307,6 +1311,18 @@ fn spec_schema() -> serde_json::Value {
                     "device": { "type": "string" },
                     "disk": { "type": "string" },
                     "client": { "type": "string" },
+                    "initiators": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "initiatorIqns": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "clients": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
                     "portal": { "type": "string" },
                     "namespaceId": { "type": ["string", "number"] },
                     "nsid": { "type": ["string", "number"] },

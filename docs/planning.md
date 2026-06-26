@@ -415,6 +415,17 @@ Examples:
   `path`, `devices`, `paths`, or `devicePaths`, apply plans render per-path SCSI
   rescans or deletes in addition to broad iSCSI session, `lsscsi`, and
   multipath refreshes.
+  Target-side provisioning is modeled separately through `targetLuns`.
+  `targetLuns.<name>.operation = "create"` and `operation = "grow"` describe
+  external storage-target allocation or capacity changes, while
+  `operation = "attach"` and `operation = "detach"` model mapping and unmapping
+  the reviewed target LUN to initiators. These actions are provider-specific:
+  apply reports emit non-ready `<target-lun-provider>` handoff commands carrying
+  the target identity, desired size, backing object, portal, and initiators, plus
+  read-only inventory verification placeholders. They remain blocked from
+  execution until an array adapter or reviewed runbook renders concrete
+  provider commands. Host-side `luns`, `iscsiSessions`, and `multipathMaps`
+  rescans should be staged after target-side verification.
   Current-topology comparison suppresses attach actions only when the declared
   LUN path is already visible and suppresses detach actions only when the
   declared LUN path is already absent; opposite states stay actionable with a
@@ -599,6 +610,8 @@ Lifecycle objects may use:
 - `name`, `snapshotName`, or `snapshot-name`: explicit snapshot identity when a
   snapshot declaration uses a friendly attribute name
 - `device` or `disk`: backing device path for disk, partition, and LUN operations
+- `initiators`, `initiatorIqns`, or `clients`: initiator identities for
+  target-side LUN mapping requests
 - `level` or `raidLevel`: MD RAID level for reviewed array creation
 - `client`: NFS export client or network selector
 - `portal`: iSCSI target portal such as `192.0.2.10:3260`; `metadata.portal`

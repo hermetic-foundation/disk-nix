@@ -184,9 +184,12 @@ to overwrite an existing path before rendering sparse-file growth.
 
 Unsupported or unsafe requests are kept explicit. Examples include XFS shrink,
 unsupported filesystem or Btrfs subvolume properties, unsupported VDO property
-values, target-side LUN provisioning, and actions whose concrete identity or
-required input is not declared. These produce machine-readable blocked actions,
-manual-review guidance, or non-ready command plans instead of guessing.
+values, target-side LUN provider execution, and actions whose concrete identity
+or required input is not declared. These produce machine-readable blocked
+actions, manual-review guidance, or non-ready command plans instead of
+guessing. Target-side LUN provisioning itself is now modeled through
+`targetLuns` with provider handoff commands and verification placeholders, but
+concrete array adapters remain future work.
 
 ## Remaining for feature complete
 

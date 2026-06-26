@@ -153,7 +153,10 @@ Update rules:
   unsupported filesystem properties, unsupported Btrfs subvolume properties, and
   unsupported VDO property values are blocked or forced to manual review instead
   of being guessed.
-- [ ] **Desired:** Target-side LUN provisioning.
+- [ ] **Partial:** Target-side LUN provisioning is modeled through
+  `targetLuns` create, grow, map, unmap, remove, rescan, and property handoff
+  actions with non-ready provider commands and verification placeholders, but
+  concrete array/provider adapters are not implemented yet.
 - [ ] **Partial:** Multi-layer lifecycle groups such as LUN refresh,
   multipath refresh, partition growth, LUKS/LVM resize, and filesystem growth
   need stronger ordering, reconciliation, and recovery proof before they are

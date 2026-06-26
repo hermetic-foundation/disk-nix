@@ -773,6 +773,7 @@ pub fn plan_from_value(value: &Value) -> Plan {
         "datasets",
         "zvols",
         "luns",
+        "targetLuns",
         "nvmeNamespaces",
         "iscsiSessions",
         "exports",
@@ -1233,9 +1234,10 @@ fn action_dependency_inputs(action: &PlannedAction) -> BTreeSet<String> {
             insert_identity(&mut inputs, action.context.target.as_deref());
             insert_identity(&mut inputs, action.context.device.as_deref());
         }
-        Some("luns") => {
+        Some("luns") | Some("targetLuns") => {
             insert_identity(&mut inputs, action.context.portal.as_deref());
             insert_identity(&mut inputs, action.context.target.as_deref());
+            insert_identity(&mut inputs, action.context.device.as_deref());
         }
         Some("volumes") | Some("thinPools") | Some("lvmCaches") | Some("lvmSnapshots") => {
             insert_lvm_parent_identities(&mut inputs, action.context.target.as_deref());
@@ -1469,6 +1471,7 @@ fn collection_dependency_rank(collection: Option<&str>) -> u16 {
         Some("disks") => 20,
         Some("iscsiSessions") => 25,
         Some("nvmeNamespaces") => 30,
+        Some("targetLuns") => 32,
         Some("luns") => 35,
         Some("partitions") => 40,
         Some("mdRaids") | Some("multipathMaps") => 45,
@@ -7324,7 +7327,7 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
 }
 
 fn lifecycle_device(collection: &str, object: &Value) -> Option<String> {
-    let keys: &[&str] = if collection == "luns" {
+    let keys: &[&str] = if collection == "luns" || collection == "targetLuns" {
         &["device", "disk", "source", "path"]
     } else {
         &["device", "disk", "source"]
@@ -7335,6 +7338,14 @@ fn lifecycle_device(collection: &str, object: &Value) -> Option<String> {
 fn lifecycle_devices(collection: &str, object: &Value) -> Vec<String> {
     let keys: &[&str] = if collection == "luns" {
         &["devices", "devicePaths", "paths", "addDevices"]
+    } else if collection == "targetLuns" {
+        &[
+            "initiators",
+            "initiatorIqns",
+            "clients",
+            "devices",
+            "addDevices",
+        ]
     } else {
         &["devices", "addDevices"]
     };
@@ -10429,6 +10440,23 @@ fn classify_operation(
                 ],
             }),
         ),
+        Operation::Create | Operation::Attach if collection == "targetLuns" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary:
+                    "target-side LUN provisioning allocates or maps storage on an external target"
+                        .to_string(),
+                alternatives: vec![
+                    "use an array-specific provider or storage runbook before host-side attach"
+                        .to_string(),
+                    "record the backing object, initiator mapping, LUN number, and expected size before rescanning hosts"
+                        .to_string(),
+                    "prefer mapping an existing reviewed LUN when preserving data is required"
+                        .to_string(),
+                ],
+            }),
+        ),
         Operation::Create if collection == "nvmeNamespaces" => (
             RiskClass::Destructive,
             true,
@@ -10682,6 +10710,7 @@ fn classify_operation(
         ),
         Operation::Rescan
             if collection == "luns"
+                || collection == "targetLuns"
                 || collection == "iscsiSessions"
                 || collection == "nvmeNamespaces"
                 || collection == "multipathMaps" =>
@@ -10716,6 +10745,21 @@ fn classify_operation(
                     "rescan block paths before refreshing LVM metadata on newly visible devices"
                         .to_string(),
                     "verify VG free extents and LV activation state after the metadata refresh"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Grow if collection == "targetLuns" => (
+            RiskClass::OfflineRequired,
+            false,
+            Some(Advice {
+                summary: "target-side LUN growth changes capacity on the storage target"
+                    .to_string(),
+                alternatives: vec![
+                    "grow the target object before host rescans and consumer resizes".to_string(),
+                    "verify snapshots, replication, and thin provisioning limits before increasing capacity"
+                        .to_string(),
+                    "stage host-side luns and multipath rescans after the target reports the new size"
                         .to_string(),
                 ],
             }),
@@ -10895,6 +10939,22 @@ fn classify_operation(
                     "verify multipath, LVM, and filesystem consumers have migrated away"
                         .to_string(),
                     "disable automatic login only after dependent services no longer need the LUN"
+                        .to_string(),
+                ],
+            }),
+        ),
+        Operation::Destroy | Operation::Detach if collection == "targetLuns" => (
+            RiskClass::PotentialDataLoss,
+            false,
+            Some(Advice {
+                summary:
+                    "target-side LUN unmapping or removal can make remote storage unavailable"
+                        .to_string(),
+                alternatives: vec![
+                    "unmap from initiators before deleting target-side storage".to_string(),
+                    "detach host paths and verify no multipath, LVM, filesystem, or guest consumers remain"
+                        .to_string(),
+                    "preserve or snapshot the backing object until post-removal verification passes"
                         .to_string(),
                 ],
             }),
@@ -11436,7 +11496,8 @@ fn destructive_alternatives(collection: &str, object: &Value) -> Vec<String> {
             alternatives
                 .push("rename the subvolume and validate consumers before removal".to_string());
         }
-        "volumes" | "volumeGroups" | "thinPools" | "luns" | "mdRaids" | "multipathMaps" => {
+        "volumes" | "volumeGroups" | "thinPools" | "luns" | "targetLuns" | "mdRaids"
+        | "multipathMaps" => {
             alternatives
                 .push("grow or attach replacement capacity instead of reformatting".to_string());
         }
@@ -26704,6 +26765,88 @@ mod tests {
                 .iter()
                 .any(|alternative| alternative.contains("multipath"))
         }));
+    }
+
+    #[test]
+    fn plan_accepts_target_side_lun_provisioning_requests() {
+        let plan = plan_from_json_bytes(
+            br#"{
+              "targetLuns": {
+                "array-a/root": {
+                  "operation": "create",
+                  "desiredSize": "2TiB",
+                  "source": "pool-a/volumes/root",
+                  "portal": "192.0.2.10:3260",
+                  "client": "iqn.2026-06.example:host.primary",
+                  "initiators": [
+                    "iqn.2026-06.example:host.secondary"
+                  ],
+                  "properties": {
+                    "thinProvisioned": true
+                  }
+                },
+                "array-a/old": {
+                  "operation": "detach",
+                  "preserveData": true
+                }
+              }
+            }"#,
+        )
+        .expect("plan should parse");
+
+        assert_eq!(plan.summary.action_count, 3);
+        assert_eq!(plan.summary.offline_required_count, 1);
+        assert_eq!(plan.summary.potential_data_loss_count, 1);
+
+        let create = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "targetluns:array-a/root:create")
+            .expect("target-side LUN create action exists");
+        assert_eq!(create.operation, Operation::Create);
+        assert_eq!(create.risk, RiskClass::OfflineRequired);
+        assert_eq!(create.context.collection.as_deref(), Some("targetLuns"));
+        assert_eq!(create.context.desired_size.as_deref(), Some("2TiB"));
+        assert_eq!(
+            create.context.device.as_deref(),
+            Some("pool-a/volumes/root")
+        );
+        assert_eq!(create.context.portal.as_deref(), Some("192.0.2.10:3260"));
+        assert_eq!(
+            create.context.client.as_deref(),
+            Some("iqn.2026-06.example:host.primary")
+        );
+        assert_eq!(
+            create.context.devices,
+            vec!["iqn.2026-06.example:host.secondary".to_string()]
+        );
+        assert!(
+            create
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("target-side LUN provisioning") })
+        );
+
+        let property = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "targetLuns:array-a/root:set-property:thinProvisioned")
+            .expect("target-side LUN property action exists");
+        assert_eq!(property.operation, Operation::SetProperty);
+        assert_eq!(property.risk, RiskClass::Safe);
+        assert_eq!(
+            property.context.property.as_deref(),
+            Some("thinProvisioned")
+        );
+
+        let detach = plan
+            .actions
+            .iter()
+            .find(|action| action.id == "targetluns:array-a/old:detach")
+            .expect("target-side LUN detach action exists");
+        assert_eq!(detach.operation, Operation::Detach);
+        assert_eq!(detach.risk, RiskClass::PotentialDataLoss);
+        assert!(!detach.destructive);
     }
 
     #[test]
