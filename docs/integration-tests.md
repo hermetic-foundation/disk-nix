@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for eighty-four failed apply paths:
+fake storage tools ahead of `PATH` for eighty-five failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -240,6 +240,9 @@ fake storage tools ahead of `PATH` for eighty-four failed apply paths:
 - an MD RAID assemble where fake `/proc/mdstat` inspection succeeds and fake
   `mdadm --assemble /dev/md/existing /dev/disk/by-id/nvme-a /dev/disk/by-id/nvme-b`
   fails after the reviewed offline gate is enabled
+- an MD RAID stop where fake `mdadm --detail /dev/md/oldroot` succeeds and
+  fake `mdadm --stop /dev/md/oldroot` fails after the reviewed offline gate is
+  enabled
 - an MD RAID grow where fake `mdadm --detail /dev/md/root` succeeds and fake
   `mdadm --grow /dev/md/root --size max` fails
 - an MD RAID member replacement where fake `mdadm --detail /dev/md/root`
@@ -470,6 +473,9 @@ The test verifies that the failed report and receipt preserve:
 - the failed
   `mdadm --assemble /dev/md/existing /dev/disk/by-id/nvme-a /dev/disk/by-id/nvme-b`
   command and non-zero status after successful `/proc/mdstat` inspection
+- `partialExecutionRecovery.failedActionId` as `mdraids:oldroot:stop`
+- the failed `mdadm --stop /dev/md/oldroot` command and non-zero status after
+  successful MD detail inspection
 - `partialExecutionRecovery.failedActionId` as
   `mdRaids:root:add-device:/dev/disk/by-id/nvme-spare`
 - the failed `mdadm /dev/md/root --add /dev/disk/by-id/nvme-spare` command and
@@ -1075,7 +1081,7 @@ concrete property rendering, target-side LUN tgt property, target-side LUN tgt
 rescan, target-side LUN SCST create, target-side LUN SCST attach,
 target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST
 grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath
-resize, multipath add, multipath remove, multipath flush, multipath replace, MD RAID create, MD RAID assemble, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
+resize, multipath add, multipath remove, multipath flush, multipath replace, MD RAID create, MD RAID assemble, MD RAID stop, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove,
 LUKS token remove, LUKS property, partition grow, NFS
 remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login,
