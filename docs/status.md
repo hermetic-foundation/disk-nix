@@ -165,7 +165,7 @@ behavior across real storage stacks.
   prove `partialExecutionRecovery`, failed-command receipts, roll-forward
   review, rollback review, snapshot-preservation, and domain-recovery
   reporting for a layered LVM-plus-filesystem apply failure, LVM grow failure,
-  XFS grow failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
+  XFS grow failure, Btrfs scrub failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create, attach, detach, and destroy
   failures, Linux tgt create, attach, detach, and destroy failures, multipath
   resize and replacement failures, MD RAID member replacement failure, LUKS
@@ -231,9 +231,9 @@ placeholders until concrete adapters are added.
   variants,
   additional cache variants, additional NVMe namespace variants, additional LUN
   flows, property mutation across more supported domains, and failed-command
-  recovery beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, swap
-  label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS
-  snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
+  recovery beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
+  scrub, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot
+  clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
   namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
   LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
   target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt
