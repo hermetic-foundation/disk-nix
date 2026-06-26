@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for forty-seven failed apply paths:
+fake storage tools ahead of `PATH` for forty-eight failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -179,6 +179,8 @@ fake storage tools ahead of `PATH` for forty-seven failed apply paths:
   `cryptsetup open /dev/disk/by-id/archive-luks cryptarchive` fails
 - a LUKS mapper close where fake `cryptsetup status cryptclosed` succeeds and
   fake `cryptsetup close cryptclosed` fails
+- a LUKS grow where fake backing-device and mapper inspections succeed and fake
+  `cryptsetup resize cryptroot` fails
 - a LUKS keyslot add where fake `cryptsetup luksDump /dev/disk/by-id/root-luks`
   succeeds and fake
   `cryptsetup luksAddKey --key-slot 1 /dev/disk/by-id/root-luks /run/keys/root-new`
@@ -303,6 +305,9 @@ The test verifies that the failed report and receipt preserve:
   `luks.devices:cryptclosed:close`
 - the failed `cryptsetup close cryptclosed` command and non-zero status after
   mapper status inspection
+- `partialExecutionRecovery.failedActionId` as `luks.devices:cryptroot:grow`
+- the failed `cryptsetup resize cryptroot` command and non-zero status after
+  backing-device and mapper inspections
 - `partialExecutionRecovery.failedActionId` as
   `lukskeyslots:cryptroot:1:add-key`
 - the failed
@@ -821,7 +826,7 @@ LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
 target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt
 attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath
 resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS
-keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
+grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
 grow, VDO property, bcache property, and LVM cache property failed-command
 paths, and broader destructive apply behavior.

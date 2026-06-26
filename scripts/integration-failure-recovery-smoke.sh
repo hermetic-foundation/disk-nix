@@ -3308,6 +3308,105 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$luks_close_receipt" >/dev/null
 
+luks_grow_tools="$tmpdir/fake-luks-grow-tools"
+mkdir -p "$luks_grow_tools"
+
+cat > "$luks_grow_tools/cryptsetup" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "resize cryptroot" ]]; then
+  echo "synthetic LUKS grow failure for disk-nix recovery coverage" >&2
+  exit 89
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$luks_grow_tools/cryptsetup"
+
+luks_grow_spec="$tmpdir/luks-grow-spec.json"
+luks_grow_json="$tmpdir/luks-grow-apply.json"
+luks_grow_report="$tmpdir/luks-grow-report.json"
+luks_grow_receipt="$tmpdir/luks-grow-receipt.json"
+
+jq -n '{
+  luks: {
+    devices: {
+      cryptroot: {
+        name: "cryptroot",
+        device: "/dev/disk/by-partuuid/root",
+        operation: "grow"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowGrow: true
+  }
+}' > "$luks_grow_spec"
+
+if PATH="$luks_grow_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$luks_grow_spec" \
+  --execute \
+  --report-out "$luks_grow_report" \
+  --receipt-out "$luks_grow_receipt" \
+  --json > "$luks_grow_json"; then
+  echo "expected synthetic LUKS grow failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 3
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/dev/disk/by-partuuid/root"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["cryptsetup", "status", "cryptroot"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 89
+  and .executionResults[2].argv == ["cryptsetup", "resize", "cryptroot"]
+  and (.executionResults[2].stderr | contains("synthetic LUKS grow failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "luks.devices:cryptroot:grow"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["cryptsetup", "resize", "cryptroot"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["luks.devices:cryptroot:grow"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["cryptsetup", "status", "cryptroot"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "cryptroot", "--json"]))
+    and (.notes | any(contains("LUKS changes")))
+    and (.notes | any(contains("dependent consumers")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["cryptsetup", "status", "cryptroot"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "cryptroot", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["cryptsetup", "status", "cryptroot"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "cryptroot", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$luks_grow_json" >/dev/null
+
+cmp "$luks_grow_json" "$luks_grow_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "luks.devices:cryptroot:grow"
+  and .report.partialExecutionRecovery.failedCommand == ["cryptsetup", "resize", "cryptroot"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$luks_grow_receipt" >/dev/null
+
 luks_keyslot_add_tools="$tmpdir/fake-luks-keyslot-add-tools"
 mkdir -p "$luks_keyslot_add_tools"
 
@@ -4673,4 +4772,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
