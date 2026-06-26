@@ -165,7 +165,8 @@ behavior across real storage stacks.
   prove `partialExecutionRecovery`, failed-command receipts, roll-forward
   review, rollback review, snapshot-preservation, and domain-recovery
   reporting for both a layered LVM-plus-filesystem apply failure and a ZFS
-  rollback failure without touching real block devices.
+  rollback failure, plus an NVMe namespace delete failure after a successful
+  synthetic detach, without touching real block devices.
 
 ## Implemented probe coverage
 
@@ -219,9 +220,9 @@ placeholders until concrete adapters are added.
 
 - Broader destructive and failure-path integration tests beyond the smoke
   suite, including device replacement, degraded arrays, cache attach/detach,
-  namespace creation/deletion, LUN login/logout flows, property mutation across
+  namespace creation flows, LUN login/logout flows, property mutation across
   supported domains, and failed-command recovery beyond the synthetic
-  LVM-plus-filesystem and ZFS rollback paths.
+  LVM-plus-filesystem, ZFS rollback, and NVMe namespace delete paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional

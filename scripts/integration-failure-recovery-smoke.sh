@@ -217,4 +217,100 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$rollback_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize and ZFS rollback failures"
+nvme_tools="$tmpdir/fake-nvme-tools"
+mkdir -p "$nvme_tools"
+
+cat > "$nvme_tools/nvme" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "delete-ns" ]]; then
+  echo "synthetic nvme namespace delete failure for disk-nix recovery coverage" >&2
+  exit 75
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$nvme_tools/nvme"
+
+nvme_spec="$tmpdir/nvme-spec.json"
+nvme_json="$tmpdir/nvme-apply.json"
+nvme_report="$tmpdir/nvme-report.json"
+nvme_receipt="$tmpdir/nvme-receipt.json"
+
+jq -n '{
+  nvmeNamespaces: {
+    "/dev/nvme4": {
+      destroy: true,
+      namespaceId: "9",
+      controllers: "0x4"
+    }
+  },
+  apply: {
+    allowDestructive: true,
+    allowOffline: true
+  }
+}' > "$nvme_spec"
+
+if PATH="$nvme_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$nvme_spec" \
+  --execute \
+  --report-out "$nvme_report" \
+  --receipt-out "$nvme_receipt" \
+  --json > "$nvme_json"; then
+  echo "expected synthetic NVMe namespace delete failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 6
+  and (.executionResults | length) == 4
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["nvme", "list-ns", "/dev/nvme4", "--all", "--output-format=json"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["nvme", "list-subsys", "--output-format=json"]
+  and .executionResults[2].success == true
+  and .executionResults[2].argv == ["nvme", "detach-ns", "/dev/nvme4", "--namespace-id", "9", "--controllers", "0x4"]
+  and .executionResults[3].success == false
+  and .executionResults[3].statusCode == 75
+  and .executionResults[3].argv == ["nvme", "delete-ns", "/dev/nvme4", "--namespace-id", "9"]
+  and (.executionResults[3].stderr | contains("synthetic nvme namespace delete failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "nvmenamespaces:/dev/nvme4:destroy"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["nvme", "delete-ns", "/dev/nvme4", "--namespace-id", "9"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["nvmenamespaces:/dev/nvme4:destroy"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 1
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["nvme", "list-ns", "/dev/nvme4", "--all", "--output-format=json"]))
+    and (.commands | any(.argv == ["nvme", "list-subsys", "--output-format=json"]))
+    and (.notes | any(contains("NVMe namespace changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["nvme", "list-ns", "/dev/nvme4", "--all", "--output-format=json"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["nvme", "list-subsys", "--output-format=json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$nvme_json" >/dev/null
+
+cmp "$nvme_json" "$nvme_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "nvmenamespaces:/dev/nvme4:destroy"
+  and .report.partialExecutionRecovery.failedCommand == ["nvme", "delete-ns", "/dev/nvme4", "--namespace-id", "9"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
+' "$nvme_receipt" >/dev/null
+
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, and NVMe namespace delete failures"
