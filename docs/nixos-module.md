@@ -955,7 +955,9 @@ successfully even when policy blocks planned actions.
 pass. The module requires `failOnBlocked = true` for this mode because
 `disk-nix validate` is report-only.
 `scriptOut` must be an absolute path. The apply service creates its parent
-directory before asking the CLI to write the review script.
+directory before asking the CLI to write the review script; script generation
+still refuses policy-blocked or graph-conflicting plans so activation artifacts
+do not imply a runnable order where none has been proven.
 `reportOut` must also be an absolute path. The apply service creates its parent
 directory before asking the CLI to write the JSON apply report.
 `receiptOut` must also be an absolute path. The apply service creates its

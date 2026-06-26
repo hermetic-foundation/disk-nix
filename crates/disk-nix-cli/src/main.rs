@@ -1590,16 +1590,48 @@ fn confirmation_file_accepts(content: &str) -> bool {
 }
 
 fn write_execution_script(path: &str, report: &ExecutionReport) -> Result<(), AppError> {
-    let script = report.to_shell_script().ok_or_else(|| {
-        AppError::Message(
-            "script generation requires apply policy to allow every planned action".to_string(),
-        )
-    })?;
+    let script = report
+        .to_shell_script()
+        .ok_or_else(|| AppError::Message(script_refusal_message(report)))?;
     std::fs::write(path, script)?;
     let mut permissions = std::fs::metadata(path)?.permissions();
     permissions.set_mode(0o700);
     std::fs::set_permissions(path, permissions)?;
     Ok(())
+}
+
+fn script_refusal_message(report: &ExecutionReport) -> String {
+    let graph_dependency_conflict_count =
+        report.topology_comparison.as_ref().map_or(0, |comparison| {
+            comparison.summary.graph_dependency_conflict_count
+        });
+    let mut reasons = Vec::new();
+    if !report.apply.can_execute() {
+        reasons.push(format!(
+            "apply policy blocks {} action(s)",
+            report.apply.blocked_count
+        ));
+    }
+    if graph_dependency_conflict_count > 0 {
+        reasons.push(format!(
+            "{graph_dependency_conflict_count} graph dependency conflict(s) require plan splitting or ordering review"
+        ));
+    }
+    if !report.command_summary.all_commands_ready() {
+        reasons.push(format!(
+            "{} command(s) need desired size, {} need domain command implementation, {} are manual-only",
+            report.command_summary.needs_desired_size_count,
+            report.command_summary.needs_domain_implementation_count,
+            report.command_summary.manual_only_count
+        ));
+    }
+    if reasons.is_empty() {
+        reasons.push("report is not in a scriptable dry-run state".to_string());
+    }
+    format!(
+        "script generation requires a policy-allowed, conflict-free command plan: {}",
+        reasons.join("; ")
+    )
 }
 
 fn write_execution_report(path: &str, report: &ExecutionReport) -> Result<(), AppError> {
@@ -4886,7 +4918,7 @@ fn human_bytes(value: Option<u64>) -> String {
 mod tests {
     use disk_nix_exec::{ExecutionMode, prepare_execution};
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
-    use disk_nix_plan::plan_and_policy_from_json_bytes;
+    use disk_nix_plan::{compare_plan_with_topology, plan_and_policy_from_json_bytes};
     use disk_nix_probe::{ProbeReport, ProbeStatus};
     use serde_json::Value;
 
@@ -4904,8 +4936,8 @@ mod tests {
         print_mappings, print_migration_report, print_mounts, print_multipath,
         print_network_storage, print_nfs, print_nvme, print_partitions, print_pools,
         print_probe_reports, print_raid, print_snapshots, print_swap, print_usage, print_vdo,
-        print_volumes, print_zfs, print_zram, snapshot_source, usage_details, usage_percent,
-        zfs_child_count,
+        print_volumes, print_zfs, print_zram, script_refusal_message, snapshot_source,
+        usage_details, usage_percent, zfs_child_count,
     };
 
     #[test]
@@ -4963,6 +4995,64 @@ mod tests {
         assert_eq!(value["generatedAtUnixSeconds"], 42);
         assert_eq!(value["report"]["status"], "dry-run");
         assert!(value["report"]["commandSummary"].is_object());
+    }
+
+    #[test]
+    fn script_refusal_message_mentions_graph_dependency_conflicts() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "root": {
+                    "operation": "grow",
+                    "device": "/dev/mapper/cryptroot",
+                    "mountpoint": "/",
+                    "fsType": "xfs",
+                    "resizePolicy": "grow-only",
+                    "desiredSize": "200GiB"
+                  }
+                },
+                "luks": {
+                  "devices": {
+                    "cryptroot": {
+                      "operation": "close",
+                      "device": "/dev/disk/by-partuuid/root",
+                      "target": "cryptroot"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowGrow": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("spec should parse");
+        let mut graph = StorageGraph::empty();
+        graph.add_node(
+            Node::new("luks:cryptroot", NodeKind::LuksContainer, "cryptroot")
+                .with_path("/dev/mapper/cryptroot"),
+        );
+        graph.add_node(
+            Node::new("filesystem:/", NodeKind::Filesystem, "root")
+                .with_path("/")
+                .with_property("filesystem.type", "xfs")
+                .with_size_bytes(100 * 1024 * 1024 * 1024),
+        );
+        graph.add_edge(Edge::new(
+            "luks:cryptroot",
+            "filesystem:/",
+            Relationship::Backs,
+        ));
+        let plan = compare_plan_with_topology(plan, &graph);
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert!(!report.can_apply());
+        let message = script_refusal_message(&report);
+        assert!(message.contains("conflict-free command plan"));
+        assert!(message.contains("1 graph dependency conflict"));
+        assert!(message.contains("plan splitting or ordering review"));
     }
 
     #[test]

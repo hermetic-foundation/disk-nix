@@ -1313,9 +1313,9 @@ the relevant graph node and include domain-specific commands such as `findmnt`,
 `exportfs` when the planned action has enough context.
 
 `--script-out <path>` writes an executable bash script after policy validation
-passes. The script contains the allowed command plan, manual-review notes,
-unresolved-input comments for non-ready commands, and post-apply verification
-commands.
+passes and graph dependency conflict checks are clean. The script contains the
+allowed command plan, manual-review notes, unresolved-input comments for
+non-ready commands, and post-apply verification commands.
 `--report-out <path>` writes the JSON report before returning blocked-policy or
 not-ready or failed-execution results, so automation can archive the exact
 decision record even when `apply` exits nonzero.
@@ -1340,7 +1340,8 @@ disk-nix validate --spec ./examples/lifecycle-update.json --receipt-out ./valida
 Use `validate` for CI, NixOS activation-style checks, and review workflows that
 need structured blocked-action details without failing before the report can be
 consumed. `--script-out` still requires every planned action to be policy
-allowed, because blocked reports do not have a runnable review script.
+allowed and graph dependency conflicts to be resolved, because blocked or
+conflicting reports do not have a runnable review script.
 `--report-out` always writes the JSON report when parsing and report
 preparation succeed. `--receipt-out` writes the same receipt envelope as apply,
 with `command = "validate"` and `executeRequested = false`.

@@ -1039,8 +1039,9 @@ bcachefs scrub actions render `bcachefs scrub`; ZFS pool scrub actions render
 Filesystem trim actions render `fstrim -v` against the mounted target and remain
 online maintenance operations.
 `disk-nix apply --script-out <path>` writes those allowed command and
-verification plans as a reviewable bash script after policy validation passes.
-Commands with unresolved inputs remain commented as not ready.
+verification plans as a reviewable bash script after policy validation passes
+and graph dependency conflict checks are clean. Commands with unresolved inputs
+remain commented as not ready.
 `disk-nix apply --report-out <path>` writes the JSON report before returning a
 blocked-policy, not-ready, or failed-execution error, preserving the decision
 record for automation and review.
