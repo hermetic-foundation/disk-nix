@@ -168,10 +168,11 @@ Update rules:
   `targetcli` inventory, backstore, target, LUN mapping, ACL, and persistence
   commands, while non-LIO array/provider adapters still use provider-labeled
   non-ready commands and verification placeholders.
-- [ ] **Partial:** Multi-layer lifecycle groups such as LUN refresh,
+- [x] **Finished:** Multi-layer lifecycle groups such as LUN refresh,
   multipath refresh, partition growth, LUKS/LVM resize, and filesystem growth
-  need stronger ordering, reconciliation, and recovery proof before they are
-  production-complete.
+  are exposed through graph-derived dependency ordering, reverse recovery edges,
+  and `topologyComparison.lifecycleGroups` with connected action ids, edge
+  counts, phases, directions, and grouped-review guidance.
 
 ## Current-topology reconciliation
 
@@ -194,9 +195,10 @@ Update rules:
   and host-visible LUN detach coverage. Dry-run reports with partially
   suppressed groups are not scriptable, and execute mode refuses them until the
   plan is re-reviewed against fresh topology or split.
-- [ ] **Partial:** More cross-domain reconciliation is needed for grouped
-  updates such as iSCSI LUN refresh, multipath refresh, partition growth,
-  LUKS/LVM resize, and filesystem growth.
+- [x] **Finished:** Cross-domain grouped updates such as iSCSI LUN refresh,
+  multipath refresh, partition growth, LUKS/LVM resize, and filesystem growth
+  are represented by `topologyComparison.lifecycleGroups` after current-topology
+  graph analysis, separate from suppression-oriented reconciliation groups.
 
 ## Recovery guidance
 

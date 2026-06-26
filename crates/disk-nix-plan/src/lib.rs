@@ -178,7 +178,7 @@ pub struct ActionDependencyOrder {
     pub notes: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DependencyPhase {
     BuildLowerLayers,
@@ -186,7 +186,7 @@ pub enum DependencyPhase {
     TearDownUpperLayers,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DependencyDirection {
     LowerLayersFirst,
@@ -200,6 +200,8 @@ pub struct TopologyComparison {
     pub diagnostics: Vec<TopologyDiagnostic>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reconciliation_groups: Vec<TopologyReconciliationGroup>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lifecycle_groups: Vec<TopologyLifecycleGroup>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub graph_dependency_conflict_resolutions: Vec<GraphDependencyConflictResolution>,
 }
@@ -222,6 +224,23 @@ pub struct TopologyComparisonSummary {
     pub reconciliation_group_count: usize,
     #[serde(default)]
     pub partially_suppressed_group_count: usize,
+    #[serde(default)]
+    pub lifecycle_group_count: usize,
+    #[serde(default)]
+    pub graph_derived_lifecycle_group_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopologyLifecycleGroup {
+    pub group_id: String,
+    pub action_ids: Vec<String>,
+    pub action_count: usize,
+    pub edge_count: usize,
+    pub graph_derived_edge_count: usize,
+    pub phases: Vec<DependencyPhase>,
+    pub directions: Vec<DependencyDirection>,
+    pub recommendation: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -881,6 +900,12 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
         graph_dependency_conflict_resolutions_for_actions(&plan.actions, graph);
     diagnostics.extend(graph_dependency_order_diagnostics);
     diagnostics.extend(graph_dependency_conflicts);
+    let lifecycle_groups = topology_lifecycle_groups_for_actions(&plan.actions, &graph_edges);
+    let lifecycle_group_count = lifecycle_groups.len();
+    let graph_derived_lifecycle_group_count = lifecycle_groups
+        .iter()
+        .filter(|group| group.graph_derived_edge_count > 0)
+        .count();
     plan.dependency_order = dependency_order_for_actions_with_edges(&plan.actions, graph_edges);
 
     let summary = TopologyComparisonSummary {
@@ -981,12 +1006,15 @@ pub fn compare_plan_with_topology(mut plan: Plan, graph: &StorageGraph) -> Plan 
         graph_dependency_conflict_count,
         reconciliation_group_count,
         partially_suppressed_group_count,
+        lifecycle_group_count,
+        graph_derived_lifecycle_group_count,
     };
 
     plan.topology_comparison = Some(TopologyComparison {
         summary,
         diagnostics,
         reconciliation_groups,
+        lifecycle_groups,
         graph_dependency_conflict_resolutions,
     });
     plan
@@ -1152,6 +1180,123 @@ fn graph_dependency_edges_for_actions(
         }
     }
     edges
+}
+
+fn topology_lifecycle_groups_for_actions(
+    actions: &[PlannedAction],
+    edges: &DependencyEdges,
+) -> Vec<TopologyLifecycleGroup> {
+    let action_ids: BTreeSet<String> = actions.iter().map(|action| action.id.clone()).collect();
+    let actions_by_id: BTreeMap<&str, &PlannedAction> = actions
+        .iter()
+        .map(|action| (action.id.as_str(), action))
+        .collect();
+    let mut adjacency: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+
+    for (action_id, dependencies) in &edges.depends_on {
+        if !action_ids.contains(action_id) {
+            continue;
+        }
+        for dependency in dependencies {
+            if !action_ids.contains(dependency) {
+                continue;
+            }
+            adjacency
+                .entry(action_id.clone())
+                .or_default()
+                .insert(dependency.clone());
+            adjacency
+                .entry(dependency.clone())
+                .or_default()
+                .insert(action_id.clone());
+        }
+    }
+
+    let mut visited = BTreeSet::new();
+    let mut groups = Vec::new();
+    for action_id in adjacency.keys() {
+        if visited.contains(action_id) {
+            continue;
+        }
+
+        let mut stack = vec![action_id.clone()];
+        let mut group_action_ids = BTreeSet::new();
+        while let Some(current) = stack.pop() {
+            if !visited.insert(current.clone()) {
+                continue;
+            }
+            group_action_ids.insert(current.clone());
+            if let Some(neighbors) = adjacency.get(&current) {
+                for neighbor in neighbors {
+                    if !visited.contains(neighbor) {
+                        stack.push(neighbor.clone());
+                    }
+                }
+            }
+        }
+
+        if group_action_ids.len() < 2 {
+            continue;
+        }
+
+        let edge_count = edges
+            .depends_on
+            .iter()
+            .filter(|(dependent, dependencies)| {
+                group_action_ids.contains(*dependent)
+                    && dependencies
+                        .iter()
+                        .any(|dependency| group_action_ids.contains(dependency))
+            })
+            .map(|(_dependent, dependencies)| {
+                dependencies
+                    .iter()
+                    .filter(|dependency| group_action_ids.contains(*dependency))
+                    .count()
+            })
+            .sum();
+        let graph_derived_edge_count = edges
+            .graph_edges
+            .iter()
+            .filter(|(dependent, dependency)| {
+                group_action_ids.contains(dependent) && group_action_ids.contains(dependency)
+            })
+            .count();
+        let phases = group_action_ids
+            .iter()
+            .filter_map(|id| actions_by_id.get(id.as_str()))
+            .map(|action| operation_dependency_phase_kind(action.operation))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let directions = group_action_ids
+            .iter()
+            .filter_map(|id| actions_by_id.get(id.as_str()))
+            .map(|action| dependency_direction(action.operation))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let action_ids = group_action_ids.into_iter().collect::<Vec<_>>();
+        let group_id = format!(
+            "lifecycle:{}",
+            action_ids
+                .first()
+                .expect("lifecycle group has at least two action ids")
+        );
+
+        groups.push(TopologyLifecycleGroup {
+            group_id,
+            action_count: action_ids.len(),
+            action_ids,
+            edge_count,
+            graph_derived_edge_count,
+            phases,
+            directions,
+            recommendation: "review and apply this connected lifecycle group as one ordered mutation or split it into independently verified passes".to_string(),
+        });
+    }
+
+    groups
 }
 
 fn graph_dependency_conflict_diagnostics_for_actions(
@@ -26546,6 +26691,44 @@ mod tests {
             .expect("comparison should be present");
 
         assert_eq!(comparison.summary.graph_dependency_edge_count, 15);
+        assert_eq!(comparison.summary.lifecycle_group_count, 1);
+        assert_eq!(comparison.summary.graph_derived_lifecycle_group_count, 1);
+        let lifecycle_group = comparison
+            .lifecycle_groups
+            .first()
+            .expect("layered growth should produce a lifecycle group");
+        assert_eq!(lifecycle_group.action_count, 6);
+        assert_eq!(lifecycle_group.edge_count, 15);
+        assert_eq!(lifecycle_group.graph_derived_edge_count, 15);
+        assert_eq!(
+            lifecycle_group.action_ids,
+            vec![
+                "filesystem:root:grow".to_string(),
+                "luks.devices:cryptroot:grow".to_string(),
+                "luns:/dev/disk/by-path/ip-192.0.2.10-lun-0:grow".to_string(),
+                "multipathmaps:mpatha:grow".to_string(),
+                "partitions:root:grow".to_string(),
+                "volumes:vg0/root:grow".to_string(),
+            ]
+        );
+        assert_eq!(
+            lifecycle_group.directions,
+            vec![DependencyDirection::LowerLayersFirst]
+        );
+        let comparison_json =
+            serde_json::to_value(comparison).expect("comparison should serialize to json");
+        assert_eq!(
+            comparison_json["summary"]["lifecycleGroupCount"],
+            serde_json::json!(1)
+        );
+        assert_eq!(
+            comparison_json["summary"]["graphDerivedLifecycleGroupCount"],
+            serde_json::json!(1)
+        );
+        assert_eq!(
+            comparison_json["lifecycleGroups"][0]["graphDerivedEdgeCount"],
+            serde_json::json!(15)
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "filesystem:root:grow"
                 && diagnostic.level == TopologyDiagnosticLevel::Info

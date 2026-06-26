@@ -632,6 +632,12 @@ force those action edges. Mixed-direction graph-path warnings are reported as
 `graph-dependency-conflict` diagnostics and counted as
 `graphDependencyConflictCount`. Dry-run reports keep those conflicts visible for
 review, but `--execute` refuses to run while the count is non-zero.
+`topologyComparison.lifecycleGroups` is also emitted after current-topology
+dependency analysis. It groups connected lifecycle actions, reports their total
+and graph-derived dependency edge counts, lists the dependency phases and
+directions involved, and carries a review recommendation for applying the
+connected mutation as one ordered group or splitting it into independently
+verified passes.
 
 With `--probe-current`, the CLI also probes the current host and adds
 `topologyComparison`, including matched target counts, missing target counts,

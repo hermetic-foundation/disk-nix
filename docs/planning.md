@@ -783,6 +783,14 @@ Group identities include normalized NFS export paths derived from client mount
 sources and normalized device-mapper names derived from `/dev/mapper/*`
 consumers so cross-domain export/mount and dm/filesystem changes are reported
 together.
+`topologyComparison.lifecycleGroups` summarizes connected lifecycle mutations
+after current-topology dependency edges are known. Each group records the
+connected action ids, total dependency edge count, graph-derived edge count,
+dependency phases, dependency directions, and a recommendation to review and
+apply the group as one ordered mutation or split it into independently verified
+passes. This exposes grouped updates such as iSCSI LUN refresh, multipath
+refresh, partition growth, LUKS/LVM resize, and filesystem growth even when no
+action is suppressed as already satisfied.
 Absent mountpoints for mount actions remain actionable with mount-required
 diagnostics rather than generic missing-target diagnostics.
 

@@ -234,6 +234,12 @@ placeholders until concrete adapters are added.
   so grouped changes such as iSCSI LUN refresh, multipath, partition growth,
   LUKS/LVM resize, and filesystem growth have explicit partial-failure review
   ordering.
+- Current-topology lifecycle grouping for multi-layer updates. The comparison
+  report emits `lifecycleGroups` for connected action sets derived from
+  dependency edges, including graph-derived LUN-to-filesystem growth paths. Each
+  group records action ids, edge counts, graph-derived edge counts, phases,
+  directions, and review guidance for applying the connected mutation as one
+  ordered group or splitting it into independently verified passes.
 - Automated editing of declarative NixOS configuration after successful
   mutation is still not implemented. The module now emits a
   `declarativeHandoff` index for mounts, crypttab/LUKS, swap, NFS exports,
