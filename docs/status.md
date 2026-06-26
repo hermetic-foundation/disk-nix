@@ -40,6 +40,9 @@ behavior across real storage stacks.
 - Probe-status reports include structured issue categories and adapter-specific
   remediation hints for missing tools/packages, permission barriers, parse
   failures, inaccessible kernel/service data, and generic command failures.
+  Preflight JSON also includes an `adapterRemediation` matrix for built-in
+  adapters and sub-adapters with canonical domains, tools, likely Nix packages,
+  privilege hints, data hints, parse-fixture hints, and manual command hints.
 - Current-topology reconciliation suppresses safe no-op grow, shrink, iSCSI
   login/logout, disk partition-table create actions that already match the
   requested table label, existing partition creates that match declared size,
@@ -233,15 +236,15 @@ placeholders, but concrete array adapters remain future work.
   inspection, plus receipt files that bind reports to their invocation
   metadata, but safe automated rollback remains out of scope until broader
   topology-specific recovery proofs exist.
-- Deeper privilege and tool availability diagnostics for every adapter and
-  command renderer, including distributions where tools have different output
-  formats. Probe reports now expose structured degradation categories,
-  adapter-specific tool/package, privilege-surface, inaccessible-data, and
-  parse-fixture hints, plus opt-in `probe-status --preflight` OS, kernel,
-  effective UID, storage tool version context, and structured preflight checks
-  for root privilege plus missing, failing, stderr-only, or empty-output storage
-  tool version probes. Live preflight coverage against every distribution and
-  tool-output variant still needs expansion.
+- Live probe-status preflight validation against every distribution and
+  privilege/container profile still needs broader validation. Probe reports now
+  expose structured degradation categories, adapter-specific tool/package,
+  privilege-surface, inaccessible-data, parse-fixture, and manual-command
+  hints, plus opt-in `probe-status --preflight` OS, kernel, effective UID,
+  storage tool version context, structured preflight checks for root privilege
+  plus missing, failing, stderr-only, or empty-output storage tool version
+  probes, and a machine-readable adapter remediation matrix for built-in
+  adapters and sub-adapters.
 - More real-world fixture coverage from diverse hardware, fabrics, filesystems,
   degraded arrays, encrypted stacks, and clustered or shared-storage setups.
 - Future spec-version field mappings. The parser validates version `1`,

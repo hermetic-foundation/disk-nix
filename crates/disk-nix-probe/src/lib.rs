@@ -60,6 +60,19 @@ pub struct ProbeReport {
     pub message: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeAdapterRemediation {
+    pub adapter: String,
+    pub canonical_adapter: String,
+    pub tools: Vec<String>,
+    pub nix_packages: Vec<String>,
+    pub privilege_hint: String,
+    pub data_hint: String,
+    pub parse_hint: String,
+    pub command_hint: String,
+}
+
 impl ProbeReport {
     #[must_use]
     pub fn category(&self) -> ProbeIssueCategory {
@@ -76,6 +89,27 @@ impl ProbeReport {
     #[must_use]
     pub fn remediation(&self) -> Vec<String> {
         remediation_for_category(&self.adapter, self.category())
+    }
+}
+
+#[must_use]
+pub fn adapter_remediation(adapter: &str) -> ProbeAdapterRemediation {
+    let canonical_adapter = canonical_adapter(adapter);
+    ProbeAdapterRemediation {
+        adapter: adapter.to_string(),
+        canonical_adapter: canonical_adapter.to_string(),
+        tools: adapter_tools(adapter)
+            .into_iter()
+            .map(ToString::to_string)
+            .collect(),
+        nix_packages: adapter_nix_packages(adapter)
+            .into_iter()
+            .map(ToString::to_string)
+            .collect(),
+        privilege_hint: adapter_privilege_hint(adapter),
+        data_hint: adapter_data_hint(adapter),
+        parse_hint: adapter_parse_hint(adapter),
+        command_hint: adapter_command_hint(adapter),
     }
 }
 
@@ -2309,8 +2343,21 @@ fn remediation_for_category(adapter: &str, category: ProbeIssueCategory) -> Vec<
     }
 }
 
-fn adapter_tools(adapter: &str) -> Vec<&'static str> {
+fn canonical_adapter(adapter: &str) -> &str {
     match adapter {
+        "mdadm-scan" | "mdadm-examine" => "mdraid",
+        "nvme-list-subsys" | "nvme-smart-log" | "nvme-id-ctrl" | "nvme-id-ns" => "nvme",
+        "vdostats" | "vdostats-verbose" => "vdo",
+        "iscsi-nodes" => "iscsi",
+        "nfs-exports" => "nfs",
+        "loopdev" => "loop",
+        "zramctl" => "zram",
+        other => other,
+    }
+}
+
+fn adapter_tools(adapter: &str) -> Vec<&'static str> {
+    match canonical_adapter(adapter) {
         "bcache" => vec!["bcache"],
         "bcachefs" => vec!["bcachefs"],
         "blkid" => vec!["blkid"],
@@ -2321,23 +2368,22 @@ fn adapter_tools(adapter: &str) -> Vec<&'static str> {
         "ext" => vec!["tune2fs", "dumpe2fs"],
         "f2fs" => vec!["dump.f2fs"],
         "findmnt" => vec!["findmnt"],
-        "iscsi" | "iscsi-nodes" => vec!["iscsiadm"],
-        "loop" | "loopdev" => vec!["losetup"],
+        "iscsi" => vec!["iscsiadm"],
+        "loop" => vec!["losetup"],
         "lsblk" => vec!["lsblk"],
         "lsscsi" => vec!["lsscsi"],
         "lvm" => vec!["pvs", "vgs", "lvs"],
         "mdraid" => vec!["mdadm"],
         "mdstat" => Vec::new(),
         "multipath" => vec!["multipath"],
-        "nfs" | "nfs-exports" => vec!["findmnt", "exportfs", "nfsstat"],
+        "nfs" => vec!["findmnt", "exportfs", "nfsstat"],
         "ntfs" => vec!["ntfsinfo"],
         "nvme" => vec!["nvme"],
         "parted" => vec!["parted"],
         "smartctl" => vec!["smartctl"],
         "swaps" => vec!["swapon"],
         "udev" => vec!["udevadm"],
-        "vdo" => vec!["vdo"],
-        "vdostats" | "vdostats-verbose" => vec!["vdostats"],
+        "vdo" => vec!["vdo", "vdostats"],
         "xfs" => vec!["xfs_info"],
         "zfs" => vec!["zpool", "zfs"],
         "zram" => vec!["zramctl"],
@@ -2346,10 +2392,10 @@ fn adapter_tools(adapter: &str) -> Vec<&'static str> {
 }
 
 fn adapter_nix_packages(adapter: &str) -> Vec<&'static str> {
-    match adapter {
+    match canonical_adapter(adapter) {
         "bcache" => vec!["pkgs.bcache-tools"],
         "bcachefs" => vec!["pkgs.bcachefs-tools"],
-        "blkid" | "findmnt" | "loop" | "loopdev" | "lsblk" | "swaps" | "zram" => {
+        "blkid" | "findmnt" | "loop" | "lsblk" | "swaps" | "zram" => {
             vec!["pkgs.util-linux"]
         }
         "btrfs" => vec!["pkgs.btrfs-progs"],
@@ -2358,18 +2404,18 @@ fn adapter_nix_packages(adapter: &str) -> Vec<&'static str> {
         "exfat" => vec!["pkgs.exfatprogs"],
         "ext" => vec!["pkgs.e2fsprogs"],
         "f2fs" => vec!["pkgs.f2fs-tools"],
-        "iscsi" | "iscsi-nodes" => vec!["pkgs.openiscsi"],
+        "iscsi" => vec!["pkgs.openiscsi"],
         "lsscsi" => vec!["pkgs.lsscsi"],
         "mdraid" => vec!["pkgs.mdadm"],
         "mdstat" => Vec::new(),
         "multipath" => vec!["pkgs.multipath-tools"],
-        "nfs" | "nfs-exports" => vec!["pkgs.nfs-utils", "pkgs.util-linux"],
+        "nfs" => vec!["pkgs.nfs-utils", "pkgs.util-linux"],
         "ntfs" => vec!["pkgs.ntfs3g"],
         "nvme" => vec!["pkgs.nvme-cli"],
         "parted" => vec!["pkgs.parted"],
         "smartctl" => vec!["pkgs.smartmontools"],
         "udev" => vec!["pkgs.systemd"],
-        "vdo" | "vdostats" | "vdostats-verbose" => vec!["pkgs.vdo"],
+        "vdo" => vec!["pkgs.vdo"],
         "xfs" => vec!["pkgs.xfsprogs"],
         "zfs" => vec!["pkgs.zfs"],
         _ => Vec::new(),
@@ -2377,17 +2423,17 @@ fn adapter_nix_packages(adapter: &str) -> Vec<&'static str> {
 }
 
 fn adapter_privilege_hint(adapter: &str) -> String {
-    match adapter {
+    match canonical_adapter(adapter) {
         "dmsetup" => "device-mapper probing needs access to /dev/mapper, /sys/block/dm-*, and dmsetup table/status metadata".to_string(),
         "lvm" => "LVM probing needs access to device-mapper state, LVM metadata devices, and any configured lvmetad/lvmdevices state".to_string(),
         "cryptsetup" => "LUKS probing needs permission to read block devices and cryptsetup status/header metadata".to_string(),
         "zfs" => "ZFS probing needs permission to run zpool and zfs list/status commands and read imported pool metadata".to_string(),
         "btrfs" => "Btrfs probing needs permission to inspect mounted Btrfs filesystems and query subvolume, qgroup, and device state".to_string(),
-        "iscsi" | "iscsi-nodes" => "iSCSI probing needs access to open-iscsi node and session state, usually under /etc/iscsi and /sys/class/iscsi_session".to_string(),
+        "iscsi" => "iSCSI probing needs access to open-iscsi node and session state, usually under /etc/iscsi and /sys/class/iscsi_session".to_string(),
         "nvme" => "NVMe probing needs access to controller character devices and /sys/class/nvme metadata".to_string(),
         "multipath" => "multipath probing needs access to multipathd/device-mapper state and path devices".to_string(),
         "mdraid" | "mdstat" => "MD RAID probing needs access to /proc/mdstat, mdadm detail output, and member block devices".to_string(),
-        "vdo" | "vdostats" | "vdostats-verbose" => "VDO probing needs access to VDO management state and device-mapper-backed VDO volumes".to_string(),
+        "vdo" => "VDO probing needs access to VDO management state and device-mapper-backed VDO volumes".to_string(),
         "smartctl" => "SMART probing often needs root or device-specific capabilities to read health and controller metadata".to_string(),
         "udev" => "udev probing needs permission to read udev database records for block devices".to_string(),
         _ => format!("{adapter} probing needs privileges for its command output and related kernel metadata"),
@@ -2395,7 +2441,7 @@ fn adapter_privilege_hint(adapter: &str) -> String {
 }
 
 fn adapter_parse_hint(adapter: &str) -> String {
-    match adapter {
+    match canonical_adapter(adapter) {
         "lvm" => "include the failing pvs/vgs/lvs JSON payload and LVM version in the fixture"
             .to_string(),
         "zfs" => {
@@ -2406,15 +2452,15 @@ fn adapter_parse_hint(adapter: &str) -> String {
             "include btrfs filesystem, subvolume, qgroup, and device command output in the fixture"
                 .to_string()
         }
-        "vdo" | "vdostats" | "vdostats-verbose" => {
+        "vdo" => {
             "include vdo status or vdostats output from the installed VDO version in the fixture"
                 .to_string()
         }
         "nvme" => "include nvme-cli JSON output and nvme-cli version in the fixture".to_string(),
-        "iscsi" | "iscsi-nodes" => {
+        "iscsi" => {
             "include iscsiadm node/session output and open-iscsi version in the fixture".to_string()
         }
-        "nfs" | "nfs-exports" => {
+        "nfs" => {
             "include findmnt, exportfs, and nfsstat output for the failing host in the fixture"
                 .to_string()
         }
@@ -2425,17 +2471,17 @@ fn adapter_parse_hint(adapter: &str) -> String {
 }
 
 fn adapter_data_hint(adapter: &str) -> String {
-    match adapter {
+    match canonical_adapter(adapter) {
         "bcache" => "verify bcache devices are registered under /sys/fs/bcache or /sys/block before probing".to_string(),
         "bcachefs" => "verify bcachefs filesystems are mounted or member devices are visible before probing".to_string(),
         "btrfs" => "verify Btrfs filesystems are mounted and qgroup/subvolume metadata is accessible".to_string(),
         "dmsetup" => "verify device-mapper is loaded and expected /dev/mapper nodes exist".to_string(),
-        "iscsi" | "iscsi-nodes" => "verify iscsid/open-iscsi state exists and expected sessions or configured nodes are present".to_string(),
+        "iscsi" => "verify iscsid/open-iscsi state exists and expected sessions or configured nodes are present".to_string(),
         "lvm" => "verify LVM devices are visible, filters permit scanning, and volume groups are not hidden by system-id or devices-file policy".to_string(),
         "multipath" => "verify multipathd is running when required and path devices are visible to the host".to_string(),
-        "nfs" | "nfs-exports" => "verify NFS mounts, exports, rpc services, and /proc/fs/nfsd state are available where expected".to_string(),
+        "nfs" => "verify NFS mounts, exports, rpc services, and /proc/fs/nfsd state are available where expected".to_string(),
         "nvme" => "verify NVMe controllers, namespaces, and fabrics sessions are visible under /sys/class/nvme".to_string(),
-        "vdo" | "vdostats" | "vdostats-verbose" => "verify VDO services, management metadata, and mapped VDO devices are present".to_string(),
+        "vdo" => "verify VDO services, management metadata, and mapped VDO devices are present".to_string(),
         "zfs" => "verify ZFS kernel support is loaded and expected pools are imported or visible to zpool import".to_string(),
         "zram" => "verify zram devices are configured before expecting zram inventory".to_string(),
         _ => format!("verify the storage resources expected by the {adapter} adapter exist on this host"),
@@ -2443,14 +2489,14 @@ fn adapter_data_hint(adapter: &str) -> String {
 }
 
 fn adapter_command_hint(adapter: &str) -> String {
-    match adapter {
+    match canonical_adapter(adapter) {
         "lvm" => "rerun pvs, vgs, and lvs with --reportformat json to identify which LVM query failed".to_string(),
         "zfs" => "rerun zpool status/list and zfs list/get commands to identify pool import or dataset failures".to_string(),
         "btrfs" => "rerun btrfs filesystem, subvolume, qgroup, and device commands against the mounted filesystem".to_string(),
-        "iscsi" | "iscsi-nodes" => "rerun iscsiadm node and session queries and verify iscsid service health".to_string(),
+        "iscsi" => "rerun iscsiadm node and session queries and verify iscsid service health".to_string(),
         "multipath" => "rerun multipath -ll and verify multipathd plus device-mapper state".to_string(),
         "nvme" => "rerun nvme list/subsystem/id/smart-log commands for the affected controller or namespace".to_string(),
-        "vdo" | "vdostats" | "vdostats-verbose" => "rerun vdo status and vdostats to distinguish service failure from missing VDO volumes".to_string(),
+        "vdo" => "rerun vdo status and vdostats to distinguish service failure from missing VDO volumes".to_string(),
         _ => format!("rerun the {adapter} adapter command set manually with stderr captured"),
     }
 }
@@ -2638,6 +2684,44 @@ mod tests {
         assert!(json.contains("device-mapper state"));
         assert!(json.contains("open-iscsi"));
         assert!(json.contains("nvme-cli"));
+    }
+
+    #[test]
+    fn sub_adapters_inherit_domain_specific_remediation() {
+        let cases = [
+            ("nvme-id-ns", "nvme", "pkgs.nvme-cli", "nvme-cli JSON"),
+            ("mdadm-scan", "mdraid", "pkgs.mdadm", "/proc/mdstat"),
+            ("vdostats-verbose", "vdo", "pkgs.vdo", "VDO services"),
+            ("zramctl", "zram", "pkgs.util-linux", "zram devices"),
+            ("nfs-exports", "nfs", "pkgs.nfs-utils", "NFS mounts"),
+        ];
+
+        for (adapter, canonical, package, domain_hint) in cases {
+            let metadata = adapter_remediation(adapter);
+            assert_eq!(metadata.adapter, adapter);
+            assert_eq!(metadata.canonical_adapter, canonical);
+            assert!(
+                metadata.nix_packages.iter().any(|item| item == package),
+                "{adapter} should include package {package}"
+            );
+            assert!(
+                metadata.data_hint.contains(domain_hint)
+                    || metadata.parse_hint.contains(domain_hint)
+                    || metadata.privilege_hint.contains(domain_hint),
+                "{adapter} should include domain hint {domain_hint}"
+            );
+
+            let report = ProbeReport {
+                adapter: adapter.to_string(),
+                status: ProbeStatus::Unavailable,
+                message: Some(format!("{adapter} not found or failed to run")),
+            };
+            let remediation = report.remediation();
+            assert!(
+                remediation.iter().any(|item| item.contains(package)),
+                "{adapter} missing-tool remediation should include package {package}"
+            );
+        }
     }
 
     #[test]

@@ -106,6 +106,14 @@ tool-output variant that produced them. The checks report whether probing is
 running as root, count missing or failing storage tools, list the affected
 tools, treat successful version probes with no output as failures, accept the
 first non-empty version line from stdout or stderr, and emit remediation text.
+The JSON `preflightChecks.adapterRemediation` matrix maps every built-in probe
+adapter and sub-adapter to its canonical storage domain, required command-line
+tools, likely Nix packages, privilege hint, kernel/service/data hint, parse
+fixture hint, and manual command hint. This covers sub-adapters such as
+`nvme-id-ns`, `nvme-smart-log`, `mdadm-scan`, `mdadm-examine`,
+`vdostats-verbose`, `nfs-exports`, and `zramctl`, so automation can recommend
+concrete package additions or privilege/service checks instead of generic
+adapter failure text.
 With `--json`, preflight output is wrapped as
 `{ environment, preflightChecks, reports }`; without `--preflight`,
 `probe-status --json` keeps the stable adapter-report array shape.

@@ -1864,6 +1864,10 @@
               and (.preflightChecks.missingTools | type == "array")
               and (.preflightChecks.failedTools | type == "array")
               and (.preflightChecks.remediation | type == "array")
+              and (.preflightChecks.adapterRemediation | type == "array")
+              and (.preflightChecks.adapterRemediation | any(.adapter == "nvme-id-ns" and .canonicalAdapter == "nvme" and (.nixPackages | index("pkgs.nvme-cli") != null)))
+              and (.preflightChecks.adapterRemediation | any(.adapter == "mdadm-scan" and .canonicalAdapter == "mdraid" and (.nixPackages | index("pkgs.mdadm") != null)))
+              and (.preflightChecks.adapterRemediation | any(.adapter == "zramctl" and .canonicalAdapter == "zram" and (.tools | index("zramctl") != null)))
               and (.reports | type == "array")
             ' "$preflightStatus"
             if grep -R -E 'executor-unavailable|does not mutate storage yet|future mutating executor|future `btrfs device remove`|does not run mutating storage commands directly|non-executed command' ${./README.md} ${./docs}; then

@@ -20,7 +20,10 @@ use disk_nix_plan::{
     compare_plan_with_topology, default_capabilities, plan_and_policy_from_json_bytes,
     plan_from_json_bytes,
 };
-use disk_nix_probe::{LinuxProbe, ProbeAdapter, ProbeIssueCategory, ProbeStatus};
+use disk_nix_probe::{
+    LinuxProbe, ProbeAdapter, ProbeAdapterRemediation, ProbeIssueCategory, ProbeStatus,
+    adapter_remediation,
+};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -395,6 +398,7 @@ struct ProbePreflightChecks {
     failed_tool_count: usize,
     missing_tools: Vec<String>,
     failed_tools: Vec<String>,
+    adapter_remediation: Vec<ProbeAdapterRemediation>,
     remediation: Vec<String>,
 }
 
@@ -2288,8 +2292,52 @@ fn probe_preflight_checks(environment: &ProbePreflightEnvironment) -> ProbePrefl
         failed_tool_count: failed_tools.len(),
         missing_tools,
         failed_tools,
+        adapter_remediation: preflight_adapter_remediation(),
         remediation,
     }
+}
+
+fn preflight_adapter_remediation() -> Vec<ProbeAdapterRemediation> {
+    [
+        "lsblk",
+        "blkid",
+        "findmnt",
+        "udev",
+        "parted",
+        "smartctl",
+        "ext",
+        "xfs",
+        "btrfs",
+        "bcachefs",
+        "bcache",
+        "cryptsetup",
+        "dmsetup",
+        "lvm",
+        "vdo",
+        "vdostats",
+        "vdostats-verbose",
+        "mdraid",
+        "mdadm-scan",
+        "mdadm-examine",
+        "multipath",
+        "nfs",
+        "nfs-exports",
+        "iscsi",
+        "iscsi-nodes",
+        "lsscsi",
+        "nvme",
+        "nvme-list-subsys",
+        "nvme-smart-log",
+        "nvme-id-ctrl",
+        "nvme-id-ns",
+        "loop",
+        "swaps",
+        "zramctl",
+        "zfs",
+    ]
+    .into_iter()
+    .map(adapter_remediation)
+    .collect()
 }
 
 fn command_stdout_first_line(command: &str, args: &[&str]) -> Result<String, String> {
@@ -5725,6 +5773,17 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert_eq!(json["preflightChecks"]["status"], "ready");
         assert_eq!(json["preflightChecks"]["root"], true);
         assert_eq!(json["preflightChecks"]["unavailableToolCount"], 0);
+        assert!(
+            json["preflightChecks"]["adapterRemediation"]
+                .as_array()
+                .is_some_and(|items| items.iter().any(|item| {
+                    item["adapter"] == "nvme-id-ns"
+                        && item["canonicalAdapter"] == "nvme"
+                        && item["nixPackages"].as_array().is_some_and(|packages| {
+                            packages.iter().any(|package| package == "pkgs.nvme-cli")
+                        })
+                }))
+        );
         assert_eq!(json["reports"][0]["adapter"], "lsblk");
         assert_eq!(json["reports"][0]["category"], "none");
     }

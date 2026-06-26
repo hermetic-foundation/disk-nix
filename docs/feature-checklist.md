@@ -243,11 +243,13 @@ Update rules:
   login/logout flows, and property mutation.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
   for multi-layer apply behavior on isolated disposable disks are still needed.
-- [ ] **Partial:** Probe-status diagnostics include adapter remediation,
+- [x] **Finished:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
   checks for root privilege plus missing, failing, stderr-only, and empty-output
-  storage tool version probes, but live checks across distributions and
-  tool-output variants need expansion.
+  storage tool version probes. Preflight JSON includes an `adapterRemediation`
+  matrix for built-in adapters and sub-adapters with canonical domains, tools,
+  likely Nix packages, privilege hints, data hints, parse-fixture hints, and
+  manual command hints.
 
 ## Documentation
 
