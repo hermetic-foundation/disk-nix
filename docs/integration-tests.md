@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for fourteen failed apply paths:
+fake storage tools ahead of `PATH` for fifteen failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -113,6 +113,9 @@ fake storage tools ahead of `PATH` for fourteen failed apply paths:
   `targetcli` inventory, backstore creation, and target creation succeed and
   fake `targetcli /iscsi/iqn.2026-06.example:storage.root/tpg1/luns create /backstores/block/_dev_zvol_tank_root lun=7`
   fails
+- a multipath path replacement where fake `multipath -ll /dev/mapper/mpatha`
+  and fake `multipathd add path /dev/sdd` succeed and fake
+  `multipathd del path /dev/sdc` fails
 - an iSCSI session logout where fake `iscsiadm --logout` fails for the reviewed
   target and portal
 - an iSCSI session login where fake `iscsiadm --mode discovery` succeeds and
@@ -162,6 +165,10 @@ The test verifies that the failed report and receipt preserve:
   `targetluns:iqn.2026-06.example:storage.root:create`
 - the failed LIO `targetcli .../tpg1/luns create` command and non-zero status
   after target-side inventory, backstore creation, and target creation
+- `partialExecutionRecovery.failedActionId` as
+  `multipathMaps:root-map:replace-device:/dev/sdc`
+- the failed `multipathd del path /dev/sdc` command and non-zero status after
+  successful multipath map inspection and replacement-path add
 - `partialExecutionRecovery.failedActionId` as
   `iscsisessions:iqn.2026-06.example:storage.old:logout`
 - the failed `iscsiadm --mode node --targetname iqn.2026-06.example:storage.old --portal 192.0.2.11:3260 --logout` command
@@ -640,16 +647,16 @@ harnesses available and packaged while preserving safe default checks.
 The VM smoke suite and targeted loop tests are only the first host-backed
 integration paths. Feature completion still needs disposable VM or lab-host
 tests for broader LUKS format/grow/keyslot/token behavior, broader LVM
-LV/thin/cache/device-topology behavior, broader bcachefs multi-device and
-member-topology behavior, broader ZFS vdev/dataset/zvol/snapshot behavior,
-broader MD RAID grow/member-topology behavior, broader multipath path
-add/remove/replace/flush/grow/failure behavior, broader iSCSI LUN failure
-behavior, broader NFS server/export/unmount/failure behavior, broader VDO
-create/grow/start/stop/property/remove behavior, additional NVMe namespace
-variant failure behavior, additional cache variant failure behavior, property
-mutation across more supported domains, recovery behavior beyond the synthetic
-LVM-plus-filesystem, ZFS rollback, NVMe namespace create, NVMe namespace grow,
-NVMe namespace attach, NVMe namespace detach, NVMe namespace delete,
-target-side LUN LIO create, iSCSI logout, iSCSI login, LVM cache attach, LVM
-cache detach, VDO property, and LVM cache property failed-command paths, and broader
-destructive apply behavior.
+LV/thin/cache/device-topology behavior, additional device replacement domains,
+broader bcachefs multi-device and member-topology behavior, broader ZFS
+vdev/dataset/zvol/snapshot behavior, broader MD RAID grow/member-topology
+behavior, broader multipath path add/remove/flush/grow/failure behavior,
+broader iSCSI LUN failure behavior, broader NFS server/export/unmount/failure
+behavior, broader VDO create/grow/start/stop/property/remove behavior,
+additional NVMe namespace variant failure behavior, additional cache variant
+failure behavior, property mutation across more supported domains, recovery
+behavior beyond the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace
+create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe
+namespace delete, target-side LUN LIO create, multipath replace, iSCSI logout,
+iSCSI login, LVM cache attach, LVM cache detach, VDO property, and LVM cache
+property failed-command paths, and broader destructive apply behavior.

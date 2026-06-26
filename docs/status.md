@@ -222,13 +222,14 @@ placeholders until concrete adapters are added.
 ## Remaining for feature complete
 
 - Broader destructive and failure-path integration tests beyond the smoke
-  suite, including device replacement, degraded arrays, additional cache
-  variants, additional NVMe namespace variants, additional LUN flows, property
-  mutation across more supported domains, and failed-command recovery beyond
-  the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace create, NVMe
-  namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace
-  delete, target-side LUN LIO create, iSCSI logout, iSCSI login, LVM cache
-  attach, LVM cache detach, VDO property, and LVM cache property paths.
+  suite, including additional device replacement domains, degraded arrays,
+  additional cache variants, additional NVMe namespace variants, additional LUN
+  flows, property mutation across more supported domains, and failed-command
+  recovery beyond the synthetic LVM-plus-filesystem, ZFS rollback, NVMe
+  namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace
+  detach, NVMe namespace delete, target-side LUN LIO create, multipath replace,
+  iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property,
+  and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional

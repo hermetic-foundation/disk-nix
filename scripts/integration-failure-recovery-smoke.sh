@@ -788,6 +788,114 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 2
 ' "$target_lun_lio_receipt" >/dev/null
 
+multipath_replace_tools="$tmpdir/fake-multipath-replace-tools"
+mkdir -p "$multipath_replace_tools"
+
+cat > "$multipath_replace_tools/multipath" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+cat > "$multipath_replace_tools/multipathd" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "del path /dev/sdc" ]]; then
+  echo "synthetic multipath replace delete failure for disk-nix recovery coverage" >&2
+  exit 87
+fi
+printf '{}\n'
+EOF
+
+cat > "$multipath_replace_tools/lsscsi" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+EOF
+
+chmod +x "$multipath_replace_tools/multipath" "$multipath_replace_tools/multipathd" "$multipath_replace_tools/lsscsi"
+
+multipath_replace_spec="$tmpdir/multipath-replace-spec.json"
+multipath_replace_json="$tmpdir/multipath-replace-apply.json"
+multipath_replace_report="$tmpdir/multipath-replace-report.json"
+multipath_replace_receipt="$tmpdir/multipath-replace-receipt.json"
+
+jq -n '{
+  spec: {
+    multipathMaps: {
+      "root-map": {
+        device: "/dev/mapper/mpatha",
+        replaceDevices: {
+          "/dev/sdc": "/dev/sdd"
+        }
+      }
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowDeviceReplacement: true
+  }
+}' > "$multipath_replace_spec"
+
+if PATH="$multipath_replace_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$multipath_replace_spec" \
+  --execute \
+  --report-out "$multipath_replace_report" \
+  --receipt-out "$multipath_replace_receipt" \
+  --json > "$multipath_replace_json"; then
+  echo "expected synthetic multipath replace failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 3
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["multipath", "-ll", "/dev/mapper/mpatha"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["multipathd", "add", "path", "/dev/sdd"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 87
+  and .executionResults[2].argv == ["multipathd", "del", "path", "/dev/sdc"]
+  and (.executionResults[2].stderr | contains("synthetic multipath replace delete failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "multipathMaps:root-map:replace-device:/dev/sdc"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["multipathd", "del", "path", "/dev/sdc"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["multipathMaps:root-map:replace-device:/dev/sdc"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 1
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["multipath", "-ll", "/dev/mapper/mpatha"]))
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"]))
+    and (.commands | any(.argv == ["disk-nix", "multipath", "--json"]))
+    and (.notes | any(contains("multipath changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["multipath", "-ll", "/dev/mapper/mpatha"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["disk-nix", "multipath", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$multipath_replace_json" >/dev/null
+
+cmp "$multipath_replace_json" "$multipath_replace_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "multipathMaps:root-map:replace-device:/dev/sdc"
+  and .report.partialExecutionRecovery.failedCommand == ["multipathd", "del", "path", "/dev/sdc"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
+' "$multipath_replace_receipt" >/dev/null
+
 iscsi_tools="$tmpdir/fake-iscsi-tools"
 mkdir -p "$iscsi_tools"
 
@@ -1345,4 +1453,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, multipath replace, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO property, and LVM cache property failures"

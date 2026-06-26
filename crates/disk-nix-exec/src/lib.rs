@@ -27574,6 +27574,111 @@ mod tests {
     }
 
     #[test]
+    fn failed_multipath_replace_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "multipathMaps": {
+                "root-map": {
+                  "device": "/dev/mapper/mpatha",
+                  "replaceDevices": {
+                    "/dev/sdc": "/dev/sdd"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true,
+                "allowDeviceReplacement": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_delete = ["multipathd", "del", "path", "/dev/sdc"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_delete,
+                status_code: Some(if argv == failed_delete { 87 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_delete {
+                    "multipath replacement delete failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            result.success && result.argv == ["multipathd", "add", "path", "/dev/sdd"]
+        }));
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success && result.argv == ["multipathd", "del", "path", "/dev/sdc"]
+        }));
+        let partial = report
+            .partial_execution_recovery
+            .as_ref()
+            .expect("partial execution recovery is reported");
+        assert_eq!(
+            partial.failed_action_id,
+            "multipathMaps:root-map:replace-device:/dev/sdc"
+        );
+        assert_eq!(
+            partial.failed_command,
+            vec!["multipathd", "del", "path", "/dev/sdc"]
+        );
+        assert_eq!(partial.completed_mutating_command_count, 1);
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("multipath replacement domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("ReplaceDevice"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["multipath", "-ll", "/dev/mapper/mpatha"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "multipath", "--json"] && !command.mutates
+        }));
+        assert!(
+            domain_recovery.notes.iter().any(|note| {
+                note.contains("multipath changes") && note.contains("path removal")
+            })
+        );
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("multipath replacement roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "disk-nix",
+                    "apply",
+                    "--spec",
+                    "<spec>",
+                    "--probe-current",
+                    "--json",
+                ]
+                && command.readiness == CommandReadiness::ManualOnly
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("multipath replacement rollback recovery review is reported");
+        assert!(rollback.commands.iter().all(|command| !command.mutates));
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["disk-nix", "multipath", "--json"] && !command.mutates
+        }));
+    }
+
+    #[test]
     fn failed_luks_open_reports_domain_recovery_guidance() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
