@@ -47,6 +47,11 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The individual harnesses below remain available for targeted lab debugging,
 but they should still be treated as destructive host operations.
 
+The ZFS harness is packaged with the VM suite and can be selected explicitly
+with `DISK_NIX_VM_HARNESSES=zfs` in a disposable guest that has working ZFS
+kernel support and a configured host ID. It is not part of the default VM suite
+until the flake VM test provisions that kernel support reliably.
+
 ## Loop-backed smoke test
 
 The repository includes a root-only loop-backed smoke harness:
@@ -252,14 +257,49 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-mdraid-smoke.sh
 ```
 
+## ZFS loop-backed smoke test
+
+The repository also includes a root-only ZFS loop-backed harness:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-zfs-smoke
+```
+
+When enabled, it:
+
+- creates a temporary 512 MiB backing file
+- attaches it to the next available `/dev/loop*`
+- creates a temporary ZFS pool mounted in the temporary directory
+- verifies `disk-nix inspect <pool> --json` sees ZFS pool topology
+- executes a `pools.<name>.operation = "scrub"` apply plan
+- verifies the generated JSON report was written and the rendered
+  `zpool scrub <pool>` command succeeded
+- destroys the temporary pool, detaches the loop device, and removes the
+  backing file during cleanup
+
+This test intentionally writes ZFS pool labels only to the temporary backing
+file it creates. It still requires destructive opt-in because it uses real
+loop and ZFS tooling. The host or guest must already have working ZFS kernel
+support; on NixOS this usually also means a configured `networking.hostId`.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-zfs-smoke.sh
+```
+
 ## Flake coverage
 
 `nix flake check` does not run destructive integration tests. It does validate
 that the loop smoke harnesses parse, remain opt-in, and still contain the
 expected loop, filesystem setup, resize, mount, Btrfs scrub, bcachefs format,
 bcachefs scrub, LUKS format, LUKS open, LUKS close, LVM create, LVM rescan, MD
-RAID create, MD RAID rescan, and VM orchestration guard steps. This keeps the
-harnesses available and packaged while preserving safe default checks.
+RAID create, MD RAID rescan, ZFS pool create, ZFS scrub, and VM orchestration
+guard steps. This keeps the harnesses available and packaged while preserving
+safe default checks.
 
 ## Remaining integration coverage
 
@@ -267,6 +307,7 @@ The VM smoke suite and targeted loop tests are only the first host-backed
 integration paths. Feature completion still needs disposable VM or lab-host
 tests for broader LUKS format/grow/keyslot/token behavior, broader LVM
 LV/thin/cache/device-topology behavior, broader bcachefs multi-device and
-member-topology behavior, ZFS, broader MD RAID grow/member-topology behavior,
-multipath, iSCSI, NFS, VDO, NVMe namespace operations, failure recovery, and
-broader destructive apply behavior.
+member-topology behavior, broader ZFS vdev/dataset/zvol/snapshot behavior,
+broader MD RAID grow/member-topology behavior, multipath, iSCSI, NFS, VDO,
+NVMe namespace operations, failure recovery, and broader destructive apply
+behavior.

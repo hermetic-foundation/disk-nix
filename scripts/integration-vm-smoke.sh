@@ -57,6 +57,9 @@ run_harness() {
     mdraid)
       disk-nix-integration-mdraid-smoke
       ;;
+    zfs)
+      disk-nix-integration-zfs-smoke
+      ;;
     *)
       echo "unknown VM integration harness: $1" >&2
       exit 2
