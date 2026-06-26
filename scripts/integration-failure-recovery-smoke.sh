@@ -5843,6 +5843,126 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_detach_receipt" >/dev/null
 
+lvm_cache_replace_tools="$tmpdir/fake-lvm-cache-replace-tools"
+mkdir -p "$lvm_cache_replace_tools"
+lvm_cache_replace_disk_nix="$(command -v "$disk_nix_bin")"
+lvm_cache_replace_real_sh="$(command -v sh)"
+
+cat > "$lvm_cache_replace_tools/sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "$lvm_cache_replace_real_sh" || "\${1:-}" == "/bin/sh" ]]; then
+  shift
+fi
+case "\$*" in
+*"command -v"*)
+  exit 0
+  ;;
+*"disk-nix-lvm-cache-replace vg0/root vg0/root-cache-new"*)
+  echo "synthetic LVM cache replacement failure for disk-nix recovery coverage" >&2
+  exit 88
+  ;;
+esac
+exec "$lvm_cache_replace_real_sh" "\$@"
+EOF
+
+cat > "$lvm_cache_replace_tools/disk-nix" <<EOF
+#!/usr/bin/env bash
+exec "$lvm_cache_replace_disk_nix" "\$@"
+EOF
+
+chmod +x "$lvm_cache_replace_tools/sh" "$lvm_cache_replace_tools/disk-nix"
+
+lvm_cache_replace_spec="$tmpdir/lvm-cache-replace-spec.json"
+lvm_cache_replace_json="$tmpdir/lvm-cache-replace-apply.json"
+lvm_cache_replace_report="$tmpdir/lvm-cache-replace-report.json"
+lvm_cache_replace_receipt="$tmpdir/lvm-cache-replace-receipt.json"
+
+jq -n '{
+  lvmCaches: {
+    "vg0/root": {
+      replaceDevices: {
+        "vg0/root-cache": "vg0/root-cache-new"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowDeviceReplacement: true
+  }
+}' > "$lvm_cache_replace_spec"
+
+if PATH="$lvm_cache_replace_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$lvm_cache_replace_spec" \
+  --execute \
+  --report-out "$lvm_cache_replace_report" \
+  --receipt-out "$lvm_cache_replace_receipt" \
+  --json > "$lvm_cache_replace_json"; then
+  echo "expected synthetic LVM cache replacement failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 1
+  and .commandSummary.commandCount == 2
+  and .commandSummary.mutatingCount == 1
+  and .commandSummary.manualReviewCount == 1
+  and .commandSummary.readyCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "lvmCaches:vg0/root:replace-device:vg0/root-cache"
+  and .executionResults[0].argv == ["disk-nix", "inspect", "vg0/root"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 88
+  and .executionResults[1].actionId == "lvmCaches:vg0/root:replace-device:vg0/root-cache"
+  and .executionResults[1].argv == ["sh", "-c", "lvconvert --uncache \"$1\" && lvconvert --type cache --cachepool \"$2\" \"$1\"", "disk-nix-lvm-cache-replace", "vg0/root", "vg0/root-cache-new"]
+  and (.executionResults[1].stderr | contains("synthetic LVM cache replacement failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "lvmCaches:vg0/root:replace-device:vg0/root-cache"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["sh", "-c", "lvconvert --uncache \"$1\" && lvconvert --type cache --cachepool \"$2\" \"$1\"", "disk-nix-lvm-cache-replace", "vg0/root", "vg0/root-cache-new"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["lvmCaches:vg0/root:replace-device:vg0/root-cache"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-a", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/root"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "vg0/root", "--json"]))
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+    and (.notes | any(contains("cache changes")))
+    and (.notes | any(contains("dirty-data")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-a", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/root"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "vg0/root", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["lvs", "--reportformat", "json", "-a", "-o", "lv_name,lv_attr,origin,cache_mode,cache_policy,data_percent,metadata_percent", "vg0/root"]))
+    and (.commands | any(.argv == ["vgs", "--reportformat", "json"]))
+    and (.commands | any(.argv == ["pvs", "--reportformat", "json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$lvm_cache_replace_json" >/dev/null
+
+cmp "$lvm_cache_replace_json" "$lvm_cache_replace_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "lvmCaches:vg0/root:replace-device:vg0/root-cache"
+  and .report.partialExecutionRecovery.failedCommand == ["sh", "-c", "lvconvert --uncache \"$1\" && lvconvert --type cache --cachepool \"$2\" \"$1\"", "disk-nix-lvm-cache-replace", "vg0/root", "vg0/root-cache-new"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$lvm_cache_replace_receipt" >/dev/null
+
 lvm_cache_rescan_tools="$tmpdir/fake-lvm-cache-rescan-tools"
 mkdir -p "$lvm_cache_rescan_tools"
 
@@ -6551,4 +6671,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO grow, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete property rendering, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, multipath resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO grow, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"

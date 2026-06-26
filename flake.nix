@@ -1884,6 +1884,9 @@
                 ${pkgs.gnugrep}/bin/grep -q 'fake-multipath-resize-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-lvm-cache-attach-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-lvm-cache-detach-tools' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'fake-lvm-cache-replace-tools' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'synthetic LVM cache replacement failure' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'lvmCaches:vg0/root:replace-device:vg0/root-cache' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-lvm-cache-rescan-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-nfs-unmount-tools' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-vdo-property-tools' ${./scripts/integration-failure-recovery-smoke.sh}
