@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for forty-two failed apply paths:
+fake storage tools ahead of `PATH` for forty-three failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -177,6 +177,8 @@ fake storage tools ahead of `PATH` for forty-two failed apply paths:
   fails
 - a LUKS mapper open where fake `cryptsetup isLuks` succeeds and fake
   `cryptsetup open /dev/disk/by-id/archive-luks cryptarchive` fails
+- a LUKS mapper close where fake `cryptsetup status cryptclosed` succeeds and
+  fake `cryptsetup close cryptclosed` fails
 - a partition grow where fake `disk-nix inspect /dev/disk/by-id/nvme-root-part2`
   succeeds and fake
   `parted -s /dev/disk/by-id/nvme-root resizepart 2 100%` fails
@@ -281,6 +283,10 @@ The test verifies that the failed report and receipt preserve:
   `targetluns:iqn.2026-06.example:tgt.root:detach`
 - the failed Linux tgt `tgtadm --lld iscsi --mode logicalunit --op delete --tid 42 --lun 8`
   command and non-zero status after inventory and initiator unbind
+- `partialExecutionRecovery.failedActionId` as
+  `luks.devices:cryptclosed:close`
+- the failed `cryptsetup close cryptclosed` command and non-zero status after
+  mapper status inspection
 - `partialExecutionRecovery.failedActionId` as
   `multipathMaps:root-map:replace-device:/dev/sdc`
 - the failed `multipathd del path /dev/sdc` command and non-zero status after
@@ -779,7 +785,7 @@ namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
 target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt
 attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath
-resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS
+resize, multipath replace, MD RAID replace, LUKS open, LUKS close, partition grow, NFS
 remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
 grow, VDO property, bcache property, and LVM cache property failed-command
 paths, and broader destructive apply behavior.

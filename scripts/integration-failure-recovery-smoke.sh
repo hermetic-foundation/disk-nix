@@ -3212,6 +3212,102 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$luks_open_receipt" >/dev/null
 
+luks_close_tools="$tmpdir/fake-luks-close-tools"
+mkdir -p "$luks_close_tools"
+
+cat > "$luks_close_tools/cryptsetup" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "close cryptclosed" ]]; then
+  echo "synthetic LUKS close failure for disk-nix recovery coverage" >&2
+  exit 84
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$luks_close_tools/cryptsetup"
+
+luks_close_spec="$tmpdir/luks-close-spec.json"
+luks_close_json="$tmpdir/luks-close-apply.json"
+luks_close_report="$tmpdir/luks-close-report.json"
+luks_close_receipt="$tmpdir/luks-close-receipt.json"
+
+jq -n '{
+  luks: {
+    devices: {
+      cryptclosed: {
+        name: "cryptclosed",
+        device: "/dev/disk/by-id/closed-luks",
+        operation: "close"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$luks_close_spec"
+
+if PATH="$luks_close_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$luks_close_spec" \
+  --execute \
+  --report-out "$luks_close_report" \
+  --receipt-out "$luks_close_receipt" \
+  --json > "$luks_close_json"; then
+  echo "expected synthetic LUKS close failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["cryptsetup", "status", "cryptclosed"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 84
+  and .executionResults[1].argv == ["cryptsetup", "close", "cryptclosed"]
+  and (.executionResults[1].stderr | contains("synthetic LUKS close failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "luks.devices:cryptclosed:close"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["cryptsetup", "close", "cryptclosed"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["luks.devices:cryptclosed:close"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["cryptsetup", "status", "cryptclosed"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "cryptclosed", "--json"]))
+    and (.notes | any(contains("LUKS changes")))
+    and (.notes | any(contains("alternate unlock paths")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["cryptsetup", "status", "cryptclosed"]))
+    and (.commands | any(.argv == ["disk-nix", "topology", "--json"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["cryptsetup", "status", "cryptclosed"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "cryptclosed", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$luks_close_json" >/dev/null
+
+cmp "$luks_close_json" "$luks_close_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "luks.devices:cryptclosed:close"
+  and .report.partialExecutionRecovery.failedCommand == ["cryptsetup", "close", "cryptclosed"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$luks_close_receipt" >/dev/null
+
 partition_grow_tools="$tmpdir/fake-partition-grow-tools"
 mkdir -p "$partition_grow_tools"
 
@@ -4185,4 +4281,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, filesystem check, filesystem repair, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, LUKS close, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
