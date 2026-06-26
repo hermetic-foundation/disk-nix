@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for sixteen failed apply paths:
+fake storage tools ahead of `PATH` for seventeen failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -112,6 +112,10 @@ fake storage tools ahead of `PATH` for sixteen failed apply paths:
 - a target-side LUN create through the Linux LIO provider where fake
   `targetcli` inventory, backstore creation, and target creation succeed and
   fake `targetcli /iscsi/iqn.2026-06.example:storage.root/tpg1/luns create /backstores/block/_dev_zvol_tank_root lun=7`
+  fails
+- a target-side LUN create through the Linux tgt provider where fake `tgtadm`
+  inventory and target creation succeed and fake
+  `tgtadm --lld iscsi --mode logicalunit --op new --tid 42 --lun 8 --backing-store /dev/zvol/tank/root`
   fails
 - a multipath path replacement where fake `multipath -ll /dev/mapper/mpatha`
   and fake `multipathd add path /dev/sdd` succeed and fake
@@ -662,7 +666,7 @@ additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, ZFS rollback, NVMe namespace
 create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe
-namespace delete, target-side LUN LIO create, multipath replace, MD RAID
-replace, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO
-property, and LVM cache property failed-command paths, and broader destructive
-apply behavior.
+namespace delete, target-side LUN LIO create, target-side LUN tgt create,
+multipath replace, MD RAID replace, iSCSI logout, iSCSI login, LVM cache
+attach, LVM cache detach, VDO property, and LVM cache property failed-command
+paths, and broader destructive apply behavior.
