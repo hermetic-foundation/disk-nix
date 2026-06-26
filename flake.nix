@@ -190,6 +190,17 @@
           ];
           text = builtins.readFile ./scripts/integration-iscsi-smoke.sh;
         };
+        integrationMultipathSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-multipath-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.lsscsi
+            pkgs.multipath-tools
+          ];
+          text = builtins.readFile ./scripts/integration-multipath-smoke.sh;
+        };
         integrationVmSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-vm-smoke";
           runtimeInputs = [
@@ -203,6 +214,7 @@
             integrationNfsSmoke
             integrationVdoSmoke
             integrationIscsiSmoke
+            integrationMultipathSmoke
             pkgs.systemd
           ];
           text = builtins.readFile ./scripts/integration-vm-smoke.sh;
@@ -1503,6 +1515,7 @@
           integration-nfs-smoke = integrationNfsSmoke;
           integration-vdo-smoke = integrationVdoSmoke;
           integration-iscsi-smoke = integrationIscsiSmoke;
+          integration-multipath-smoke = integrationMultipathSmoke;
           integration-vm-smoke = integrationVmSmoke;
           integration-vm-test = integrationVmTest;
           integration-loop-smoke = integrationLoopSmoke;
@@ -1582,6 +1595,13 @@
             program = "${integrationIscsiSmoke}/bin/disk-nix-integration-iscsi-smoke";
             meta = {
               description = "Root-only iSCSI session disk-nix smoke integration harness";
+            };
+          };
+          integration-multipath-smoke = {
+            type = "app";
+            program = "${integrationMultipathSmoke}/bin/disk-nix-integration-multipath-smoke";
+            meta = {
+              description = "Root-only multipath map disk-nix smoke integration harness";
             };
           };
           integration-vm-smoke = {
@@ -1706,6 +1726,16 @@
             ${pkgs.gnugrep}/bin/grep -q 'lsscsi", "-t", "-s"' ${./scripts/integration-iscsi-smoke.sh}
             touch "$out"
           '';
+          integrationMultipathSmoke = pkgs.runCommand "disk-nix-integration-multipath-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_MULTIPATH_MAP ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'multipath -ll' ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'lsscsi -t -s' ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'multipath", "-ll"' ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'multipath", "-r"' ${./scripts/integration-multipath-smoke.sh}
+            touch "$out"
+          '';
           integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vm-smoke.sh}
@@ -1718,6 +1748,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-nfs-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-vdo-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-iscsi-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-multipath-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
           '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''

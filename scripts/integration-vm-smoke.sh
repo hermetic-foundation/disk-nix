@@ -69,6 +69,9 @@ run_harness() {
     iscsi)
       disk-nix-integration-iscsi-smoke
       ;;
+    multipath)
+      disk-nix-integration-multipath-smoke
+      ;;
     *)
       echo "unknown VM integration harness: $1" >&2
       exit 2
