@@ -271,7 +271,10 @@ initiator group, initiator, LUN map/unmap, target enable/removal, `resync_dev`,
 LUN attribute, and persistence commands when the reviewed target IQN, backing
 object, LUN, optional group, and initiators are declared. Other providers still
 use provider-labeled handoff commands and verification placeholders until
-concrete adapters are added.
+concrete adapters are added, but those handoffs now carry a
+`providerCapabilities` contract naming the required create, grow, map, unmap,
+remove, rescan, property, persistence, verification, and refusal behavior that
+an external adapter must implement.
 
 ## Remaining for feature complete
 

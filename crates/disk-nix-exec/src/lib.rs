@@ -90,6 +90,8 @@ pub struct ExecutionCommand {
     pub mutates: bool,
     pub readiness: CommandReadiness,
     pub unresolved_inputs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provider_capabilities: Vec<String>,
     pub note: String,
 }
 
@@ -4285,6 +4287,11 @@ fn render_script_command(script: &mut String, command: &ExecutionCommand) {
     script.push_str("# ");
     script.push_str(&command.note);
     script.push('\n');
+    if !command.provider_capabilities.is_empty() {
+        script.push_str("# Provider capabilities: ");
+        script.push_str(&command.provider_capabilities.join(", "));
+        script.push('\n');
+    }
     if !command.unresolved_inputs.is_empty() {
         script.push_str("# Unresolved inputs: ");
         script.push_str(&command.unresolved_inputs.join(", "));
@@ -10995,7 +11002,7 @@ fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec
         "verify target-side LUN inventory after provider action",
     )];
     if let Some(portal) = action.context.portal.as_deref() {
-        commands.push(command_vec_with_readiness(
+        let mut command = command_vec_with_readiness(
             vec![
                 target_lun_provider_program(action),
                 "show-mapping".to_string(),
@@ -11008,7 +11015,9 @@ fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec
             CommandReadiness::NeedsDomainImplementation,
             [target_lun_provider_unresolved(action)],
             "verify target-side portal mapping after provider action",
-        ));
+        );
+        command.provider_capabilities = target_lun_provider_capabilities(action);
+        commands.push(command);
     }
     commands
 }
@@ -12290,7 +12299,7 @@ fn target_lun_inventory_command(
     target: &str,
     note: &str,
 ) -> ExecutionCommand {
-    command_vec_with_readiness(
+    let mut command = command_vec_with_readiness(
         vec![
             target_lun_provider_program(action),
             "show-lun".to_string(),
@@ -12301,7 +12310,9 @@ fn target_lun_inventory_command(
         CommandReadiness::NeedsDomainImplementation,
         [target_lun_provider_unresolved(action)],
         note,
-    )
+    );
+    command.provider_capabilities = target_lun_provider_capabilities(action);
+    command
 }
 
 fn target_lun_provider_command(
@@ -12373,13 +12384,15 @@ fn target_lun_provider_command(
         argv.push(value.to_string());
     }
 
-    command_vec_with_readiness(
+    let mut command = command_vec_with_readiness(
         argv,
         action.operation != Operation::Rescan,
         CommandReadiness::NeedsDomainImplementation,
         unresolved_inputs,
         &format!("render provider-specific target-side LUN {operation} command"),
-    )
+    );
+    command.provider_capabilities = target_lun_provider_capabilities(action);
+    command
 }
 
 fn target_lun_provider_program(action: &PlannedAction) -> String {
@@ -12398,6 +12411,84 @@ fn target_lun_provider_unresolved(action: &PlannedAction) -> String {
         .as_deref()
         .map(|provider| format!("{provider} target LUN provider implementation"))
         .unwrap_or_else(|| "target LUN provider implementation".to_string())
+}
+
+fn target_lun_provider_capabilities(action: &PlannedAction) -> Vec<String> {
+    let mut capabilities = vec![
+        "target-lun.identity".to_string(),
+        "target-lun.inventory".to_string(),
+        "target-lun.persistence".to_string(),
+        "target-lun.verification".to_string(),
+        "target-lun.refusal".to_string(),
+    ];
+
+    match action.operation {
+        Operation::Create => {
+            capabilities.extend([
+                "target-lun.create".to_string(),
+                "target-lun.capacity.declare".to_string(),
+                "target-lun.backing.bind".to_string(),
+                "target-lun.mapping.create".to_string(),
+            ]);
+        }
+        Operation::Grow => {
+            capabilities.extend([
+                "target-lun.grow".to_string(),
+                "target-lun.capacity.expand".to_string(),
+                "target-lun.consumer-refresh.handoff".to_string(),
+            ]);
+        }
+        Operation::Attach => {
+            capabilities.extend([
+                "target-lun.mapping.create".to_string(),
+                "target-lun.initiator.allow".to_string(),
+            ]);
+        }
+        Operation::Detach => {
+            capabilities.extend([
+                "target-lun.mapping.remove".to_string(),
+                "target-lun.initiator.revoke".to_string(),
+            ]);
+        }
+        Operation::Destroy => {
+            capabilities.extend([
+                "target-lun.mapping.remove".to_string(),
+                "target-lun.destroy".to_string(),
+                "target-lun.data-loss.guard".to_string(),
+            ]);
+        }
+        Operation::Rescan => {
+            capabilities.extend([
+                "target-lun.refresh".to_string(),
+                "target-lun.consumer-refresh.handoff".to_string(),
+            ]);
+        }
+        Operation::SetProperty => {
+            capabilities.extend([
+                "target-lun.property.set".to_string(),
+                "target-lun.property.validate".to_string(),
+            ]);
+        }
+        _ => {}
+    }
+
+    if action.context.target_id.is_some() {
+        capabilities.push("target-lun.target-id.declared".to_string());
+    }
+    if action.context.lun.is_some() {
+        capabilities.push("target-lun.lun-id.declared".to_string());
+    }
+    if action.context.device.is_some() {
+        capabilities.push("target-lun.backing.declared".to_string());
+    }
+    if action.context.portal.is_some() {
+        capabilities.push("target-lun.portal.declared".to_string());
+    }
+    if action.context.client.is_some() || !action.context.devices.is_empty() {
+        capabilities.push("target-lun.initiator-scope.declared".to_string());
+    }
+
+    capabilities
 }
 
 fn unimplemented_action_command(
@@ -12473,6 +12564,7 @@ fn command_with_readiness<const N: usize, const M: usize>(
             .iter()
             .map(|value| (*value).to_string())
             .collect(),
+        provider_capabilities: Vec::new(),
         note: note.to_string(),
     }
 }
@@ -12495,6 +12587,7 @@ where
         mutates,
         readiness,
         unresolved_inputs: unresolved_inputs.into_iter().map(Into::into).collect(),
+        provider_capabilities: Vec::new(),
         note: note.to_string(),
     }
 }
@@ -30100,6 +30193,18 @@ mod tests {
                 && command
                     .unresolved_inputs
                     .contains(&"netapp-ontap target LUN provider implementation".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.create".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.persistence".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.refusal".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.initiator-scope.declared".to_string())
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "targetluns:array-a/root:create"
@@ -30114,6 +30219,12 @@ mod tests {
                             "array-a/root",
                         ]
                         && !command.mutates
+                        && command
+                            .provider_capabilities
+                            .contains(&"target-lun.verification".to_string())
+                        && command
+                            .provider_capabilities
+                            .contains(&"target-lun.portal.declared".to_string())
                 })
         }));
 
@@ -30134,7 +30245,25 @@ mod tests {
                 ]
                 && command.mutates
                 && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.grow".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.capacity.expand".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.consumer-refresh.handoff".to_string())
         }));
+
+        let script = report
+            .to_shell_script()
+            .expect("not-ready plans still render a review script");
+        assert!(
+            script.contains("# Provider capabilities: target-lun.identity, target-lun.inventory")
+        );
+        assert!(script.contains("target-lun.capacity.expand"));
+        assert!(script.contains("target-lun.refusal"));
     }
 
     #[test]

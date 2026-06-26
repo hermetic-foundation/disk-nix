@@ -2187,6 +2187,9 @@
             ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' ${./scripts/integration-failure-recovery-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'tgt property updates render' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'provider = "scst"' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'providerCapabilities' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'provider capability contracts' ${./docs/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'target-lun.capacity.expand' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'scstadmin' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'initiatorGroup' ${./docs/planning.md}
             runbooks=${./docs/operator-runbooks.md}

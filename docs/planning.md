@@ -830,8 +830,9 @@ Apply reports include `blockedSummary` counters for offline-required,
 destructive, potential-data-loss, and unsupported blocked actions in addition
 to the detailed blocked action list. When policy allows an action, the report
 also includes a `commandSummary` plus a `commandPlan` with planned command
-argv, mutation markers, manual-review flags, readiness, unresolved inputs, and
-notes. If `--probe-current` is set, the report also includes the same
+argv, mutation markers, manual-review flags, readiness, unresolved inputs,
+provider capability contracts for generic target-side LUN handoffs, and notes.
+If `--probe-current` is set, the report also includes the same
 `topologyComparison` emitted by `plan`, including any safe no-op actions
 suppressed before command rendering. It also includes a
 `verificationSummary` plus a `verificationPlan` with read-only post-apply

@@ -827,6 +827,13 @@ whether each command mutates system state, and notes that still require
 operator review. Each command also reports readiness:
 `ready`, `needs-desired-size`, `needs-domain-implementation`, or `manual-only`,
 plus unresolved inputs when applicable.
+Generic target-side LUN provider handoffs also report
+`providerCapabilities`, a stable capability contract that names the adapter
+behavior required for the placeholder command. The contract covers target LUN
+identity, inventory, persistence, verification, refusal behavior, and the
+operation-specific capability such as create, grow, map, unmap, remove, rescan,
+or property mutation. Generated shell scripts render the same capability list
+as review comments before the non-ready provider command.
 When an action context includes `desiredSize`, supported resize commands use
 that concrete target and no longer report `needs-desired-size`.
 Cache-layer command plans include bcache sysfs operations for attaching or

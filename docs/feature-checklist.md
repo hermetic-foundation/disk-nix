@@ -259,7 +259,7 @@ Update rules:
   that validates the backing object, refreshes exported logical-unit capacity
   where supported, persists target state, and verifies initiator-visible
   capacity.
-- [ ] **Partial:** Other target provider adapters need a provider capability
+- [x] **Finished:** Other target provider adapters have a provider capability
   contract for create, grow, map, unmap, remove, rescan, property mutation,
   persistence, verification, and refusal behavior.
 - [ ] **Partial:** Array-backed target providers need concrete adapter models
