@@ -536,6 +536,106 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$btrfs_rebalance_receipt" >/dev/null
 
+filesystem_trim_tools="$tmpdir/fake-filesystem-trim-tools"
+mkdir -p "$filesystem_trim_tools"
+
+cat > "$filesystem_trim_tools/findmnt" <<'EOF'
+#!/usr/bin/env bash
+printf '{}\n'
+exit 0
+EOF
+
+cat > "$filesystem_trim_tools/fstrim" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "-v /scratch" ]]; then
+  echo "synthetic filesystem trim failure for disk-nix recovery coverage" >&2
+  exit 83
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$filesystem_trim_tools/findmnt" "$filesystem_trim_tools/fstrim"
+
+filesystem_trim_spec="$tmpdir/filesystem-trim-spec.json"
+filesystem_trim_json="$tmpdir/filesystem-trim-apply.json"
+filesystem_trim_report="$tmpdir/filesystem-trim-report.json"
+filesystem_trim_receipt="$tmpdir/filesystem-trim-receipt.json"
+
+jq -n '{
+  filesystems: {
+    scratch: {
+      mountpoint: "/scratch",
+      fsType: "xfs",
+      operation: "trim"
+    }
+  },
+  apply: {}
+}' > "$filesystem_trim_spec"
+
+if PATH="$filesystem_trim_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$filesystem_trim_spec" \
+  --execute \
+  --report-out "$filesystem_trim_report" \
+  --receipt-out "$filesystem_trim_receipt" \
+  --json > "$filesystem_trim_json"; then
+  echo "expected synthetic filesystem trim failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.stepCount == 2
+  and .commandSummary.commandCount == 3
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].actionId == "filesystem:scratch:inspect"
+  and .executionResults[0].argv == ["disk-nix", "inspect", "/scratch"]
+  and .executionResults[1].success == true
+  and .executionResults[1].actionId == "filesystems:scratch:trim"
+  and .executionResults[1].argv == ["disk-nix", "inspect", "/scratch"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 83
+  and .executionResults[2].argv == ["fstrim", "-v", "/scratch"]
+  and (.executionResults[2].stderr | contains("synthetic filesystem trim failure"))
+  and .partialExecutionRecovery.completedActionIds == ["filesystem:scratch:inspect"]
+  and .partialExecutionRecovery.failedActionId == "filesystems:scratch:trim"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["fstrim", "-v", "/scratch"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["filesystems:scratch:trim"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["disk-nix", "filesystems", "--json"]))
+    and (.notes | any(contains("filesystem changes")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "inspect", "scratch", "--json"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["disk-nix", "filesystems", "--json"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$filesystem_trim_json" >/dev/null
+
+cmp "$filesystem_trim_json" "$filesystem_trim_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.completedActionIds == ["filesystem:scratch:inspect"]
+  and .report.partialExecutionRecovery.failedActionId == "filesystems:scratch:trim"
+  and .report.partialExecutionRecovery.failedCommand == ["fstrim", "-v", "/scratch"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$filesystem_trim_receipt" >/dev/null
+
 swap_label_tools="$tmpdir/fake-swap-label-tools"
 mkdir -p "$swap_label_tools"
 
@@ -3879,4 +3979,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, XFS grow, Btrfs scrub, Btrfs rebalance, filesystem trim, swap label, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, multipath resize, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
