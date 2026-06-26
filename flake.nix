@@ -211,6 +211,15 @@
           ];
           text = builtins.readFile ./scripts/integration-nvme-smoke.sh;
         };
+        integrationFailureRecoverySmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-failure-recovery-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.jq
+          ];
+          text = builtins.readFile ./scripts/integration-failure-recovery-smoke.sh;
+        };
         integrationVmSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-vm-smoke";
           runtimeInputs = [
@@ -226,6 +235,7 @@
             integrationIscsiSmoke
             integrationMultipathSmoke
             integrationNvmeSmoke
+            integrationFailureRecoverySmoke
             pkgs.systemd
           ];
           text = builtins.readFile ./scripts/integration-vm-smoke.sh;
@@ -1528,6 +1538,7 @@
           integration-iscsi-smoke = integrationIscsiSmoke;
           integration-multipath-smoke = integrationMultipathSmoke;
           integration-nvme-smoke = integrationNvmeSmoke;
+          integration-failure-recovery-smoke = integrationFailureRecoverySmoke;
           integration-vm-smoke = integrationVmSmoke;
           integration-vm-test = integrationVmTest;
           integration-loop-smoke = integrationLoopSmoke;
@@ -1621,6 +1632,13 @@
             program = "${integrationNvmeSmoke}/bin/disk-nix-integration-nvme-smoke";
             meta = {
               description = "Root-only NVMe namespace disk-nix smoke integration harness";
+            };
+          };
+          integration-failure-recovery-smoke = {
+            type = "app";
+            program = "${integrationFailureRecoverySmoke}/bin/disk-nix-integration-failure-recovery-smoke";
+            meta = {
+              description = "Synthetic failed-apply disk-nix partial recovery smoke integration harness";
             };
           };
           integration-vm-smoke = {
@@ -1769,6 +1787,19 @@
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "ns-rescan"' ${./scripts/integration-nvme-smoke.sh}
             touch "$out"
           '';
+          integrationFailureRecoverySmoke =
+            pkgs.runCommand "disk-nix-integration-failure-recovery-smoke-check" { }
+              ''
+                ${pkgs.bash}/bin/bash -n ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'fake_tools/lvs' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q partialExecutionRecovery ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'synthetic resize failure' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'completedMutatingCommandCount' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'roll-forward-review' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'rollback-review' ${./scripts/integration-failure-recovery-smoke.sh}
+                touch "$out"
+              '';
           integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vm-smoke.sh}
@@ -1783,6 +1814,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-iscsi-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-multipath-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-nvme-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-failure-recovery-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
           '';
           documentation = pkgs.runCommand "disk-nix-documentation-check" { } ''

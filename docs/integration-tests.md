@@ -35,8 +35,8 @@ The VM suite refuses to run unless:
 For controlled lab automation where VM detection is unavailable but isolation
 is provided externally, set `DISK_NIX_INTEGRATION_ASSUME_VM=1`.
 
-By default the suite runs the loop, Btrfs, bcachefs, LUKS, LVM, and MD RAID
-smoke harnesses. To run a subset:
+By default the suite runs the loop, Btrfs, bcachefs, LUKS, LVM, MD RAID, and
+failure-recovery smoke harnesses. To run a subset:
 
 ```sh
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
@@ -80,6 +80,41 @@ with `DISK_NIX_VM_HARNESSES=nvme` when the guest has an existing disposable
 controller path named by `DISK_NIX_NVME_CONTROLLER`. It is not part of the
 default VM suite because the flake VM test does not yet provision an NVMe
 controller.
+
+## Failure-recovery smoke test
+
+The repository includes a synthetic failed-apply harness:
+
+```sh
+env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-failure-recovery-smoke
+```
+
+The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
+matching the execute-mode integration guard used by the destructive harnesses.
+It does not require root and does not mutate real storage. Instead, it places
+fake `lvextend` and `resize2fs` tools ahead of `PATH`, runs
+`disk-nix apply --execute --json` for a layered LVM volume grow followed by an
+ext4 filesystem grow, lets the fake `lvextend` succeed, and forces the fake
+`resize2fs` to fail.
+
+The test verifies that the failed report and receipt preserve:
+
+- `partialExecutionRecovery.completedActionIds` containing
+  `volumes:vg0/root:grow`
+- `partialExecutionRecovery.failedActionId` as `filesystem:root:grow`
+- the failed `resize2fs vg0/root 50GiB` command and non-zero status
+- one completed mutating command before failure
+- retry/review, roll-forward review, rollback review, and domain-recovery
+  guidance for the partially completed apply
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-failure-recovery-smoke.sh
+```
 
 ## Loop-backed smoke test
 
@@ -514,10 +549,10 @@ that the loop smoke harnesses parse, remain opt-in, and still contain the
 expected loop, filesystem setup, resize, mount, Btrfs scrub, bcachefs format,
 bcachefs scrub, LUKS format, LUKS open, LUKS close, LVM create, LVM rescan, MD
 RAID create, MD RAID rescan, ZFS pool create, ZFS scrub, NFS mount, NFS rescan,
-NFS remount, VDO status, VDO stats, VDO rescan, and VM orchestration guard
-steps, iSCSI session rescan, multipath map rescan, and NVMe namespace rescan.
-This keeps the harnesses available and packaged while preserving safe default
-checks.
+NFS remount, VDO status, VDO stats, VDO rescan, VM orchestration guard steps,
+iSCSI session rescan, multipath map rescan, NVMe namespace rescan, and the
+synthetic failed-apply `partialExecutionRecovery` assertions. This keeps the
+harnesses available and packaged while preserving safe default checks.
 
 ## Remaining integration coverage
 
@@ -530,5 +565,6 @@ broader MD RAID grow/member-topology behavior, broader multipath path
 add/remove/replace/flush/grow/failure behavior, broader iSCSI
 login/logout/LUN/failure behavior, broader NFS server/export/unmount/failure
 behavior, broader VDO create/grow/start/stop/property/remove behavior, NVMe
-namespace create/grow/attach/detach/delete/failure behavior, failure recovery,
-and broader destructive apply behavior.
+namespace create/grow/attach/detach/delete/failure behavior, recovery behavior
+beyond the synthetic LVM-plus-filesystem failed-command path, and broader
+destructive apply behavior.

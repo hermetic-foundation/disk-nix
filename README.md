@@ -61,13 +61,19 @@ nix flake check
 The flake checks build the CLI, run workspace tests and clippy, validate the
 NixOS module, and execute the checked-in example specs through `plan`, `apply`,
 and `--script-out` so JSON contracts and review-script generation stay covered.
-They also validate the opt-in loop-backed integration harness without creating
-block devices.
+They also validate the opt-in integration harnesses without creating block
+devices, including the synthetic failed-apply recovery smoke test.
 
 Run the root-only loop-backed smoke harness explicitly with:
 
 ```sh
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 nix run .#integration-loop-smoke
+```
+
+Run the synthetic partial-recovery smoke harness without root:
+
+```sh
+env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 nix run .#integration-failure-recovery-smoke
 ```
 
 ## CLI

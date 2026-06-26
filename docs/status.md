@@ -154,13 +154,17 @@ behavior across real storage stacks.
   multipath, ZFS pools/datasets/zvols/snapshots, LVM PV/VG/LV/thin/cache
   identities, VDO volumes, loop devices, cache identities, iSCSI sessions, LUN
   host paths, NVMe namespaces, and NFS export path/client pairs.
-- Root-only, explicitly enabled smoke integration harnesses for loop devices,
-  Btrfs, bcachefs, LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, and
-  NVMe. The self-contained loop-backed harnesses create disposable backing
-  files or arrays, verify real `inspect --json`, execute reviewed apply plans,
-  and clean up temporary devices. Lab-hardware harnesses for NFS, VDO, iSCSI,
-  multipath, and NVMe require explicit environment-selected existing targets
-  and exercise non-destructive refresh or remount paths.
+- Explicitly enabled smoke integration harnesses for loop devices, Btrfs,
+  bcachefs, LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, NVMe, and
+  synthetic failed-apply recovery. The self-contained loop-backed harnesses
+  create disposable backing files or arrays, verify real `inspect --json`,
+  execute reviewed apply plans, and clean up temporary devices. Lab-hardware
+  harnesses for NFS, VDO, iSCSI, multipath, and NVMe require explicit
+  environment-selected existing targets and exercise non-destructive refresh
+  or remount paths. The failure-recovery harness uses fake storage tools to
+  prove `partialExecutionRecovery`, failed-command receipts, roll-forward
+  review, rollback review, and domain-recovery reporting for a layered
+  LVM-plus-filesystem apply failure without touching real block devices.
 
 ## Implemented probe coverage
 
@@ -197,9 +201,10 @@ placeholders, but concrete array adapters remain future work.
 ## Remaining for feature complete
 
 - Broader destructive and failure-path integration tests beyond the smoke
-  suite, including device replacement, rollback, failed-command recovery,
-  degraded arrays, cache attach/detach, namespace creation/deletion, LUN
-  login/logout flows, and property mutation across supported domains.
+  suite, including device replacement, rollback, degraded arrays, cache
+  attach/detach, namespace creation/deletion, LUN login/logout flows, property
+  mutation across supported domains, and failed-command recovery beyond the
+  synthetic LVM-plus-filesystem path.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional

@@ -244,13 +244,16 @@ Update rules:
 - [x] **Finished:** Root-only opt-in smoke harnesses for loop-backed and
   selected lab-backed storage domains.
 - [x] **Finished:** Smoke harness coverage for loop devices, Btrfs, bcachefs,
-  LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, and NVMe.
+  LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, NVMe, and synthetic
+  failed-apply recovery.
 - [ ] **Partial:** Broader destructive and failure-path integration tests are
-  still needed for device replacement, rollback, failed-command recovery,
-  degraded arrays, cache attach/detach, namespace creation/deletion, LUN
-  login/logout flows, and property mutation.
+  still needed for device replacement, rollback, degraded arrays, cache
+  attach/detach, namespace creation/deletion, LUN login/logout flows, property
+  mutation, and failed-command recovery beyond the synthetic
+  LVM-plus-filesystem path.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
-  for multi-layer apply behavior on isolated disposable disks are still needed.
+  for multi-layer apply behavior on isolated disposable disks are still needed;
+  the default VM suite now includes the synthetic failure-recovery harness.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
   checks for root privilege plus missing, failing, stderr-only, and empty-output
