@@ -75,6 +75,12 @@ existing disposable multipath map named by `DISK_NIX_MULTIPATH_MAP`. It is not
 part of the default VM suite because the flake VM test does not yet provision
 multiple backing paths for a map.
 
+The NVMe harness is packaged with the VM suite and can be selected explicitly
+with `DISK_NIX_VM_HARNESSES=nvme` when the guest has an existing disposable
+controller path named by `DISK_NIX_NVME_CONTROLLER`. It is not part of the
+default VM suite because the flake VM test does not yet provision an NVMe
+controller.
+
 ## Loop-backed smoke test
 
 The repository includes a root-only loop-backed smoke harness:
@@ -459,6 +465,43 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-multipath-smoke.sh
 ```
 
+## NVMe namespace smoke test
+
+The repository also includes a root-only NVMe harness for existing lab
+controllers:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_NVME_CONTROLLER=/dev/nvme0 \
+  nix run .#integration-nvme-smoke
+```
+
+When enabled, it:
+
+- verifies `nvme list-ns <controller> --all --output-format=json` can read
+  namespace inventory
+- verifies `nvme list-subsys --output-format=json` can read subsystem paths
+- verifies `disk-nix inspect <controller> --json` sees NVMe topology
+- executes an `nvmeNamespaces.<controller>.operation = "rescan"` apply plan
+- verifies the rendered `nvme list-ns`, `nvme list-subsys`, and
+  `nvme ns-rescan <controller>` commands succeeded
+- verifies the generated JSON report was written
+
+This test does not create, grow, attach, detach, or delete NVMe namespaces. It
+still requires destructive opt-in because `nvme ns-rescan` refreshes live
+controller namespace state and is intended for disposable lab hosts where the
+selected controller can be safely rescanned. Use a controller path such as
+`/dev/nvme0`, not a namespace path such as `/dev/nvme0n1`.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_NVME_CONTROLLER=/dev/nvme0 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-nvme-smoke.sh
+```
+
 ## Flake coverage
 
 `nix flake check` does not run destructive integration tests. It does validate
@@ -467,8 +510,9 @@ expected loop, filesystem setup, resize, mount, Btrfs scrub, bcachefs format,
 bcachefs scrub, LUKS format, LUKS open, LUKS close, LVM create, LVM rescan, MD
 RAID create, MD RAID rescan, ZFS pool create, ZFS scrub, NFS mount, NFS rescan,
 NFS remount, VDO status, VDO stats, VDO rescan, and VM orchestration guard
-steps, iSCSI session rescan, and multipath map rescan. This keeps the harnesses
-available and packaged while preserving safe default checks.
+steps, iSCSI session rescan, multipath map rescan, and NVMe namespace rescan.
+This keeps the harnesses available and packaged while preserving safe default
+checks.
 
 ## Remaining integration coverage
 
@@ -481,4 +525,5 @@ broader MD RAID grow/member-topology behavior, broader multipath path
 add/remove/replace/flush/grow/failure behavior, broader iSCSI
 login/logout/LUN/failure behavior, broader NFS server/export/unmount/failure
 behavior, broader VDO create/grow/start/stop/property/remove behavior, NVMe
-namespace operations, failure recovery, and broader destructive apply behavior.
+namespace create/grow/attach/detach/delete/failure behavior, failure recovery,
+and broader destructive apply behavior.

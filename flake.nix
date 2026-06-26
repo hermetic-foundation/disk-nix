@@ -201,6 +201,16 @@
           ];
           text = builtins.readFile ./scripts/integration-multipath-smoke.sh;
         };
+        integrationNvmeSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-nvme-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.nvme-cli
+          ];
+          text = builtins.readFile ./scripts/integration-nvme-smoke.sh;
+        };
         integrationVmSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-vm-smoke";
           runtimeInputs = [
@@ -215,6 +225,7 @@
             integrationVdoSmoke
             integrationIscsiSmoke
             integrationMultipathSmoke
+            integrationNvmeSmoke
             pkgs.systemd
           ];
           text = builtins.readFile ./scripts/integration-vm-smoke.sh;
@@ -1516,6 +1527,7 @@
           integration-vdo-smoke = integrationVdoSmoke;
           integration-iscsi-smoke = integrationIscsiSmoke;
           integration-multipath-smoke = integrationMultipathSmoke;
+          integration-nvme-smoke = integrationNvmeSmoke;
           integration-vm-smoke = integrationVmSmoke;
           integration-vm-test = integrationVmTest;
           integration-loop-smoke = integrationLoopSmoke;
@@ -1602,6 +1614,13 @@
             program = "${integrationMultipathSmoke}/bin/disk-nix-integration-multipath-smoke";
             meta = {
               description = "Root-only multipath map disk-nix smoke integration harness";
+            };
+          };
+          integration-nvme-smoke = {
+            type = "app";
+            program = "${integrationNvmeSmoke}/bin/disk-nix-integration-nvme-smoke";
+            meta = {
+              description = "Root-only NVMe namespace disk-nix smoke integration harness";
             };
           };
           integration-vm-smoke = {
@@ -1736,6 +1755,16 @@
             ${pkgs.gnugrep}/bin/grep -q 'multipath", "-r"' ${./scripts/integration-multipath-smoke.sh}
             touch "$out"
           '';
+          integrationNvmeSmoke = pkgs.runCommand "disk-nix-integration-nvme-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_CONTROLLER ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme list-ns' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme list-subsys' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme", "list-ns"' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme", "ns-rescan"' ${./scripts/integration-nvme-smoke.sh}
+            touch "$out"
+          '';
           integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vm-smoke.sh}
@@ -1749,6 +1778,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-vdo-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-iscsi-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-multipath-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-nvme-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
           '';
           examples = pkgs.runCommand "disk-nix-examples-check" { nativeBuildInputs = [ pkgs.jq ]; } ''

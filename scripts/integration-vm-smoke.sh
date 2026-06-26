@@ -72,6 +72,9 @@ run_harness() {
     multipath)
       disk-nix-integration-multipath-smoke
       ;;
+    nvme)
+      disk-nix-integration-nvme-smoke
+      ;;
     *)
       echo "unknown VM integration harness: $1" >&2
       exit 2
