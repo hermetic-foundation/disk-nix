@@ -235,6 +235,103 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$swap_label_receipt" >/dev/null
 
+dm_rename_tools="$tmpdir/fake-dm-rename-tools"
+mkdir -p "$dm_rename_tools"
+
+cat > "$dm_rename_tools/dmsetup" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "rename /dev/mapper/cryptswap cryptswap-retired" ]]; then
+  echo "synthetic device-mapper rename failure for disk-nix recovery coverage" >&2
+  exit 76
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$dm_rename_tools/dmsetup"
+
+dm_rename_spec="$tmpdir/dm-rename-spec.json"
+dm_rename_json="$tmpdir/dm-rename-apply.json"
+dm_rename_report="$tmpdir/dm-rename-report.json"
+dm_rename_receipt="$tmpdir/dm-rename-receipt.json"
+
+jq -n '{
+  dmMaps: {
+    cryptswap: {
+      operation: "rename",
+      target: "/dev/mapper/cryptswap",
+      renameTo: "/dev/mapper/cryptswap-retired"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$dm_rename_spec"
+
+if PATH="$dm_rename_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$dm_rename_spec" \
+  --execute \
+  --report-out "$dm_rename_report" \
+  --receipt-out "$dm_rename_receipt" \
+  --json > "$dm_rename_json"; then
+  echo "expected synthetic device-mapper rename failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 4
+  and (.executionResults | length) == 3
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["dmsetup", "info", "-c", "--noheadings", "-o", "name,uuid,major,minor,open,segments,events", "/dev/mapper/cryptswap"]
+  and .executionResults[1].success == true
+  and .executionResults[1].argv == ["dmsetup", "deps", "-o", "devname", "/dev/mapper/cryptswap"]
+  and .executionResults[2].success == false
+  and .executionResults[2].statusCode == 76
+  and .executionResults[2].argv == ["dmsetup", "rename", "/dev/mapper/cryptswap", "cryptswap-retired"]
+  and (.executionResults[2].stderr | contains("synthetic device-mapper rename failure"))
+  and .partialExecutionRecovery.completedActionIds == []
+  and .partialExecutionRecovery.failedActionId == "dmmaps:cryptswap:rename"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["dmsetup", "rename", "/dev/mapper/cryptswap", "cryptswap-retired"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["dmmaps:cryptswap:rename"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["dmsetup", "info", "-c", "--noheadings", "-o", "name,uuid,major,minor,open,segments,events", "/dev/mapper/cryptswap"]))
+    and (.commands | any(.argv == ["dmsetup", "deps", "-o", "devname", "/dev/mapper/cryptswap"]))
+    and (.commands | any(.argv == ["dmsetup", "table", "/dev/mapper/cryptswap"]))
+    and (.commands | any(.argv == ["dmsetup", "status", "/dev/mapper/cryptswap"]))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "/dev/mapper/cryptswap", "--json"]))
+    and (.notes | any(contains("local mapping changes")))
+    and (.notes | any(contains("dependencies")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["dmsetup", "status", "/dev/mapper/cryptswap"]))
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["dmsetup", "table", "/dev/mapper/cryptswap"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$dm_rename_json" >/dev/null
+
+cmp "$dm_rename_json" "$dm_rename_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "dmmaps:cryptswap:rename"
+  and .report.partialExecutionRecovery.failedCommand == ["dmsetup", "rename", "/dev/mapper/cryptswap", "cryptswap-retired"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$dm_rename_receipt" >/dev/null
+
 rollback_tools="$tmpdir/fake-rollback-tools"
 mkdir -p "$rollback_tools"
 
@@ -2270,4 +2367,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, swap label, device-mapper rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache property failures"

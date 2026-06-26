@@ -169,9 +169,10 @@ behavior across real storage stacks.
   delete failures, target-side LUN LIO and Linux tgt create failures,
   multipath replacement failure, MD RAID member replacement failure, LUKS open
   failure, partition grow failure, NFS remount failure, swap label mutation
-  failure, iSCSI logout and login failures, LVM cache attach and detach
-  failures, VDO grow failure, VDO and bcache property mutation failures, and
-  an LVM cache property mutation failure, without touching real block devices.
+  failure, device-mapper rename failure, iSCSI logout and login failures, LVM
+  cache attach and detach failures, VDO grow failure, VDO and bcache property
+  mutation failures, and an LVM cache property mutation failure, without
+  touching real block devices.
 
 ## Implemented probe coverage
 
@@ -228,13 +229,13 @@ placeholders until concrete adapters are added.
   variants,
   additional cache variants, additional NVMe namespace variants, additional LUN
   flows, property mutation across more supported domains, and failed-command
-  recovery beyond the synthetic LVM-plus-filesystem, swap label, ZFS rollback,
-  NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe
-  namespace detach, NVMe namespace delete, target-side LUN LIO create,
-  target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open,
-  partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach,
-  LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache
-  property paths.
+  recovery beyond the synthetic LVM-plus-filesystem, swap label, device-mapper
+  rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
+  namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
+  LUN LIO create, target-side LUN tgt create, multipath replace, MD RAID
+  replace, LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login,
+  LVM cache attach, LVM cache detach, VDO grow, VDO property, bcache property,
+  and LVM cache property paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional

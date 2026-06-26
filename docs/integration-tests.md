@@ -93,12 +93,14 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for twenty-three failed apply paths:
+fake storage tools ahead of `PATH` for twenty-four failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
 - a swap label mutation where fake
   `swaplabel --label swap-new /dev/disk/by-label/swap-old` fails
+- a device-mapper rename where fake `dmsetup info` and `dmsetup deps` succeed
+  and fake `dmsetup rename /dev/mapper/cryptswap cryptswap-retired` fails
 - a ZFS snapshot rollback where fake `zfs list` succeeds and fake
   `zfs rollback tank/home@before` fails
 - an NVMe namespace create where fake `nvme list-ns` succeeds and fake
@@ -677,10 +679,10 @@ broader iSCSI LUN failure behavior, broader NFS server/export/unmount/failure
 behavior, broader VDO create/grow/start/stop/property/remove behavior,
 additional NVMe namespace variant failure behavior, additional cache variant
 failure behavior, property mutation across more supported domains, recovery
-behavior beyond the synthetic LVM-plus-filesystem, swap label, ZFS rollback,
-NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe
-namespace detach, NVMe namespace delete, target-side LUN LIO create,
-target-side LUN tgt create, multipath replace, MD RAID replace, LUKS open,
-partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache attach, LVM
-cache detach, VDO grow, VDO property, bcache property, and LVM cache property
-failed-command paths, and broader destructive apply behavior.
+behavior beyond the synthetic LVM-plus-filesystem, swap label, device-mapper
+rename, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
+namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
+LIO create, target-side LUN tgt create, multipath replace, MD RAID replace,
+LUKS open, partition grow, NFS remount, iSCSI logout, iSCSI login, LVM cache
+attach, LVM cache detach, VDO grow, VDO property, bcache property, and LVM cache
+property failed-command paths, and broader destructive apply behavior.
