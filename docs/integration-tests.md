@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for fifty-one failed apply paths:
+fake storage tools ahead of `PATH` for fifty-two failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -259,6 +259,9 @@ fake storage tools ahead of `PATH` for fifty-one failed apply paths:
   `vdo growLogical --name archive --vdoLogicalSize 4TiB` fails
 - a VDO property mutation where fake `disk-nix inspect archive` succeeds and
   fake `vdo changeWritePolicy --name archive --writePolicy sync` fails
+- a bcache cache replacement where fake `disk-nix inspect /dev/bcache0`
+  succeeds and fake `make-bcache` plus sysfs detach/attach handoff fails
+  through the reviewed `disk-nix-bcache-replace` shell wrapper
 - a bcache property mutation where fake `disk-nix inspect /dev/bcache1`
   succeeds and fake sysfs `cache_mode` update fails for `/dev/bcache1`
 - a bcache rescan where fake `disk-nix inspect /dev/bcache0` succeeds and fake
@@ -939,5 +942,5 @@ rescan, multipath
 resize, multipath replace, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
 format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, partition grow, NFS
 remount, NFS unmount, iSCSI logout, iSCSI login, LVM cache attach, LVM cache detach, LVM cache rescan, VDO
-grow, VDO property, bcache property, bcache rescan, and LVM cache property failed-command
+grow, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failed-command
 paths, and broader destructive apply behavior.
