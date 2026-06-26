@@ -569,6 +569,7 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
         step.operation,
         Operation::Rollback
             | Operation::Shrink
+            | Operation::Attach
             | Operation::ReplaceDevice
             | Operation::AddDevice
             | Operation::RemoveDevice
@@ -779,6 +780,19 @@ fn domain_roll_forward_inspection_commands(step: &ExecutionStep) -> Vec<Executio
             ));
         }
         (
+            Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
+            Some("nvmeNamespaces"),
+            Some(target),
+        ) => {
+            commands.push(nvme_list_namespaces_command(
+                Some(target),
+                "inspect NVMe namespace inventory before completing namespace changes",
+            ));
+            commands.push(nvme_list_subsystems_command(
+                "inspect NVMe subsystem and controller attachments before retrying namespace changes",
+            ));
+        }
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -874,6 +888,19 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             ]
         }
         (
+            Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
+            Some("nvmeNamespaces"),
+            Some(target),
+        ) => vec![
+            nvme_list_namespaces_command(
+                Some(target),
+                "confirm NVMe namespace inventory before undoing or retrying namespace changes",
+            ),
+            nvme_list_subsystems_command(
+                "confirm NVMe subsystem attachments before rollback decisions",
+            ),
+        ],
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -922,6 +949,19 @@ fn domain_recovery_commands(step: &ExecutionStep) -> Vec<ExecutionCommand> {
                 ["lvs", "--reportformat", "json", target],
                 false,
                 "inspect LVM snapshot and merge state before deciding whether to retry",
+            ));
+        }
+        (
+            Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
+            Some("nvmeNamespaces"),
+            Some(target),
+        ) => {
+            commands.push(nvme_list_namespaces_command(
+                Some(target),
+                "inspect NVMe namespace inventory before deciding whether to retry",
+            ));
+            commands.push(nvme_list_subsystems_command(
+                "inspect NVMe subsystem attachments after the failed namespace command",
             ));
         }
         (
@@ -992,6 +1032,17 @@ fn domain_recovery_notes(
             );
         }
         (
+            Operation::Create | Operation::Destroy | Operation::Attach | Operation::Detach,
+            Some("nvmeNamespaces"),
+        ) => {
+            notes.push(
+                "for NVMe namespace changes, inspect namespace inventory and subsystem attachments before retrying create, attach, detach, or delete operations".to_string(),
+            );
+            notes.push(
+                "keep dependent filesystems, multipath maps, and consumers quiesced until namespace visibility and attachment state are verified".to_string(),
+            );
+        }
+        (
             Operation::Stop
             | Operation::RemoveDevice
             | Operation::ReplaceDevice
@@ -1029,6 +1080,7 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
         .map(|collection| match collection {
             "snapshot" => "snapshots",
             "filesystem" => "filesystems",
+            "nvmenamespaces" => "nvmeNamespaces",
             other => other,
         })
 }
@@ -1036,6 +1088,11 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
 fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     if command_step_collection(step) == Some("mdRaids") {
         if let Some(target) = md_array_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if command_step_collection(step) == Some("nvmeNamespaces") {
+        if let Some(target) = nvme_controller_target_from_step(step) {
             return Some(target);
         }
     }
@@ -1062,6 +1119,26 @@ fn md_array_target_from_step(step: &ExecutionStep) -> Option<&str> {
             {
                 return command.argv.get(1).map(String::as_str);
             }
+        }
+        None
+    })
+}
+
+fn nvme_controller_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        if command.argv.first().is_some_and(|arg| arg == "nvme")
+            && command.argv.get(1).is_some_and(|arg| {
+                matches!(
+                    arg.as_str(),
+                    "attach-ns" | "create-ns" | "delete-ns" | "detach-ns" | "list-ns" | "ns-rescan"
+                )
+            })
+        {
+            return command
+                .argv
+                .get(2)
+                .map(String::as_str)
+                .filter(|target| is_nvme_controller_path(target));
         }
         None
     })
@@ -23317,6 +23394,95 @@ mod tests {
                 .iter()
                 .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints)
         );
+    }
+
+    #[test]
+    fn failed_nvme_namespace_delete_reports_domain_recovery_guidance() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "nvmeNamespaces": {
+                "logical-destroy": {
+                  "target": "/dev/nvme4",
+                  "destroy": true,
+                  "namespaceId": "9",
+                  "controllers": "0x4"
+                }
+              },
+              "apply": {
+                "allowDestructive": true,
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_delete = ["nvme", "delete-ns", "/dev/nvme4", "--namespace-id", "9"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_delete,
+                status_code: Some(if argv == failed_delete { 16 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_delete {
+                    "namespace delete failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            !result.success
+                && result.argv == ["nvme", "delete-ns", "/dev/nvme4", "--namespace-id", "9"]
+        }));
+        let domain_recovery = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
+            .expect("NVMe namespace domain-specific recovery action is reported");
+        assert!(domain_recovery.summary.contains("Destroy"));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "nvme",
+                    "list-ns",
+                    "/dev/nvme4",
+                    "--all",
+                    "--output-format=json",
+                ]
+                && !command.mutates
+        }));
+        assert!(domain_recovery.commands.iter().any(|command| {
+            command.argv == ["nvme", "list-subsys", "--output-format=json"] && !command.mutates
+        }));
+        assert!(domain_recovery.notes.iter().any(|note| {
+            note.contains("NVMe namespace changes")
+                && note.contains("create, attach, detach, or delete")
+        }));
+        let roll_forward = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollForwardReview)
+            .expect("NVMe roll-forward recovery review is reported");
+        assert!(roll_forward.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "nvme",
+                    "list-ns",
+                    "/dev/nvme4",
+                    "--all",
+                    "--output-format=json",
+                ]
+                && !command.mutates
+        }));
+        let rollback = report
+            .recovery_actions
+            .iter()
+            .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+            .expect("NVMe rollback recovery review is reported");
+        assert!(rollback.commands.iter().any(|command| {
+            command.argv == ["nvme", "list-subsys", "--output-format=json"] && !command.mutates
+        }));
     }
 
     #[test]
