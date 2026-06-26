@@ -93,7 +93,7 @@ env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set,
 matching the execute-mode integration guard used by the destructive harnesses.
 It does not require root and does not mutate real storage. Instead, it uses
-fake storage tools ahead of `PATH` for seventy-seven failed apply paths:
+fake storage tools ahead of `PATH` for seventy-eight failed apply paths:
 
 - a layered LVM volume grow followed by an ext4 filesystem grow where fake
   `lvextend` succeeds and fake `resize2fs` fails
@@ -125,6 +125,9 @@ fake storage tools ahead of `PATH` for seventy-seven failed apply paths:
 - a zram inventory rescan where fake
   `zramctl --bytes --raw --noheadings --output-all` fails before any mutating
   command runs
+- a zram property reconciliation where fake
+  `zramctl --bytes --raw --noheadings --output-all` fails while the generated
+  `zram:set-property:algorithm` action remains pending for retry review
 - a device-mapper rename where fake `dmsetup info` and `dmsetup deps` succeed
   and fake `dmsetup rename /dev/mapper/cryptswap cryptswap-retired` fails
 - a ZFS dataset rename where fake `zfs list -H -p tank/home` succeeds and fake
@@ -507,6 +510,10 @@ The test verifies that the failed report and receipt preserve:
 - the failed `zramctl --bytes --raw --noheadings --output-all` command and
   non-zero status before any mutating command runs, with generic read-only
   recovery actions
+- `partialExecutionRecovery.failedActionId` as `zram:inspect`
+- the failed `zramctl --bytes --raw --noheadings --output-all` command and
+  non-zero status while `zram:set-property:algorithm` remains queued for retry
+  review
 - `partialExecutionRecovery.failedActionId` as
   `lvmCaches:vg0/root:set-property:lvm.cache-mode`
 - the failed `lvchange --cachemode writethrough vg0/root` command and non-zero
@@ -1015,7 +1022,7 @@ failure behavior, property mutation across more supported domains, recovery
 behavior beyond the synthetic LVM-plus-filesystem, LVM grow, XFS grow, Btrfs
 scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement,
 filesystem trim, filesystem check, filesystem repair, filesystem property,
-swap label, zram rescan, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
+swap label, zram rescan, zram property inventory, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
 ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement,
 ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
