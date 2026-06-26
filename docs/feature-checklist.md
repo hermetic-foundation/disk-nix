@@ -267,10 +267,10 @@ Update rules:
   LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, NVMe, and synthetic
   failed-apply recovery.
 - [ ] **Partial:** Broader destructive and failure-path integration tests are
-  still needed for device replacement, rollback, degraded arrays, cache
-  attach/detach, namespace creation/deletion, LUN login/logout flows, property
-  mutation, and failed-command recovery beyond the synthetic
-  LVM-plus-filesystem path.
+  still needed for device replacement, degraded arrays, cache attach/detach,
+  namespace creation/deletion, LUN login/logout flows, property mutation, and
+  failed-command recovery beyond the synthetic LVM-plus-filesystem and ZFS
+  rollback paths.
 - [ ] **Partial:** A VM smoke harness exists, but deeper destructive VM tests
   for multi-layer apply behavior on isolated disposable disks are still needed;
   the default VM suite now includes the synthetic failure-recovery harness.

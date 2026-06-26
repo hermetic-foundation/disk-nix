@@ -126,4 +126,95 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 1
 ' "$receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize failure"
+rollback_tools="$tmpdir/fake-rollback-tools"
+mkdir -p "$rollback_tools"
+
+cat > "$rollback_tools/zfs" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "rollback" ]]; then
+  echo "synthetic zfs rollback failure for disk-nix recovery coverage" >&2
+  exit 74
+fi
+printf '{}\n'
+EOF
+
+chmod +x "$rollback_tools/zfs"
+
+rollback_spec="$tmpdir/rollback-spec.json"
+rollback_json="$tmpdir/rollback-apply.json"
+rollback_report="$tmpdir/rollback-report.json"
+rollback_receipt="$tmpdir/rollback-receipt.json"
+
+jq -n '{
+  spec: {
+    snapshots: {
+      "tank/home@before": {
+        rollback: true
+      }
+    }
+  },
+  apply: {
+    allowPotentialDataLoss: true
+  }
+}' > "$rollback_spec"
+
+if PATH="$rollback_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$rollback_spec" \
+  --execute \
+  --report-out "$rollback_report" \
+  --receipt-out "$rollback_receipt" \
+  --json > "$rollback_json"; then
+  echo "expected synthetic ZFS rollback failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and .commandSummary.commandCount == 2
+  and (.executionResults | length) == 2
+  and .executionResults[0].success == true
+  and .executionResults[0].argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "tank/home@before"]
+  and .executionResults[1].success == false
+  and .executionResults[1].statusCode == 74
+  and .executionResults[1].argv == ["zfs", "rollback", "tank/home@before"]
+  and (.executionResults[1].stderr | contains("synthetic zfs rollback failure"))
+  and .partialExecutionRecovery.failedActionId == "snapshot:tank/home@before:rollback"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["zfs", "rollback", "tank/home@before"]
+  and .partialExecutionRecovery.retryReviewActionIds == ["snapshot:tank/home@before:rollback"]
+  and .partialExecutionRecovery.remainingActionIds == []
+  and .partialExecutionRecovery.completedMutatingCommandCount == 0
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(
+    .kind == "domain-recovery"
+    and (.commands | any(.argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "tank/home@before"]))
+    and (.commands | any(.argv == ["zfs", "list", "-H", "-p", "tank/home"]))
+    and (.notes | any(contains("prefer cloning the snapshot")))
+  ))
+  and (.recoveryActions | any(
+    .kind == "roll-forward-review"
+    and (.commands | any(.argv == ["disk-nix", "apply", "--spec", "<spec>", "--probe-current", "--json"] and .readiness == "manual-only"))
+    and (.commands | any(.argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "-o", "name,creation,used,referenced,userrefs", "-r", "tank/home"]))
+  ))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["zfs", "list", "-t", "snapshot", "-H", "-p", "tank/home@before"]))
+    and (.commands | any(.argv == ["zfs", "list", "-H", "-p", "tank/home"]))
+  ))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$rollback_json" >/dev/null
+
+cmp "$rollback_json" "$rollback_report" >/dev/null
+jq -e '
+  .receiptVersion == 1
+  and .command == "apply"
+  and .executeRequested == true
+  and .report.status == "failed"
+  and .report.partialExecutionRecovery.failedActionId == "snapshot:tank/home@before:rollback"
+  and .report.partialExecutionRecovery.failedCommand == ["zfs", "rollback", "tank/home@before"]
+  and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
+' "$rollback_receipt" >/dev/null
+
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize and ZFS rollback failures"

@@ -163,8 +163,9 @@ behavior across real storage stacks.
   environment-selected existing targets and exercise non-destructive refresh
   or remount paths. The failure-recovery harness uses fake storage tools to
   prove `partialExecutionRecovery`, failed-command receipts, roll-forward
-  review, rollback review, and domain-recovery reporting for a layered
-  LVM-plus-filesystem apply failure without touching real block devices.
+  review, rollback review, snapshot-preservation, and domain-recovery
+  reporting for both a layered LVM-plus-filesystem apply failure and a ZFS
+  rollback failure without touching real block devices.
 
 ## Implemented probe coverage
 
@@ -210,10 +211,10 @@ added.
 ## Remaining for feature complete
 
 - Broader destructive and failure-path integration tests beyond the smoke
-  suite, including device replacement, rollback, degraded arrays, cache
-  attach/detach, namespace creation/deletion, LUN login/logout flows, property
-  mutation across supported domains, and failed-command recovery beyond the
-  synthetic LVM-plus-filesystem path.
+  suite, including device replacement, degraded arrays, cache attach/detach,
+  namespace creation/deletion, LUN login/logout flows, property mutation across
+  supported domains, and failed-command recovery beyond the synthetic
+  LVM-plus-filesystem and ZFS rollback paths.
 - A deeper VM-based destructive test harness that validates multi-layer apply
   behavior on isolated disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional
