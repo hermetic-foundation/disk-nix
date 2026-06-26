@@ -3862,6 +3862,7 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
         "nvme" => Some("nvme-cli"),
         "parted" => Some("parted"),
         "smartctl" => Some("smartmontools"),
+        "targetcli" => Some("targetcli-fb"),
         "vdo" | "vdostats" => Some("vdo"),
         "mkfs.xfs" | "xfs_admin" | "xfs_growfs" | "xfs_info" | "xfs_repair" => Some("xfsprogs"),
         "zfs" | "zpool" => Some("zfs"),
@@ -3893,6 +3894,7 @@ fn disk_nix_default_tool_package(package: &str) -> bool {
             | "openiscsi"
             | "parted"
             | "smartmontools"
+            | "targetcli-fb"
             | "util-linux"
             | "vdo"
             | "xfsprogs"
@@ -10666,6 +10668,15 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
 }
 
 fn target_lun_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCommand> {
+    if target_lun_lio_provider(action)
+        && matches!(
+            action.operation,
+            Operation::Create | Operation::Attach | Operation::Detach | Operation::Rescan
+        )
+    {
+        return target_lun_lio_commands(action, target);
+    }
+
     let operation = operation_name(action.operation);
     let desired_size = action.context.desired_size.as_deref();
     vec![
@@ -10684,6 +10695,25 @@ fn target_lun_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCom
 }
 
 fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCommand> {
+    if target_lun_lio_provider(action) {
+        let mut commands = vec![target_lun_lio_inventory_command(
+            target,
+            "verify LIO target-side LUN inventory after provider action",
+        )];
+        if let Some(portal) = action.context.portal.as_deref() {
+            commands.push(command_vec(
+                vec![
+                    "targetcli".to_string(),
+                    target_lun_lio_tpg_path(target),
+                    "ls".to_string(),
+                ],
+                false,
+                &format!("verify LIO portal mapping for {portal} after provider action"),
+            ));
+        }
+        return commands;
+    }
+
     let mut commands = vec![target_lun_inventory_command(
         action,
         target,
@@ -10706,6 +10736,277 @@ fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec
         ));
     }
     commands
+}
+
+fn target_lun_lio_provider(action: &PlannedAction) -> bool {
+    action.context.provider.as_deref().is_some_and(|provider| {
+        matches!(
+            provider.to_ascii_lowercase().as_str(),
+            "lio" | "linux-lio" | "targetcli" | "targetcli-fb"
+        )
+    })
+}
+
+fn target_lun_lio_commands(action: &PlannedAction, target: &str) -> Vec<ExecutionCommand> {
+    let mut commands = vec![if action.operation == Operation::Create {
+        target_lun_lio_inventory_root_command(
+            "inspect LIO target-side inventory before targetcli mutation",
+        )
+    } else {
+        target_lun_lio_inventory_command(
+            target,
+            "inspect LIO target-side inventory before targetcli mutation",
+        )
+    }];
+    let backstore = target_lun_lio_backstore_name(action, target);
+    let tpg = target_lun_lio_tpg_path(target);
+    let lun = target_lun_lio_lun(action);
+
+    match action.operation {
+        Operation::Create => {
+            commands.push(target_lun_lio_backstore_create_command(
+                action,
+                &backstore,
+                "create LIO block backstore for the reviewed target-side LUN",
+            ));
+            commands.push(command_vec(
+                vec![
+                    "targetcli".to_string(),
+                    "/iscsi".to_string(),
+                    "create".to_string(),
+                    target.to_string(),
+                ],
+                true,
+                "create or ensure the reviewed LIO iSCSI target exists",
+            ));
+            commands.push(target_lun_lio_lun_create_command(
+                action,
+                &tpg,
+                &backstore,
+                &lun,
+                "map the reviewed LIO backstore as a target LUN",
+            ));
+            target_lun_lio_acl_commands(action, &tpg, true, &mut commands);
+            commands.push(target_lun_lio_saveconfig_command());
+        }
+        Operation::Attach => {
+            if action.context.device.is_some() {
+                commands.push(target_lun_lio_lun_create_command(
+                    action,
+                    &tpg,
+                    &backstore,
+                    &lun,
+                    "map an existing LIO backstore as a target LUN",
+                ));
+            }
+            target_lun_lio_acl_commands(action, &tpg, true, &mut commands);
+            commands.push(target_lun_lio_saveconfig_command());
+        }
+        Operation::Detach => {
+            target_lun_lio_acl_commands(action, &tpg, false, &mut commands);
+            commands.push(command_vec(
+                vec![
+                    "targetcli".to_string(),
+                    format!("{tpg}/luns"),
+                    "delete".to_string(),
+                    lun,
+                ],
+                true,
+                "unmap the reviewed LIO target LUN without deleting the backstore",
+            ));
+            commands.push(target_lun_lio_saveconfig_command());
+        }
+        Operation::Rescan => {}
+        _ => {}
+    }
+
+    commands.push(target_lun_lio_inventory_command(
+        target,
+        "inspect LIO target-side inventory after targetcli mutation",
+    ));
+    commands
+}
+
+fn target_lun_lio_inventory_command(target: &str, note: &str) -> ExecutionCommand {
+    command_vec(
+        vec![
+            "targetcli".to_string(),
+            target_lun_lio_target_path(target),
+            "ls".to_string(),
+        ],
+        false,
+        note,
+    )
+}
+
+fn target_lun_lio_inventory_root_command(note: &str) -> ExecutionCommand {
+    command_vec(
+        vec![
+            "targetcli".to_string(),
+            "/iscsi".to_string(),
+            "ls".to_string(),
+        ],
+        false,
+        note,
+    )
+}
+
+fn target_lun_lio_backstore_create_command(
+    action: &PlannedAction,
+    backstore: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let mut argv = vec![
+        "targetcli".to_string(),
+        "/backstores/block".to_string(),
+        "create".to_string(),
+        format!("name={backstore}"),
+    ];
+    let mut unresolved_inputs = Vec::new();
+    if let Some(device) = action.context.device.as_deref() {
+        argv.push(format!("dev={device}"));
+    } else {
+        argv.push("dev=<backing-block-device-or-file>".to_string());
+        unresolved_inputs.push("LIO backing block device or file".to_string());
+    }
+    command_vec_with_readiness(
+        argv,
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_lio_lun_create_command(
+    action: &PlannedAction,
+    tpg: &str,
+    backstore: &str,
+    lun: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let mut unresolved_inputs = Vec::new();
+    let backstore_path = if action.context.device.is_some() {
+        format!("/backstores/block/{backstore}")
+    } else {
+        unresolved_inputs.push("LIO backing block device or file".to_string());
+        "/backstores/block/<backstore>".to_string()
+    };
+    command_vec_with_readiness(
+        vec![
+            "targetcli".to_string(),
+            format!("{tpg}/luns"),
+            "create".to_string(),
+            backstore_path,
+            format!("lun={lun}"),
+        ],
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_lio_acl_commands(
+    action: &PlannedAction,
+    tpg: &str,
+    create: bool,
+    commands: &mut Vec<ExecutionCommand>,
+) {
+    let mut initiators = Vec::new();
+    if let Some(client) = action.context.client.as_deref() {
+        initiators.push(client.to_string());
+    }
+    initiators.extend(action.context.devices.iter().cloned());
+
+    if initiators.is_empty() {
+        commands.push(command_vec_with_readiness(
+            vec![
+                "targetcli".to_string(),
+                format!("{tpg}/acls"),
+                if create { "create" } else { "delete" }.to_string(),
+                "<initiator-iqn>".to_string(),
+            ],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["initiator IQN for LIO target ACL"],
+            if create {
+                "map the LIO target LUN to a reviewed initiator ACL"
+            } else {
+                "remove the reviewed initiator ACL from the LIO target"
+            },
+        ));
+        return;
+    }
+
+    for initiator in initiators {
+        commands.push(command_vec(
+            vec![
+                "targetcli".to_string(),
+                format!("{tpg}/acls"),
+                if create { "create" } else { "delete" }.to_string(),
+                initiator,
+            ],
+            true,
+            if create {
+                "map the LIO target LUN to the reviewed initiator ACL"
+            } else {
+                "remove the reviewed initiator ACL from the LIO target"
+            },
+        ));
+    }
+}
+
+fn target_lun_lio_saveconfig_command() -> ExecutionCommand {
+    command_vec(
+        vec!["targetcli".to_string(), "saveconfig".to_string()],
+        true,
+        "persist reviewed LIO target configuration",
+    )
+}
+
+fn target_lun_lio_target_path(target: &str) -> String {
+    format!("/iscsi/{target}")
+}
+
+fn target_lun_lio_tpg_path(target: &str) -> String {
+    format!("{}/tpg1", target_lun_lio_target_path(target))
+}
+
+fn target_lun_lio_lun(action: &PlannedAction) -> String {
+    action.context.lun.as_deref().unwrap_or("0").to_string()
+}
+
+fn target_lun_lio_backstore_name(action: &PlannedAction, target: &str) -> String {
+    let raw = action
+        .context
+        .device
+        .as_deref()
+        .or(action.context.name.as_deref())
+        .unwrap_or(target);
+    let sanitized: String = raw
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if sanitized.is_empty() {
+        "disk_nix_lun".to_string()
+    } else {
+        sanitized
+    }
 }
 
 fn target_lun_inventory_command(
@@ -28093,6 +28394,117 @@ mod tests {
                 && command.mutates
                 && command.readiness == CommandReadiness::NeedsDomainImplementation
         }));
+    }
+
+    #[test]
+    fn target_lun_lio_provider_renders_concrete_targetcli_commands() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:storage.root": {
+                    "operation": "create",
+                    "provider": "lio",
+                    "source": "/dev/zvol/tank/root",
+                    "lun": 7,
+                    "portal": "192.0.2.10:3260",
+                    "client": "iqn.2026-06.example:host.primary",
+                    "initiators": [
+                      "iqn.2026-06.example:host.secondary"
+                    ]
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
+
+        let step = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:storage.root:create")
+            .expect("LIO target-side LUN create command plan exists");
+        assert!(step.requires_manual_review);
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "targetcli",
+                    "/backstores/block",
+                    "create",
+                    "name=_dev_zvol_tank_root",
+                    "dev=/dev/zvol/tank/root",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "targetcli",
+                    "/iscsi",
+                    "create",
+                    "iqn.2026-06.example:storage.root",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "targetcli",
+                    "/iscsi/iqn.2026-06.example:storage.root/tpg1/luns",
+                    "create",
+                    "/backstores/block/_dev_zvol_tank_root",
+                    "lun=7",
+                ]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(step.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "targetcli",
+                    "/iscsi/iqn.2026-06.example:storage.root/tpg1/acls",
+                    "create",
+                    "iqn.2026-06.example:host.primary",
+                ]
+                && command.mutates
+        }));
+        assert!(
+            step.commands
+                .iter()
+                .any(|command| { command.argv == ["targetcli", "saveconfig"] && command.mutates })
+        );
+
+        assert!(report.verification_plan.iter().any(|step| {
+            step.action_id == "targetluns:iqn.2026-06.example:storage.root:create"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+
+        let targetcli = report
+            .tool_requirements
+            .iter()
+            .find(|requirement| requirement.tool == "targetcli")
+            .expect("targetcli tool requirement exists");
+        assert!(
+            targetcli
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.targetcli-fb"))
+        );
     }
 
     #[test]

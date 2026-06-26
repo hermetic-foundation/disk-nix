@@ -467,6 +467,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub lun: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub namespace_id: Option<String>,
@@ -515,6 +517,7 @@ impl ActionContext {
             && self.client.is_none()
             && self.portal.is_none()
             && self.provider.is_none()
+            && self.lun.is_none()
             && self.options.is_none()
             && self.namespace_id.is_none()
             && self.controllers.is_none()
@@ -7458,6 +7461,10 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
                 "arrayProvider",
                 "array-provider",
             ],
+        ),
+        lun: metadata_string_field(
+            object,
+            &["lun", "lunId", "lun-id", "lunNumber", "lun-number"],
         ),
         options: lifecycle_options(object),
         namespace_id: metadata_string_field(object, &["namespaceId", "nsid"]),
@@ -26996,6 +27003,7 @@ mod tests {
                   "desiredSize": "2TiB",
                   "source": "pool-a/volumes/root",
                   "provider": "netapp-ontap",
+                  "lun": 7,
                   "portal": "192.0.2.10:3260",
                   "client": "iqn.2026-06.example:host.primary",
                   "initiators": [
@@ -27032,6 +27040,7 @@ mod tests {
             Some("pool-a/volumes/root")
         );
         assert_eq!(create.context.provider.as_deref(), Some("netapp-ontap"));
+        assert_eq!(create.context.lun.as_deref(), Some("7"));
         assert_eq!(create.context.portal.as_deref(), Some("192.0.2.10:3260"));
         assert_eq!(
             create.context.client.as_deref(),

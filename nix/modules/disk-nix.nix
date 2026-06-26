@@ -45,6 +45,7 @@ let
     openiscsi
     parted
     smartmontools
+    targetcli-fb
     util-linux
     vdo
     xfsprogs
@@ -1719,6 +1720,7 @@ in
           openiscsi
           parted
           smartmontools
+          targetcli-fb
           util-linux
           vdo
           xfsprogs

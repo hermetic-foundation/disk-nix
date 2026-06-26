@@ -539,6 +539,11 @@ multipath. Legacy LUN `create` and `destroy` still map to the same host-side
 command plans. Executable LUN attach, grow, rescan, and detach plans require
 declared stable paths through `device`, `path`, `devices`, `paths`, or
 `devicePaths`.
+Target-side `targetLuns` declarations can use `provider = "lio"` to render
+concrete Linux LIO `targetcli` inventory, backstore creation, target creation,
+LUN mapping, ACL mapping/unmapping, and persistence commands. Non-LIO array
+providers remain explicit handoff plans until a provider adapter or reviewed
+runbook supplies concrete commands.
 Generic snapshot plans render reviewed ZFS `zfs snapshot` and Btrfs
 `subvolume snapshot` commands when the snapshot naming clearly identifies the
 domain. Btrfs snapshot declarations with `readOnly = true` render

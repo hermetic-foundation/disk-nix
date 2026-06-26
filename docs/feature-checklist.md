@@ -160,8 +160,10 @@ Update rules:
   of being guessed.
 - [ ] **Partial:** Target-side LUN provisioning is modeled through
   `targetLuns` create, grow, map, unmap, remove, rescan, and property handoff
-  actions with provider-labeled non-ready commands and verification
-  placeholders, but concrete array/provider adapters are not implemented yet.
+  actions. Linux LIO target-side create/map/unmap/rescan now renders concrete
+  `targetcli` inventory, backstore, target, LUN mapping, ACL, and persistence
+  commands, while non-LIO array/provider adapters still use provider-labeled
+  non-ready commands and verification placeholders.
 - [ ] **Partial:** Multi-layer lifecycle groups such as LUN refresh,
   multipath refresh, partition growth, LUKS/LVM resize, and filesystem growth
   need stronger ordering, reconciliation, and recovery proof before they are

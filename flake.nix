@@ -2013,6 +2013,7 @@
               and ."$defs".lifecycleObject.properties.provider.type == "string"
               and ."$defs".lifecycleObject.properties.storageProvider.type == "string"
               and ."$defs".lifecycleObject.properties.arrayProvider.type == "string"
+              and ."$defs".lifecycleObject.properties.lun.type == ["string", "number"]
               and ."$defs".snapshot.properties.operation["$ref"] == "#/$defs/operation"
               and ."$defs".snapshot.properties.action["$ref"] == "#/$defs/operation"
               and (."$defs".operation.enum | index("grow") != null)
@@ -2859,6 +2860,7 @@
                   grep -- 'ntfs3g-' service-paths
                   grep -- 'open-iscsi-' service-paths
                   grep -- 'smartmontools-' service-paths
+                  grep -- 'targetcli-fb-' service-paths
                   grep -- 'util-linux-' service-paths
                   grep -- 'zfs-user-' service-paths
                   swapDevices=${

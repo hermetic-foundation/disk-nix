@@ -1089,15 +1089,19 @@ SCSI path devices before reloading multipath. Legacy LUN `create` and
 Attach, rescan, grow, and detach remain non-ready until stable paths are
 declared through `device`, `path`, `devices`, `paths`, or `devicePaths`.
 Target-side array provisioning is modeled separately through `targetLuns`.
-`targetLuns.<name>.operation = "create"` and `operation = "grow"` render
-provider-specific `<target-lun-provider[:provider]>` placeholders with reviewed
-target, provider label, size, backing object, portal, and initiator inputs.
-Declarations can set `provider`, `storageProvider`, or `arrayProvider` to label
-the intended array adapter. `operation = "attach"` and `operation = "detach"`
-model target-side mapping and unmapping. These commands remain non-ready until
-an array adapter or reviewed runbook supplies concrete provider commands;
-host-side `luns`, `iscsiSessions`, and `multipathMaps` rescans should follow
-target-side verification.
+`targetLuns.<name>.operation = "create"` and `operation = "grow"` describe
+target-side allocation or capacity changes, while `operation = "attach"` and
+`operation = "detach"` model target-side mapping and unmapping. Declarations
+can set `provider`, `storageProvider`, or `arrayProvider` to label the intended
+adapter. `provider = "lio"` renders concrete Linux LIO `targetcli` command
+plans for inventory, backstore creation, target creation, LUN mapping, ACL
+mapping/unmapping, and `saveconfig` when the target IQN, backing object, LUN
+number, and initiators are declared. Other providers render non-ready
+`<target-lun-provider[:provider]>` placeholders with reviewed target, provider
+label, size, backing object, portal, and initiator inputs until an adapter or
+reviewed runbook supplies concrete commands. Host-side `luns`,
+`iscsiSessions`, and `multipathMaps` rescans should follow target-side
+verification.
 The capability inventory advertises iSCSI login/logout, LUN attach/detach, and
 NVMe namespace attach/detach as host lifecycle operations, distinct from
 target-side LUN provisioning or destructive namespace deletion.

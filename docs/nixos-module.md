@@ -106,8 +106,8 @@ and copy the relevant declarations into their real NixOS configuration.
 `toolPackages` defaults to the storage tools used by the probe and executor
 adapters, including bash shell wrappers, coreutils file helpers, Btrfs,
 bcachefs, ext, XFS, F2FS, exFAT, LVM, cryptsetup, MD RAID, multipath, NFS,
-iSCSI, SCSI inventory, NVMe, SMART, VDO, bcache, ZFS, partitioning,
-cloud-utils `growpart`, and util-linux tooling. The apply service adds these
+iSCSI, SCSI inventory, NVMe, SMART, VDO, Linux LIO `targetcli`, bcache, ZFS,
+partitioning, cloud-utils `growpart`, and util-linux tooling. The apply service adds these
 packages to `PATH`, and the same packages are installed in
 `environment.systemPackages`. Override the list to pin site-specific tool
 builds or to trim unused storage domains.

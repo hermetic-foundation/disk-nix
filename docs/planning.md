@@ -428,13 +428,15 @@ Examples:
   `operation = "attach"` and `operation = "detach"` model mapping and unmapping
   the reviewed target LUN to initiators. These actions are provider-specific:
   declarations can set `provider`, `storageProvider`, or `arrayProvider` to
-  label the intended array adapter. Apply reports emit non-ready
-  `<target-lun-provider[:provider]>` handoff commands carrying the target
-  identity, provider label, desired size, backing object, portal, and
-  initiators, plus read-only inventory verification placeholders. They remain
-  blocked from execution until an array adapter or reviewed runbook renders
-  concrete provider commands. Host-side `luns`, `iscsiSessions`, and
-  `multipathMaps` rescans should be staged after target-side verification.
+  label the intended array adapter. `provider = "lio"` renders concrete
+  `targetcli` inventory, backstore creation, target creation, LUN mapping,
+  ACL mapping/unmapping, and `saveconfig` commands for Linux LIO targets when
+  the target IQN, backing object, LUN number, and initiators are declared.
+  Other providers still emit non-ready `<target-lun-provider[:provider]>`
+  handoff commands carrying the target identity, provider label, desired size,
+  backing object, portal, and initiators, plus read-only inventory verification
+  placeholders. Host-side `luns`, `iscsiSessions`, and `multipathMaps` rescans
+  should be staged after target-side verification.
   Current-topology comparison suppresses attach actions only when the declared
   LUN path is already visible and suppresses detach actions only when the
   declared LUN path is already absent; opposite states stay actionable with a
@@ -621,6 +623,8 @@ Lifecycle objects may use:
 - `device` or `disk`: backing device path for disk, partition, and LUN operations
 - `initiators`, `initiatorIqns`, or `clients`: initiator identities for
   target-side LUN mapping requests
+- `lun`, `lunId`, or `lunNumber`: target-side LUN number for concrete provider
+  adapters such as Linux LIO `targetcli`
 - `level` or `raidLevel`: MD RAID level for reviewed array creation
 - `client`: NFS export client or network selector
 - `portal`: iSCSI target portal such as `192.0.2.10:3260`; `metadata.portal`
