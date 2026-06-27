@@ -938,6 +938,10 @@ When enabled, it:
   `mdadm --examine <removed-loop>`
 - verifies `disk-nix inspect <array> --json` still sees the degraded array and
   the degraded rescan apply succeeds
+- applies an `mdRaids.<name>.removeDevices` plan for the already-removed
+  member, verifies the real `mdadm` command fails, and checks the failed-detach recovery
+  report includes partial-execution metadata, retry review, domain recovery,
+  and roll-forward review
 - stops the array, wipes member superblocks, detaches the loop devices, and
   removes backing files during cleanup
 

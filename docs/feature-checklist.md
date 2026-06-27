@@ -517,6 +517,12 @@ Update rules:
   and then fails/removes the replacement member, it runs
   `mdadm --examine <removed-loop>` and verifies the removed member still
   exposes stale array metadata before rerunning degraded-array inspection.
+- [x] **Finished:** Destructive integration tests include MD RAID failed-detach
+  coverage: after the loop-backed MD harness removes a replacement member, it
+  applies `mdRaids.*.removeDevices` for the already-removed member, verifies
+  the real `mdadm` detach command fails, and checks the apply report contains
+  partial-execution metadata, retry review, domain recovery, and roll-forward
+  review.
 - [x] **Finished:** Destructive integration tests include MD RAID degraded
   missing-member coverage: the loop-backed MD harness creates a temporary RAID1
   array, fails and removes one member, verifies `disk-nix inspect` still sees

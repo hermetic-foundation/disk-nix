@@ -184,7 +184,8 @@ behavior across real storage stacks.
   real NFS export option mutation with `exportfs -i`, verify NFS failed-and-resumed remount data-survival
   with a lab export sentinel, verify real MD RAID member replacement
   with `mdadm --replace` and `mdadm --wait`, verify MD RAID stale-superblock evidence
-  with `mdadm --examine`, and verify
+  with `mdadm --examine`, verify MD RAID failed-detach recovery after an
+  already-removed member, and verify
   degraded missing-member MD RAID rescan after failing and removing one
   temporary RAID1 member, then clean up temporary devices. A layered VM
   harness creates partitioned loop, LUKS, LVM, and mounted ext4 layers on a

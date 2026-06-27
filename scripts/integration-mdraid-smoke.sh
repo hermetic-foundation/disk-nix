@@ -59,6 +59,8 @@ report="$tmpdir/apply-report.json"
 replace_spec="$tmpdir/replace-spec.json"
 replace_report="$tmpdir/replace-apply-report.json"
 degraded_report="$tmpdir/degraded-apply-report.json"
+failed_detach_spec="$tmpdir/failed-detach-spec.json"
+failed_detach_report="$tmpdir/failed-detach-report.json"
 
 truncate --size 64M "$backing_a" "$backing_b" "$backing_c"
 loop_a="$(losetup --find --show "$backing_a")"
@@ -183,4 +185,42 @@ jq -e --arg array "$array" '
 
 cmp "$tmpdir/degraded-apply.json" "$degraded_report" >/dev/null
 
-echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, replaced $loop_b with $loop_c, then verified stale-superblock and degraded missing-member rescan"
+jq -n --arg array "$array" --arg removed "$loop_c" '{
+  version: 1,
+  apply: {
+    allowOffline: true,
+    allowPotentialDataLoss: true
+  },
+  mdRaids: {
+    failedDetach: {
+      target: $array,
+      removeDevices: [$removed]
+    }
+  }
+}' > "$failed_detach_spec"
+
+if "$disk_nix_bin" apply \
+  --spec "$failed_detach_spec" \
+  --execute \
+  --report-out "$failed_detach_report" \
+  --json > "$tmpdir/failed-detach-apply.json"; then
+  echo "expected failed detach of already-removed MD member to fail apply" >&2
+  exit 1
+fi
+
+jq -e --arg array "$array" --arg removed "$loop_c" '
+  .status == "failed"
+  and (.executionResults
+    | any(
+        (.argv == ["mdadm", $array, "--fail", $removed] or .argv == ["mdadm", $array, "--remove", $removed])
+        and .success == false
+      ))
+  and .partialExecutionRecovery.failedActionId == ("mdRaids:failedDetach:remove-device:" + $removed)
+  and (.partialExecutionRecovery.retryReviewActionIds | index("mdRaids:failedDetach:remove-device:" + $removed) != null)
+  and (.recoveryActions | any(.kind == "domain-recovery"))
+  and (.recoveryActions | any(.kind == "roll-forward-review"))
+' "$tmpdir/failed-detach-apply.json" >/dev/null
+
+cmp "$tmpdir/failed-detach-apply.json" "$failed_detach_report" >/dev/null
+
+echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, replaced $loop_b with $loop_c, then verified stale-superblock, degraded missing-member rescan, and failed-detach recovery"
