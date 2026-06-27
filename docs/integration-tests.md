@@ -698,6 +698,41 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-bcachefs-smoke.sh
 ```
 
+## bcache loop-backed smoke test
+
+The repository also includes a root-only bcache property mutation harness:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-bcache-smoke
+```
+
+When enabled, it:
+
+- creates temporary backing and cache image files
+- attaches both files to disposable `/dev/loop*` devices
+- loads the `bcache` kernel module and initializes a real bcache backing/cache
+  pair with `make-bcache`
+- finds the generated `/dev/bcache*` device for the temporary backing loop
+- applies `caches.bcacheSmoke.properties."bcache.cache-mode" = "writethrough"`
+- verifies the rendered `disk-nix-bcache-property` sysfs write succeeded
+- checks `/sys/block/<bcache>/bcache/cache_mode` reports `writethrough`
+- stops the generated bcache device, detaches the loops, and removes the
+  backing files during cleanup
+
+This test intentionally writes bcache metadata only to the temporary backing
+files it creates. It is VM-callable through `DISK_NIX_VM_HARNESSES=bcache`, but
+it is not in the default VM suite because bcache kernel support varies by
+runner.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-bcache-smoke.sh
+```
+
 ## LUKS loop-backed smoke test
 
 The repository also includes a root-only LUKS loop-backed harness:

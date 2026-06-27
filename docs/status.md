@@ -162,8 +162,9 @@ behavior across real storage stacks.
   label mutation on a disposable loop device, verify real LUKS header label mutation
   with `cryptsetup config`, verify real Btrfs filesystem label mutation with
   `btrfs filesystem label`, verify real loop-backed swap label mutation with
-  `swaplabel`, verify real ZFS pool property mutation with `zpool set`, and
-  verify real LVM cache property mutation with `lvchange --cachemode`, then
+  `swaplabel`, verify real ZFS pool property mutation with `zpool set`, verify
+  real LVM cache property mutation with `lvchange --cachemode`, verify
+  real bcache cache-mode mutation with a `disk-nix-bcache-property` sysfs write, then
   verify real VDO write-policy mutation with `vdo changeWritePolicy`, and verify
   real NFS export option mutation with `exportfs -i`, then clean up temporary
   devices. A layered VM

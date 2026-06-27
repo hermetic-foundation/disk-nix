@@ -114,6 +114,18 @@
           ];
           text = builtins.readFile ./scripts/integration-bcachefs-smoke.sh;
         };
+        integrationBcacheSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-bcache-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.bcache-tools
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.kmod
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-bcache-smoke.sh;
+        };
         integrationLuksSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-luks-smoke";
           runtimeInputs = [
@@ -254,6 +266,7 @@
           runtimeInputs = [
             integrationLoopSmoke
             integrationBtrfsSmoke
+            integrationBcacheSmoke
             integrationBcachefsSmoke
             integrationLuksSmoke
             integrationSwapSmoke
@@ -288,6 +301,7 @@
                 "dm_crypt"
                 "md_mod"
                 "raid1"
+                "bcache"
                 "bcachefs"
               ];
               environment.systemPackages = [ integrationVmSmoke ];
@@ -1581,6 +1595,7 @@
         packages = {
           default = diskNix;
           disk-nix = diskNix;
+          integration-bcache-smoke = integrationBcacheSmoke;
           integration-bcachefs-smoke = integrationBcachefsSmoke;
           integration-btrfs-smoke = integrationBtrfsSmoke;
           integration-luks-smoke = integrationLuksSmoke;
@@ -1625,6 +1640,13 @@
             program = "${integrationBcachefsSmoke}/bin/disk-nix-integration-bcachefs-smoke";
             meta = {
               description = "Root-only bcachefs loop-backed disk-nix smoke integration harness";
+            };
+          };
+          integration-bcache-smoke = {
+            type = "app";
+            program = "${integrationBcacheSmoke}/bin/disk-nix-integration-bcache-smoke";
+            meta = {
+              description = "Root-only bcache loop-backed disk-nix property mutation harness";
             };
           };
           integration-luks-smoke = {
@@ -1773,6 +1795,17 @@
             ${pkgs.gnugrep}/bin/grep -q 'bcachefs format' ${./scripts/integration-bcachefs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mount -t bcachefs' ${./scripts/integration-bcachefs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'bcachefs", "scrub"' ${./scripts/integration-bcachefs-smoke.sh}
+            touch "$out"
+          '';
+          integrationBcacheSmoke = pkgs.runCommand "disk-nix-integration-bcache-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'make-bcache -B' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'modprobe bcache' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'caches:bcacheSmoke:set-property:bcache.cache-mode' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-property' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cache_mode' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'writethrough' ${./scripts/integration-bcache-smoke.sh}
             touch "$out"
           '';
           integrationLuksSmoke = pkgs.runCommand "disk-nix-integration-luks-smoke-check" { } ''
@@ -2220,6 +2253,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'default_harnesses="loop btrfs swap layered-vm failure-recovery"' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-loop-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-swap-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-bcache-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-bcachefs-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-mdraid-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-zfs-smoke' ${./scripts/integration-vm-smoke.sh}
@@ -2257,6 +2291,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real swap signature' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache property' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real VDO volume' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
@@ -2265,6 +2300,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'swaplabel' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'zpool set' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lvchange --cachemode' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-property' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'vdo changeWritePolicy' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'exportfs -i' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
@@ -2273,6 +2309,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real loop-backed swap label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache property mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
@@ -2281,6 +2318,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'swaps.swapSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'pools.<name>.properties.autotrim' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.properties.lvm.cache-mode' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.properties."bcache.cache-mode"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes.<name>.properties.writePolicy' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'exports.<path>.properties.options' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}

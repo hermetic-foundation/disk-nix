@@ -553,8 +553,14 @@ Update rules:
   temporary export, applies a disk-nix `exports.*.properties.options`
   declaration, executes `exportfs -i`, and verifies the export with
   `exportfs -v`.
+- [x] **Finished:** Destructive integration tests include real bcache property
+  mutation coverage: the bcache harness creates disposable loop-backed backing
+  and cache devices, applies a disk-nix
+  `caches.*.properties."bcache.cache-mode"` declaration, executes the
+  `disk-nix-bcache-property` sysfs write, and verifies `cache_mode` reports
+  `writethrough`.
 - [ ] **Partial:** Destructive integration tests still need property mutation
-  coverage across bcache, target LUNs, loop devices, backing files, and zram.
+  coverage across target LUNs, loop devices, backing files, and zram.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`

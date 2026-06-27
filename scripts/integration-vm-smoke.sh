@@ -48,6 +48,9 @@ run_harness() {
     bcachefs)
       disk-nix-integration-bcachefs-smoke
       ;;
+    bcache)
+      disk-nix-integration-bcache-smoke
+      ;;
     luks)
       disk-nix-integration-luks-smoke
       ;;
