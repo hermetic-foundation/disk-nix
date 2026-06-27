@@ -523,7 +523,13 @@ Update rules:
   namespace identity drift.
 - [ ] **Partial:** Destructive integration tests need VM-backed LUN flow
   coverage for host-side rescan, multipath resize, multipath add/remove/flush,
-  target-side map/unmap, and target-side destroy refusal paths.
+  and target-side destroy refusal paths.
+- [x] **Finished:** Destructive integration tests include LIO target-side
+  map/unmap coverage: the loop-backed target LUN harness creates a second
+  temporary backstore, applies `targetLuns.<iqn>.operation = "attach"` with a
+  reviewed initiator ACL, verifies the LUN and ACL are present, applies
+  `targetLuns.<iqn>.operation = "detach"`, and verifies the LUN is unmapped
+  without deleting the backstore.
 - [x] **Finished:** Destructive integration tests include real filesystem
   property mutation coverage: the loop-backed ext4 harness applies a disk-nix
   `filesystems.*.properties.label` declaration, executes `e2label`, and verifies

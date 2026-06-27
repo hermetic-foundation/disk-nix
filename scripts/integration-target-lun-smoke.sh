@@ -7,8 +7,8 @@ Refusing to run target-side LUN integration smoke test.
 
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates
 a temporary loop-backed LIO block backstore and iSCSI target/LUN mapping,
-mutates a target-side LUN property, then removes the temporary target state and
-backing file during cleanup.
+mutates a target-side LUN property, maps and unmaps a second target-side LUN,
+then removes the temporary target state and backing files during cleanup.
 MSG
   exit 2
 fi
@@ -21,8 +21,10 @@ fi
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 target_iqn="${DISK_NIX_TARGET_LUN_IQN:-iqn.2026-06.example:disk-nix-lio-smoke}"
 lun_id="${DISK_NIX_TARGET_LUN_ID:-7}"
+attach_lun_id="${DISK_NIX_TARGET_LUN_ATTACH_ID:-8}"
+initiator_iqn="${DISK_NIX_TARGET_LUN_INITIATOR:-iqn.2026-06.example:disk-nix-initiator}"
 
-for tool in "$disk_nix_bin" jq losetup modprobe targetcli truncate; do
+for tool in "$disk_nix_bin" cmp grep jq losetup modprobe targetcli truncate; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -31,9 +33,12 @@ done
 
 tmpdir="$(mktemp -d)"
 loopdev=""
+attach_loopdev=""
 backstore=""
+attach_backstore=""
 target_created=0
 backstore_created=0
+attach_backstore_created=0
 
 cleanup() {
   if [[ "$target_created" == "1" ]]; then
@@ -42,9 +47,15 @@ cleanup() {
   if [[ "$backstore_created" == "1" ]] && [[ -n "$backstore" ]]; then
     targetcli "/backstores/block" delete "$backstore" >/dev/null 2>&1 || true
   fi
+  if [[ "$attach_backstore_created" == "1" ]] && [[ -n "$attach_backstore" ]]; then
+    targetcli "/backstores/block" delete "$attach_backstore" >/dev/null 2>&1 || true
+  fi
   targetcli saveconfig >/dev/null 2>&1 || true
   if [[ -n "$loopdev" ]] && losetup --list "$loopdev" >/dev/null 2>&1; then
     losetup --detach "$loopdev" || true
+  fi
+  if [[ -n "$attach_loopdev" ]] && losetup --list "$attach_loopdev" >/dev/null 2>&1; then
+    losetup --detach "$attach_loopdev" || true
   fi
   rm -rf "$tmpdir"
 }
@@ -54,16 +65,27 @@ modprobe target_core_mod
 modprobe target_core_iblock || true
 
 backing="$tmpdir/disk-nix-target-lun.img"
+attach_backing="$tmpdir/disk-nix-target-lun-attach.img"
 property_spec="$tmpdir/property-spec.json"
 property_report="$tmpdir/property-report.json"
+attach_spec="$tmpdir/attach-spec.json"
+attach_report="$tmpdir/attach-report.json"
+detach_spec="$tmpdir/detach-spec.json"
+detach_report="$tmpdir/detach-report.json"
 
 truncate --size 64M "$backing"
+truncate --size 64M "$attach_backing"
 loopdev="$(losetup --find --show "$backing")"
+attach_loopdev="$(losetup --find --show "$attach_backing")"
 backstore="_${loopdev#/}"
 backstore="${backstore//\//_}"
+attach_backstore="_${attach_loopdev#/}"
+attach_backstore="${attach_backstore//\//_}"
 
 targetcli /backstores/block create "name=$backstore" "dev=$loopdev" >/dev/null
 backstore_created=1
+targetcli /backstores/block create "name=$attach_backstore" "dev=$attach_loopdev" >/dev/null
+attach_backstore_created=1
 targetcli /iscsi create "$target_iqn" >/dev/null
 target_created=1
 targetcli "/iscsi/$target_iqn/tpg1/luns" create "/backstores/block/$backstore" "lun=$lun_id" >/dev/null
@@ -114,4 +136,105 @@ jq -e \
 cmp "$tmpdir/property-apply.json" "$property_report" >/dev/null
 targetcli "/backstores/block/$backstore" ls >/dev/null
 
-echo "target-side LUN integration smoke test updated lio.writeCache for $target_iqn LUN $lun_id"
+jq -n \
+  --arg target_iqn "$target_iqn" \
+  --arg attach_loopdev "$attach_loopdev" \
+  --arg initiator_iqn "$initiator_iqn" \
+  --argjson attach_lun_id "$attach_lun_id" \
+  '{
+    version: 1,
+    targetLuns: {
+      ($target_iqn): {
+        operation: "attach",
+        provider: "lio",
+        source: $attach_loopdev,
+        lun: $attach_lun_id,
+        client: $initiator_iqn
+      }
+    },
+    apply: {
+      allowOffline: true
+    }
+  }' > "$attach_spec"
+
+if ! "$disk_nix_bin" apply \
+  --spec "$attach_spec" \
+  --execute \
+  --report-out "$attach_report" \
+  --json > "$tmpdir/attach-apply.json"; then
+  cat "$tmpdir/attach-apply.json" >&2 || true
+  cat "$attach_report" >&2 || true
+  exit 1
+fi
+
+jq -e \
+  --arg target_iqn "$target_iqn" \
+  --arg attach_backstore "$attach_backstore" \
+  --arg initiator_iqn "$initiator_iqn" \
+  --argjson attach_lun_id "$attach_lun_id" \
+  '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("targetluns:" + $target_iqn + ":attach"))
+    | .commands
+    | any(.argv == ["targetcli", ("/iscsi/" + $target_iqn + "/tpg1/luns"), "create", ("/backstores/block/" + $attach_backstore), ("lun=" + ($attach_lun_id | tostring))])
+    and any(.argv == ["targetcli", ("/iscsi/" + $target_iqn + "/tpg1/acls"), "create", $initiator_iqn]))
+  and (.executionResults
+    | any(.argv == ["targetcli", ("/iscsi/" + $target_iqn + "/tpg1/luns"), "create", ("/backstores/block/" + $attach_backstore), ("lun=" + ($attach_lun_id | tostring))] and .success == true))
+' "$tmpdir/attach-apply.json" >/dev/null
+
+cmp "$tmpdir/attach-apply.json" "$attach_report" >/dev/null
+targetcli "/iscsi/$target_iqn/tpg1/luns" ls | grep -E "lun[[:space:]]*$attach_lun_id|lun$attach_lun_id" >/dev/null
+targetcli "/iscsi/$target_iqn/tpg1/acls" ls | grep -F "$initiator_iqn" >/dev/null
+
+jq -n \
+  --arg target_iqn "$target_iqn" \
+  --arg attach_loopdev "$attach_loopdev" \
+  --arg initiator_iqn "$initiator_iqn" \
+  --argjson attach_lun_id "$attach_lun_id" \
+  '{
+    version: 1,
+    targetLuns: {
+      ($target_iqn): {
+        operation: "detach",
+        provider: "lio",
+        source: $attach_loopdev,
+        lun: $attach_lun_id,
+        client: $initiator_iqn
+      }
+    },
+    apply: {
+      allowOffline: true
+    }
+  }' > "$detach_spec"
+
+if ! "$disk_nix_bin" apply \
+  --spec "$detach_spec" \
+  --execute \
+  --report-out "$detach_report" \
+  --json > "$tmpdir/detach-apply.json"; then
+  cat "$tmpdir/detach-apply.json" >&2 || true
+  cat "$detach_report" >&2 || true
+  exit 1
+fi
+
+jq -e \
+  --arg target_iqn "$target_iqn" \
+  --arg initiator_iqn "$initiator_iqn" \
+  --argjson attach_lun_id "$attach_lun_id" \
+  '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("targetluns:" + $target_iqn + ":detach"))
+    | .commands
+    | any(.argv == ["targetcli", ("/iscsi/" + $target_iqn + "/tpg1/acls"), "delete", $initiator_iqn])
+    and any(.argv == ["targetcli", ("/iscsi/" + $target_iqn + "/tpg1/luns"), "delete", ($attach_lun_id | tostring)]))
+  and (.executionResults
+    | any(.argv == ["targetcli", ("/iscsi/" + $target_iqn + "/tpg1/luns"), "delete", ($attach_lun_id | tostring)] and .success == true))
+' "$tmpdir/detach-apply.json" >/dev/null
+
+cmp "$tmpdir/detach-apply.json" "$detach_report" >/dev/null
+if targetcli "/iscsi/$target_iqn/tpg1/luns" ls | grep -E "lun[[:space:]]*$attach_lun_id|lun$attach_lun_id" >/dev/null; then
+  echo "target-side LUN $attach_lun_id remained mapped after detach" >&2
+  exit 1
+fi
+
+echo "target-side LUN integration smoke test updated lio.writeCache for $target_iqn LUN $lun_id and mapped/unmapped LUN $attach_lun_id"

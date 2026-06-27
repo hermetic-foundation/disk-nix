@@ -170,7 +170,8 @@ behavior across real storage stacks.
   verify real backing-file mode mutation with `chmod`, verify
   real loop-device read-only mutation with `blockdev --setro` and `blockdev --setrw`, verify
   real zram property reconciliation with `zramctl`, `swapon`, and `disk-nix zram`, then verify
-  real target-side LUN property mutation with `targetcli`, then verify
+  real target-side LUN property mutation plus target-side LIO map/unmap with
+  `targetcli`, then verify
   real VDO write-policy mutation with `vdo changeWritePolicy`, verify
   real NFS export option mutation with `exportfs -i`, and verify degraded
   missing-member MD RAID rescan after failing and removing one temporary RAID1

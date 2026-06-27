@@ -1188,13 +1188,18 @@ When enabled, it:
   `/dev/loop*`
 - creates a temporary LIO block backstore with
   `targetcli /backstores/block create`
-- creates a temporary iSCSI target and maps the backstore as a LUN
+- creates a temporary iSCSI target and maps the first backstore as a LUN
 - applies `targetLuns.<iqn>.properties."lio.writeCache" = "off"`
 - verifies the rendered
   `targetcli /backstores/block/<name> set attribute emulate_write_cache=0`
   command succeeded
-- removes the temporary target, backstore, loop device, and backing file during
-  cleanup
+- creates a second temporary backstore and applies
+  `targetLuns.<iqn>.operation = "attach"` to map it as another LUN with a
+  reviewed initiator ACL
+- applies `targetLuns.<iqn>.operation = "detach"` to remove that initiator ACL
+  and unmap the second LUN without deleting the backstore
+- removes the temporary target, backstores, loop devices, and backing files
+  during cleanup
 
 This test intentionally mutates only the temporary LIO target state and
 loop-backed block device it creates. It is VM-callable with

@@ -1998,6 +1998,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'targetcli /backstores/block create' ${./scripts/integration-target-lun-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'targetcli /iscsi create' ${./scripts/integration-target-lun-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'targetLuns' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'operation: "attach"' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'operation: "detach"' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'targetluns:" + $target_iqn + ":attach' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'targetluns:" + $target_iqn + ":detach' ${./scripts/integration-target-lun-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lio.writeCache' ${./scripts/integration-target-lun-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' ${./scripts/integration-target-lun-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'target-side LUN integration smoke test' ${./scripts/integration-target-lun-smoke.sh}
@@ -2380,6 +2384,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real zram property' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real target-side LUN' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'LIO target-side' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'map/unmap coverage: the loop-backed target LUN harness' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real VDO volume' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
@@ -2407,6 +2413,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device read-only mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real zram property reconciliation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real target-side LUN property mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'target-side LIO map/unmap' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'missing-member MD RAID rescan' ${./docs/status.md}
@@ -2424,6 +2431,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'zram.properties.algorithm' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'services.disk-nix.zram' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.properties."lio.writeCache"' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.operation = "attach"' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.operation = "detach"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_VM_HARNESSES=target-lun' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes.<name>.properties.writePolicy' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'exports.<path>.properties.options' ${./docs/integration-tests.md}
