@@ -1851,8 +1851,11 @@
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-vdo-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vdo-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_VDO_NAME ${./scripts/integration-vdo-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_VDO_WRITE_POLICY ${./scripts/integration-vdo-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'vdo status --name' ${./scripts/integration-vdo-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'vdostats --human-readable' ${./scripts/integration-vdo-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes:" + $vdo_name + ":set-property:writePolicy' ${./scripts/integration-vdo-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'vdo", "changeWritePolicy", "--name"' ${./scripts/integration-vdo-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'vdo", "status", "--name"' ${./scripts/integration-vdo-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'vdostats", "--human-readable"' ${./scripts/integration-vdo-smoke.sh}
             touch "$out"
@@ -2251,24 +2254,28 @@
             ${pkgs.gnugrep}/bin/grep -q 'real swap signature' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real VDO volume' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup config' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'btrfs filesystem label' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'swaplabel' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'zpool set' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lvchange --cachemode' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'vdo changeWritePolicy' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real loop-backed swap label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache property mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'btrfsSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'swaps.swapSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'pools.<name>.properties.autotrim' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.properties.lvm.cache-mode' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes.<name>.properties.writePolicy' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'rollback review safety' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'failed-and-resumed' ${./docs/status.md}

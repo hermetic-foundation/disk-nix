@@ -543,9 +543,14 @@ Update rules:
   cached origin LV, applies a disk-nix `lvmCaches.*.properties.lvm.cache-mode`
   declaration, executes `lvchange --cachemode`, and verifies the resulting mode
   with `lvs`.
+- [x] **Finished:** Destructive integration tests include real VDO volume
+  property mutation coverage: the lab-target VDO harness applies a disk-nix
+  `vdoVolumes.*.properties.writePolicy` declaration, executes
+  `vdo changeWritePolicy`, and verifies the resulting policy with
+  `vdo status --name` on the selected disposable VDO volume.
 - [ ] **Partial:** Destructive integration tests still need property mutation
-  coverage across VDO, bcache, NFS, target LUNs, loop devices, backing files,
-  and zram.
+  coverage across bcache, NFS, target LUNs, loop devices, backing files, and
+  zram.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`

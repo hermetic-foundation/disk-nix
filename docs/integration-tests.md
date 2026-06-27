@@ -943,6 +943,11 @@ When enabled, it:
 - verifies `vdo status --name <name>` can read the selected VDO volume
 - verifies `vdostats --human-readable <name>` can read runtime counters
 - verifies `disk-nix inspect <name> --json` sees VDO topology
+- applies `vdoVolumes.<name>.properties.writePolicy` against the selected
+  disposable VDO volume
+- verifies the generated JSON report was written, the rendered
+  `vdo changeWritePolicy --name <name> --writePolicy <policy>` command
+  succeeded, and `vdo status --name <name>` reports the requested write policy
 - executes a `vdoVolumes.<name>.operation = "rescan"` apply plan
 - verifies the rendered `vdo status --name <name>`,
   `vdostats --human-readable <name>`, and `disk-nix inspect <name>` commands
@@ -950,14 +955,18 @@ When enabled, it:
 - verifies the generated JSON report was written
 
 This test does not create, grow, start, stop, or remove a VDO volume. It still
-requires destructive opt-in because it reads real VDO management state and is
-intended for disposable lab hosts where the named volume can be safely probed.
+requires destructive opt-in because it reads real VDO management state and
+changes the selected volume's write policy. It is intended for disposable lab
+hosts where the named volume can be safely probed and mutated. The default
+write policy is `sync`; override it with `DISK_NIX_VDO_WRITE_POLICY=auto`,
+`sync`, or `async`.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 
 ```sh
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   DISK_NIX_VDO_NAME=archive \
+  DISK_NIX_VDO_WRITE_POLICY=sync \
   DISK_NIX_BIN=target/debug/disk-nix \
   ./scripts/integration-vdo-smoke.sh
 ```
