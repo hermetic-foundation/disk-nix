@@ -7,6 +7,7 @@ Refusing to run iSCSI integration smoke test.
 
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test rescans
 real iSCSI sessions for the target provided through DISK_NIX_ISCSI_TARGET.
+When DISK_NIX_LUN_PATH is set, it also rescans that host-visible LUN path.
 The harness does not log in to or log out from targets.
 MSG
   exit 2
@@ -18,6 +19,7 @@ if [[ "$(id -u)" != "0" ]]; then
 fi
 
 target="${DISK_NIX_ISCSI_TARGET:-}"
+lun_path="${DISK_NIX_LUN_PATH:-}"
 if [[ -z "$target" ]]; then
   cat >&2 <<'MSG'
 DISK_NIX_ISCSI_TARGET is required.
@@ -30,7 +32,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" iscsiadm jq lsscsi; do
+for tool in "$disk_nix_bin" blockdev cmp iscsiadm jq lsscsi multipath; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -45,6 +47,8 @@ trap cleanup EXIT
 
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
+lun_spec="$tmpdir/lun-spec.json"
+lun_report="$tmpdir/lun-apply-report.json"
 
 iscsiadm --mode session > "$tmpdir/session.txt"
 if ! grep -F -- "$target" "$tmpdir/session.txt" >/dev/null; then
@@ -94,4 +98,50 @@ jq -e --arg target "$target" '
 
 cmp "$tmpdir/apply.json" "$report" >/dev/null
 
-echo "iSCSI integration smoke test rescanned $target"
+if [[ -n "$lun_path" ]]; then
+  if [[ ! -e "$lun_path" ]]; then
+    echo "host-side LUN path does not exist: $lun_path" >&2
+    exit 2
+  fi
+
+  blockdev --getsize64 "$lun_path" >/dev/null
+
+  jq -n --arg target "$target" --arg lun_path "$lun_path" '{
+    version: 1,
+    luns: {
+      ($target + ":0"): {
+        operation: "rescan",
+        devices: [
+          $lun_path
+        ]
+      }
+    },
+    apply: {
+      allowOffline: true
+    }
+  }' > "$lun_spec"
+
+  "$disk_nix_bin" apply \
+    --spec "$lun_spec" \
+    --execute \
+    --report-out "$lun_report" \
+    --json > "$tmpdir/lun-apply.json"
+
+  jq -e --arg target "$target" --arg lun_path "$lun_path" '
+    .status == "succeeded"
+    and (.commandPlan[] | select(.actionId == ("luns:" + $target + ":0:rescan"))
+      | .commands
+      | any(.argv == ["iscsiadm", "--mode", "session", "--rescan"])
+      and any(.argv == ["lsscsi", "-t", "-s"])
+      and any(.argv == ["multipath", "-r"])
+      and any(.argv == ["sh", "-c", "block=$(basename \"$(readlink -f \"$1\")\"); printf '\''1\\n'\'' > \"/sys/class/block/${block}/device/rescan\"", "disk-nix-scsi-rescan", $lun_path]))
+    and (.executionResults
+      | any(.argv == ["sh", "-c", "block=$(basename \"$(readlink -f \"$1\")\"); printf '\''1\\n'\'' > \"/sys/class/block/${block}/device/rescan\"", "disk-nix-scsi-rescan", $lun_path] and .success == true)
+      and any(.argv == ["multipath", "-r"] and .success == true))
+  ' "$tmpdir/lun-apply.json" >/dev/null
+
+  cmp "$tmpdir/lun-apply.json" "$lun_report" >/dev/null
+  echo "iSCSI integration smoke test rescanned $target and host-side LUN $lun_path"
+else
+  echo "iSCSI integration smoke test rescanned $target"
+fi

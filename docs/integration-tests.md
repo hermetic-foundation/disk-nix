@@ -1073,6 +1073,7 @@ sessions:
 ```sh
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   DISK_NIX_ISCSI_TARGET=iqn.2026-06.example:storage.root \
+  DISK_NIX_LUN_PATH=/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage.root-lun-0 \
   nix run .#integration-iscsi-smoke
 ```
 
@@ -1084,18 +1085,24 @@ When enabled, it:
 - executes an `iscsiSessions.<target>.operation = "rescan"` apply plan
 - verifies the rendered `iscsiadm --mode session --rescan`,
   `lsscsi -t -s`, and `disk-nix inspect <target> --json` commands succeeded
+- when `DISK_NIX_LUN_PATH` is set, executes
+  `luns.<target>:0.operation = "rescan"` for that host-visible path
+- verifies the rendered host-side `disk-nix-scsi-rescan` handoff and
+  `multipath -r` commands succeeded for the selected LUN path
 - verifies the generated JSON report was written
 
 This test does not discover, log in to, log out from, grow, attach, detach, or
 remove an iSCSI target or LUN. It still requires destructive opt-in because it
-performs a real session rescan and is intended for disposable lab hosts where
-the named session can be safely refreshed.
+performs a real session rescan and, when `DISK_NIX_LUN_PATH` is set, a real
+host-side LUN rescan. It is intended for disposable lab hosts where the named
+session and optional LUN path can be safely refreshed.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 
 ```sh
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   DISK_NIX_ISCSI_TARGET=iqn.2026-06.example:storage.root \
+  DISK_NIX_LUN_PATH=/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage.root-lun-0 \
   DISK_NIX_BIN=target/debug/disk-nix \
   ./scripts/integration-iscsi-smoke.sh
 ```

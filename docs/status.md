@@ -172,7 +172,8 @@ behavior across real storage stacks.
   real zram property reconciliation with `zramctl`, `swapon`, and `disk-nix zram`, then verify
   real target-side LUN property mutation plus target-side LIO map/unmap with
   `targetcli`, verify target-side LUN destroy refusal without destructive
-  policy, then verify
+  policy, verify lab-backed host-side LUN rescan with `disk-nix-scsi-rescan`
+  and `multipath -r`, then verify
   real VDO write-policy mutation with `vdo changeWritePolicy`, verify
   real NFS export option mutation with `exportfs -i`, and verify degraded
   missing-member MD RAID rescan after failing and removing one temporary RAID1
