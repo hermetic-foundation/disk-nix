@@ -160,7 +160,8 @@ behavior across real storage stacks.
   create disposable backing files or arrays, verify real `inspect --json`,
   execute reviewed apply plans, verify ext4 grow plus real `e2label` filesystem
   label mutation on a disposable loop device, verify real LUKS header label mutation
-  with `cryptsetup config`, and clean up temporary devices. A layered VM
+  with `cryptsetup config`, verify real Btrfs filesystem label mutation with
+  `btrfs filesystem label`, and clean up temporary devices. A layered VM
   harness creates partitioned loop, LUKS, LVM, and mounted ext4 layers on a
   disposable disk, enlarges the backing file, and executes one disk-nix apply
   run that grows the partition, resizes the LUKS mapper, grows the LV, grows the

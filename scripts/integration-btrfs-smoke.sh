@@ -19,7 +19,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" btrfs findmnt jq losetup mkfs.btrfs mount truncate umount; do
+for tool in "$disk_nix_bin" btrfs findmnt grep jq losetup mkfs.btrfs mount truncate umount; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -45,6 +45,8 @@ backing="$tmpdir/disk-nix-btrfs-smoke.img"
 mountpoint="$tmpdir/mnt"
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
+property_spec="$tmpdir/property-spec.json"
+property_report="$tmpdir/property-report.json"
 
 mkdir -p "$mountpoint"
 truncate --size 128M "$backing"
@@ -63,6 +65,37 @@ jq -e --arg mountpoint "$mountpoint" '
       or (.properties // [] | any(.key == "filesystem.type" and .value == "btrfs"))
     )
 ' "$tmpdir/inspect.json" >/dev/null
+
+jq -n --arg loopdev "$loopdev" --arg mountpoint "$mountpoint" '{
+  version: 1,
+  filesystems: {
+    btrfsSmokeLabel: {
+      device: $loopdev,
+      fsType: "btrfs",
+      mountpoint: $mountpoint,
+      properties: {
+        label: "disknix-btrfs"
+      }
+    }
+  }
+}' > "$property_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$property_spec" \
+  --execute \
+  --report-out "$property_report" \
+  --json > "$tmpdir/property-apply.json"
+
+jq -e --arg mountpoint "$mountpoint" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == "filesystems:btrfsSmokeLabel:set-property:label")
+    | .commands | any(.argv == ["btrfs", "filesystem", "label", $mountpoint, "disknix-btrfs"]))
+  and (.executionResults
+    | any(.argv == ["btrfs", "filesystem", "label", $mountpoint, "disknix-btrfs"] and .success == true))
+' "$tmpdir/property-apply.json" >/dev/null
+
+cmp "$tmpdir/property-apply.json" "$property_report" >/dev/null
+btrfs filesystem label "$mountpoint" | grep -qx 'disknix-btrfs'
 
 jq -n --arg loopdev "$loopdev" --arg mountpoint "$mountpoint" '{
   version: 1,
@@ -93,4 +126,4 @@ jq -e --arg mountpoint "$mountpoint" '
 cmp "$tmpdir/apply.json" "$report" >/dev/null
 findmnt --target "$mountpoint" --types btrfs >/dev/null
 
-echo "Btrfs loop-backed integration smoke test passed for $loopdev mounted at $mountpoint"
+echo "Btrfs loop-backed integration smoke test labeled and scrubbed $loopdev mounted at $mountpoint"

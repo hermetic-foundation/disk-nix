@@ -524,9 +524,14 @@ Update rules:
   `luks.devices.*.properties.label` declaration, executes `cryptsetup config`,
   and verifies the resulting label with `cryptsetup luksDump` on the disposable
   loop-backed container.
+- [x] **Finished:** Destructive integration tests include real Btrfs filesystem
+  property mutation coverage: the loop-backed Btrfs harness applies a disk-nix
+  `filesystems.*.properties.label` declaration, executes
+  `btrfs filesystem label`, and verifies the resulting label on the mounted
+  disposable Btrfs filesystem.
 - [ ] **Partial:** Destructive integration tests still need property mutation
-  coverage across LVM, ZFS, Btrfs, VDO, bcache, NFS, target LUNs, loop devices,
-  backing files, swap, and zram.
+  coverage across LVM, ZFS, VDO, bcache, NFS, target LUNs, loop devices, backing
+  files, swap, and zram.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`

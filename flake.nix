@@ -97,6 +97,7 @@
             diskNix
             pkgs.btrfs-progs
             pkgs.coreutils
+            pkgs.gnugrep
             pkgs.jq
             pkgs.util-linux
           ];
@@ -1739,6 +1740,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-btrfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mkfs.btrfs' ${./scripts/integration-btrfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mount -t btrfs' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'btrfsSmokeLabel' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystems:btrfsSmokeLabel:set-property:label' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'btrfs", "filesystem", "label"' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disknix-btrfs' ${./scripts/integration-btrfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'btrfs", "scrub", "start", "-B"' ${./scripts/integration-btrfs-smoke.sh}
             touch "$out"
           '';
@@ -2203,12 +2208,16 @@
             ${pkgs.gnugrep}/bin/grep -q 'cache and network-storage' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup config' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'btrfs filesystem label' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header label mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel.properties.label' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'btrfsSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'rollback review safety' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'failed-and-resumed' ${./docs/status.md}

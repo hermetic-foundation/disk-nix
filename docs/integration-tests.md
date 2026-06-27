@@ -641,6 +641,11 @@ When enabled, it:
 - formats the temporary loop device with Btrfs
 - mounts the filesystem in the temporary directory
 - verifies `disk-nix inspect <mountpoint> --json` sees Btrfs topology
+- applies `filesystems.btrfsSmokeLabel.properties.label = "disknix-btrfs"`
+  against the mounted Btrfs filesystem
+- verifies the generated JSON report was written, the rendered
+  `btrfs filesystem label <mountpoint> disknix-btrfs` command succeeded, and
+  `btrfs filesystem label <mountpoint>` reports the new label
 - executes a `filesystems.<name>.operation = "scrub"` apply plan
 - verifies the generated JSON report was written and the rendered
   `btrfs scrub start -B <mountpoint>` command succeeded
