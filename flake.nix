@@ -2204,6 +2204,11 @@
             ${pkgs.gnugrep}/bin/grep -q 'normalizes_referral_pnfs_remount_and_export_reload_fixture' ${./crates/disk-nix-probe/src/nfs.rs}
             ${pkgs.gnugrep}/bin/grep -q 'nfs.export-option-pnfs' ${./crates/disk-nix-probe/src/nfs.rs}
             ${pkgs.gnugrep}/bin/grep -q 'SAS enclosure fixture' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'Real-world hardware enclosure and array fixture coverage' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'vendor LUN metadata' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'SES failure attributes' ${./docs/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'hardware_array_fixture_preserves_ses_failures_and_identity_drift' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'vdisk-prod-77-replaced' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'stressed VDO fixture' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'vdo_pressure_fixture_preserves_rebuild_policy_and_failure_state' ${./crates/disk-nix-probe/src/lib.rs}

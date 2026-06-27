@@ -127,9 +127,9 @@ Update rules:
 - [x] **Finished:** Real-world clustered storage fixture coverage includes
   clustered LVM, shared VG locking, remote LV activity, and split-brain or
   lock-manager failure states.
-- [ ] **Partial:** Real-world fixture coverage still needs additional hardware
-  enclosure and array samples covering SAS enclosure fixture variants, SES
-  failures, vendor LUN metadata, and array-backed multipath identity drift.
+- [x] **Finished:** Real-world hardware enclosure and array fixture coverage
+  includes SAS enclosure variants, SES failures, vendor LUN metadata, and
+  array-backed multipath identity drift.
 - [x] **Finished:** Real-world VDO fixture coverage includes additional samples
   beyond the LVM-backed VDO fixture for physical-space pressure, index rebuild
   state, dedupe/compression policy drift, and VDO start/stop failure states.

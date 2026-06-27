@@ -240,7 +240,9 @@ source-to-mount edges, NFSv4 referrals, pNFS/flexfiles layout hints, export
 reload drift, client remount drift, and Kerberos policy variants, plus a SAS
 enclosure fixture
 covering non-block SES enclosure records,
-enclosure identifiers, SAS addresses, and attached disk LUN backing edges, plus
+enclosure identifiers, SAS addresses, attached disk LUN backing edges, SES
+failure attributes, vendor LUN metadata, and array-backed multipath identity
+drift, plus
 an LVM-backed VDO fixture that correlates native VDO status, vdostats usage,
 verbose VDO block counters, LVM VDO LV metadata, VDO segment policy, and
 backing-pool dependency edges, plus a stressed VDO fixture covering

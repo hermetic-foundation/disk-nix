@@ -265,7 +265,10 @@ The current probe layer normalizes:
   portals, concise open-iscsi node records, attached LUN disks, iSER/RDMA
   session transport over InfiniBand netdevs, multi-portal login/logout churn,
   discovery CHAP, mutual CHAP, replacement LUN identity drift, and password
-  presence redaction without serializing secret material.
+  presence redaction without serializing secret material. Hardware enclosure
+  fixture coverage includes SAS enclosure variants, SES failure attributes,
+  vendor LUN metadata, attached disk LUN backing edges, and array-backed
+  multipath identity drift.
 
 Probe-status remediation is adapter-aware. Missing-tool reports include the
 likely tool names and Nix packages, including PATH and `ENOENT` command launch

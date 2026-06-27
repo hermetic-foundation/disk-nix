@@ -2754,6 +2754,73 @@ size=4.0T features='2 queue_if_no_path retain_attached_hw_handler' hwhandler='1 
   `- 11:0:4:23 sdi 8:128 failed faulty offline standby
 "#;
 
+    const HARDWARE_ARRAY_LSSCSI_LIST: &[u8] = br#"
+[12:0:0:0]   enclosu DELL     PowerVault ME5   1.2   -          /dev/sg12  -
+  device_blocked=0
+  enclosure_identifier=0x5000c500dead0001
+  enclosure_logical_id=ME5-A
+  enclosure_slot_count=24
+  sas_address=0x5000c500dead0100
+  ses_status=ok
+  state=running
+[12:0:1:0]   enclosu DELL     PowerVault ME5   1.2   -          /dev/sg13  -
+  device_blocked=1
+  enclosure_identifier=0x5000c500dead0002
+  enclosure_logical_id=ME5-B
+  enclosure_slot_count=24
+  element_descriptor=expander-b
+  element_status=critical
+  fault_code=over_temperature
+  sas_address=0x5000c500dead0200
+  ses_status=failed
+  state=blocked
+[12:0:2:7]   disk    DELL     ME5 VirtualDisk  0520  /dev/sdj   /dev/sg14  8.00T
+  array_serial=ME5SN12345
+  device_blocked=0
+  enclosure_identifier=0x5000c500dead0001
+  enclosure_slot=7
+  logical_unit_id=600c0ff0005a4bcd0000000000000077
+  queue_depth=256
+  sas_address=0x5000c500dead0177
+  storage_pool=pool-a
+  target_port_group=preferred-a
+  vendor_lun_id=vdisk-prod-77
+  volume_id=vol-prod
+  state=running
+[13:0:2:7]   disk    DELL     ME5 VirtualDisk  0520  /dev/sdk   /dev/sg15  8.00T
+  array_serial=ME5SN12345
+  device_blocked=0
+  enclosure_identifier=0x5000c500dead0002
+  enclosure_slot=7
+  logical_unit_id=600c0ff0005a4bcd0000000000000088
+  queue_depth=256
+  sas_address=0x5000c500dead0277
+  storage_pool=pool-a
+  target_port_group=nonpreferred-b
+  vendor_lun_id=vdisk-prod-77-replaced
+  volume_id=vol-prod
+  state=running
+"#;
+
+    const HARDWARE_ARRAY_LSSCSI_TRANSPORT: &[u8] = br#"
+[12:0:2:7]   disk    sas:0x5000c500dead0177                                /dev/sdj   /dev/sg14  /dev/disk/by-id/scsi-3600c0ff0005a4bcd0000000000000077  /dev/disk/by-id/wwn-0x600c0ff0005a4bcd0000000000000077  8.00T
+[13:0:2:7]   disk    sas:0x5000c500dead0277                                /dev/sdk   /dev/sg15  /dev/disk/by-id/scsi-3600c0ff0005a4bcd0000000000000088  /dev/disk/by-id/wwn-0x600c0ff0005a4bcd0000000000000088  8.00T
+"#;
+
+    const HARDWARE_ARRAY_LSSCSI_UNIT: &[u8] = br#"
+[12:0:2:7]   disk    3600c0ff0005a4bcd0000000000000077                    /dev/sdj   /dev/sg14  /dev/disk/by-id/scsi-3600c0ff0005a4bcd0000000000000077  /dev/disk/by-id/wwn-0x600c0ff0005a4bcd0000000000000077  8.00T
+[13:0:2:7]   disk    3600c0ff0005a4bcd0000000000000088                    /dev/sdk   /dev/sg15  /dev/disk/by-id/scsi-3600c0ff0005a4bcd0000000000000088  /dev/disk/by-id/wwn-0x600c0ff0005a4bcd0000000000000088  8.00T
+"#;
+
+    const HARDWARE_ARRAY_MULTIPATH: &[u8] = br#"
+mpatharray (3600c0ff0005a4bcd0000000000000099) dm-14 DELL,ME5 VirtualDisk
+size=8.0T features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
+|-+- policy='service-time 0' prio=50 status=active
+| `- 12:0:2:7 sdj 8:144 active ready running preferred
+`-+- policy='service-time 0' prio=10 status=enabled
+  `- 13:0:2:7 sdk 8:160 active ready running nonpreferred identity-drift
+"#;
+
     const ENCRYPTED_DEGRADED_MDSTAT: &[u8] = br#"
 Personalities : [raid1]
 md127 : active raid1 nvme1n1p2[1](F) nvme0n1p2[0]
@@ -4041,6 +4108,166 @@ nas01.example:/exports/projects mounted on /mnt/projects:
                 })
                 .count(),
             4
+        );
+    }
+
+    #[test]
+    fn hardware_array_fixture_preserves_ses_failures_and_identity_drift() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_list_output(HARDWARE_ARRAY_LSSCSI_LIST)
+                .expect("hardware array lsscsi list fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_transport_output(HARDWARE_ARRAY_LSSCSI_TRANSPORT)
+                .expect("hardware array lsscsi transport fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_unit_output(HARDWARE_ARRAY_LSSCSI_UNIT)
+                .expect("hardware array lsscsi unit fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            multipath::normalize_multipath_output(HARDWARE_ARRAY_MULTIPATH)
+                .expect("hardware array multipath fixture should parse"),
+        );
+
+        let healthy_enclosure = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:12:0:0:0")
+            .expect("healthy SES enclosure should exist");
+        assert_eq!(healthy_enclosure.kind, NodeKind::Lun);
+        assert_has_property(healthy_enclosure, "scsi.peripheral-type", "enclosu");
+        assert_has_property(
+            healthy_enclosure,
+            "scsi.enclosure-identifier",
+            "0x5000c500dead0001",
+        );
+        assert_has_property(healthy_enclosure, "scsi.ses-status", "ok");
+
+        let failed_enclosure = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:12:0:1:0")
+            .expect("failed SES enclosure should exist");
+        assert_eq!(failed_enclosure.kind, NodeKind::Lun);
+        assert_has_property(failed_enclosure, "scsi.device-blocked", "1");
+        assert_has_property(failed_enclosure, "scsi.element-status", "critical");
+        assert_has_property(failed_enclosure, "scsi.fault-code", "over_temperature");
+        assert_has_property(failed_enclosure, "scsi.ses-status", "failed");
+        assert_has_property(failed_enclosure, "scsi.state", "blocked");
+
+        assert!(
+            !graph
+                .nodes
+                .iter()
+                .any(|node| node.id.0 == "block:-" || node.path.as_deref() == Some("-")),
+            "SES enclosure records must not create placeholder block devices"
+        );
+
+        let preferred_lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:12:0:2:7")
+            .expect("preferred vendor LUN should exist");
+        assert_eq!(preferred_lun.kind, NodeKind::Lun);
+        assert_eq!(preferred_lun.size_bytes, Some(8_000_000_000_000));
+        assert_has_property(preferred_lun, "scsi.array-serial", "ME5SN12345");
+        assert_has_property(preferred_lun, "scsi.storage-pool", "pool-a");
+        assert_has_property(preferred_lun, "scsi.volume-id", "vol-prod");
+        assert_has_property(preferred_lun, "scsi.vendor-lun-id", "vdisk-prod-77");
+        assert_has_property(preferred_lun, "scsi.target-port-group", "preferred-a");
+        assert_has_property(
+            preferred_lun,
+            "scsi.logical-unit-id",
+            "600c0ff0005a4bcd0000000000000077",
+        );
+
+        let replacement_lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:13:0:2:7")
+            .expect("replacement vendor LUN path should exist");
+        assert_has_property(
+            replacement_lun,
+            "scsi.vendor-lun-id",
+            "vdisk-prod-77-replaced",
+        );
+        assert_has_property(replacement_lun, "scsi.target-port-group", "nonpreferred-b");
+        assert_has_property(
+            replacement_lun,
+            "scsi.logical-unit-id",
+            "600c0ff0005a4bcd0000000000000088",
+        );
+
+        let preferred_path = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdj")
+            .expect("preferred array path should exist");
+        assert_has_property(preferred_path, "scsi.transport", "sas:0x5000c500dead0177");
+        assert_has_property(
+            preferred_path,
+            "scsi.unit-name",
+            "3600c0ff0005a4bcd0000000000000077",
+        );
+        assert_has_property(preferred_path, "multipath.path-flags", "preferred");
+
+        let drifted_path = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdk")
+            .expect("drifted array path should exist");
+        assert_has_property(drifted_path, "scsi.transport", "sas:0x5000c500dead0277");
+        assert_has_property(
+            drifted_path,
+            "scsi.unit-name",
+            "3600c0ff0005a4bcd0000000000000088",
+        );
+        assert_has_property(
+            drifted_path,
+            "multipath.path-flags",
+            "nonpreferred identity-drift",
+        );
+
+        let map = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "multipath:mpatharray")
+            .expect("array-backed multipath map should exist");
+        assert_eq!(map.kind, NodeKind::MultipathDevice);
+        assert_has_property(map, "multipath.vendor-product", "DELL,ME5 VirtualDisk");
+        assert_has_property(map, "multipath.wwid", "3600c0ff0005a4bcd0000000000000099");
+        assert_ne!(
+            map.properties
+                .iter()
+                .find(|property| property.key == "multipath.wwid")
+                .map(|property| property.value.as_str()),
+            drifted_path
+                .identity
+                .wwn
+                .as_deref()
+                .map(|value| value.trim_start_matches("/dev/disk/by-id/scsi-"))
+        );
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "scsi-lun:12:0:2:7"
+                && edge.to.0 == "block:/dev/sdj"
+                && edge.relationship == Relationship::Backs
+        }));
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to.0 == "multipath:mpatharray" && edge.relationship == Relationship::Backs
+                })
+                .count(),
+            2
         );
     }
 
