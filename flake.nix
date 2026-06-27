@@ -1827,6 +1827,9 @@
             ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-zfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'zpool create' ${./scripts/integration-zfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'zpool destroy' ${./scripts/integration-zfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'pools:" + $pool + ":set-property:autotrim' ${./scripts/integration-zfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'zpool", "set", "autotrim=on"' ${./scripts/integration-zfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'zpool get -H -o value autotrim' ${./scripts/integration-zfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'zpool", "scrub"' ${./scripts/integration-zfs-smoke.sh}
             touch "$out"
           '';
@@ -2242,18 +2245,22 @@
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real swap signature' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup config' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'btrfs filesystem label' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'swaplabel' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'zpool set' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real loop-backed swap label mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'btrfsSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'swaps.swapSmokeLabel.properties.label' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'pools.<name>.properties.autotrim' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'rollback review safety' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'failed-and-resumed' ${./docs/status.md}

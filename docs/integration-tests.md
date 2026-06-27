@@ -859,6 +859,11 @@ When enabled, it:
 - attaches it to the next available `/dev/loop*`
 - creates a temporary ZFS pool mounted in the temporary directory
 - verifies `disk-nix inspect <pool> --json` sees ZFS pool topology
+- applies `pools.<name>.properties.autotrim = "on"` against the real
+  loop-backed ZFS pool
+- verifies the generated JSON report was written, the rendered
+  `zpool set autotrim=on <pool>` command succeeded, and
+  `zpool get -H -o value autotrim <pool>` reports `on`
 - executes a `pools.<name>.operation = "scrub"` apply plan
 - verifies the generated JSON report was written and the rendered
   `zpool scrub <pool>` command succeeded

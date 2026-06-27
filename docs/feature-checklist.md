@@ -534,8 +534,12 @@ Update rules:
   `swaps.*.properties.label` declaration, executes `swaplabel`, and verifies
   the resulting label with `blkid` on the disposable loop-backed swap
   signature.
+- [x] **Finished:** Destructive integration tests include real ZFS pool
+  property mutation coverage: the loop-backed ZFS harness applies a disk-nix
+  `pools.*.properties.autotrim` declaration, executes `zpool set`, and verifies
+  the resulting property with `zpool get` on the disposable loop-backed pool.
 - [ ] **Partial:** Destructive integration tests still need property mutation
-  coverage across LVM, ZFS, VDO, bcache, NFS, target LUNs, loop devices, backing
+  coverage across LVM, VDO, bcache, NFS, target LUNs, loop devices, backing
   files, and zram.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs

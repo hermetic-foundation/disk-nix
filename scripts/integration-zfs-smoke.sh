@@ -46,6 +46,8 @@ backing="$tmpdir/disk-nix-zfs-smoke.img"
 mountpoint_path="$tmpdir/mnt"
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
+property_spec="$tmpdir/property-spec.json"
+property_report="$tmpdir/property-report.json"
 
 mkdir -p "$mountpoint_path"
 truncate --size 512M "$backing"
@@ -64,6 +66,37 @@ jq -e --arg pool "$pool" --arg mountpoint_path "$mountpoint_path" '
       or (.properties // [] | any(.key == "zfs.mountpoint" and .value == $mountpoint_path))
     )
 ' "$tmpdir/inspect.json" >/dev/null
+
+jq -n --arg pool "$pool" '{
+  version: 1,
+  pools: {
+    ($pool): {
+      properties: {
+        autotrim: "on"
+      }
+    }
+  }
+}' > "$property_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$property_spec" \
+  --execute \
+  --report-out "$property_report" \
+  --json > "$tmpdir/property-apply.json"
+
+jq -e --arg pool "$pool" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("pools:" + $pool + ":set-property:autotrim"))
+    | .commands | any(.argv == ["zpool", "set", "autotrim=on", $pool]))
+  and (.executionResults
+    | any(.argv == ["zpool", "set", "autotrim=on", $pool] and .success == true))
+' "$tmpdir/property-apply.json" >/dev/null
+
+cmp "$tmpdir/property-apply.json" "$property_report" >/dev/null
+if [[ "$(zpool get -H -o value autotrim "$pool")" != "on" ]]; then
+  echo "ZFS pool autotrim property did not match after disk-nix mutation" >&2
+  exit 1
+fi
 
 jq -n --arg pool "$pool" '{
   version: 1,
@@ -92,4 +125,4 @@ cmp "$tmpdir/apply.json" "$report" >/dev/null
 zpool status "$pool" >/dev/null
 mountpoint -q "$mountpoint_path"
 
-echo "ZFS loop-backed integration smoke test scrubbed $pool on $loopdev"
+echo "ZFS loop-backed integration smoke test set autotrim and scrubbed $pool on $loopdev"
