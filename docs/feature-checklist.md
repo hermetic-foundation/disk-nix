@@ -548,9 +548,13 @@ Update rules:
   `vdoVolumes.*.properties.writePolicy` declaration, executes
   `vdo changeWritePolicy`, and verifies the resulting policy with
   `vdo status --name` on the selected disposable VDO volume.
+- [x] **Finished:** Destructive integration tests include real NFS export
+  property mutation coverage: the NFS lab harness can opt into a server-side
+  temporary export, applies a disk-nix `exports.*.properties.options`
+  declaration, executes `exportfs -i`, and verifies the export with
+  `exportfs -v`.
 - [ ] **Partial:** Destructive integration tests still need property mutation
-  coverage across bcache, NFS, target LUNs, loop devices, backing files, and
-  zram.
+  coverage across bcache, target LUNs, loop devices, backing files, and zram.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`

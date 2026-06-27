@@ -909,6 +909,10 @@ When enabled, it:
 - executes an `nfs.mounts.<mountpoint>.operation = "remount"` apply plan
 - verifies the rendered `mount -o remount,<options> <mountpoint>` command
   succeeded
+- when `DISK_NIX_NFS_EXPORT_PROPERTY=1` is set, creates a temporary local
+  export path, applies `exports.<path>.properties.options`, verifies the
+  rendered `exportfs -i -o <options> <client>:<path>` command succeeded, and
+  checks `exportfs -v` lists the temporary export
 - unmounts the temporary client mount during cleanup
 
 This test does not provision an NFS server or export. It requires a disposable
@@ -917,13 +921,18 @@ reachability, NFS version, and authentication vary by lab. The default
 filesystem type is `nfs4`, the default mount options are `vers=4.2`, and the
 default remount options reuse the mount options. Override them with
 `DISK_NIX_NFS_FSTYPE`, `DISK_NIX_NFS_MOUNT_OPTIONS`, and
-`DISK_NIX_NFS_REMOUNT_OPTIONS`.
+`DISK_NIX_NFS_REMOUNT_OPTIONS`. For server-side export option testing, set
+`DISK_NIX_NFS_EXPORT_PROPERTY=1`; the harness exports a temporary directory to
+`DISK_NIX_NFS_EXPORT_CLIENT` with `DISK_NIX_NFS_EXPORT_OPTIONS`, then unexports
+it during cleanup. The defaults are `127.0.0.1` and
+`ro,sync,no_subtree_check`.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 
 ```sh
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   DISK_NIX_NFS_SOURCE=server.example.com:/srv/disk-nix-smoke \
+  DISK_NIX_NFS_EXPORT_PROPERTY=1 \
   DISK_NIX_BIN=target/debug/disk-nix \
   ./scripts/integration-nfs-smoke.sh
 ```
