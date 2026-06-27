@@ -1118,6 +1118,12 @@ When enabled, it:
   `luns.<target>:0.operation = "rescan"` for that host-visible path
 - verifies the rendered host-side `disk-nix-scsi-rescan` handoff and
   `multipath -r` commands succeeded for the selected LUN path
+- when `DISK_NIX_LUN_DATA_SURVIVAL=1` and `DISK_NIX_LUN_MOUNTPOINT` are set,
+  writes `disk-nix-iscsi-lun-sentinel.txt` to an already-mounted filesystem on
+  that LUN, injects a failed host-side LUN rescan, verifies the
+  partial-execution recovery report includes `resume-after-fix`, verifies the
+  sentinel remains readable, reruns a clean LUN rescan apply, and verifies the
+  sentinel remains readable after the resumed operation
 - verifies the generated JSON report was written
 
 This test does not discover, log in to, log out from, grow, attach, detach, or

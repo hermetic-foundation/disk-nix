@@ -182,7 +182,8 @@ behavior across real storage stacks.
   multipath flush with `multipath -f`, then verify
   real VDO write-policy mutation with `vdo changeWritePolicy`, verify
   real NFS export option mutation with `exportfs -i`, verify NFS failed-and-resumed remount data-survival
-  with a lab export sentinel, verify real MD RAID member replacement
+  with a lab export sentinel, verify iSCSI host-LUN failed-and-resumed rescan data-survival
+  with a mounted LUN sentinel, verify real MD RAID member replacement
   with `mdadm --replace` and `mdadm --wait`, verify MD RAID stale-superblock evidence
   with `mdadm --examine`, verify MD RAID failed-detach recovery after an
   already-removed member, and verify

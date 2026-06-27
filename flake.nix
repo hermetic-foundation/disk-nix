@@ -1991,12 +1991,18 @@
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-iscsi-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_ISCSI_TARGET ${./scripts/integration-iscsi-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_LUN_PATH ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_LUN_DATA_SURVIVAL ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_LUN_MOUNTPOINT ${./scripts/integration-iscsi-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'iscsiadm --mode session' ${./scripts/integration-iscsi-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lsscsi -t -s' ${./scripts/integration-iscsi-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'iscsiadm", "--mode", "session", "--rescan"' ${./scripts/integration-iscsi-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-scsi-rescan' ${./scripts/integration-iscsi-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipath", "-r"' ${./scripts/integration-iscsi-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lsscsi", "-t", "-s"' ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix iSCSI LUN sentinel' ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'synthetic iSCSI LUN rescan failure for disk-nix data-survival coverage' ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'failed-lun-apply.json' ${./scripts/integration-iscsi-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'resumed-lun-apply.json' ${./scripts/integration-iscsi-smoke.sh}
             touch "$out"
           '';
           integrationMultipathSmoke = pkgs.runCommand "disk-nix-integration-multipath-smoke-check" { } ''
@@ -2435,6 +2441,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'rescan coverage: the loop-backed bcache harness' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'network-storage scenarios' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'NFS failed-and-resumed remount data-survival' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'iSCSI host-LUN failed-and-resumed rescan data-survival' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace create/delete' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace grow' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace attach/detach' "$checklist"
@@ -2490,6 +2497,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'NFS failed-and-resumed remount data-survival' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'iSCSI host-LUN failed-and-resumed rescan data-survival' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace create/delete' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace grow' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace attach/detach' ${./docs/status.md}
@@ -2519,6 +2527,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.operation = "detach"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.destroy = true' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_LUN_PATH' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_LUN_DATA_SURVIVAL=1' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-iscsi-lun-sentinel.txt' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'luns.<target>:0.operation = "rescan"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_RESIZE=1' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_ADD_PATH' ${./docs/integration-tests.md}

@@ -713,6 +713,14 @@ Update rules:
   `resume-after-fix` guidance, verifies the sentinel remains readable, reruns a
   clean remount apply, and verifies the sentinel remains readable after the
   resumed network-storage operation.
+- [x] **Finished:** Deeper destructive tests include iSCSI host-LUN failed-and-resumed rescan data-survival
+  coverage: when `DISK_NIX_LUN_DATA_SURVIVAL=1` is set with an already-mounted
+  `DISK_NIX_LUN_MOUNTPOINT`, the iSCSI harness writes a sentinel file to the
+  mounted LUN filesystem, injects a failed host-side LUN rescan, verifies
+  `partialExecutionRecovery`, `resume-after-fix`, and domain recovery guidance,
+  verifies the sentinel remains readable, reruns a clean LUN rescan apply, and
+  verifies the sentinel remains readable after the resumed network-storage
+  operation.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
   checks for root privilege plus missing, failing, stderr-only, and empty-output

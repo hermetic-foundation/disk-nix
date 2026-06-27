@@ -8,7 +8,10 @@ Refusing to run iSCSI integration smoke test.
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test rescans
 real iSCSI sessions for the target provided through DISK_NIX_ISCSI_TARGET.
 When DISK_NIX_LUN_PATH is set, it also rescans that host-visible LUN path.
-The harness does not log in to or log out from targets.
+When DISK_NIX_LUN_DATA_SURVIVAL=1 and DISK_NIX_LUN_MOUNTPOINT are set, it
+writes a sentinel to an already-mounted filesystem on that LUN and verifies the
+sentinel survives a failed-and-resumed host-LUN rescan. The harness does not
+log in to or log out from targets.
 MSG
   exit 2
 fi
@@ -20,6 +23,8 @@ fi
 
 target="${DISK_NIX_ISCSI_TARGET:-}"
 lun_path="${DISK_NIX_LUN_PATH:-}"
+lun_data_survival="${DISK_NIX_LUN_DATA_SURVIVAL:-0}"
+lun_mountpoint="${DISK_NIX_LUN_MOUNTPOINT:-}"
 if [[ -z "$target" ]]; then
   cat >&2 <<'MSG'
 DISK_NIX_ISCSI_TARGET is required.
@@ -32,7 +37,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" blockdev cmp iscsiadm jq lsscsi multipath; do
+for tool in "$disk_nix_bin" blockdev cmp findmnt install iscsiadm jq lsscsi multipath mountpoint; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -49,6 +54,8 @@ spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 lun_spec="$tmpdir/lun-spec.json"
 lun_report="$tmpdir/lun-apply-report.json"
+failed_lun_report="$tmpdir/failed-lun-apply-report.json"
+sentinel_expected="$tmpdir/iscsi-lun-sentinel.expected"
 
 iscsiadm --mode session > "$tmpdir/session.txt"
 if ! grep -F -- "$target" "$tmpdir/session.txt" >/dev/null; then
@@ -141,6 +148,80 @@ if [[ -n "$lun_path" ]]; then
   ' "$tmpdir/lun-apply.json" >/dev/null
 
   cmp "$tmpdir/lun-apply.json" "$lun_report" >/dev/null
+
+  if [[ "$lun_data_survival" == "1" ]]; then
+    if [[ -z "$lun_mountpoint" ]]; then
+      echo "DISK_NIX_LUN_MOUNTPOINT is required when DISK_NIX_LUN_DATA_SURVIVAL=1 is set" >&2
+      exit 2
+    fi
+    if ! mountpoint -q "$lun_mountpoint"; then
+      echo "host-side LUN mountpoint is not mounted: $lun_mountpoint" >&2
+      exit 2
+    fi
+    findmnt --target "$lun_mountpoint" >/dev/null
+
+    printf 'disk-nix iSCSI LUN sentinel %s %s\n' "$target" "$lun_path" > "$sentinel_expected"
+    install -m 0600 "$sentinel_expected" "$lun_mountpoint/disk-nix-iscsi-lun-sentinel.txt"
+    cmp "$sentinel_expected" "$lun_mountpoint/disk-nix-iscsi-lun-sentinel.txt" >/dev/null
+
+    fail_tools="$tmpdir/fake-iscsi-lun-rescan-tools"
+    mkdir -p "$fail_tools"
+    real_sh="$(command -v sh)"
+    cat > "$fail_tools/sh" <<EOF
+#!/usr/bin/env bash
+if [[ "\$*" == *"disk-nix-scsi-rescan $lun_path"* ]]; then
+  echo "synthetic iSCSI LUN rescan failure for disk-nix data-survival coverage" >&2
+  exit 77
+fi
+exec "$real_sh" "\$@"
+EOF
+    chmod +x "$fail_tools/sh"
+
+    if PATH="$fail_tools:$PATH" "$disk_nix_bin" apply \
+      --spec "$lun_spec" \
+      --execute \
+      --report-out "$failed_lun_report" \
+      --json > "$tmpdir/failed-lun-apply.json"; then
+      echo "expected injected host-side LUN rescan failure to fail apply" >&2
+      exit 1
+    fi
+
+    jq -e --arg target "$target" --arg lun_path "$lun_path" '
+      .status == "failed"
+      and (.executionResults
+        | any(
+            .argv == ["sh", "-c", "block=$(basename \"$(readlink -f \"$1\")\"); printf '\''1\\n'\'' > \"/sys/class/block/${block}/device/rescan\"", "disk-nix-scsi-rescan", $lun_path]
+            and .success == false
+            and .statusCode == 77
+            and (.stderr | contains("synthetic iSCSI LUN rescan failure"))
+          ))
+      and .partialExecutionRecovery.failedActionId == ("luns:" + $target + ":0:rescan")
+      and (.partialExecutionRecovery.retryReviewActionIds | index("luns:" + $target + ":0:rescan") != null)
+      and (.recoveryActions | any(.kind == "resume-after-fix"))
+      and (.recoveryActions | any(.kind == "domain-recovery"))
+    ' "$tmpdir/failed-lun-apply.json" >/dev/null
+
+    cmp "$tmpdir/failed-lun-apply.json" "$failed_lun_report" >/dev/null
+    cmp "$sentinel_expected" "$lun_mountpoint/disk-nix-iscsi-lun-sentinel.txt" >/dev/null
+
+    "$disk_nix_bin" apply \
+      --spec "$lun_spec" \
+      --execute \
+      --report-out "$tmpdir/resumed-lun-report.json" \
+      --json > "$tmpdir/resumed-lun-apply.json"
+
+    jq -e --arg target "$target" --arg lun_path "$lun_path" '
+      .status == "succeeded"
+      and (.executionResults
+        | any(.argv == ["sh", "-c", "block=$(basename \"$(readlink -f \"$1\")\"); printf '\''1\\n'\'' > \"/sys/class/block/${block}/device/rescan\"", "disk-nix-scsi-rescan", $lun_path] and .success == true)
+        and any(.argv == ["multipath", "-r"] and .success == true))
+      and (.commandPlan[] | select(.actionId == ("luns:" + $target + ":0:rescan")))
+    ' "$tmpdir/resumed-lun-apply.json" >/dev/null
+
+    cmp "$tmpdir/resumed-lun-apply.json" "$tmpdir/resumed-lun-report.json" >/dev/null
+    cmp "$sentinel_expected" "$lun_mountpoint/disk-nix-iscsi-lun-sentinel.txt" >/dev/null
+  fi
+
   echo "iSCSI integration smoke test rescanned $target and host-side LUN $lun_path"
 else
   echo "iSCSI integration smoke test rescanned $target"
