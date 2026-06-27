@@ -840,7 +840,10 @@ flush, or discard semantics, and refuses command metadata that advertises active
 consumers, mounted filesystems, exported LUNs, open encrypted mappings, active
 sessions, holders, or live mappings. It also refuses command metadata that
 advertises ambiguous rollback points, ambiguous rollback targets, missing
-rollback points, stale identity data, or unbound rollback targets.
+rollback points, stale identity data, or unbound rollback targets. Idempotency
+metadata for already rolled-back, partially rolled-back, externally modified,
+already applied, partially applied, or diverged rollback topology states is also
+refused before any command runs.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

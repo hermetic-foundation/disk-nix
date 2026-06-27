@@ -189,12 +189,13 @@ Update rules:
 - [ ] **Desired:** Automatic rollback needs network-storage safety gates for
   NFS, iSCSI, multipath, NVMe-oF, host-side LUNs, and target-side LUN
   providers.
-- [ ] **Desired:** Automatic rollback needs idempotency checks for already
-  rolled-back topology states.
-- [ ] **Desired:** Automatic rollback needs idempotency checks for partially
-  rolled-back topology states.
-- [ ] **Desired:** Automatic rollback needs idempotency checks for externally
-  modified topology states.
+- [x] **Finished:** Automatic rollback replay refuses reversible mutation
+  commands whose metadata advertises already rolled-back, partially rolled-back,
+  externally modified, rollback already applied, rollback partially applied, or
+  diverged rollback topology states.
+- [ ] **Desired:** Automatic rollback needs topology-derived idempotency checks
+  for already rolled-back, partially rolled-back, and externally modified
+  topology states that are not already present in rollback command metadata.
 - [x] **Finished:** Automatic rollback recipes declare required topology
   evidence labels for expected, pre-apply, failed-apply, and current topology
   identities, and replay receipts bind the supplied evidence IDs.

@@ -999,6 +999,9 @@ fn proven_safe_rollback_refusal_reasons(
         if let Some(reason) = rollback_command_identity_blocker_reason(command) {
             reasons.push(reason);
         }
+        if let Some(reason) = rollback_command_idempotency_blocker_reason(command) {
+            reasons.push(reason);
+        }
     }
 
     reasons
@@ -1123,6 +1126,38 @@ fn rollback_command_identity_blocker_reason(command: &ExecutionCommand) -> Optio
     }) {
         return Some(format!(
             "automatic rollback replay refuses ambiguous or stale identity metadata: {}",
+            command.argv.join(" ")
+        ));
+    }
+
+    None
+}
+
+fn rollback_command_idempotency_blocker_reason(command: &ExecutionCommand) -> Option<String> {
+    let blocker_phrases = [
+        "already rolled back",
+        "already-rolled-back",
+        "external modification",
+        "external modifications",
+        "externally modified",
+        "partially rolled back",
+        "partially-rolled-back",
+        "rollback already applied",
+        "rollback partially applied",
+        "rollback state diverged",
+        "topology externally modified",
+    ];
+    let mut metadata_fields = command
+        .provider_capabilities
+        .iter()
+        .chain(command.unresolved_inputs.iter())
+        .chain(std::iter::once(&command.note));
+    if metadata_fields.any(|field| {
+        let field = field.to_ascii_lowercase();
+        blocker_phrases.iter().any(|phrase| field.contains(phrase))
+    }) {
+        return Some(format!(
+            "automatic rollback replay refuses idempotency blocker metadata: {}",
             command.argv.join(" ")
         ));
     }
@@ -29299,6 +29334,38 @@ mod tests {
                     recipe
                 },
                 "ambiguous or stale identity metadata",
+            ),
+            (
+                "idempotency-already-rolled-back-metadata",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.reversible_mutations.commands[0]
+                        .provider_capabilities
+                        .push("rollback.state.already rolled back".to_string());
+                    recipe
+                },
+                "idempotency blocker metadata",
+            ),
+            (
+                "idempotency-partially-rolled-back-metadata",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.reversible_mutations.commands[0]
+                        .unresolved_inputs
+                        .push("rollback partially applied".to_string());
+                    recipe
+                },
+                "idempotency blocker metadata",
+            ),
+            (
+                "idempotency-externally-modified-metadata",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.reversible_mutations.commands[0].note =
+                        "topology externally modified after failed apply".to_string();
+                    recipe
+                },
+                "idempotency blocker metadata",
             ),
         ];
 

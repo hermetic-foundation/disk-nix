@@ -2246,10 +2246,13 @@
             ${pkgs.gnugrep}/bin/grep -q 'rollback_command_data_loss_risk_reason' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_command_live_use_blocker_reason' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_command_identity_blocker_reason' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_command_idempotency_blocker_reason' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'live-use-blocker-metadata' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'ambiguous-stale-identity-metadata' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'idempotency-externally-modified-metadata' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'plausible data-loss command metadata' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses missing required tools' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'metadata advertises already rolled-back' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes declare required topology' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay can materialize deterministic' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses proven-safe recipes when' ${./docs/feature-checklist.md}
@@ -2262,6 +2265,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'topology comparison summary already has missing targets' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'open encrypted mappings, active' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'ambiguous rollback points, ambiguous rollback targets' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Idempotency' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'operatorOnlyHandoff' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'proven-safe reversible rollback' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback has an execution engine' ${./docs/feature-checklist.md}
