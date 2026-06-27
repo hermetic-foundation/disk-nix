@@ -404,10 +404,12 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   report to the original receipt, a fresh topology probe, and topology evidence
   IDs while refusing review-only, destructive, operator-only, not-ready,
   unbound, missing-tool, missing-topology-evidence, divergent topology
-  comparison summaries, plausible-data-loss command recipes, or live-use
+  comparison summaries, detailed topology diagnostic live-use blockers,
+  topology-derived stale identity or ambiguous rollback points, topology-derived
+  plausible data-loss paths, plausible-data-loss command recipes, or live-use
   blocker, ambiguous-rollback-point, stale-identity, or rollback-idempotency
-  command metadata before any command runs. Reports also
-  expose `partialExecutionRecovery` sequencing with completed
+  command metadata before any command runs. Reports also expose
+  `partialExecutionRecovery` sequencing with completed
   actions, failed action, failed command, retry/review actions, remaining
   actions, completed mutating command counts, and fresh-topology review notes.
   They also include

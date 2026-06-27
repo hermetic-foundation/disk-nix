@@ -843,7 +843,18 @@ advertises ambiguous rollback points, ambiguous rollback targets, missing
 rollback points, stale identity data, or unbound rollback targets. Idempotency
 metadata for already rolled-back, partially rolled-back, externally modified,
 already applied, partially applied, or diverged rollback topology states is also
-refused before any command runs.
+refused before any command runs. Detailed topology diagnostics are also treated
+as replay safety gates: live-use blockers such as mounts, NFS exports, iSCSI
+sessions, LUN/NVMe attachment, LUKS mappings, device-mapper maps, multipath,
+LVM activation, swap, loop, MD RAID, and VDO state are refused before command
+metadata is trusted. Topology-derived stale identity or ambiguous rollback point
+diagnostics, including missing targets, missing rollback points, missing
+snapshot clone/rename sources, mount source conflicts, loop conflicts, and
+pre-existing format targets, are refused. Domain-specific topology diagnostics
+for plausible data-loss paths such as Btrfs subvolume/qgroup destroy,
+bcache/LVM-cache detach, LUKS keyslot/token removal, multipath destroy/path
+removal, swap destroy, MD member removal, snapshot destroy, VDO destroy, and
+ZFS object destroy are also refused before any command runs.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

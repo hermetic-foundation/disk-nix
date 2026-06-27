@@ -5,7 +5,7 @@ use std::{
 
 use disk_nix_plan::{
     ApplyPolicy, ApplyReport, Operation, Plan, PlannedAction, RiskClass, TopologyComparison,
-    evaluate_apply_policy,
+    TopologyDiagnosticKind, evaluate_apply_policy,
 };
 use serde::{Deserialize, Serialize};
 
@@ -1237,6 +1237,7 @@ fn rollback_topology_comparison_refusal_reasons(failed_report: &ExecutionReport)
             summary.partially_suppressed_group_count
         ));
     }
+    divergences.extend(rollback_topology_diagnostic_refusal_reasons(comparison));
 
     if divergences.is_empty() {
         Vec::new()
@@ -1246,6 +1247,126 @@ fn rollback_topology_comparison_refusal_reasons(failed_report: &ExecutionReport)
             divergences.join(", ")
         )]
     }
+}
+
+fn rollback_topology_diagnostic_refusal_reasons(comparison: &TopologyComparison) -> Vec<String> {
+    let mut live_use = BTreeSet::new();
+    let mut stale_identity = BTreeSet::new();
+    let mut data_loss = BTreeSet::new();
+
+    for diagnostic in &comparison.diagnostics {
+        if rollback_topology_diagnostic_is_live_use_blocker(diagnostic.kind) {
+            live_use.insert(rollback_topology_diagnostic_label(
+                &diagnostic.action_id,
+                diagnostic.kind,
+            ));
+        }
+        if rollback_topology_diagnostic_is_stale_identity_blocker(diagnostic.kind) {
+            stale_identity.insert(rollback_topology_diagnostic_label(
+                &diagnostic.action_id,
+                diagnostic.kind,
+            ));
+        }
+        if rollback_topology_diagnostic_is_data_loss_risk(diagnostic.kind) {
+            data_loss.insert(rollback_topology_diagnostic_label(
+                &diagnostic.action_id,
+                diagnostic.kind,
+            ));
+        }
+    }
+
+    let mut reasons = Vec::new();
+    if !live_use.is_empty() {
+        reasons.push(format!(
+            "topology diagnostic live-use blocker(s): {}",
+            live_use.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if !stale_identity.is_empty() {
+        reasons.push(format!(
+            "topology diagnostic stale identity or ambiguous rollback point(s): {}",
+            stale_identity.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if !data_loss.is_empty() {
+        reasons.push(format!(
+            "topology diagnostic plausible data-loss path(s): {}",
+            data_loss.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    reasons
+}
+
+fn rollback_topology_diagnostic_label(action_id: &str, kind: TopologyDiagnosticKind) -> String {
+    format!("{action_id}:{kind:?}")
+}
+
+fn rollback_topology_diagnostic_is_live_use_blocker(kind: TopologyDiagnosticKind) -> bool {
+    matches!(
+        kind,
+        TopologyDiagnosticKind::MountRequired
+            | TopologyDiagnosticKind::MountOptionsDiffer
+            | TopologyDiagnosticKind::UnmountRequired
+            | TopologyDiagnosticKind::NfsExportDiffers
+            | TopologyDiagnosticKind::NfsExportRequired
+            | TopologyDiagnosticKind::NfsUnexportRequired
+            | TopologyDiagnosticKind::IscsiLoginRequired
+            | TopologyDiagnosticKind::IscsiLogoutRequired
+            | TopologyDiagnosticKind::LunAttachRequired
+            | TopologyDiagnosticKind::LunDetachRequired
+            | TopologyDiagnosticKind::NvmeNamespaceAttachRequired
+            | TopologyDiagnosticKind::NvmeNamespaceDetachRequired
+            | TopologyDiagnosticKind::LvmActivateRequired
+            | TopologyDiagnosticKind::LvmDeactivateRequired
+            | TopologyDiagnosticKind::LvmVgExportRequired
+            | TopologyDiagnosticKind::LvmVgImportRequired
+            | TopologyDiagnosticKind::LuksCloseRequired
+            | TopologyDiagnosticKind::LuksOpenRequired
+            | TopologyDiagnosticKind::DmMapDestroyRequired
+            | TopologyDiagnosticKind::DmMapRenameRequired
+            | TopologyDiagnosticKind::MultipathDestroyRequired
+            | TopologyDiagnosticKind::MultipathPathAddRequired
+            | TopologyDiagnosticKind::MultipathPathRemoveRequired
+            | TopologyDiagnosticKind::SwapDeactivateRequired
+            | TopologyDiagnosticKind::LoopDetachRequired
+            | TopologyDiagnosticKind::MdStopRequired
+            | TopologyDiagnosticKind::VdoStartRequired
+            | TopologyDiagnosticKind::VdoStopRequired
+    )
+}
+
+fn rollback_topology_diagnostic_is_stale_identity_blocker(kind: TopologyDiagnosticKind) -> bool {
+    matches!(
+        kind,
+        TopologyDiagnosticKind::Missing
+            | TopologyDiagnosticKind::MountSourceConflict
+            | TopologyDiagnosticKind::LoopCreateConflict
+            | TopologyDiagnosticKind::LuksFormatTargetPresent
+            | TopologyDiagnosticKind::SwapFormatTargetPresent
+            | TopologyDiagnosticKind::VdoCreateTargetPresent
+            | TopologyDiagnosticKind::SnapshotCloneSourceMissing
+            | TopologyDiagnosticKind::SnapshotRenameSourceMissing
+            | TopologyDiagnosticKind::SnapshotRollbackPointMissing
+    )
+}
+
+fn rollback_topology_diagnostic_is_data_loss_risk(kind: TopologyDiagnosticKind) -> bool {
+    matches!(
+        kind,
+        TopologyDiagnosticKind::BtrfsSubvolumeDestroyRequired
+            | TopologyDiagnosticKind::BtrfsQgroupDestroyRequired
+            | TopologyDiagnosticKind::BcacheDetachRequired
+            | TopologyDiagnosticKind::LvmCacheDetachRequired
+            | TopologyDiagnosticKind::LuksKeyslotRemoveRequired
+            | TopologyDiagnosticKind::LuksTokenRemoveRequired
+            | TopologyDiagnosticKind::MultipathDestroyRequired
+            | TopologyDiagnosticKind::MultipathPathRemoveRequired
+            | TopologyDiagnosticKind::SwapDestroyRequired
+            | TopologyDiagnosticKind::MdMemberRemoveRequired
+            | TopologyDiagnosticKind::SnapshotDestroyRequired
+            | TopologyDiagnosticKind::VdoDestroyRequired
+            | TopologyDiagnosticKind::ZfsObjectDestroyRequired
+    )
 }
 
 fn missing_rollback_replay_tools(
@@ -28843,6 +28964,20 @@ mod tests {
         }
     }
 
+    fn rollback_topology_diagnostic(
+        action_id: &str,
+        kind: disk_nix_plan::TopologyDiagnosticKind,
+    ) -> disk_nix_plan::TopologyDiagnostic {
+        disk_nix_plan::TopologyDiagnostic {
+            action_id: action_id.to_string(),
+            level: disk_nix_plan::TopologyDiagnosticLevel::Warning,
+            kind,
+            query: "test topology query".to_string(),
+            message: "test topology diagnostic".to_string(),
+            current: None,
+        }
+    }
+
     fn proven_safe_rollback_recipe() -> RollbackRecipe {
         RollbackRecipe {
             recipe_version: 1,
@@ -29124,6 +29259,64 @@ mod tests {
                 && reason.contains("1 graph dependency conflict")
                 && reason.contains("1 partially suppressed reconciliation group")
         }));
+    }
+
+    #[test]
+    fn rollback_replay_refuses_risky_topology_diagnostics_before_running_commands() {
+        let cases = [
+            (
+                "topology-live-use-mount",
+                disk_nix_plan::TopologyDiagnosticKind::UnmountRequired,
+                "topology diagnostic live-use blocker",
+            ),
+            (
+                "topology-stale-rollback-point",
+                disk_nix_plan::TopologyDiagnosticKind::SnapshotRollbackPointMissing,
+                "topology diagnostic stale identity or ambiguous rollback point",
+            ),
+            (
+                "topology-data-loss-destroy",
+                disk_nix_plan::TopologyDiagnosticKind::ZfsObjectDestroyRequired,
+                "topology diagnostic plausible data-loss path",
+            ),
+        ];
+
+        for (action_id, diagnostic_kind, expected_reason) in cases {
+            let mut report = failed_report_for_rollback_replay();
+            report.rollback_recipes = vec![proven_safe_rollback_recipe()];
+            let mut comparison = clean_topology_comparison();
+            comparison
+                .diagnostics
+                .push(rollback_topology_diagnostic(action_id, diagnostic_kind));
+            report.topology_comparison = Some(comparison);
+            let mut calls = Vec::new();
+
+            let replay = replay_proven_safe_rollback_recipe_with_runner(
+                &report,
+                0,
+                "receipt:apply-123".to_string(),
+                "topology:fresh-456".to_string(),
+                &mut |argv| {
+                    calls.push(argv.to_vec());
+                    CommandRunResult {
+                        success: true,
+                        status_code: Some(0),
+                        stdout: String::new(),
+                        stderr: String::new(),
+                    }
+                },
+            );
+
+            assert_eq!(replay.status, RollbackExecutionStatus::Refused);
+            assert!(calls.is_empty());
+            assert!(replay.validation_results.is_empty());
+            assert!(replay.rollback_results.is_empty());
+            assert!(replay.refusal_reasons.iter().any(|reason| {
+                reason.contains("divergent topology comparison")
+                    && reason.contains(expected_reason)
+                    && reason.contains(action_id)
+            }));
+        }
     }
 
     #[test]

@@ -212,33 +212,44 @@ Update rules:
   the failed report's topology comparison summary already reports missing
   targets, size diagnostics, type conflicts, graph dependency conflicts, or
   partially suppressed reconciliation groups.
-- [ ] **Desired:** Automatic rollback needs detailed post-failure topology
-  comparison that refuses rollback mutations when domain identity, holder,
-  mount, export, session, or mapping state diverges from the proven recipe.
+- [x] **Finished:** Automatic rollback replay refuses proven-safe recipes when
+  detailed post-failure topology diagnostics report divergent mount/remount,
+  NFS export, iSCSI session, host/target LUN, NVMe namespace, LVM activation,
+  LUKS mapping, device-mapper, multipath, swap, loop, MD RAID, or VDO live-use
+  state before command metadata is trusted.
+- [x] **Finished:** Automatic rollback replay refuses proven-safe recipes when
+  detailed post-failure topology diagnostics report missing rollback points,
+  missing clone/rename sources, missing targets, mount source conflicts, loop
+  conflicts, or pre-existing format targets before command metadata is trusted.
 - [x] **Finished:** Automatic rollback replay refuses reversible mutation
   commands whose metadata advertises ambiguous rollback points, ambiguous
   rollback targets, missing rollback points, stale rollback points, stale
   identity data, or unbound rollback targets.
-- [ ] **Desired:** Automatic rollback needs topology-derived refusal behavior
-  for ambiguous rollback points and stale identity data that are not already
-  present in rollback command metadata.
+- [x] **Finished:** Automatic rollback replay has topology-derived refusal
+  behavior for ambiguous rollback points and stale identity data that are not
+  already present in rollback command metadata.
 - [x] **Finished:** Automatic rollback replay refuses reversible mutation
   commands whose metadata advertises active consumers, mounted filesystems,
   exported LUNs, open encrypted mappings, active sessions, holders, or live
   mappings.
-- [ ] **Desired:** Automatic rollback needs topology-derived refusal behavior
-  for active consumers, mounted filesystems, exported LUNs, open encrypted
-  mappings, and other live-use blockers that are not already present in
-  rollback command metadata.
+- [x] **Finished:** Automatic rollback replay has topology-derived refusal
+  behavior for mounted filesystems, exported NFS/LUN state, active iSCSI/NVMe
+  sessions, open encrypted mappings, device-mapper maps, multipath state,
+  activated LVM state, swap, loop, MD RAID, and VDO live-use blockers that are
+  not already present in rollback command metadata.
 - [x] **Finished:** Automatic rollback replay refuses missing required tools
   before running read-only validation or reversible mutation commands.
 - [x] **Finished:** Automatic rollback replay refuses reversible mutation
   commands whose argv or command metadata advertises plausible data-loss
   semantics beyond already-refused destructive and operator-only recipe
   sections.
-- [ ] **Desired:** Automatic rollback needs topology-aware refusal behavior for
-  domain-specific plausible data-loss paths that cannot be proven from rollback
-  command argv, notes, unresolved inputs, or provider capability metadata alone.
+- [x] **Finished:** Automatic rollback replay has topology-aware refusal
+  behavior for domain-specific plausible data-loss paths including Btrfs
+  subvolume/qgroup destroy, bcache/LVM-cache detach, LUKS keyslot/token remove,
+  multipath destroy/path removal, swap destroy, MD member removal, snapshot
+  destroy, VDO destroy, and ZFS object destroy diagnostics that cannot be
+  proven from rollback command argv, notes, unresolved inputs, or provider
+  capability metadata alone.
 
 ## Lifecycle operations
 

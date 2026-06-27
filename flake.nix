@@ -2241,7 +2241,12 @@
             ${pkgs.gnugrep}/bin/grep -q 'materialize_rollback_topology_evidence' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_evidence_materializes_from_failed_report_and_fresh_probe' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_comparison_refusal_reasons' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_diagnostic_refusal_reasons' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_diagnostic_is_live_use_blocker' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_diagnostic_is_stale_identity_blocker' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_diagnostic_is_data_loss_risk' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_refuses_divergent_topology_comparison_before_running_commands' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_refuses_risky_topology_diagnostics_before_running_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_refuses_missing_required_topology_evidence_before_running_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_command_data_loss_risk_reason' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_command_live_use_blocker_reason' ${./crates/disk-nix-exec/src/lib.rs}
@@ -2253,6 +2258,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'plausible data-loss command metadata' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses missing required tools' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'metadata advertises already rolled-back' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'detailed post-failure topology diagnostics report divergent' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'ambiguous rollback points and stale identity data' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'behavior for mounted filesystems' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'topology-aware refusal' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes declare required topology' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay can materialize deterministic' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses proven-safe recipes when' ${./docs/feature-checklist.md}
