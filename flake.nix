@@ -148,6 +148,16 @@
           ];
           text = builtins.readFile ./scripts/integration-swap-smoke.sh;
         };
+        integrationZramSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-zram-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-zram-smoke.sh;
+        };
         integrationLvmSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-lvm-smoke";
           runtimeInputs = [
@@ -270,6 +280,7 @@
             integrationBcachefsSmoke
             integrationLuksSmoke
             integrationSwapSmoke
+            integrationZramSmoke
             integrationLvmSmoke
             integrationMdraidSmoke
             integrationZfsSmoke
@@ -1600,6 +1611,7 @@
           integration-btrfs-smoke = integrationBtrfsSmoke;
           integration-luks-smoke = integrationLuksSmoke;
           integration-swap-smoke = integrationSwapSmoke;
+          integration-zram-smoke = integrationZramSmoke;
           integration-lvm-smoke = integrationLvmSmoke;
           integration-mdraid-smoke = integrationMdraidSmoke;
           integration-zfs-smoke = integrationZfsSmoke;
@@ -1661,6 +1673,13 @@
             program = "${integrationSwapSmoke}/bin/disk-nix-integration-swap-smoke";
             meta = {
               description = "Root-only swap loop-backed disk-nix smoke integration harness";
+            };
+          };
+          integration-zram-smoke = {
+            type = "app";
+            program = "${integrationZramSmoke}/bin/disk-nix-integration-zram-smoke";
+            meta = {
+              description = "Root-only zram disk-nix property reconciliation harness";
             };
           };
           integration-lvm-smoke = {
@@ -1835,6 +1854,17 @@
             ${pkgs.gnugrep}/bin/grep -q 'swaps:swapSmokeLabel:set-property:label' ${./scripts/integration-swap-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'swaplabel", "--label"' ${./scripts/integration-swap-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disknix-swap' ${./scripts/integration-swap-smoke.sh}
+            touch "$out"
+          '';
+          integrationZramSmoke = pkgs.runCommand "disk-nix-integration-zram-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-zram-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-zram-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'zram:set-property:algorithm' ${./scripts/integration-zram-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'zram:set-property:priority' ${./scripts/integration-zram-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'zramctl", "--bytes", "--raw", "--noheadings", "--output-all"' ${./scripts/integration-zram-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'swapon", "--show", "--bytes", "--raw"' ${./scripts/integration-zram-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'services.disk-nix.zram' ${./scripts/integration-zram-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'non-mutating property reconciliation' ${./scripts/integration-zram-smoke.sh}
             touch "$out"
           '';
           integrationLvmSmoke = pkgs.runCommand "disk-nix-integration-lvm-smoke-check" { } ''
@@ -2258,6 +2288,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'default_harnesses="loop btrfs swap layered-vm failure-recovery"' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-loop-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-swap-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-zram-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-bcache-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-bcachefs-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-mdraid-smoke' ${./scripts/integration-vm-smoke.sh}
@@ -2299,6 +2330,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real bcache property' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real zram property' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real VDO volume' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
@@ -2310,6 +2342,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-property' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'blockdev --setro' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'chmod 0600' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'zramctl --bytes --raw --noheadings --output-all' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'vdo changeWritePolicy' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'exportfs -i' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
@@ -2321,6 +2354,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file mode mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device read-only mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real zram property reconciliation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
@@ -2332,6 +2366,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.properties."bcache.cache-mode"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'backingFiles.<path>.properties.mode' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopDevices.<loop>.properties."loop.read-only"' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'zram.properties.algorithm' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'services.disk-nix.zram' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes.<name>.properties.writePolicy' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'exports.<path>.properties.options' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}

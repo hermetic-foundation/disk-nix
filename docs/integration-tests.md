@@ -812,6 +812,40 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-swap-smoke.sh
 ```
 
+## zram property reconciliation smoke test
+
+The repository also includes a root-only zram property reconciliation harness:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-zram-smoke
+```
+
+When enabled, it:
+
+- applies `zram.properties.algorithm` and `zram.properties.priority`
+  declarations
+- verifies `zram:set-property:algorithm` and `zram:set-property:priority`
+  render only read-only inventory commands
+- verifies the rendered `zramctl --bytes --raw --noheadings --output-all`,
+  `swapon --show --bytes --raw`, and `disk-nix zram` commands succeeded
+- verifies the command-plan notes direct operators to
+  `services.disk-nix.zram` and NixOS `zramSwap` reconciliation
+- writes and compares the generated JSON report
+
+This harness intentionally does not recreate active `/dev/zram*` devices.
+Changing live zram algorithm, size, priority, or writeback settings is modeled
+as generator reconciliation through NixOS service options because active zram
+swap may require coordinated `swapoff` and device recreation.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-zram-smoke.sh
+```
+
 ## LVM loop-backed smoke test
 
 The repository also includes a root-only LVM loop-backed harness:

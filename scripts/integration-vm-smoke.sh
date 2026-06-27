@@ -57,6 +57,9 @@ run_harness() {
     swap)
       disk-nix-integration-swap-smoke
       ;;
+    zram)
+      disk-nix-integration-zram-smoke
+      ;;
     lvm)
       disk-nix-integration-lvm-smoke
       ;;

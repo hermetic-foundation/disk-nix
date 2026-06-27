@@ -166,7 +166,8 @@ behavior across real storage stacks.
   real LVM cache property mutation with `lvchange --cachemode`, verify
   real bcache cache-mode mutation with a `disk-nix-bcache-property` sysfs write,
   verify real backing-file mode mutation with `chmod`, verify
-  real loop-device read-only mutation with `blockdev --setro` and `blockdev --setrw`, then verify
+  real loop-device read-only mutation with `blockdev --setro` and `blockdev --setrw`, verify
+  real zram property reconciliation with `zramctl`, `swapon`, and `disk-nix zram`, then verify
   real VDO write-policy mutation with `vdo changeWritePolicy`, and verify
   real NFS export option mutation with `exportfs -i`, then clean up temporary
   devices. A layered VM

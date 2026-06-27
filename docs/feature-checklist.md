@@ -568,8 +568,15 @@ Update rules:
   property mutation coverage: the loop harness applies
   `backingFiles.*.properties.mode` to its temporary backing image, executes
   `chmod 0600`, and verifies the mode with `stat`.
+- [x] **Finished:** Destructive integration tests include real zram property
+  reconciliation coverage: the zram harness applies
+  `zram.properties.algorithm` and `zram.properties.priority`, verifies the
+  `zram:set-property:*` actions stay non-mutating, executes real
+  `zramctl --bytes --raw --noheadings --output-all`, `swapon --show`, and
+  `disk-nix zram` inventory commands, and confirms the plan points operators to
+  NixOS `zramSwap` reconciliation.
 - [ ] **Partial:** Destructive integration tests still need property mutation
-  coverage across target LUNs and zram.
+  coverage across target LUNs.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`
