@@ -1767,6 +1767,9 @@
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'losetup --set-capacity' ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'loop.read-only' ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'blockdev", "--setro"' ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'blockdev", "--setrw"' ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mkfs.ext4' ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'resize2fs' ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel' ${./scripts/integration-loop-smoke.sh}
@@ -2292,6 +2295,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real bcache property' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real loop-device' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real VDO volume' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
@@ -2301,6 +2305,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'zpool set' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lvchange --cachemode' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-property' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'blockdev --setro' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'vdo changeWritePolicy' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'exportfs -i' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
@@ -2310,6 +2315,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real loop-device read-only mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
@@ -2319,6 +2325,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'pools.<name>.properties.autotrim' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.properties.lvm.cache-mode' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.properties."bcache.cache-mode"' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'loopDevices.<loop>.properties."loop.read-only"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes.<name>.properties.writePolicy' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'exports.<path>.properties.options' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}

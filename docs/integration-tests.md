@@ -600,6 +600,9 @@ When enabled, it:
 
 - creates a temporary 64 MiB backing file
 - attaches it to the next available `/dev/loop*`
+- applies `loopDevices.<loop>.properties."loop.read-only" = true`, verifies the
+  rendered `blockdev --setro <loop>` command succeeded, then applies `false`
+  and verifies `blockdev --setrw <loop>`
 - formats the temporary loop device with ext4
 - verifies `disk-nix inspect <loop> --json` can see the real loop node
 - executes a safe `loopDevices.<loop>.operation = "rescan"` apply plan

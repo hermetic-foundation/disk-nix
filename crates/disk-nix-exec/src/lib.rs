@@ -16680,6 +16680,7 @@ fn set_property_command(
             lvm_cache_property_command(lvm_volume_target_path(Some(target)), property, assignment)
         }
         Some("caches") => bcache_property_command(target, property, assignment, cache_set_uuid),
+        Some("loopDevices") => loop_property_command(target, property, assignment),
         Some("vdoVolumes") => vdo_property_command(target, property, assignment),
         _ => command_with_readiness(
             ["<set-property-tool>", target, property],
@@ -16689,6 +16690,57 @@ fn set_property_command(
             "apply the storage-domain property update",
         ),
     }
+}
+
+fn loop_property_command(target: &str, property: &str, assignment: &str) -> ExecutionCommand {
+    let value = assignment
+        .split_once('=')
+        .map(|(_, value)| value)
+        .unwrap_or(assignment);
+    match normalize_property_name(property).as_str() {
+        "readonly" | "read-only" | "loop-read-only" => {
+            let tool = if truthy_property_value(value) {
+                "--setro"
+            } else {
+                "--setrw"
+            };
+            command(
+                ["blockdev", tool, target],
+                true,
+                "set loop device read-only mode",
+            )
+        }
+        "directio" | "direct-io" | "loop-direct-io" => {
+            let value = if truthy_property_value(value) {
+                "on"
+            } else {
+                "off"
+            };
+            command_vec(
+                vec![
+                    "losetup".to_string(),
+                    format!("--direct-io={value}"),
+                    target.to_string(),
+                ],
+                true,
+                "set loop device direct I/O mode",
+            )
+        }
+        _ => command_with_readiness(
+            ["<loop-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported loop property"],
+            "apply a loop-device property update after selecting a supported loop property",
+        ),
+    }
+}
+
+fn truthy_property_value(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on" | "enabled"
+    )
 }
 
 fn vdo_property_command(target: &str, property: &str, assignment: &str) -> ExecutionCommand {
@@ -28959,6 +29011,52 @@ mod tests {
                     .commands
                     .iter()
                     .any(|command| command.argv == ["disk-nix", "inspect", "/dev/loop10", "--json"])
+        }));
+    }
+
+    #[test]
+    fn loop_device_property_reports_blockdev_command() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "loopDevices": {
+                  "/dev/loop7": {
+                    "properties": {
+                      "loop.read-only": true
+                    }
+                  },
+                  "/dev/loop8": {
+                    "properties": {
+                      "loop.direct-io": false
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowPropertyChanges": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "loopDevices:/dev/loop7:set-property:loop.read-only"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["blockdev", "--setro", "/dev/loop7"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+        }));
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "loopDevices:/dev/loop8:set-property:loop.direct-io"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["losetup", "--direct-io=off", "/dev/loop8"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
         }));
     }
 

@@ -46,12 +46,91 @@ spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 grow_spec="$tmpdir/grow-spec.json"
 grow_report="$tmpdir/grow-report.json"
+loop_property_ro_spec="$tmpdir/loop-property-ro-spec.json"
+loop_property_ro_report="$tmpdir/loop-property-ro-report.json"
+loop_property_rw_spec="$tmpdir/loop-property-rw-spec.json"
+loop_property_rw_report="$tmpdir/loop-property-rw-report.json"
 property_spec="$tmpdir/property-spec.json"
 property_report="$tmpdir/property-report.json"
 
 truncate --size 64M "$backing"
 mkdir -p "$mountpoint"
 loopdev="$(losetup --find --show "$backing")"
+
+jq -n --arg loopdev "$loopdev" '{
+  version: 1,
+  loopDevices: {
+    ($loopdev): {
+      properties: {
+        "loop.read-only": true
+      }
+    }
+  },
+  apply: {
+    allowPropertyChanges: true
+  }
+}' > "$loop_property_ro_spec"
+
+if ! "$disk_nix_bin" apply \
+  --spec "$loop_property_ro_spec" \
+  --execute \
+  --report-out "$loop_property_ro_report" \
+  --json > "$tmpdir/loop-property-ro-apply.json"; then
+  cat "$tmpdir/loop-property-ro-apply.json" >&2 || true
+  cat "$loop_property_ro_report" >&2 || true
+  exit 1
+fi
+
+jq -e --arg loopdev "$loopdev" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("loopDevices:" + $loopdev + ":set-property:loop.read-only"))
+    | .commands | any(.argv == ["blockdev", "--setro", $loopdev]))
+  and (.executionResults | any(.argv == ["blockdev", "--setro", $loopdev] and .success == true))
+' "$tmpdir/loop-property-ro-apply.json" >/dev/null
+
+cmp "$tmpdir/loop-property-ro-apply.json" "$loop_property_ro_report" >/dev/null
+if [[ "$(blockdev --getro "$loopdev")" != "1" ]]; then
+  echo "loop device did not become read-only after disk-nix property mutation" >&2
+  exit 1
+fi
+
+jq -n --arg loopdev "$loopdev" '{
+  version: 1,
+  loopDevices: {
+    ($loopdev): {
+      properties: {
+        "loop.read-only": false
+      }
+    }
+  },
+  apply: {
+    allowPropertyChanges: true
+  }
+}' > "$loop_property_rw_spec"
+
+if ! "$disk_nix_bin" apply \
+  --spec "$loop_property_rw_spec" \
+  --execute \
+  --report-out "$loop_property_rw_report" \
+  --json > "$tmpdir/loop-property-rw-apply.json"; then
+  cat "$tmpdir/loop-property-rw-apply.json" >&2 || true
+  cat "$loop_property_rw_report" >&2 || true
+  exit 1
+fi
+
+jq -e --arg loopdev "$loopdev" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("loopDevices:" + $loopdev + ":set-property:loop.read-only"))
+    | .commands | any(.argv == ["blockdev", "--setrw", $loopdev]))
+  and (.executionResults | any(.argv == ["blockdev", "--setrw", $loopdev] and .success == true))
+' "$tmpdir/loop-property-rw-apply.json" >/dev/null
+
+cmp "$tmpdir/loop-property-rw-apply.json" "$loop_property_rw_report" >/dev/null
+if [[ "$(blockdev --getro "$loopdev")" != "0" ]]; then
+  echo "loop device did not return to read-write after disk-nix property mutation" >&2
+  exit 1
+fi
+
 mkfs.ext4 -F -q "$loopdev"
 mount "$loopdev" "$mountpoint"
 
@@ -171,4 +250,4 @@ if [[ "$(e2label "$loopdev")" != "disknix-loop" ]]; then
   exit 1
 fi
 
-echo "loop-backed integration smoke test passed for $loopdev, including ext4 grow and label mutation"
+echo "loop-backed integration smoke test passed for $loopdev, including loop read-only, ext4 grow, and label mutation"
