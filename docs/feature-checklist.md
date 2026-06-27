@@ -214,8 +214,13 @@ Update rules:
 - [ ] **Desired:** Automatic rollback needs detailed post-failure topology
   comparison that refuses rollback mutations when domain identity, holder,
   mount, export, session, or mapping state diverges from the proven recipe.
-- [ ] **Desired:** Automatic rollback needs refusal behavior for ambiguous
-  rollback points and stale identity data.
+- [x] **Finished:** Automatic rollback replay refuses reversible mutation
+  commands whose metadata advertises ambiguous rollback points, ambiguous
+  rollback targets, missing rollback points, stale rollback points, stale
+  identity data, or unbound rollback targets.
+- [ ] **Desired:** Automatic rollback needs topology-derived refusal behavior
+  for ambiguous rollback points and stale identity data that are not already
+  present in rollback command metadata.
 - [x] **Finished:** Automatic rollback replay refuses reversible mutation
   commands whose metadata advertises active consumers, mounted filesystems,
   exported LUNs, open encrypted mappings, active sessions, holders, or live

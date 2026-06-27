@@ -996,6 +996,9 @@ fn proven_safe_rollback_refusal_reasons(
         if let Some(reason) = rollback_command_live_use_blocker_reason(command) {
             reasons.push(reason);
         }
+        if let Some(reason) = rollback_command_identity_blocker_reason(command) {
+            reasons.push(reason);
+        }
     }
 
     reasons
@@ -1088,6 +1091,38 @@ fn rollback_command_live_use_blocker_reason(command: &ExecutionCommand) -> Optio
     }) {
         return Some(format!(
             "automatic rollback replay refuses live-use blocker metadata: {}",
+            command.argv.join(" ")
+        ));
+    }
+
+    None
+}
+
+fn rollback_command_identity_blocker_reason(command: &ExecutionCommand) -> Option<String> {
+    let blocker_phrases = [
+        "ambiguous rollback point",
+        "ambiguous rollback target",
+        "ambiguous target",
+        "rollback point missing",
+        "rollback point stale",
+        "stale identity",
+        "stale identity data",
+        "stale rollback point",
+        "stale target identity",
+        "unbound rollback point",
+        "unbound rollback target",
+    ];
+    let mut metadata_fields = command
+        .provider_capabilities
+        .iter()
+        .chain(command.unresolved_inputs.iter())
+        .chain(std::iter::once(&command.note));
+    if metadata_fields.any(|field| {
+        let field = field.to_ascii_lowercase();
+        blocker_phrases.iter().any(|phrase| field.contains(phrase))
+    }) {
+        return Some(format!(
+            "automatic rollback replay refuses ambiguous or stale identity metadata: {}",
             command.argv.join(" ")
         ));
     }
@@ -29250,6 +29285,20 @@ mod tests {
                     recipe
                 },
                 "live-use blocker metadata",
+            ),
+            (
+                "ambiguous-stale-identity-metadata",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.reversible_mutations.commands[0]
+                        .provider_capabilities
+                        .push("rollback.blocker.ambiguous rollback point".to_string());
+                    recipe.reversible_mutations.commands[0]
+                        .unresolved_inputs
+                        .push("stale identity data".to_string());
+                    recipe
+                },
+                "ambiguous or stale identity metadata",
             ),
         ];
 

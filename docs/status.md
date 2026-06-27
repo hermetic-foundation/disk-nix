@@ -405,7 +405,8 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   IDs while refusing review-only, destructive, operator-only, not-ready,
   unbound, missing-tool, missing-topology-evidence, divergent topology
   comparison summaries, plausible-data-loss command recipes, or live-use
-  blocker command metadata before any command runs. Reports also
+  blocker, ambiguous-rollback-point, or stale-identity command metadata before
+  any command runs. Reports also
   expose `partialExecutionRecovery` sequencing with completed
   actions, failed action, failed command, retry/review actions, remaining
   actions, completed mutating command counts, and fresh-topology review notes.
