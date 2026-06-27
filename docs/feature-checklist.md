@@ -539,6 +539,13 @@ Update rules:
 - [ ] **Partial:** Destructive integration tests need VM-backed NVMe namespace
   coverage for create, grow, attach, detach, delete, controller reconnect, and
   namespace identity drift.
+- [x] **Finished:** Destructive integration tests include lab-backed NVMe namespace create/delete
+  coverage: when `DISK_NIX_NVME_CREATE_DELETE=1` is set with explicit
+  namespace size, namespace id, and controller list, the NVMe harness applies
+  `nvmeNamespaces.<controller>.operation = "create"`, verifies `nvme create-ns`,
+  `nvme attach-ns`, and namespace rescan, then applies a destructive cleanup
+  plan and verifies `nvme detach-ns`, `nvme delete-ns`, and final namespace
+  inventory.
 - [x] **Finished:** Destructive integration tests include lab-backed NVMe namespace grow
   coverage: when `DISK_NIX_NVME_GROW=1` is set, the NVMe harness applies
   `nvmeNamespaces.<controller>.operation = "grow"` with reviewed grow policy

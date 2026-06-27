@@ -10,8 +10,10 @@ real NVMe namespace inventory for the controller provided through
 DISK_NIX_NVME_CONTROLLER. When DISK_NIX_NVME_GROW=1 is set, it also executes a
 reviewed namespace grow/rescan plan. When DISK_NIX_NVME_ATTACH_DETACH=1 is set,
 it also attaches and detaches the disposable namespace selected by
-DISK_NIX_NVME_NAMESPACE_ID and DISK_NIX_NVME_CONTROLLERS. The harness does not
-create or delete namespaces.
+DISK_NIX_NVME_NAMESPACE_ID and DISK_NIX_NVME_CONTROLLERS. When
+DISK_NIX_NVME_CREATE_DELETE=1 is set, it creates, attaches, detaches, and
+deletes the disposable namespace selected by DISK_NIX_NVME_NAMESPACE_ID,
+DISK_NIX_NVME_NAMESPACE_SIZE, and DISK_NIX_NVME_CONTROLLERS.
 MSG
   exit 2
 fi
@@ -24,7 +26,9 @@ fi
 controller="${DISK_NIX_NVME_CONTROLLER:-}"
 grow_namespace="${DISK_NIX_NVME_GROW:-0}"
 attach_detach="${DISK_NIX_NVME_ATTACH_DETACH:-0}"
+create_delete="${DISK_NIX_NVME_CREATE_DELETE:-0}"
 namespace_id="${DISK_NIX_NVME_NAMESPACE_ID:-}"
+namespace_size="${DISK_NIX_NVME_NAMESPACE_SIZE:-}"
 namespace_controllers="${DISK_NIX_NVME_CONTROLLERS:-}"
 if [[ -z "$controller" ]]; then
   cat >&2 <<'MSG'
@@ -57,6 +61,21 @@ MSG
     exit 2
   fi
 fi
+if [[ "$create_delete" == "1" ]]; then
+  if [[ -z "$namespace_id" ]] || [[ -z "$namespace_size" ]] || [[ -z "$namespace_controllers" ]]; then
+    cat >&2 <<'MSG'
+DISK_NIX_NVME_NAMESPACE_ID, DISK_NIX_NVME_NAMESPACE_SIZE, and
+DISK_NIX_NVME_CONTROLLERS are required when DISK_NIX_NVME_CREATE_DELETE=1 is
+set.
+
+Example:
+  DISK_NIX_NVME_NAMESPACE_ID=7
+  DISK_NIX_NVME_NAMESPACE_SIZE=1G
+  DISK_NIX_NVME_CONTROLLERS=0x1
+MSG
+    exit 2
+  fi
+fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
@@ -77,6 +96,10 @@ spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 grow_spec="$tmpdir/grow-spec.json"
 grow_report="$tmpdir/grow-report.json"
+create_spec="$tmpdir/create-spec.json"
+create_report="$tmpdir/create-report.json"
+destroy_spec="$tmpdir/destroy-spec.json"
+destroy_report="$tmpdir/destroy-report.json"
 attach_spec="$tmpdir/attach-spec.json"
 attach_report="$tmpdir/attach-report.json"
 detach_spec="$tmpdir/detach-spec.json"
@@ -161,6 +184,103 @@ if [[ "$grow_namespace" == "1" ]]; then
 
   cmp "$tmpdir/grow-apply.json" "$grow_report" >/dev/null
   nvme list-ns "$controller" --all --output-format=json > "$tmpdir/list-ns-grown.json"
+fi
+
+if [[ "$create_delete" == "1" ]]; then
+  jq -n \
+    --arg controller "$controller" \
+    --arg namespace_id "$namespace_id" \
+    --arg namespace_size "$namespace_size" \
+    --arg namespace_controllers "$namespace_controllers" \
+    '{
+      version: 1,
+      nvmeNamespaces: {
+        ($controller): {
+          operation: "create",
+          desiredSize: $namespace_size,
+          namespaceId: $namespace_id,
+          controllers: $namespace_controllers
+        }
+      },
+      apply: {
+        allowDestructive: true,
+        allowOffline: true
+      }
+    }' > "$create_spec"
+
+  "$disk_nix_bin" apply \
+    --spec "$create_spec" \
+    --execute \
+    --report-out "$create_report" \
+    --json > "$tmpdir/create-apply.json"
+
+  jq -e \
+    --arg controller "$controller" \
+    --arg namespace_id "$namespace_id" \
+    --arg namespace_size "$namespace_size" \
+    --arg namespace_controllers "$namespace_controllers" \
+    '
+    .status == "succeeded"
+    and (.commandPlan[] | select(.actionId == ("nvmenamespaces:" + $controller + ":create"))
+      | .commands
+      | any(.argv == ["nvme", "list-ns", $controller, "--all", "--output-format=json"])
+      and any(.argv == ["nvme", "create-ns", $controller, "--nsze-si", $namespace_size, "--ncap-si", $namespace_size])
+      and any(.argv == ["nvme", "attach-ns", $controller, "--namespace-id", $namespace_id, "--controllers", $namespace_controllers])
+      and any(.argv == ["nvme", "ns-rescan", $controller]))
+    and (.executionResults
+      | any(.argv == ["nvme", "create-ns", $controller, "--nsze-si", $namespace_size, "--ncap-si", $namespace_size] and .success == true)
+      and any(.argv == ["nvme", "attach-ns", $controller, "--namespace-id", $namespace_id, "--controllers", $namespace_controllers] and .success == true)
+      and any(.argv == ["nvme", "ns-rescan", $controller] and .success == true))
+  ' "$tmpdir/create-apply.json" >/dev/null
+
+  cmp "$tmpdir/create-apply.json" "$create_report" >/dev/null
+  nvme list-ns "$controller" --all --output-format=json > "$tmpdir/list-ns-created.json"
+
+  jq -n \
+    --arg controller "$controller" \
+    --arg namespace_id "$namespace_id" \
+    --arg namespace_controllers "$namespace_controllers" \
+    '{
+      version: 1,
+      nvmeNamespaces: {
+        ($controller): {
+          destroy: true,
+          namespaceId: $namespace_id,
+          controllers: $namespace_controllers
+        }
+      },
+      apply: {
+        allowDestructive: true,
+        allowOffline: true
+      }
+    }' > "$destroy_spec"
+
+  "$disk_nix_bin" apply \
+    --spec "$destroy_spec" \
+    --execute \
+    --report-out "$destroy_report" \
+    --json > "$tmpdir/destroy-apply.json"
+
+  jq -e \
+    --arg controller "$controller" \
+    --arg namespace_id "$namespace_id" \
+    --arg namespace_controllers "$namespace_controllers" \
+    '
+    .status == "succeeded"
+    and (.commandPlan[] | select(.actionId == ("nvmenamespaces:" + $controller + ":destroy"))
+      | .commands
+      | any(.argv == ["nvme", "list-subsys", "--output-format=json"])
+      and any(.argv == ["nvme", "detach-ns", $controller, "--namespace-id", $namespace_id, "--controllers", $namespace_controllers])
+      and any(.argv == ["nvme", "delete-ns", $controller, "--namespace-id", $namespace_id])
+      and any(.argv == ["nvme", "ns-rescan", $controller]))
+    and (.executionResults
+      | any(.argv == ["nvme", "detach-ns", $controller, "--namespace-id", $namespace_id, "--controllers", $namespace_controllers] and .success == true)
+      and any(.argv == ["nvme", "delete-ns", $controller, "--namespace-id", $namespace_id] and .success == true)
+      and any(.argv == ["nvme", "ns-rescan", $controller] and .success == true))
+  ' "$tmpdir/destroy-apply.json" >/dev/null
+
+  cmp "$tmpdir/destroy-apply.json" "$destroy_report" >/dev/null
+  nvme list-ns "$controller" --all --output-format=json > "$tmpdir/list-ns-deleted.json"
 fi
 
 if [[ "$attach_detach" == "1" ]]; then

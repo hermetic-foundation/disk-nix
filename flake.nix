@@ -2015,7 +2015,9 @@
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_CONTROLLER ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_GROW ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_ATTACH_DETACH ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_CREATE_DELETE ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_NAMESPACE_ID ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_NAMESPACE_SIZE ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_CONTROLLERS ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvme list-ns' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvme list-subsys' ${./scripts/integration-nvme-smoke.sh}
@@ -2023,6 +2025,12 @@
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "ns-rescan"' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvmenamespaces:" + $controller + ":grow' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'list-ns-grown' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'nvmenamespaces:" + $controller + ":create' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'nvmenamespaces:" + $controller + ":destroy' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme", "create-ns"' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme", "delete-ns"' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'list-ns-created' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'list-ns-deleted' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "attach-ns"' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "detach-ns"' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'list-ns-attached' ${./scripts/integration-nvme-smoke.sh}
@@ -2417,6 +2425,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'rescan coverage: the loop-backed bcache harness' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'network-storage scenarios' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'NFS failed-and-resumed remount data-survival' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace create/delete' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace grow' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace attach/detach' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real filesystem' "$checklist"
@@ -2470,6 +2479,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'NFS failed-and-resumed remount data-survival' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace create/delete' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace grow' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace attach/detach' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real MD RAID member replacement' ${./docs/status.md}
@@ -2500,8 +2510,11 @@
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_ADD_PATH' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_REMOVE_PATH' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_FLUSH=1' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_CREATE_DELETE=1' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_GROW=1' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_ATTACH_DETACH=1' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme create-ns <controller>' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme delete-ns <controller>' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'nvme attach-ns <controller>' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'nvme detach-ns <controller>' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.resize.operation = "grow"' ${./docs/integration-tests.md}

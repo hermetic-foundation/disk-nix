@@ -1202,6 +1202,16 @@ When enabled, it:
 - executes an `nvmeNamespaces.<controller>.operation = "rescan"` apply plan
 - verifies the rendered `nvme list-ns`, `nvme list-subsys`, and
   `nvme ns-rescan <controller>` commands succeeded
+- when `DISK_NIX_NVME_CREATE_DELETE=1` is set with
+  `DISK_NIX_NVME_NAMESPACE_ID`, `DISK_NIX_NVME_NAMESPACE_SIZE`, and
+  `DISK_NIX_NVME_CONTROLLERS`, applies an
+  `nvmeNamespaces.<controller>.operation = "create"` plan, verifies
+  `nvme create-ns <controller> --nsze-si <size> --ncap-si <size>`,
+  `nvme attach-ns <controller> --namespace-id <id> --controllers <ids>`, and
+  namespace rescan succeed, then applies a destructive cleanup plan and verifies
+  `nvme detach-ns <controller> --namespace-id <id> --controllers <ids>`,
+  `nvme delete-ns <controller> --namespace-id <id>`, and final namespace
+  inventory succeed
 - when `DISK_NIX_NVME_GROW=1` is set, applies an
   `nvmeNamespaces.<controller>.operation = "grow"` plan and verifies the
   rendered `nvme list-subsys` and `nvme ns-rescan <controller>` commands
@@ -1215,12 +1225,12 @@ When enabled, it:
 - verifies the generated JSON report was written
 
 By default this test does not create, grow, attach, detach, or delete NVMe
-namespaces. The attach/detach mode is deliberately opt-in and requires a
-disposable namespace that can safely end detached from the selected controller.
-The harness still requires destructive opt-in because `nvme ns-rescan` refreshes
-live controller namespace state and attach/detach changes namespace visibility.
-Use a controller path such as `/dev/nvme0`, not a namespace path such as
-`/dev/nvme0n1`.
+namespaces. The create/delete and attach/detach modes are deliberately opt-in
+and require a disposable namespace that can safely end deleted or detached from
+the selected controller. The harness still requires destructive opt-in because
+`nvme ns-rescan` refreshes live controller namespace state and namespace
+lifecycle changes visibility or allocation. Use a controller path such as
+`/dev/nvme0`, not a namespace path such as `/dev/nvme0n1`.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 
