@@ -13,7 +13,12 @@ it also attaches and detaches the disposable namespace selected by
 DISK_NIX_NVME_NAMESPACE_ID and DISK_NIX_NVME_CONTROLLERS. When
 DISK_NIX_NVME_CREATE_DELETE=1 is set, it creates, attaches, detaches, and
 deletes the disposable namespace selected by DISK_NIX_NVME_NAMESPACE_ID,
-DISK_NIX_NVME_NAMESPACE_SIZE, and DISK_NIX_NVME_CONTROLLERS.
+DISK_NIX_NVME_NAMESPACE_SIZE, and DISK_NIX_NVME_CONTROLLERS. When
+DISK_NIX_NVME_RECONNECT=1 is set, it disconnects and reconnects the reviewed
+controller target selected by DISK_NIX_NVME_RECONNECT_NQN,
+DISK_NIX_NVME_RECONNECT_TRANSPORT, DISK_NIX_NVME_RECONNECT_TRADDR, optional
+DISK_NIX_NVME_RECONNECT_TRSVCID, and optional
+DISK_NIX_NVME_RECONNECT_CONTROLLER.
 MSG
   exit 2
 fi
@@ -27,9 +32,15 @@ controller="${DISK_NIX_NVME_CONTROLLER:-}"
 grow_namespace="${DISK_NIX_NVME_GROW:-0}"
 attach_detach="${DISK_NIX_NVME_ATTACH_DETACH:-0}"
 create_delete="${DISK_NIX_NVME_CREATE_DELETE:-0}"
+reconnect_controller="${DISK_NIX_NVME_RECONNECT:-0}"
 namespace_id="${DISK_NIX_NVME_NAMESPACE_ID:-}"
 namespace_size="${DISK_NIX_NVME_NAMESPACE_SIZE:-}"
 namespace_controllers="${DISK_NIX_NVME_CONTROLLERS:-}"
+reconnect_nqn="${DISK_NIX_NVME_RECONNECT_NQN:-}"
+reconnect_transport="${DISK_NIX_NVME_RECONNECT_TRANSPORT:-}"
+reconnect_traddr="${DISK_NIX_NVME_RECONNECT_TRADDR:-}"
+reconnect_trsvcid="${DISK_NIX_NVME_RECONNECT_TRSVCID:-}"
+reconnect_expected_controller="${DISK_NIX_NVME_RECONNECT_CONTROLLER:-$controller}"
 if [[ -z "$controller" ]]; then
   cat >&2 <<'MSG'
 DISK_NIX_NVME_CONTROLLER is required.
@@ -76,6 +87,23 @@ MSG
     exit 2
   fi
 fi
+if [[ "$reconnect_controller" == "1" ]]; then
+  if [[ -z "$reconnect_nqn" ]] || [[ -z "$reconnect_transport" ]] || [[ -z "$reconnect_traddr" ]] || [[ -z "$reconnect_expected_controller" ]]; then
+    cat >&2 <<'MSG'
+DISK_NIX_NVME_RECONNECT_NQN, DISK_NIX_NVME_RECONNECT_TRANSPORT,
+DISK_NIX_NVME_RECONNECT_TRADDR, and DISK_NIX_NVME_RECONNECT_CONTROLLER are
+required when DISK_NIX_NVME_RECONNECT=1 is set.
+
+Example:
+  DISK_NIX_NVME_RECONNECT_NQN=nqn.2014-08.org.nvmexpress.discovery
+  DISK_NIX_NVME_RECONNECT_TRANSPORT=tcp
+  DISK_NIX_NVME_RECONNECT_TRADDR=192.0.2.10
+  DISK_NIX_NVME_RECONNECT_TRSVCID=4420
+  DISK_NIX_NVME_RECONNECT_CONTROLLER=/dev/nvme0
+MSG
+    exit 2
+  fi
+fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
@@ -117,6 +145,8 @@ attach_spec="$tmpdir/attach-spec.json"
 attach_report="$tmpdir/attach-report.json"
 detach_spec="$tmpdir/detach-spec.json"
 detach_report="$tmpdir/detach-report.json"
+reconnect_spec="$tmpdir/reconnect-spec.json"
+reconnect_report="$tmpdir/reconnect-report.json"
 
 nvme list-ns "$controller" --all --output-format=json > "$tmpdir/list-ns.json"
 nvme list-subsys --output-format=json > "$tmpdir/list-subsys.json"
@@ -390,6 +420,68 @@ if [[ "$attach_detach" == "1" ]]; then
 
   cmp "$tmpdir/detach-apply.json" "$detach_report" >/dev/null
   nvme list-ns "$controller" --all --output-format=json > "$tmpdir/list-ns-detached.json"
+fi
+
+if [[ "$reconnect_controller" == "1" ]]; then
+  connect_args=(connect -t "$reconnect_transport" -n "$reconnect_nqn" -a "$reconnect_traddr")
+  if [[ -n "$reconnect_trsvcid" ]]; then
+    connect_args+=(-s "$reconnect_trsvcid")
+  fi
+
+  nvme disconnect -n "$reconnect_nqn"
+  nvme "${connect_args[@]}"
+
+  for _ in $(seq 1 60); do
+    if [[ -e "$reconnect_expected_controller" ]]; then
+      break
+    fi
+    sleep 1
+  done
+  if [[ ! -e "$reconnect_expected_controller" ]]; then
+    echo "NVMe reconnect did not expose expected controller: $reconnect_expected_controller" >&2
+    exit 1
+  fi
+
+  "$disk_nix_bin" inspect "$reconnect_expected_controller" --json > "$tmpdir/reconnect-inspect.json"
+  jq -e --arg controller "$reconnect_expected_controller" '
+    (.matchedNodes // .nodes // [])
+    | any(
+        .path == $controller
+        or .name == $controller
+        or .id == ("block:" + $controller)
+        or (.properties // [] | any(.key == "nvme.controller" and .value == $controller))
+        or (.properties // [] | any(.key == "nvme.subsystem"))
+      )
+  ' "$tmpdir/reconnect-inspect.json" >/dev/null
+
+  jq -n --arg controller "$reconnect_expected_controller" '{
+    version: 1,
+    nvmeNamespaces: {
+      ($controller): {
+        operation: "rescan"
+      }
+    }
+  }' > "$reconnect_spec"
+
+  "$disk_nix_bin" apply \
+    --spec "$reconnect_spec" \
+    --execute \
+    --report-out "$reconnect_report" \
+    --json > "$tmpdir/reconnect-apply.json"
+
+  jq -e --arg controller "$reconnect_expected_controller" '
+    .status == "succeeded"
+    and (.commandPlan[] | select(.actionId == ("nvmenamespaces:" + $controller + ":rescan"))
+      | .commands
+      | any(.argv == ["nvme", "list-ns", $controller, "--all", "--output-format=json"])
+      and any(.argv == ["nvme", "list-subsys", "--output-format=json"])
+      and any(.argv == ["nvme", "ns-rescan", $controller]))
+    and (.executionResults
+      | any(.argv == ["nvme", "ns-rescan", $controller] and .success == true))
+  ' "$tmpdir/reconnect-apply.json" >/dev/null
+
+  cmp "$tmpdir/reconnect-apply.json" "$reconnect_report" >/dev/null
+  nvme list-ns "$reconnect_expected_controller" --all --output-format=json > "$tmpdir/list-ns-reconnected.json"
 fi
 
 echo "NVMe integration smoke test rescanned $controller"

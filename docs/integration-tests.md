@@ -1249,6 +1249,12 @@ controllers:
 ```sh
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   DISK_NIX_NVME_CONTROLLER=/dev/nvme0 \
+  DISK_NIX_NVME_RECONNECT=1 \
+  DISK_NIX_NVME_RECONNECT_NQN=nqn.2014-08.org.nvmexpress.discovery \
+  DISK_NIX_NVME_RECONNECT_TRANSPORT=tcp \
+  DISK_NIX_NVME_RECONNECT_TRADDR=192.0.2.10 \
+  DISK_NIX_NVME_RECONNECT_TRSVCID=4420 \
+  DISK_NIX_NVME_RECONNECT_CONTROLLER=/dev/nvme0 \
   nix run .#integration-nvme-smoke
 ```
 
@@ -1284,6 +1290,14 @@ When enabled, it:
   `nvme attach-ns <controller> --namespace-id <id> --controllers <ids>` and
   `nvme ns-rescan <controller>` succeed, then applies a matching detach plan
   and verifies `nvme detach-ns <controller> --namespace-id <id> --controllers <ids>` plus a final namespace rescan succeed
+- when `DISK_NIX_NVME_RECONNECT=1` is set with
+  `DISK_NIX_NVME_RECONNECT_NQN`, `DISK_NIX_NVME_RECONNECT_TRANSPORT`,
+  `DISK_NIX_NVME_RECONNECT_TRADDR`, optional
+  `DISK_NIX_NVME_RECONNECT_TRSVCID`, and
+  `DISK_NIX_NVME_RECONNECT_CONTROLLER`, disconnects the reviewed NQN with
+  `nvme disconnect`, reconnects it with `nvme connect`, waits for the expected
+  controller path, verifies `disk-nix inspect <controller> --json` sees the
+  reconnected controller, and reruns the namespace rescan apply
 - verifies the generated JSON report was written
 
 By default this test does not create, grow, attach, detach, or delete NVMe

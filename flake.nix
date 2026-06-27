@@ -2067,6 +2067,10 @@
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_GROW ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_ATTACH_DETACH ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_CREATE_DELETE ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_RECONNECT ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_RECONNECT_NQN ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_RECONNECT_TRANSPORT ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_RECONNECT_TRADDR ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_NAMESPACE_ID ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_NAMESPACE_SIZE ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NVME_CONTROLLERS ${./scripts/integration-nvme-smoke.sh}
@@ -2084,6 +2088,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'list-ns-deleted' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'namespace_present' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'NVMe namespace identity drift' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme disconnect -n "$reconnect_nqn"' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'connect_args=(connect -t "$reconnect_transport"' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'connect_args+=(-s "$reconnect_trsvcid")' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'list-ns-reconnected' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "attach-ns"' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "detach-ns"' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'list-ns-attached' ${./scripts/integration-nvme-smoke.sh}

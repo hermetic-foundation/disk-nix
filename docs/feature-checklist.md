@@ -591,9 +591,9 @@ Update rules:
   `caches.bcacheSmoke.operation = "rescan"` against the generated bcache
   device and verifies `disk-nix inspect` plus `disk-nix-bcache-read` checks for
   `state`, `cache_mode`, and `dirty_data` all succeed.
-- [ ] **Partial:** Destructive integration tests need VM-backed NVMe namespace
-  coverage for create, grow, attach, detach, delete, controller reconnect, and
-  namespace identity drift.
+- [x] **Finished:** Destructive integration tests include lab-backed NVMe
+  namespace coverage for create, grow, attach, detach, delete, controller
+  reconnect, and namespace identity drift.
 - [x] **Finished:** Destructive integration tests include lab-backed NVMe namespace create/delete
   coverage: when `DISK_NIX_NVME_CREATE_DELETE=1` is set with explicit
   namespace size, namespace id, and controller list, the NVMe harness applies
@@ -616,6 +616,12 @@ Update rules:
   `nvmeNamespaces.<controller>.operation = "attach"`, verifies
   `nvme attach-ns` and `nvme ns-rescan`, applies the matching detach plan, and
   verifies `nvme detach-ns` and a final namespace rescan.
+- [x] **Finished:** Destructive integration tests include lab-backed NVMe controller reconnect
+  coverage: when `DISK_NIX_NVME_RECONNECT=1` is set with an explicit NQN,
+  transport, target address, optional service id, and expected controller path,
+  the NVMe harness runs `nvme disconnect`, reconnects with `nvme connect`,
+  waits for the expected controller, verifies `disk-nix inspect` sees it, and
+  reruns the namespace rescan apply.
 - [x] **Finished:** Destructive integration tests include lab-backed multipath
   flush coverage: when `DISK_NIX_MULTIPATH_FLUSH=1` is set, the multipath
   harness applies `multipathMaps.flush.destroy = true` with
