@@ -277,9 +277,12 @@ plans instead of guessing. Target-side LUN provisioning is modeled through
 backstore, target, LUN mapping, ACL, target removal, reviewed backstore removal,
 and persistence commands; grow updates validate the reviewed backing object with
 `blockdev --getsize64`, refresh target/LUN inventory, persist target state, and
-verify host-visible SCSI, multipath, and modeled graph state, while property
-updates include native target/backstore inventory and concrete reviewed
-attribute updates. `provider = "tgt"` or
+verify host-visible SCSI, multipath, and modeled graph state. When a reviewed
+LIO grow declaration sets `backstoreType = "fileio"`, disk-nix emits a
+provider-specific `truncate --size <desiredSize> <source>` resize step before
+target refresh, inspects `/backstores/fileio/...`, and validates the grown file
+with `stat --format=%s`. Property updates include native target/backstore
+inventory and concrete reviewed attribute updates. `provider = "tgt"` or
 `"tgtadm"` renders concrete Linux tgt `tgtadm` inventory, target
 creation/removal, logical-unit creation/removal, and initiator-address
 bind/unbind commands when the reviewed `targetId`/`tid`, `lun`, backing object,

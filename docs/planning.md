@@ -442,9 +442,13 @@ Examples:
   updates render native target/backstore inventory and concrete
   `targetcli ... set attribute emulate_write_cache=...` commands when the
   backing object and reviewed boolean value are declared. LIO grow validates
-  the reviewed backing object with `blockdev --getsize64`, refreshes target/LUN
-  inventory, persists target state with `saveconfig`, and verifies
-  host-visible SCSI, multipath, and modeled graph state. `provider = "tgt"` or
+  block backstores with `blockdev --getsize64`, refreshes target/LUN inventory,
+  persists target state with `saveconfig`, and verifies host-visible SCSI,
+  multipath, and modeled graph state. If `backstoreType = "fileio"` is
+  declared, the grow plan uses `/backstores/fileio/...` inventory, runs
+  `truncate --size <desiredSize> <source>` as the reviewed forced backstore
+  resize primitive, and validates the resulting regular-file size with
+  `stat --format=%s`. `provider = "tgt"` or
   `"tgtadm"` renders concrete
   Linux tgt `tgtadm` inventory, target creation, logical-unit creation/removal,
   initiator-address bind/unbind, and target removal when `targetId`/`tid`,

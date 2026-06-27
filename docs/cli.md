@@ -1186,9 +1186,11 @@ when the target IQN, backing object, LUN number, and initiators are declared.
 LIO write-cache property updates render native target/backstore inventory and
 concrete `targetcli ... set attribute emulate_write_cache=...` commands when
 the backing object and reviewed boolean value are declared. LIO grow validates
-the reviewed backing object with `blockdev --getsize64`, refreshes target/LUN
-inventory, persists target state with `saveconfig`, and verifies host-visible
-SCSI, multipath, and modeled graph state. `provider = "tgt"` or `"tgtadm"` renders concrete Linux tgt
+block backstores with `blockdev --getsize64`, refreshes target/LUN inventory,
+persists target state with `saveconfig`, and verifies host-visible SCSI,
+multipath, and modeled graph state. When `backstoreType = "fileio"` is set,
+the grow plan inspects `/backstores/fileio/...`, runs `truncate --size <desiredSize> <source>` before target refresh, and validates the grown file with
+`stat --format=%s`. `provider = "tgt"` or `"tgtadm"` renders concrete Linux tgt
 `tgtadm` command plans for target inventory, target
 creation/removal, logical-unit creation/removal, and initiator-address
 bind/unbind when `targetId` or `tid`, `lun`, backing object, and

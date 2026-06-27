@@ -12212,6 +12212,14 @@ fn target_lun_lio_commands(action: &PlannedAction, target: &str) -> Vec<Executio
                 &backstore,
                 "inspect the reviewed LIO backstore before target-side LUN growth",
             ));
+            if let Some(command) = target_lun_lio_forced_backstore_resize_command(
+                action,
+                target,
+                &backstore,
+                "force the reviewed LIO fileio backstore to the declared size before target refresh",
+            ) {
+                commands.push(command);
+            }
             commands.push(target_lun_lio_backing_size_command(
                 action,
                 "validate the reviewed LIO backing object exposes the grown capacity",
@@ -12289,7 +12297,7 @@ fn target_lun_lio_backstore_inventory_command(
 ) -> ExecutionCommand {
     let (backstore_path, readiness, unresolved_inputs) = if action.context.device.is_some() {
         (
-            format!("/backstores/block/{backstore}"),
+            target_lun_lio_backstore_path(action, backstore),
             CommandReadiness::Ready,
             Vec::new(),
         )
@@ -12322,6 +12330,37 @@ fn target_lun_lio_lun_inventory_command(tpg: &str, note: &str) -> ExecutionComma
 }
 
 fn target_lun_lio_backing_size_command(action: &PlannedAction, note: &str) -> ExecutionCommand {
+    let fileio_regular_file = lio_backstore_type(action).as_deref() == Some("fileio")
+        && action
+            .context
+            .device
+            .as_deref()
+            .is_none_or(|device| !device.starts_with("/dev/"));
+    if fileio_regular_file {
+        return match action.context.device.as_deref() {
+            Some(path) => command_vec(
+                vec![
+                    "stat".to_string(),
+                    "--format=%s".to_string(),
+                    path.to_string(),
+                ],
+                false,
+                note,
+            ),
+            None => command_vec_with_readiness(
+                vec![
+                    "stat".to_string(),
+                    "--format=%s".to_string(),
+                    "<fileio-backing-file>".to_string(),
+                ],
+                false,
+                CommandReadiness::NeedsDomainImplementation,
+                ["LIO fileio backing file for capacity validation"],
+                note,
+            ),
+        };
+    }
+
     match action.context.device.as_deref() {
         Some(device) => command_vec(
             vec![
@@ -12344,6 +12383,120 @@ fn target_lun_lio_backing_size_command(action: &PlannedAction, note: &str) -> Ex
             note,
         ),
     }
+}
+
+fn target_lun_lio_backstore_path(action: &PlannedAction, backstore: &str) -> String {
+    let backstore_type = lio_backstore_type(action).unwrap_or_else(|| "block".to_string());
+    format!("/backstores/{backstore_type}/{backstore}")
+}
+
+fn target_lun_lio_forced_backstore_resize_command(
+    action: &PlannedAction,
+    target: &str,
+    backstore: &str,
+    note: &str,
+) -> Option<ExecutionCommand> {
+    let backstore_type = lio_backstore_type(action)?;
+    match backstore_type.as_str() {
+        "fileio" => Some(target_lun_lio_fileio_resize_command(
+            action, backstore, note,
+        )),
+        "block" => None,
+        _ => Some(target_lun_lio_backstore_resize_handoff_command(
+            action,
+            target,
+            backstore,
+            &backstore_type,
+        )),
+    }
+}
+
+fn target_lun_lio_backstore_resize_handoff_command(
+    action: &PlannedAction,
+    target: &str,
+    backstore: &str,
+    backstore_type: &str,
+) -> ExecutionCommand {
+    let mut argv = vec![
+        target_lun_provider_program(action),
+        "grow-lio-backstore".to_string(),
+        "--target".to_string(),
+        target.to_string(),
+        "--backstore-type".to_string(),
+        backstore_type.to_string(),
+        "--backstore-name".to_string(),
+        backstore.to_string(),
+    ];
+    if let Some(lun) = action.context.lun.as_deref() {
+        argv.push("--lun".to_string());
+        argv.push(lun.to_string());
+    }
+    if let Some(device) = action.context.device.as_deref() {
+        argv.push("--source".to_string());
+        argv.push(device.to_string());
+    }
+    if let Some(size) = action.context.desired_size.as_deref() {
+        argv.push("--size".to_string());
+        argv.push(size.to_string());
+    }
+    let mut command = command_vec_with_readiness(
+        argv,
+        true,
+        CommandReadiness::NeedsDomainImplementation,
+        [format!(
+            "provider-specific LIO {backstore_type} backstore resize primitive"
+        )],
+        "handoff LIO backstore resize to a reviewed site provider adapter",
+    );
+    command.provider_capabilities = target_lun_provider_capabilities(action);
+    command
+}
+
+fn target_lun_lio_fileio_resize_command(
+    action: &PlannedAction,
+    backstore: &str,
+    note: &str,
+) -> ExecutionCommand {
+    let mut unresolved_inputs = Vec::new();
+    let size = match action.context.desired_size.as_deref() {
+        Some(size) => size.to_string(),
+        None => {
+            unresolved_inputs.push("desired LIO fileio backstore size".to_string());
+            "<size>".to_string()
+        }
+    };
+    let path = match action.context.device.as_deref() {
+        Some(path) => path.to_string(),
+        None => {
+            unresolved_inputs.push("LIO fileio backing file path".to_string());
+            format!("<fileio-backing-file-for-{backstore}>")
+        }
+    };
+    command_vec_with_readiness(
+        vec!["truncate".to_string(), "--size".to_string(), size, path],
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn lio_backstore_type(action: &PlannedAction) -> Option<String> {
+    action
+        .context
+        .backstore_type
+        .as_deref()
+        .map(|backstore_type| {
+            backstore_type
+                .trim()
+                .trim_matches('"')
+                .replace(['-', '_'], "")
+                .to_ascii_lowercase()
+        })
 }
 
 fn target_lun_lio_backstore_create_command(
@@ -32677,6 +32830,75 @@ mod tests {
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));
+    }
+
+    #[test]
+    fn target_lun_lio_fileio_grow_forces_backstore_resize_before_refresh() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "targetLuns": {
+                  "iqn.2026-06.example:storage.file": {
+                    "operation": "grow",
+                    "provider": "lio",
+                    "backstoreType": "fileio",
+                    "source": "/var/lib/iscsi/root.img",
+                    "desiredSize": "4TiB",
+                    "lun": 3
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
+
+        let grow = report
+            .command_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:storage.file:grow")
+            .expect("LIO fileio target-side LUN grow command plan exists");
+        assert!(grow.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "targetcli",
+                    "/backstores/fileio/_var_lib_iscsi_root.img",
+                    "ls",
+                ]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(grow.commands.iter().any(|command| {
+            command.argv == ["truncate", "--size", "4TiB", "/var/lib/iscsi/root.img"]
+                && command.mutates
+                && command.readiness == CommandReadiness::Ready
+                && command.note.contains("fileio backstore")
+        }));
+        assert!(grow.commands.iter().any(|command| {
+            command.argv == ["stat", "--format=%s", "/var/lib/iscsi/root.img"]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+
+        let truncate_requirement = report
+            .tool_requirements
+            .iter()
+            .find(|requirement| requirement.tool == "truncate")
+            .expect("truncate tool requirement exists");
+        assert!(
+            truncate_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.coreutils"))
+        );
     }
 
     #[test]

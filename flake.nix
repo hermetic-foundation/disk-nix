@@ -2225,6 +2225,9 @@
             ${pkgs.gnugrep}/bin/grep -q 'target-lun.capacity.expand' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_lio_backing_size_command' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'LIO target-side LUN grow has a native reviewed block' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'target_lun_lio_fileio_grow_forces_backstore_resize_before_refresh' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'backstoreType = "fileio"' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'truncate --size <desiredSize> <source>' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_tgt_logical_unit_refresh_command' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'tgt target-side LUN grow has a native reviewed refresh path' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Generic target LUN verification plans' ${./docs/status.md}

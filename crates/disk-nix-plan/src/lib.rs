@@ -510,6 +510,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub backstore_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vendor: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub array_id: Option<String>,
@@ -578,6 +580,7 @@ impl ActionContext {
             && self.client.is_none()
             && self.portal.is_none()
             && self.provider.is_none()
+            && self.backstore_type.is_none()
             && self.vendor.is_none()
             && self.array_id.is_none()
             && self.storage_pool.is_none()
@@ -7811,6 +7814,17 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
                 "storage-provider",
                 "arrayProvider",
                 "array-provider",
+            ],
+        ),
+        backstore_type: metadata_string_field(
+            object,
+            &[
+                "backstoreType",
+                "backstore-type",
+                "backstore_type",
+                "lioBackstoreType",
+                "lio-backstore-type",
+                "lio_backstore_type",
             ],
         ),
         vendor: metadata_string_field(object, &["vendor", "arrayVendor", "array-vendor"]),
@@ -27773,6 +27787,7 @@ mod tests {
                   "desiredSize": "2TiB",
                   "source": "pool-a/volumes/root",
                   "provider": "netapp-ontap",
+                  "backstoreType": "array",
                   "vendor": "netapp",
                   "arrayId": "ontap-cluster-a",
                   "storagePool": "aggr1",
@@ -27817,6 +27832,7 @@ mod tests {
             Some("pool-a/volumes/root")
         );
         assert_eq!(create.context.provider.as_deref(), Some("netapp-ontap"));
+        assert_eq!(create.context.backstore_type.as_deref(), Some("array"));
         assert_eq!(create.context.vendor.as_deref(), Some("netapp"));
         assert_eq!(create.context.array_id.as_deref(), Some("ontap-cluster-a"));
         assert_eq!(create.context.storage_pool.as_deref(), Some("aggr1"));

@@ -318,9 +318,11 @@ Update rules:
 - [x] **Finished:** LIO target-side LUN grow has a native reviewed block
   backstore path that validates backing capacity, refreshes LIO target/LUN
   inventory, persists target state, and verifies initiator-visible capacity.
-- [ ] **Desired:** LIO target-side LUN grow needs provider-specific forced
-  backstore resize primitives if future LIO backstore types require more than
-  backing-device capacity validation and initiator refresh.
+- [x] **Finished:** LIO target-side LUN grow has a provider-specific forced
+  fileio backstore resize primitive. Declarations can set
+  `backstoreType = "fileio"` to emit a reviewed `truncate --size <desiredSize> <source>` step before target/LUN refresh, use `/backstores/fileio/...`
+  inventory, validate the grown file with `stat --format=%s`, and keep block
+  backstores on the non-destructive backing-capacity validation path.
 - [x] **Finished:** tgt target-side LUN grow has a native reviewed refresh path
   that validates backing capacity, refreshes the exported logical unit with
   `tgtadm --mode logicalunit --op update --params online=1`, captures
