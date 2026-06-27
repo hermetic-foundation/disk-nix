@@ -402,9 +402,11 @@ Update rules:
 - [ ] **Desired:** Proven automatic rollback recipes need network-storage
   recipes and fixtures for NFS, iSCSI, multipath, NVMe-oF, host-side LUNs, and
   target-side LUN providers.
-- [ ] **Desired:** Automatic rollback recipes need integration proof that a
-  failed apply can re-probe topology, choose a proven rollback recipe, run it,
-  verify data-preserving state, and emit a rollback receipt.
+- [x] **Finished:** Automatic rollback recipes have crate-level integration
+  proof that a failed apply report can bind fresh topology evidence and
+  payloads, choose a proven rollback recipe, run read-only validation and
+  reversible mutation steps, verify success, and emit a rollback receipt with
+  original receipt, fresh topology, evidence, and payload bindings.
 - [x] **Finished:** Automatic rollback recipes have negative tests proving
   refusal when rollback points are missing, stale, or not bound to the failed
   apply receipt.

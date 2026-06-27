@@ -415,7 +415,11 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   `partialExecutionRecovery` sequencing with completed
   actions, failed action, failed command, retry/review actions, remaining
   actions, completed mutating command counts, and fresh-topology review notes.
-  They also include
+  The exec crate also has an integration test proving a failed apply report can
+  bind fresh topology evidence and payloads, select a proven-safe rollback
+  recipe, run read-only validation plus reversible mutation steps, and emit a
+  rollback receipt with the original receipt, fresh topology, evidence, and
+  payload bindings. Reports also include
   ZFS/Btrfs snapshot lifecycle changes, ZFS pool/dataset/zvol lifecycle
   changes, LVM VG/volume/thin/PV changes, LUKS mapper/header/keyslot/token
   changes, filesystem lifecycle updates, cache lifecycle changes, swap

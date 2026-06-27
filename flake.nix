@@ -2286,6 +2286,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'data-loss-prone operations make rollback unsafe' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay can materialize deterministic' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'receiptBinding.topologyPayloads' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'crate-level integration' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'proven_rollback_recipe_replays_and_emits_receipt_binding' ${./crates/disk-nix-exec/tests/rollback_replay.rs}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses proven-safe recipes when' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises ambiguous rollback points' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises active consumers' ${./docs/feature-checklist.md}
