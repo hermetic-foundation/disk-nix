@@ -1980,8 +1980,10 @@
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_MULTIPATH_MAP ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_MULTIPATH_RESIZE ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipath -ll' ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lsscsi -t -s' ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'multipathd", "resize", "map"' ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipath", "-ll"' ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipath", "-r"' ${./scripts/integration-multipath-smoke.sh}
             touch "$out"
@@ -2424,6 +2426,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'target-side LIO map/unmap' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'target-side LUN destroy refusal' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'host-side LUN rescan' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lab-backed multipath resize' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'missing-member MD RAID rescan' ${./docs/status.md}
@@ -2446,6 +2449,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.destroy = true' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_LUN_PATH' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'luns.<target>:0.operation = "rescan"' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_RESIZE=1' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.resize.operation = "grow"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_VM_HARNESSES=target-lun' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes.<name>.properties.writePolicy' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'exports.<path>.properties.options' ${./docs/integration-tests.md}

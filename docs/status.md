@@ -173,7 +173,8 @@ behavior across real storage stacks.
   real target-side LUN property mutation plus target-side LIO map/unmap with
   `targetcli`, verify target-side LUN destroy refusal without destructive
   policy, verify lab-backed host-side LUN rescan with `disk-nix-scsi-rescan`
-  and `multipath -r`, then verify
+  and `multipath -r`, verify lab-backed multipath resize with
+  `multipathd resize map`, then verify
   real VDO write-policy mutation with `vdo changeWritePolicy`, verify
   real NFS export option mutation with `exportfs -i`, and verify degraded
   missing-member MD RAID rescan after failing and removing one temporary RAID1

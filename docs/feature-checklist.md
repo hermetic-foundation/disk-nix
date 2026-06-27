@@ -522,7 +522,12 @@ Update rules:
   coverage for create, grow, attach, detach, delete, controller reconnect, and
   namespace identity drift.
 - [ ] **Partial:** Destructive integration tests need VM-backed LUN flow
-  coverage for multipath resize and multipath add/remove/flush paths.
+  coverage for multipath add/remove/flush paths.
+- [x] **Finished:** Destructive integration tests include lab-backed multipath
+  resize coverage: when `DISK_NIX_MULTIPATH_RESIZE=1` is set, the multipath
+  harness applies `multipathMaps.resize.operation = "grow"` for the selected
+  map and verifies `multipath -ll`, `lsscsi -t -s`,
+  `multipathd resize map <map>`, and `multipath -r` all succeed.
 - [x] **Finished:** Destructive integration tests include lab-backed host-side
   LUN rescan coverage: when `DISK_NIX_LUN_PATH` is set, the iSCSI harness
   applies `luns.<target>:0.operation = "rescan"` for that path and verifies
