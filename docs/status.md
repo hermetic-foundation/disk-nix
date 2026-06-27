@@ -163,7 +163,8 @@ behavior across real storage stacks.
   with `cryptsetup config`, verify real Btrfs filesystem label mutation with
   `btrfs filesystem label`, verify real loop-backed swap label mutation with
   `swaplabel`, verify real ZFS pool property mutation with `zpool set`, verify
-  real LVM cache property mutation with `lvchange --cachemode`, verify
+  real LVM cache property mutation with `lvchange --cachemode` while a
+  cached-origin ext4 sentinel remains readable, verify
   real bcache cache-mode mutation with a `disk-nix-bcache-property` sysfs write,
   verify real backing-file mode mutation with `chmod`, verify
   real loop-device read-only mutation with `blockdev --setro` and `blockdev --setrw`, verify

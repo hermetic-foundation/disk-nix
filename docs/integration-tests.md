@@ -861,12 +861,15 @@ When enabled, it:
 - attaches it to the next available `/dev/loop*`
 - creates a temporary LVM physical volume, volume group, logical volume, thin
   pool, thin volume, snapshot, cache pool, and cached origin volume
+- formats the cached origin as ext4, mounts it, and writes a sentinel file
 - verifies `disk-nix inspect <vg> --json` sees the volume group
 - applies `lvmCaches.<vg/lv>.properties.lvm.cache-mode = "writethrough"`
   against the real cached origin logical volume
 - verifies the generated JSON report was written, the rendered
   `lvchange --cachemode writethrough <vg/lv>` command succeeded, and
   `lvs -o cache_mode <vg/lv>` reports `writethrough`
+- verifies the cached-origin ext4 cache sentinel survives the cache-mode
+  mutation and remains readable after LVM rescan plans
 - executes `volumeGroups.<name>.operation = "rescan"`,
   `volumes.<vg/lv>.operation = "rescan"`,
   `thinPools.<vg/pool>.operation = "rescan"`, and
@@ -874,8 +877,9 @@ When enabled, it:
 - verifies the generated JSON report was written and the rendered
   `pvscan --cache`, `vgscan`, `vgchange --refresh <vg>`, and LVM `lvs`
   inventory commands succeeded
-- removes the temporary volume group, wipes the physical volume metadata,
-  detaches the loop device, and removes the backing file during cleanup
+- unmounts the cached origin, removes the temporary volume group, wipes the
+  physical volume metadata, detaches the loop device, and removes the backing
+  file during cleanup
 
 This test intentionally writes LVM metadata only to the temporary backing file
 it creates. It still requires destructive opt-in because it uses real loop and

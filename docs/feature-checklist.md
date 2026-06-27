@@ -612,9 +612,12 @@ Update rules:
   `xfs_growfs` failure, the harness runs a resumed remount apply, verifies the
   sentinel remains readable, then closes/reopens the LUKS stack and verifies the
   sentinel again.
+- [x] **Finished:** Deeper destructive VM tests include LVM cache data-survival
+  assertions: the loop-backed LVM harness formats the cached origin as ext4,
+  writes a sentinel file, mutates cache mode with `lvchange --cachemode`, and
+  verifies the cache sentinel survives mutation and rescan plans.
 - [ ] **Partial:** Deeper destructive VM tests still need data-survival
-  assertions across failed and resumed apply runs for cache and network-storage
-  scenarios.
+  assertions across failed and resumed apply runs for network-storage scenarios.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
   checks for root privilege plus missing, failing, stderr-only, and empty-output

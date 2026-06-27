@@ -163,6 +163,7 @@
           runtimeInputs = [
             diskNix
             pkgs.coreutils
+            pkgs.e2fsprogs
             pkgs.jq
             pkgs.lvm2
             pkgs.util-linux
@@ -1898,6 +1899,9 @@
             ${pkgs.gnugrep}/bin/grep -q 'lvcreate --yes --snapshot' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lvcreate --yes --type cache-pool' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lvconvert --yes --type cache --cachepool' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'mkfs.ext4 -F -q "$origin_path"' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix LVM cache sentinel' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cmp "$sentinel_expected" "$mountpoint/sentinel.txt"' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches:" + $origin + ":set-property:lvm.cache-mode' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lvchange", "--cachemode", "writethrough"' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'vgchange", "--refresh"' ${./scripts/integration-lvm-smoke.sh}
@@ -2353,7 +2357,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'rollback-review behavior' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'operator-only guidance instead of automated unsafe rollback' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'layered block/filesystem' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'cache and network-storage' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'LVM cache data-survival' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'network-storage scenarios' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem' "$checklist"
@@ -2386,6 +2391,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real loop-backed swap label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache property mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'cached-origin ext4 sentinel' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file mode mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device read-only mutation' ${./docs/status.md}
@@ -2399,6 +2405,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'swaps.swapSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'pools.<name>.properties.autotrim' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.properties.lvm.cache-mode' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'cache sentinel survives' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.properties."bcache.cache-mode"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'backingFiles.<path>.properties.mode' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopDevices.<loop>.properties."loop.read-only"' ${./docs/integration-tests.md}

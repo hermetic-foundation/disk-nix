@@ -20,7 +20,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" jq losetup lvchange lvconvert lvcreate lvs pvcreate pvremove pvscan pvs tr truncate vgchange vgcreate vgremove vgscan vgs; do
+for tool in "$disk_nix_bin" cmp findmnt install jq losetup lvchange lvconvert lvcreate lvs mkfs.ext4 mount mountpoint pvcreate pvremove pvscan pvs sync tr truncate umount vgchange vgcreate vgremove vgscan vgs; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -30,8 +30,12 @@ done
 tmpdir="$(mktemp -d)"
 loopdev=""
 vg="disk_nix_lvm_smoke_$$"
+mountpoint="$tmpdir/mnt"
 
 cleanup() {
+  if mountpoint -q "$mountpoint"; then
+    umount "$mountpoint" || true
+  fi
   if vgs "$vg" >/dev/null 2>&1; then
     vgchange --activate n "$vg" >/dev/null 2>&1 || true
     vgremove --force --force --yes "$vg" >/dev/null 2>&1 || true
@@ -51,6 +55,7 @@ spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 property_spec="$tmpdir/property-spec.json"
 property_report="$tmpdir/property-report.json"
+sentinel_expected="$tmpdir/sentinel.expected"
 
 truncate --size 512M "$backing"
 loopdev="$(losetup --find --show "$backing")"
@@ -62,6 +67,14 @@ lvcreate --yes --virtualsize 64M --thinpool "$vg/thinpool" --name thinvol "$vg"
 lvcreate --yes --snapshot --size 32M --name origin_snap "$vg/origin"
 lvcreate --yes --type cache-pool --size 64M --name cachepool "$vg"
 lvconvert --yes --type cache --cachepool "$vg/cachepool" "$vg/origin"
+origin_path="/dev/$vg/origin"
+
+mkfs.ext4 -F -q "$origin_path"
+mkdir -p "$mountpoint"
+mount "$origin_path" "$mountpoint"
+printf 'disk-nix LVM cache sentinel %s\n' "$vg" > "$sentinel_expected"
+install -m 0600 "$sentinel_expected" "$mountpoint/sentinel.txt"
+sync
 
 "$disk_nix_bin" inspect "$vg" --json > "$tmpdir/inspect.json"
 jq -e --arg vg "$vg" '
@@ -106,6 +119,8 @@ if [[ "$(lvs --noheadings -o cache_mode "$vg/origin" | tr -d '[:space:]')" != "w
   echo "LVM cache mode did not match after disk-nix property mutation" >&2
   exit 1
 fi
+cmp "$sentinel_expected" "$mountpoint/sentinel.txt" >/dev/null
+findmnt --target "$mountpoint" >/dev/null
 
 jq -n \
   --arg vg "$vg" \
@@ -179,5 +194,6 @@ lvs --reportformat json "$vg/origin" >/dev/null
 lvs --reportformat json "$vg/thinpool" >/dev/null
 lvs --reportformat json "$vg/thinvol" >/dev/null
 lvs --reportformat json "$vg/origin_snap" >/dev/null
+cmp "$sentinel_expected" "$mountpoint/sentinel.txt" >/dev/null
 
-echo "LVM loop-backed integration smoke test refreshed $vg with cached origin, thin pool, thin volume, and snapshot on $loopdev"
+echo "LVM loop-backed integration smoke test refreshed $vg with cached origin, thin pool, thin volume, snapshot, and cache sentinel on $loopdev"
