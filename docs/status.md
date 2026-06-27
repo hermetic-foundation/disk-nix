@@ -424,6 +424,13 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   replay a declared `rollbackValue`; filesystem grow, scrub, repair, and
   failed-check boundaries emit refused/operator-only recipes because they lack a
   generic data-preserving inverse.
+  Block-stack failed-apply reports also specialize rollback recipes: swap and
+  LUKS identity property failures can replay declared `rollbackValue`,
+  device-mapper rename verification failures can restore the previous mapper
+  name, and LUKS open verification failures can close the opened mapper.
+  Partition growth, LVM growth, MD RAID replacement, loop create, backing-file
+  growth, swap deactivation command failures, and zram generated-state mutation
+  boundaries remain refused/operator-only without stronger topology proof.
   The exec crate also has an integration test proving a failed apply report can
   bind fresh topology evidence and payloads, select a proven-safe rollback
   recipe, run read-only validation plus reversible mutation steps, and emit a

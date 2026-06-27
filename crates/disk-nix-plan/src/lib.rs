@@ -8806,6 +8806,20 @@ fn add_swap_property_actions(
             context: ActionContext {
                 property: Some(property.to_string()),
                 property_value: Some(property_value(value)),
+                rollback_value: metadata_string_field(
+                    swap,
+                    &[
+                        "rollbackValue",
+                        "rollback-value",
+                        "rollback_value",
+                        "previousValue",
+                        "previous-value",
+                        "previous_value",
+                        "preApplyValue",
+                        "pre-apply-value",
+                        "pre_apply_value",
+                    ],
+                ),
                 ..context.clone()
             },
             advice,
@@ -9203,6 +9217,20 @@ fn add_luks_property_actions(
                 property: Some(property.to_string()),
                 property_value: Some(property_value(value)),
                 property_assignments: property_assignments(luks),
+                rollback_value: metadata_string_field(
+                    luks,
+                    &[
+                        "rollbackValue",
+                        "rollback-value",
+                        "rollback_value",
+                        "previousValue",
+                        "previous-value",
+                        "previous_value",
+                        "preApplyValue",
+                        "pre-apply-value",
+                        "pre_apply_value",
+                    ],
+                ),
                 ..ActionContext::default()
             },
             advice,

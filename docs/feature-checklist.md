@@ -400,9 +400,15 @@ Update rules:
   `rollbackValue`, and grow, scrub, repair, and failed-check boundaries emit
   refused/operator-only recipes because they have no generic data-preserving
   inverse.
-- [ ] **Desired:** Proven automatic rollback recipes need block-stack recipes
+- [x] **Finished:** Proven automatic rollback recipes have block-stack recipes
   and fixtures for partition, LUKS, LVM, MD RAID, device-mapper, loop,
-  backing-file, swap, and zram mutations.
+  backing-file, swap, and zram mutation boundaries. Swap and LUKS identity
+  property failures can replay declared `rollbackValue`, device-mapper rename
+  and LUKS open verification failures can replay bounded inverse commands, and
+  partition growth, LVM growth, MD RAID replacement, loop create, backing-file
+  growth, swap deactivation failures, and zram generated-state mutation
+  boundaries emit refused/operator-only recipes unless stronger topology proof
+  is available.
 - [ ] **Desired:** Proven automatic rollback recipes need advanced storage
   recipes and fixtures for ZFS, Btrfs, bcachefs, bcache, LVM cache, VDO, and
   snapshot or clone operations.

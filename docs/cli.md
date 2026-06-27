@@ -827,12 +827,18 @@ can replay declared `rollbackOptions` with
 can replay declared `rollbackValue` with the filesystem-specific
 label/UUID/serial tool. Filesystem grow, scrub, repair, and failed-check
 failures remain refused/operator-only rollback recipes because they have no
-generic data-preserving inverse. Recipes can declare `requiredTopologyEvidence`
-labels such as `expected`, `preApply`, `failedApply`, and `current`; replay
-receipts include `topologyEvidence` IDs and refuse execution when required
-evidence bindings are missing. The execution library materializes deterministic
-evidence IDs from the failed execution report and fresh probe ID unless callers
-provide explicit evidence through
+generic data-preserving inverse. Block-stack failures can also produce
+proven-safe recipes when the report contains deterministic old state: swap and
+LUKS identity property failures can replay declared `rollbackValue`,
+device-mapper rename verification failures can replay `dmsetup rename <new> <old>`, and LUKS open verification failures can replay `cryptsetup close <mapper>`. Partition growth, LVM growth, MD RAID replacement, loop attach
+creation, backing-file growth, swap deactivation command failures, and zram
+generated-state mutation boundaries remain refused/operator-only unless
+stronger topology proof is available. Recipes can declare
+`requiredTopologyEvidence` labels such as `expected`, `preApply`,
+`failedApply`, and `current`; replay receipts include `topologyEvidence` IDs
+and refuse execution when required evidence bindings are missing. The execution
+library materializes deterministic evidence IDs from the failed execution report
+and fresh probe ID unless callers provide explicit evidence through
 `replay_proven_safe_rollback_recipe_with_topology_evidence`.
 `replay_proven_safe_rollback_recipe` handles already-proven recipes; it runs
 read-only validation first, replays only proven-safe reversible mutation steps,

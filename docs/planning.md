@@ -1123,6 +1123,15 @@ recipe may replay with the filesystem-specific property tool. Filesystem grow,
 scrub, repair, and failed-check boundaries are emitted as refused/operator-only
 rollback recipes because they cannot be generically reversed without risking
 data-preserving state.
+Block-stack property declarations use the same `rollbackValue`/`previousValue`
+metadata for supported identity metadata. Swap label/UUID changes and LUKS
+label/subsystem/UUID changes can use that pre-apply value for proven-safe
+rollback replay. Device-mapper rename and LUKS open failures only become
+automatic when the mutation succeeded and verification failed, so the inverse is
+bounded to the new mapper name or opened mapper. Partition, LVM, MD RAID, loop,
+backing-file, swap deactivation, and zram generated-state mutation boundaries
+stay refused/operator-only unless a future domain recipe can prove a
+data-preserving inverse from stronger topology evidence.
 Btrfs subvolume property updates only treat read-only aliases (`readOnly`,
 `readonly`, `ro`, `btrfs.readonly`, and `btrfs.ro`) as safe planned property
 changes. Other Btrfs subvolume property keys are classified as unsupported so

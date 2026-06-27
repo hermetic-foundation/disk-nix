@@ -642,6 +642,9 @@ fn rollback_recipes_for_report(report: &ExecutionReport) -> Vec<RollbackRecipe> 
         if let Some(recipe) = filesystem_rollback_recipe_for_step(partial, rollback_review, step) {
             return vec![recipe];
         }
+        if let Some(recipe) = block_stack_rollback_recipe_for_step(partial, rollback_review, step) {
+            return vec![recipe];
+        }
     }
 
     vec![review_only_rollback_recipe(
@@ -915,6 +918,338 @@ fn filesystem_property_rollback_command(step: &ExecutionStep) -> Option<Executio
         argv,
         true,
         "restore declared pre-apply filesystem property value",
+    ))
+}
+
+fn block_stack_rollback_recipe_for_step(
+    partial: &PartialExecutionRecovery,
+    rollback_review: &RecoveryAction,
+    step: &ExecutionStep,
+) -> Option<RollbackRecipe> {
+    if !block_stack_collection(command_step_collection(step)?) {
+        return None;
+    }
+
+    let validation_commands = rollback_review.commands.clone();
+    let mut recipe = review_only_rollback_recipe(
+        partial,
+        rollback_review,
+        block_stack_rollback_refusal_reasons(step),
+        block_stack_rollback_notes(step),
+    );
+
+    if let Some(command) = block_stack_proven_rollback_command(partial, step) {
+        recipe.status = RollbackRecipeStatus::ProvenSafe;
+        recipe.read_only_validation.notes.push(
+            "block-stack rollback validation must prove stable target identity, old metadata, and active consumer state still match the failed apply receipt".to_string(),
+        );
+        recipe.reversible_mutations = RollbackRecipeSection {
+            commands: vec![command],
+            notes: vec![
+                "block-stack rollback mutation is limited to a declared old metadata value, a verification-bound rename/open/loop attach inverse, or swap reactivation".to_string(),
+                "partition, LVM growth, MD RAID repair, backing-file growth, formatting, creation, destruction, key, token, and replacement boundaries remain refused without stronger domain proof".to_string(),
+            ],
+        };
+        recipe.operator_only_handoff = RollbackRecipeSection {
+            commands: Vec::new(),
+            notes: Vec::new(),
+        };
+        recipe.refusal_reasons = Vec::new();
+        recipe.notes.push(
+            "block-stack recipe is proven-safe only because the rollback command is derived from explicit pre-apply metadata or a failed verification boundary".to_string(),
+        );
+    } else if block_stack_refused_operation(step) {
+        recipe.status = RollbackRecipeStatus::Refused;
+        recipe.operator_only_handoff = RollbackRecipeSection {
+            commands: validation_commands,
+            notes: vec![
+                "block-stack rollback requires operator review of identity, active consumers, redundancy, and data placement before mutation".to_string(),
+                "prefer roll-forward validation, fresh topology inspection, backup/header restore, array repair, replacement capacity, or cloned-device recovery instead of automated mutation".to_string(),
+            ],
+        };
+    }
+
+    Some(recipe)
+}
+
+fn block_stack_collection(collection: &str) -> bool {
+    matches!(
+        collection,
+        "disks"
+            | "partitions"
+            | "luks.devices"
+            | "luksKeyslots"
+            | "luksTokens"
+            | "physicalVolumes"
+            | "volumeGroups"
+            | "volumes"
+            | "thinPools"
+            | "lvmSnapshots"
+            | "mdRaids"
+            | "dmMaps"
+            | "loopDevices"
+            | "backingFiles"
+            | "swaps"
+            | "zram"
+    )
+}
+
+fn block_stack_refused_operation(step: &ExecutionStep) -> bool {
+    matches!(
+        step.operation,
+        Operation::AddDevice
+            | Operation::AddKey
+            | Operation::Assemble
+            | Operation::Attach
+            | Operation::Close
+            | Operation::Create
+            | Operation::Deactivate
+            | Operation::Destroy
+            | Operation::Detach
+            | Operation::Export
+            | Operation::Format
+            | Operation::Grow
+            | Operation::Import
+            | Operation::ImportToken
+            | Operation::RemoveDevice
+            | Operation::RemoveKey
+            | Operation::RemoveToken
+            | Operation::ReplaceDevice
+            | Operation::Rollback
+            | Operation::SetProperty
+            | Operation::Stop
+    )
+}
+
+fn block_stack_rollback_refusal_reasons(step: &ExecutionStep) -> Vec<String> {
+    let collection = command_step_collection(step).unwrap_or("block-stack");
+    match (collection, step.operation) {
+        ("swaps", Operation::SetProperty) | ("luks.devices", Operation::SetProperty) => vec![
+            "block-stack property rollback metadata is missing or insufficient for proven-safe replay".to_string(),
+        ],
+        ("dmMaps", Operation::Rename) => vec![
+            "device-mapper rename rollback requires the verification-failed new name and declared previous name".to_string(),
+        ],
+        ("luks.devices", Operation::Open) => vec![
+            "LUKS open rollback is only automatic when the open command succeeded and verification failed".to_string(),
+        ],
+        ("loopDevices", Operation::Create) => vec![
+            "loop attach rollback is only automatic when the attach command succeeded and verification failed".to_string(),
+        ],
+        ("swaps", Operation::Deactivate) => vec![
+            "swap deactivation rollback is only automatic when swapoff succeeded and verification failed".to_string(),
+        ],
+        ("partitions" | "disks", Operation::Create | Operation::Grow | Operation::Format) => {
+            vec![
+                "disk and partition rollback is refused because table and geometry changes have no generic data-preserving inverse".to_string(),
+            ]
+        }
+        ("physicalVolumes" | "volumeGroups" | "volumes" | "thinPools" | "lvmSnapshots", _) => {
+            vec![
+                "LVM rollback is refused without volume metadata backups, activation state, and current consumer proof".to_string(),
+            ]
+        }
+        ("mdRaids", _) => vec![
+            "MD RAID rollback is refused without fresh array health, redundancy, and member role proof".to_string(),
+        ],
+        ("backingFiles", Operation::Create | Operation::Grow | Operation::Destroy) => vec![
+            "backing-file rollback is refused because sparse allocation, truncation, and consumers require operator review".to_string(),
+        ],
+        ("zram", _) => vec![
+            "zram rollback is refused because live compressed swap state is reconciled through NixOS service settings".to_string(),
+        ],
+        ("luks.devices" | "luksKeyslots" | "luksTokens", _) => vec![
+            "LUKS rollback is refused without header backup, keyslot, token, mapper, and consumer proof".to_string(),
+        ],
+        ("swaps", Operation::Grow | Operation::Format | Operation::Destroy) => vec![
+            "swap rollback is refused for grow, format, and signature removal because previous content and active memory pressure must be reviewed".to_string(),
+        ],
+        _ => vec!["block-stack rollback for this operation remains review-only".to_string()],
+    }
+}
+
+fn block_stack_rollback_notes(step: &ExecutionStep) -> Vec<String> {
+    let collection = command_step_collection(step).unwrap_or("block-stack");
+    let boundary = match (collection, step.operation) {
+        ("disks" | "partitions", _) => "disk/partition",
+        ("luks.devices" | "luksKeyslots" | "luksTokens", _) => "LUKS",
+        ("physicalVolumes" | "volumeGroups" | "volumes" | "thinPools" | "lvmSnapshots", _) => "LVM",
+        ("mdRaids", _) => "MD RAID",
+        ("dmMaps", _) => "device-mapper",
+        ("loopDevices", _) => "loop-device",
+        ("backingFiles", _) => "backing-file",
+        ("swaps", _) => "swap",
+        ("zram", _) => "zram",
+        _ => "block-stack",
+    };
+    vec![
+        format!("block-stack rollback recipe covers the {boundary} boundary"),
+        "read-only validation must be bound to expected, pre-apply, failed-apply, and current topology evidence".to_string(),
+    ]
+}
+
+fn block_stack_proven_rollback_command(
+    partial: &PartialExecutionRecovery,
+    step: &ExecutionStep,
+) -> Option<ExecutionCommand> {
+    let collection = command_step_collection(step)?;
+    match (collection, step.operation) {
+        ("swaps", Operation::SetProperty) => swap_property_rollback_command(step),
+        ("luks.devices", Operation::SetProperty) => luks_property_rollback_command(step),
+        ("dmMaps", Operation::Rename) if partial.failed_phase == ExecutionPhase::Verification => {
+            dm_rename_verification_rollback_command(step)
+        }
+        ("luks.devices", Operation::Open)
+            if partial.failed_phase == ExecutionPhase::Verification =>
+        {
+            luks_open_verification_rollback_command(step)
+        }
+        ("loopDevices", Operation::Create)
+            if partial.failed_phase == ExecutionPhase::Verification =>
+        {
+            loop_attach_verification_rollback_command(step)
+        }
+        ("swaps", Operation::Deactivate)
+            if partial.failed_phase == ExecutionPhase::Verification =>
+        {
+            swap_deactivate_verification_rollback_command(step)
+        }
+        _ => None,
+    }
+}
+
+fn swap_property_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_value = step_note_value(step, "rollback-value")?;
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let argv = match rollback_command.argv.as_slice() {
+        [tool, flag, _, target] if tool == "swaplabel" && flag == "--label" => vec![
+            "swaplabel".to_string(),
+            "--label".to_string(),
+            rollback_value.to_string(),
+            target.clone(),
+        ],
+        [tool, flag, _, target] if tool == "swaplabel" && flag == "--uuid" => vec![
+            "swaplabel".to_string(),
+            "--uuid".to_string(),
+            rollback_value.to_string(),
+            target.clone(),
+        ],
+        _ => return None,
+    };
+    Some(command_vec(
+        argv,
+        true,
+        "restore declared pre-apply swap signature metadata",
+    ))
+}
+
+fn luks_property_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_value = step_note_value(step, "rollback-value")?;
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let argv = match rollback_command.argv.as_slice() {
+        [tool, subcommand, device, flag, _]
+            if tool == "cryptsetup"
+                && subcommand == "config"
+                && (flag == "--label" || flag == "--subsystem") =>
+        {
+            vec![
+                "cryptsetup".to_string(),
+                "config".to_string(),
+                device.clone(),
+                flag.clone(),
+                rollback_value.to_string(),
+            ]
+        }
+        [tool, subcommand, device, flag, _]
+            if tool == "cryptsetup" && subcommand == "luksUUID" && flag == "--uuid" =>
+        {
+            vec![
+                "cryptsetup".to_string(),
+                "luksUUID".to_string(),
+                device.clone(),
+                "--uuid".to_string(),
+                rollback_value.to_string(),
+            ]
+        }
+        _ => return None,
+    };
+    Some(command_vec(
+        argv,
+        true,
+        "restore declared pre-apply LUKS header identity metadata",
+    ))
+}
+
+fn dm_rename_verification_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let [tool, subcommand, old_name, new_name] = rollback_command.argv.as_slice() else {
+        return None;
+    };
+    if tool != "dmsetup" || subcommand != "rename" {
+        return None;
+    }
+    let rollback_name = step_note_value(step, "rollback-value").unwrap_or(old_name);
+    Some(command_vec(
+        vec![
+            "dmsetup".to_string(),
+            "rename".to_string(),
+            new_name.clone(),
+            rollback_name.to_string(),
+        ],
+        true,
+        "restore declared pre-apply device-mapper name after failed rename verification",
+    ))
+}
+
+fn luks_open_verification_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let [tool, subcommand, _, mapper] = rollback_command.argv.as_slice() else {
+        return None;
+    };
+    if tool != "cryptsetup" || subcommand != "open" {
+        return None;
+    }
+    Some(command_vec(
+        vec![
+            "cryptsetup".to_string(),
+            "close".to_string(),
+            mapper.clone(),
+        ],
+        true,
+        "close LUKS mapper opened by the failed apply after read-only validation",
+    ))
+}
+
+fn loop_attach_verification_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let tool = rollback_command.argv.first()?;
+    if tool != "losetup" {
+        return None;
+    }
+    let loop_device = command_step_target(step)?;
+    Some(command_vec(
+        vec![
+            "losetup".to_string(),
+            "-d".to_string(),
+            loop_device.to_string(),
+        ],
+        true,
+        "detach loop device attached by the failed apply after read-only validation",
+    ))
+}
+
+fn swap_deactivate_verification_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let [tool, target] = rollback_command.argv.as_slice() else {
+        return None;
+    };
+    if tool != "swapoff" {
+        return None;
+    }
+    Some(command_vec(
+        vec!["swapon".to_string(), target.clone()],
+        true,
+        "reactivate swap target disabled by the failed apply after read-only validation",
     ))
 }
 
@@ -32202,6 +32537,514 @@ mod tests {
                     .any(|note| note.contains("operator review"))
             );
         }
+    }
+
+    #[test]
+    fn block_stack_property_failures_emit_proven_safe_rollback_recipes() {
+        for (case, spec, failed_command, expected_rollback) in [
+            (
+                "swap label",
+                br#"{
+                  "spec": {
+                    "swaps": {
+                      "primary": {
+                        "device": "/dev/disk/by-label/swap-old",
+                        "rollbackValue": "swap-old",
+                        "properties": {
+                          "label": "swap-new"
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "swaplabel".to_string(),
+                    "--label".to_string(),
+                    "swap-new".to_string(),
+                    "/dev/disk/by-label/swap-old".to_string(),
+                ],
+                vec![
+                    "swaplabel".to_string(),
+                    "--label".to_string(),
+                    "swap-old".to_string(),
+                    "/dev/disk/by-label/swap-old".to_string(),
+                ],
+            ),
+            (
+                "LUKS label",
+                br#"{
+                  "spec": {
+                    "luks": {
+                      "devices": {
+                        "cryptroot": {
+                          "device": "/dev/disk/by-id/root-luks",
+                          "target": "cryptroot",
+                          "rollbackValue": "root-old",
+                          "properties": {
+                            "label": "root-new"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true,
+                    "allowPropertyChanges": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "cryptsetup".to_string(),
+                    "config".to_string(),
+                    "/dev/disk/by-id/root-luks".to_string(),
+                    "--label".to_string(),
+                    "root-new".to_string(),
+                ],
+                vec![
+                    "cryptsetup".to_string(),
+                    "config".to_string(),
+                    "/dev/disk/by-id/root-luks".to_string(),
+                    "--label".to_string(),
+                    "root-old".to_string(),
+                ],
+            ),
+        ] {
+            let (plan, policy) = plan_and_policy_from_json_bytes(spec).expect("document parses");
+            let report = prepare_execution_with_runner_and_tool_checker(
+                &plan,
+                policy,
+                ExecutionMode::Execute,
+                |argv| CommandRunResult {
+                    success: argv != failed_command.as_slice(),
+                    status_code: Some(if argv == failed_command.as_slice() {
+                        12
+                    } else {
+                        0
+                    }),
+                    stdout: String::new(),
+                    stderr: if argv == failed_command.as_slice() {
+                        format!("{case} failed")
+                    } else {
+                        String::new()
+                    },
+                },
+                |_| true,
+            );
+
+            assert_eq!(report.status, ExecutionStatus::Failed, "{case}");
+            let recipe = report
+                .rollback_recipes
+                .first()
+                .unwrap_or_else(|| panic!("{case} rollback recipe is reported"));
+            assert_eq!(recipe.status, RollbackRecipeStatus::ProvenSafe, "{case}");
+            assert_eq!(
+                recipe.reversible_mutations.commands[0].argv, expected_rollback,
+                "{case}"
+            );
+
+            let replay = replay_proven_safe_rollback_recipe_with_runner(
+                &report,
+                0,
+                "receipt:block-stack-property".to_string(),
+                "topology:block-stack-property".to_string(),
+                &mut |_| CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                },
+            );
+            assert_eq!(
+                replay.status,
+                RollbackExecutionStatus::Succeeded,
+                "{case}: {:?}",
+                replay.refusal_reasons
+            );
+        }
+    }
+
+    #[test]
+    fn block_stack_verification_failures_emit_proven_safe_rollback_recipes() {
+        for (case, spec, failed_verification, expected_rollback) in [
+            (
+                "device-mapper rename",
+                br#"{
+                  "spec": {
+                    "dmMaps": {
+                      "crypt-old": {
+                        "operation": "rename",
+                        "target": "/dev/mapper/crypt-old",
+                        "renameTo": "crypt-new",
+                        "rollbackValue": "crypt-old"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "dmsetup".to_string(),
+                    "info".to_string(),
+                    "-c".to_string(),
+                    "--noheadings".to_string(),
+                    "-o".to_string(),
+                    "name,uuid,major,minor,open,segments,events".to_string(),
+                    "/dev/mapper/crypt-new".to_string(),
+                ],
+                vec![
+                    "dmsetup".to_string(),
+                    "rename".to_string(),
+                    "crypt-new".to_string(),
+                    "crypt-old".to_string(),
+                ],
+            ),
+            (
+                "LUKS open",
+                br#"{
+                  "spec": {
+                    "luks": {
+                      "devices": {
+                        "cryptroot": {
+                          "operation": "open",
+                          "device": "/dev/disk/by-id/root-luks",
+                          "target": "cryptroot"
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "cryptsetup".to_string(),
+                    "status".to_string(),
+                    "cryptroot".to_string(),
+                ],
+                vec![
+                    "cryptsetup".to_string(),
+                    "close".to_string(),
+                    "cryptroot".to_string(),
+                ],
+            ),
+        ] {
+            let (plan, policy) = plan_and_policy_from_json_bytes(spec).expect("document parses");
+            let report = prepare_execution_with_runner_and_tool_checker(
+                &plan,
+                policy,
+                ExecutionMode::Execute,
+                |argv| CommandRunResult {
+                    success: argv != failed_verification.as_slice(),
+                    status_code: Some(if argv == failed_verification.as_slice() {
+                        13
+                    } else {
+                        0
+                    }),
+                    stdout: String::new(),
+                    stderr: if argv == failed_verification.as_slice() {
+                        format!("{case} verification failed")
+                    } else {
+                        String::new()
+                    },
+                },
+                |_| true,
+            );
+
+            assert_eq!(report.status, ExecutionStatus::Failed, "{case}");
+            let recipe = report
+                .rollback_recipes
+                .first()
+                .unwrap_or_else(|| panic!("{case} rollback recipe is reported"));
+            assert_eq!(recipe.status, RollbackRecipeStatus::ProvenSafe, "{case}");
+            assert_eq!(
+                recipe.reversible_mutations.commands[0].argv, expected_rollback,
+                "{case}"
+            );
+
+            let replay = replay_proven_safe_rollback_recipe_with_runner(
+                &report,
+                0,
+                "receipt:block-stack-verification".to_string(),
+                "topology:block-stack-verification".to_string(),
+                &mut |_| CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                },
+            );
+            assert_eq!(
+                replay.status,
+                RollbackExecutionStatus::Succeeded,
+                "{case}: {:?}",
+                replay.refusal_reasons
+            );
+        }
+    }
+
+    #[test]
+    fn block_stack_refused_boundaries_emit_operator_only_rollback_recipes() {
+        for (boundary, spec, failed_command, reason_fragment) in [
+            (
+                "partition grow",
+                br#"{
+                  "spec": {
+                    "partitions": {
+                      "root": {
+                        "operation": "grow",
+                        "device": "/dev/disk/by-id/nvme-root",
+                        "target": "/dev/disk/by-id/nvme-root-part2",
+                        "partitionNumber": 2,
+                        "end": "100%"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true,
+                    "allowGrow": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "parted".to_string(),
+                    "-s".to_string(),
+                    "/dev/disk/by-id/nvme-root".to_string(),
+                    "resizepart".to_string(),
+                    "2".to_string(),
+                    "100%".to_string(),
+                ],
+                "partition rollback is refused",
+            ),
+            (
+                "LVM grow",
+                br#"{
+                  "spec": {
+                    "volumes": {
+                      "vg0/root": {
+                        "operation": "grow",
+                        "target": "vg0/root",
+                        "desiredSize": "64GiB"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowGrow": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "lvextend".to_string(),
+                    "--resizefs".to_string(),
+                    "--size".to_string(),
+                    "64GiB".to_string(),
+                    "vg0/root".to_string(),
+                ],
+                "LVM rollback is refused",
+            ),
+            (
+                "MD RAID replace",
+                br#"{
+                  "spec": {
+                    "mdRaids": {
+                      "root": {
+                        "target": "/dev/md/root",
+                        "replaceDevices": {
+                          "/dev/disk/by-id/old-md-member": "/dev/disk/by-id/new-md-member"
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "mdadm".to_string(),
+                    "/dev/md/root".to_string(),
+                    "--replace".to_string(),
+                    "/dev/disk/by-id/old-md-member".to_string(),
+                    "--with".to_string(),
+                    "/dev/disk/by-id/new-md-member".to_string(),
+                ],
+                "MD RAID rollback is refused",
+            ),
+            (
+                "swap deactivate",
+                br#"{
+                  "spec": {
+                    "swaps": {
+                      "retired": {
+                        "operation": "deactivate",
+                        "device": "/dev/disk/by-label/swap-retired"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "swapoff".to_string(),
+                    "/dev/disk/by-label/swap-retired".to_string(),
+                ],
+                "swap deactivation rollback",
+            ),
+            (
+                "loop create",
+                br#"{
+                  "spec": {
+                    "loopDevices": {
+                      "loop0": {
+                        "operation": "create",
+                        "target": "/dev/loop10",
+                        "source": "/var/lib/images/root.img"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "losetup".to_string(),
+                    "/dev/loop10".to_string(),
+                    "/var/lib/images/root.img".to_string(),
+                ],
+                "loop attach rollback",
+            ),
+            (
+                "backing-file grow",
+                br#"{
+                  "spec": {
+                    "backingFiles": {
+                      "/var/lib/images/root.img": {
+                        "operation": "grow",
+                        "desiredSize": "16GiB"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowGrow": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "truncate".to_string(),
+                    "--size".to_string(),
+                    "16GiB".to_string(),
+                    "/var/lib/images/root.img".to_string(),
+                ],
+                "backing-file rollback is refused",
+            ),
+        ] {
+            let (plan, policy) = plan_and_policy_from_json_bytes(spec).expect("document parses");
+            let report = prepare_execution_with_runner_and_tool_checker(
+                &plan,
+                policy,
+                ExecutionMode::Execute,
+                |argv| CommandRunResult {
+                    success: argv != failed_command.as_slice(),
+                    status_code: Some(if argv == failed_command.as_slice() {
+                        14
+                    } else {
+                        0
+                    }),
+                    stdout: String::new(),
+                    stderr: if argv == failed_command.as_slice() {
+                        format!("{boundary} failed")
+                    } else {
+                        String::new()
+                    },
+                },
+                |_| true,
+            );
+
+            assert_eq!(report.status, ExecutionStatus::Failed, "{boundary}");
+            let recipe = report
+                .rollback_recipes
+                .first()
+                .unwrap_or_else(|| panic!("{boundary} rollback recipe should be reported"));
+            assert_eq!(recipe.status, RollbackRecipeStatus::Refused, "{boundary}");
+            assert!(
+                recipe.reversible_mutations.commands.is_empty(),
+                "{boundary} should not emit automatic rollback mutation"
+            );
+            assert!(
+                recipe
+                    .operator_only_handoff
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("operator review")),
+                "{boundary} should hand off to operator review"
+            );
+            assert!(
+                recipe
+                    .refusal_reasons
+                    .iter()
+                    .any(|reason| reason.contains(reason_fragment)),
+                "{boundary} should explain refusal"
+            );
+        }
+    }
+
+    #[test]
+    fn block_stack_zram_boundary_emits_refused_rollback_recipe() {
+        let partial = PartialExecutionRecovery {
+            completed_action_ids: Vec::new(),
+            failed_action_id: "zram:set-property:algorithm".to_string(),
+            failed_phase: ExecutionPhase::Command,
+            failed_command: vec![
+                "zramctl".to_string(),
+                "--algorithm".to_string(),
+                "zstd".to_string(),
+                "/dev/zram0".to_string(),
+            ],
+            retry_review_action_ids: vec!["zram:set-property:algorithm".to_string()],
+            remaining_action_ids: Vec::new(),
+            completed_mutating_command_count: 0,
+            notes: Vec::new(),
+        };
+        let rollback_review = RecoveryAction {
+            kind: RecoveryActionKind::RollbackReview,
+            summary: "review zram rollback preconditions".to_string(),
+            commands: vec![command(
+                ["disk-nix", "zram", "--json"],
+                false,
+                "inspect generated zram state before rollback review",
+            )],
+            notes: vec!["read-only zram rollback review".to_string()],
+        };
+        let step = ExecutionStep {
+            action_id: "zram:set-property:algorithm".to_string(),
+            operation: Operation::SetProperty,
+            risk: RiskClass::OfflineRequired,
+            requires_manual_review: false,
+            commands: vec![command(
+                ["zramctl", "--algorithm", "zstd", "/dev/zram0"],
+                true,
+                "test zram property mutation boundary",
+            )],
+            notes: Vec::new(),
+        };
+
+        let recipe = block_stack_rollback_recipe_for_step(&partial, &rollback_review, &step)
+            .expect("zram boundary is handled by block-stack rollback recipes");
+
+        assert_eq!(recipe.status, RollbackRecipeStatus::Refused);
+        assert!(recipe.reversible_mutations.commands.is_empty());
+        assert!(
+            recipe
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("zram rollback is refused"))
+        );
+        assert!(
+            recipe
+                .operator_only_handoff
+                .notes
+                .iter()
+                .any(|note| note.contains("operator review"))
+        );
     }
 
     #[test]
