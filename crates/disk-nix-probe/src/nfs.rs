@@ -272,6 +272,28 @@ storage.example:/export/home mounted on /home:
 /srv/read-only 198.51.100.10(ro,sync,no_subtree_check,fsid=12)
 "#;
 
+    const NFS_COMPLEX_MOUNTS: &[u8] = br#"
+nas-ref.example:/referrals/projects mounted on /mnt/referral:
+   Flags: rw,relatime,vers=4.2,minorversion=2,proto=tcp,sec=krb5i,clientaddr=10.44.0.20,addr=10.44.0.10,port=2049,local_lock=none,lookupcache=positive,referral=true,replicas=nas-a:/exports/projects;nas-b:/exports/projects
+   Options: pnfs,layout=nfs4-files,max_connect=4,migration=enabled
+   Age: 10
+nas-ref.example:/exports/projects mounted on /mnt/referral:
+   Flags: ro,relatime,vers=4.2,minorversion=2,proto=tcp,sec=krb5p,clientaddr=10.44.0.20,addr=10.44.0.10,port=2049,local_lock=none,lookupcache=none,noac
+   Options: remount,lookupcache=none,sec=krb5p
+   Age: 42
+nas-pnfs.example:/exports/media mounted on /mnt/media:
+   Flags: rw,relatime,vers=4.1,minorversion=1,proto=tcp,sec=sys,clientaddr=10.44.0.21,addr=10.44.0.12,port=2049,local_lock=none
+   Options: pnfs,layout=flexfiles,dsaddr=10.44.1.10,dsaddr2=10.44.1.11
+   Age: 77
+"#;
+
+    const NFS_COMPLEX_EXPORTS: &[u8] = br#"
+/exports/projects
+        10.44.0.0/16(rw,sync,no_subtree_check,sec=krb5i,fsid=101,refer,replicas=nas-a:/exports/projects:nas-b:/exports/projects)
+        10.44.0.0/16(ro,sync,no_subtree_check,sec=krb5p,fsid=101,crossmnt)
+/exports/media *(rw,async,no_subtree_check,sec=sys,pnfs,fsid=202)
+"#;
+
     #[test]
     fn normalizes_nfsstat_mount_metadata() {
         let graph = normalize_nfsstat_mounts(NFSSTAT).expect("fixture should parse");
@@ -403,5 +425,154 @@ storage.example:/export/home mounted on /home:
                     property.key == "nfs.export-option-ro" && property.value == "true"
                 })
         }));
+    }
+
+    #[test]
+    fn normalizes_referral_pnfs_remount_and_export_reload_fixture() {
+        let mut graph = StorageGraph::empty();
+        merge_test_graph(
+            &mut graph,
+            normalize_nfsstat_mounts(NFS_COMPLEX_MOUNTS)
+                .expect("complex NFS mount fixture should parse"),
+        );
+        merge_test_graph(
+            &mut graph,
+            normalize_exportfs_verbose(NFS_COMPLEX_EXPORTS)
+                .expect("complex NFS export fixture should parse"),
+        );
+
+        let remounted = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "mount:/mnt/referral")
+            .expect("merged referral/remount node should exist");
+        assert_eq!(remounted.kind, NodeKind::NfsMount);
+        assert!(remounted.properties.iter().any(|property| {
+            property.key == "nfs.source" && property.value == "nas-ref.example:/referrals/projects"
+        }));
+        assert!(remounted.properties.iter().any(|property| {
+            property.key == "nfs.source" && property.value == "nas-ref.example:/exports/projects"
+        }));
+        assert!(
+            remounted
+                .properties
+                .iter()
+                .any(|property| { property.key == "nfs.sec" && property.value == "krb5i" })
+        );
+        assert!(
+            remounted
+                .properties
+                .iter()
+                .any(|property| { property.key == "nfs.sec" && property.value == "krb5p" })
+        );
+        assert!(
+            remounted
+                .properties
+                .iter()
+                .any(|property| property.key == "nfs.referral" && property.value == "true")
+        );
+        assert!(
+            remounted
+                .properties
+                .iter()
+                .any(|property| property.key == "nfs.pnfs" && property.value == "true")
+        );
+        assert!(
+            remounted
+                .properties
+                .iter()
+                .any(|property| { property.key == "nfs.remount" && property.value == "true" })
+        );
+        assert!(
+            remounted.properties.iter().any(|property| {
+                property.key == "nfs.lookupcache" && property.value == "positive"
+            })
+        );
+        assert!(
+            remounted
+                .properties
+                .iter()
+                .any(|property| { property.key == "nfs.lookupcache" && property.value == "none" })
+        );
+        assert!(
+            remounted
+                .properties
+                .iter()
+                .any(|property| property.key == "nfs.noac" && property.value == "true")
+        );
+
+        let pnfs = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "mount:/mnt/media")
+            .expect("pNFS media mount should exist");
+        assert!(
+            pnfs.properties
+                .iter()
+                .any(|property| { property.key == "nfs.layout" && property.value == "flexfiles" })
+        );
+        assert!(
+            pnfs.properties
+                .iter()
+                .any(|property| property.key == "nfs.dsaddr" && property.value == "10.44.1.10")
+        );
+        assert!(
+            pnfs.properties
+                .iter()
+                .any(|property| property.key == "nfs.dsaddr2" && property.value == "10.44.1.11")
+        );
+
+        let reloaded_export = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nfs-export:/exports/projects:10.44.0.0/16")
+            .expect("merged export reload node should exist");
+        assert!(reloaded_export.properties.iter().any(|property| {
+            property.key == "nfs.export-option-rw" && property.value == "true"
+        }));
+        assert!(reloaded_export.properties.iter().any(|property| {
+            property.key == "nfs.export-option-ro" && property.value == "true"
+        }));
+        assert!(reloaded_export.properties.iter().any(|property| {
+            property.key == "nfs.export-option-sec" && property.value == "krb5i"
+        }));
+        assert!(reloaded_export.properties.iter().any(|property| {
+            property.key == "nfs.export-option-sec" && property.value == "krb5p"
+        }));
+        assert!(reloaded_export.properties.iter().any(|property| {
+            property.key == "nfs.export-option-refer" && property.value == "true"
+        }));
+        assert!(reloaded_export.properties.iter().any(|property| {
+            property.key == "nfs.export-option-crossmnt" && property.value == "true"
+        }));
+
+        let pnfs_export = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nfs-export:/exports/media:*")
+            .expect("pNFS export should exist");
+        assert!(pnfs_export.properties.iter().any(|property| {
+            property.key == "nfs.export-option-pnfs" && property.value == "true"
+        }));
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to.0 == "mount:/mnt/referral"
+                        && edge.relationship == Relationship::MountedAt
+                })
+                .count(),
+            2
+        );
+    }
+
+    fn merge_test_graph(graph: &mut StorageGraph, other: StorageGraph) {
+        for node in other.nodes {
+            graph.add_node(node);
+        }
+        for edge in other.edges {
+            graph.add_edge(edge);
+        }
     }
 }

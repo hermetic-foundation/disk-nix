@@ -122,9 +122,9 @@ Update rules:
 - [x] **Finished:** Real-world iSCSI fixture coverage includes multi-portal
   sessions, mutual CHAP, discovery authentication, replacement LUN identity
   changes, and logout/login churn.
-- [ ] **Partial:** Real-world fixture coverage still needs additional
-  server/client NFS samples for NFSv4 referrals, pNFS, export reload behavior,
-  client remount drift, and Kerberos policy variants.
+- [x] **Finished:** Real-world server/client NFS fixture coverage includes
+  NFSv4 referrals, pNFS, export reload behavior, client remount drift, and
+  Kerberos policy variants.
 - [ ] **Partial:** Real-world fixture coverage still needs additional
   clustered storage samples for clustered LVM, shared VG locking, remote LV
   activity, and split-brain or lock-manager failure states.

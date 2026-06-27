@@ -220,7 +220,9 @@ The current probe layer normalizes:
   transport, port/mount address, transfer sizes, timeout/retransmit settings,
   local locking, lookup cache, FS-Cache, capability flags, transfer
   multipliers, directory transfer/block sizing, RPC security flavor
-  identifiers, age, and mount options
+  identifiers, age, mount options, NFSv4 referral replicas, pNFS layout and
+  data-server hints, client remount drift, export reload policy drift, and
+  Kerberos policy variants
 - MD RAID arrays through `/proc/mdstat`, `mdadm --detail --scan`,
   `mdadm --examine --scan`, and `mdadm --detail <array>` for scan-level array
   UUID, metadata version, array name, spare count, member device hints, array

@@ -2180,8 +2180,13 @@
             ${pkgs.gnugrep}/bin/grep -q 'uuid.aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Real-world server/client NFS fixture coverage' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'client remount drift' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'pNFS layout and' ${./docs/storage-scope.md}
             ${pkgs.gnugrep}/bin/grep -q 'nfs_server_client_fixture_merges_mount_usage_and_export_policy' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'nfs.export-option-sec", "krb5p' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'normalizes_referral_pnfs_remount_and_export_reload_fixture' ${./crates/disk-nix-probe/src/nfs.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'nfs.export-option-pnfs' ${./crates/disk-nix-probe/src/nfs.rs}
             ${pkgs.gnugrep}/bin/grep -q 'SAS enclosure fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'stressed VDO fixture' ${./docs/status.md}
