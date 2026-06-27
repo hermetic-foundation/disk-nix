@@ -823,8 +823,8 @@ automatic rollback step safe. The execution library exposes
 `replay_proven_safe_rollback_recipe` for already-proven recipes; it runs
 read-only validation first, replays only proven-safe reversible mutation steps,
 binds the replay report to the original receipt and fresh topology probe, and
-refuses review-only, destructive, operator-only, not-ready, or unbound recipes
-before executing commands.
+refuses review-only, destructive, operator-only, not-ready, unbound, or
+missing-tool recipes before executing commands.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

@@ -681,21 +681,41 @@ pub fn replay_proven_safe_rollback_recipe(
     fresh_topology_probe_id: impl Into<String>,
 ) -> RollbackExecutionReport {
     let mut runner = run_command;
-    replay_proven_safe_rollback_recipe_with_runner(
+    replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
         failed_report,
         recipe_index,
         original_receipt_id.into(),
         fresh_topology_probe_id.into(),
         &mut runner,
+        command_exists,
     )
 }
 
+#[cfg(test)]
 fn replay_proven_safe_rollback_recipe_with_runner(
     failed_report: &ExecutionReport,
     recipe_index: usize,
     original_receipt_id: String,
     fresh_topology_probe_id: String,
     runner: &mut impl FnMut(&[String]) -> CommandRunResult,
+) -> RollbackExecutionReport {
+    replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
+        failed_report,
+        recipe_index,
+        original_receipt_id,
+        fresh_topology_probe_id,
+        runner,
+        |_| true,
+    )
+}
+
+fn replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
+    failed_report: &ExecutionReport,
+    recipe_index: usize,
+    original_receipt_id: String,
+    fresh_topology_probe_id: String,
+    runner: &mut impl FnMut(&[String]) -> CommandRunResult,
+    tool_exists: impl Fn(&str) -> bool,
 ) -> RollbackExecutionReport {
     let Some(recipe) = failed_report.rollback_recipes.get(recipe_index) else {
         return refused_rollback_report(
@@ -713,6 +733,7 @@ fn replay_proven_safe_rollback_recipe_with_runner(
         recipe,
         &original_receipt_id,
         &fresh_topology_probe_id,
+        tool_exists,
     );
     if !refusal_reasons.is_empty() {
         refusal_reasons.extend(recipe.refusal_reasons.iter().cloned());
@@ -812,6 +833,7 @@ fn proven_safe_rollback_refusal_reasons(
     recipe: &RollbackRecipe,
     original_receipt_id: &str,
     fresh_topology_probe_id: &str,
+    tool_exists: impl Fn(&str) -> bool,
 ) -> Vec<String> {
     let mut reasons = Vec::new();
 
@@ -835,6 +857,13 @@ fn proven_safe_rollback_refusal_reasons(
     }
     if recipe.reversible_mutations.commands.is_empty() {
         reasons.push("rollback recipe has no proven-safe reversible mutation steps".to_string());
+    }
+    let missing_tools = missing_rollback_replay_tools(recipe, tool_exists);
+    if !missing_tools.is_empty() {
+        reasons.push(format!(
+            "automatic rollback replay refuses missing required tool(s): {}",
+            missing_tools.join(", ")
+        ));
     }
 
     for command in &recipe.read_only_validation.commands {
@@ -867,6 +896,27 @@ fn proven_safe_rollback_refusal_reasons(
     }
 
     reasons
+}
+
+fn missing_rollback_replay_tools(
+    recipe: &RollbackRecipe,
+    tool_exists: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    let mut tools = BTreeSet::new();
+    for command in recipe
+        .read_only_validation
+        .commands
+        .iter()
+        .chain(recipe.reversible_mutations.commands.iter())
+    {
+        if let Some(tool) = command.argv.first().filter(|tool| !tool.starts_with('<')) {
+            tools.insert(tool.clone());
+        }
+    }
+    tools
+        .into_iter()
+        .filter(|tool| !tool_exists(tool))
+        .collect()
 }
 
 fn refused_rollback_report(
@@ -28566,6 +28616,41 @@ mod tests {
                 .refusal_reasons
                 .iter()
                 .any(|reason| reason.contains("fresh post-failure topology probe binding"))
+        );
+    }
+
+    #[test]
+    fn rollback_replay_refuses_missing_tools_before_running_commands() {
+        let mut report = failed_report_for_rollback_replay();
+        report.rollback_recipes = vec![proven_safe_rollback_recipe()];
+        let mut calls = Vec::new();
+
+        let replay = replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
+            &report,
+            0,
+            "receipt:apply-123".to_string(),
+            "topology:fresh-456".to_string(),
+            &mut |argv| {
+                calls.push(argv.to_vec());
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+            |tool| tool != "disk-nix-test-rollback",
+        );
+
+        assert_eq!(replay.status, RollbackExecutionStatus::Refused);
+        assert!(calls.is_empty());
+        assert!(replay.validation_results.is_empty());
+        assert!(replay.rollback_results.is_empty());
+        assert!(
+            replay
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("missing required tool(s): disk-nix-test-rollback"))
         );
     }
 

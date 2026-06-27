@@ -205,8 +205,11 @@ Update rules:
 - [ ] **Desired:** Automatic rollback needs refusal behavior for active
   consumers, mounted filesystems, exported LUNs, open encrypted mappings, and
   other live-use blockers.
-- [ ] **Desired:** Automatic rollback needs refusal behavior for missing tools
-  and any path with plausible data-loss risk.
+- [x] **Finished:** Automatic rollback replay refuses missing required tools
+  before running read-only validation or reversible mutation commands.
+- [ ] **Desired:** Automatic rollback needs refusal behavior for any path with
+  plausible data-loss risk beyond already-refused destructive and operator-only
+  recipe sections.
 
 ## Lifecycle operations
 
