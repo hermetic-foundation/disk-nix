@@ -220,7 +220,10 @@ merged degraded-MD-with-LUKS stack covering recovering array state, failed membe
 metadata, active encrypted mapper status, backing edges, and LUKS header
 metadata, plus a clustered LVM over NVMe-oF fixture covering shared/clustered
 VG metadata, sanlock lock hints, remote LV activity, NVMe fabrics controller
-paths, ANA state, and namespace-to-controller edges, plus a Fibre Channel
+paths, ANA state, and namespace-to-controller edges, plus a clustered LVM
+DLM/lvmlockd failure fixture covering shared VG lock failure, missing PV state,
+remote LV activity, split-brain protection refusal, and lock-manager reason
+metadata, plus a Fibre Channel
 multipath fixture covering FC transport WWPN pairs, SCSI unit names, ALUA path
 groups, active/standby path state, failed path metadata, multipath backing edges,
 additional adapters, zoning-style fabric/WWPN layouts, optimized and

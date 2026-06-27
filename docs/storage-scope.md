@@ -248,7 +248,10 @@ The current probe layer normalizes:
   health, error, temperature, lifetime usage, and power telemetry.
   Cross-adapter fixture coverage includes clustered LVM on an NVMe-oF namespace
   with shared VG metadata, sanlock lock hints, remote LV activity, fabrics path
-  state, ANA state, and controller-to-namespace relationships, plus Fibre
+  state, ANA state, and controller-to-namespace relationships; clustered LVM
+  lock-failure coverage includes DLM/lvmlockd lock status, missing PV state,
+  remote LV activity, split-brain protection refusal, and lock-manager reason
+  metadata, plus Fibre
   Channel multipath paths with FC transport WWPN pairs, SCSI unit names, ALUA
   path groups, active/standby state, failed path metadata, additional adapters,
   zoning-style fabric/WWPN layouts, optimized and non-optimized ALUA paths,

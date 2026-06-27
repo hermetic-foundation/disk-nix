@@ -3200,6 +3200,136 @@ size=1.2T features='1 queue_if_no_path' hwhandler='0' wp=rw
       }]
     }"#;
 
+    const CLUSTERED_FAILURE_PVS: &[u8] = br#"{
+      "report": [{
+        "pv": [
+          {
+            "pv_name": "/dev/mapper/mpath-cluster-a",
+            "vg_name": "vgshared",
+            "pv_fmt": "lvm2",
+            "pv_uuid": "shared-pv-a",
+            "pv_size": "1.00t",
+            "pv_free": "256.00g",
+            "pv_used": "768.00g",
+            "pv_attr": "a--",
+            "pv_allocatable": "allocatable",
+            "pv_tags": "fabric-a,lockspace",
+            "pv_in_use": "used",
+            "pv_device_id": "dm.uuid.mpath-3600a098038314f6f2b5d514d43594c33",
+            "pv_device_id_type": "sys_wwid"
+          },
+          {
+            "pv_name": "/dev/mapper/mpath-cluster-b",
+            "vg_name": "vgshared",
+            "pv_fmt": "lvm2",
+            "pv_uuid": "shared-pv-b",
+            "pv_size": "1.00t",
+            "pv_free": "512.00g",
+            "pv_used": "512.00g",
+            "pv_attr": "a--",
+            "pv_allocatable": "allocatable",
+            "pv_tags": "fabric-b,lockspace",
+            "pv_in_use": "used",
+            "pv_device_id": "dm.uuid.mpath-3600a098038314f6f2b5d514d43594c44",
+            "pv_device_id_type": "sys_wwid"
+          }
+        ]
+      }]
+    }"#;
+
+    const CLUSTERED_FAILURE_VGS: &[u8] = br#"{
+      "report": [{
+        "vg": [{
+          "vg_name": "vgshared",
+          "vg_fmt": "lvm2",
+          "vg_uuid": "shared-vg-uuid",
+          "vg_attr": "wz--ns",
+          "vg_permissions": "writeable",
+          "vg_extendable": "extendable",
+          "vg_autoactivation": "disabled",
+          "vg_partial": "partial",
+          "vg_allocation_policy": "cling",
+          "vg_clustered": "clustered",
+          "vg_shared": "shared",
+          "vg_size": "2.00t",
+          "vg_free": "768.00g",
+          "vg_sysid": "node-b",
+          "vg_lock_type": "dlm",
+          "vg_lock_args": "lockspace=vgshared host_id=2",
+          "vg_lock_status": "partial",
+          "vg_lock_failure": "lvmlockd unavailable",
+          "vg_lock_reason": "quorum lost after fabric partition",
+          "vg_split_brain": "suspected",
+          "vg_extent_size": "4.00m",
+          "vg_extent_count": "524288",
+          "vg_free_count": "196608",
+          "pv_count": "2",
+          "vg_missing_pv_count": "1",
+          "lv_count": "2",
+          "snap_count": "0",
+          "vg_seqno": "88",
+          "vg_tags": "clustered,split-brain,lock-failure"
+        }]
+      }]
+    }"#;
+
+    const CLUSTERED_FAILURE_LVS: &[u8] = br#"{
+      "report": [{
+        "lv": [
+          {
+            "lv_name": "remoteactive",
+            "vg_name": "vgshared",
+            "lv_uuid": "remote-lv-uuid",
+            "lv_path": "/dev/vgshared/remoteactive",
+            "lv_size": "512.00g",
+            "lv_attr": "-wi-ao----",
+            "lv_layout": "linear",
+            "lv_active": "active",
+            "lv_active_locally": "",
+            "lv_active_remotely": "active remotely",
+            "lv_active_exclusively": "",
+            "lv_permissions": "writeable",
+            "lv_health_status": "warning",
+            "lv_tags": "remote,clustered",
+            "lv_dm_path": "/dev/mapper/vgshared-remoteactive",
+            "lv_suspended": "not suspended",
+            "lv_live_table": "live",
+            "lv_modules": "linear",
+            "lv_host": "node-a",
+            "lv_lock_status": "remote",
+            "lv_lock_args": "dlm remote-holder=node-a",
+            "lv_role": "public"
+          },
+          {
+            "lv_name": "blocked",
+            "vg_name": "vgshared",
+            "lv_uuid": "blocked-lv-uuid",
+            "lv_path": "/dev/vgshared/blocked",
+            "lv_size": "256.00g",
+            "lv_attr": "-wi---p---",
+            "lv_layout": "linear",
+            "lv_active": "inactive",
+            "lv_active_locally": "",
+            "lv_active_remotely": "",
+            "lv_permissions": "writeable",
+            "lv_health_status": "lock-failed",
+            "lv_tags": "blocked,split-brain",
+            "lv_dm_path": "/dev/mapper/vgshared-blocked",
+            "lv_suspended": "suspended",
+            "lv_live_table": "inactive",
+            "lv_modules": "linear",
+            "lv_host": "node-b",
+            "lv_lock_status": "failed",
+            "lv_lock_args": "dlm local-holder=node-b",
+            "lv_lock_failure": "resource busy",
+            "lv_lock_reason": "split-brain protection refused activation",
+            "lv_device_open": "closed",
+            "lv_role": "public"
+          }
+        ]
+      }]
+    }"#;
+
     const LVM_BACKED_VDO_STATUS: &[u8] = br#"
 VDO status:
   Date: '2026-06-26 10:00:00-05:00'
@@ -4277,6 +4407,112 @@ nas01.example:/exports/projects mounted on /mnt/projects:
                 && edge.to.0 == "lvm-lv:vgcluster/shareddata"
                 && edge.relationship == Relationship::Contains
         }));
+    }
+
+    #[test]
+    fn clustered_lvm_failure_fixture_preserves_lock_manager_and_split_brain_state() {
+        let graph = lvm::normalize_lvm_json(
+            CLUSTERED_FAILURE_PVS,
+            CLUSTERED_FAILURE_VGS,
+            CLUSTERED_FAILURE_LVS,
+            None,
+        )
+        .expect("clustered failure LVM fixture should parse");
+
+        let vg = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-vg:vgshared")
+            .expect("shared VG should exist");
+        assert_eq!(vg.kind, NodeKind::LvmVolumeGroup);
+        assert_eq!(vg.identity.uuid.as_deref(), Some("shared-vg-uuid"));
+        assert_has_property(vg, "lvm.vg-clustered", "clustered");
+        assert_has_property(vg, "lvm.vg-shared", "shared");
+        assert_has_property(vg, "lvm.vg-lock-type", "dlm");
+        assert_has_property(vg, "lvm.vg-lock-args", "lockspace=vgshared host_id=2");
+        assert_has_property(vg, "lvm.vg-lock-status", "partial");
+        assert_has_property(vg, "lvm.vg-lock-failure", "lvmlockd unavailable");
+        assert_has_property(
+            vg,
+            "lvm.vg-lock-reason",
+            "quorum lost after fabric partition",
+        );
+        assert_has_property(vg, "lvm.vg-split-brain", "suspected");
+        assert_has_property(vg, "lvm.missing-pv-count", "1");
+        assert_has_property(vg, "lvm.tags", "clustered,split-brain,lock-failure");
+
+        let fabric_a_pv = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-pv:/dev/mapper/mpath-cluster-a")
+            .expect("fabric A PV should exist");
+        assert_has_property(fabric_a_pv, "lvm.pv-device-id-type", "sys_wwid");
+        assert_has_property(
+            fabric_a_pv,
+            "lvm.pv-device-id",
+            "dm.uuid.mpath-3600a098038314f6f2b5d514d43594c33",
+        );
+        assert_has_property(fabric_a_pv, "lvm.pv-tags", "fabric-a,lockspace");
+
+        let fabric_b_pv = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-pv:/dev/mapper/mpath-cluster-b")
+            .expect("fabric B PV should exist");
+        assert_has_property(
+            fabric_b_pv,
+            "lvm.pv-device-id",
+            "dm.uuid.mpath-3600a098038314f6f2b5d514d43594c44",
+        );
+        assert_has_property(fabric_b_pv, "lvm.pv-tags", "fabric-b,lockspace");
+
+        let remote_lv = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-lv:vgshared/remoteactive")
+            .expect("remote-active LV should exist");
+        assert_has_property(remote_lv, "lvm.active-remotely", "active remotely");
+        assert_has_property(remote_lv, "lvm.host", "node-a");
+        assert_has_property(remote_lv, "lvm.lock-status", "remote");
+        assert_has_property(remote_lv, "lvm.lock-args", "dlm remote-holder=node-a");
+
+        let blocked_lv = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "lvm-lv:vgshared/blocked")
+            .expect("blocked LV should exist");
+        assert_has_property(blocked_lv, "lvm.active", "inactive");
+        assert_has_property(blocked_lv, "lvm.health", "lock-failed");
+        assert_has_property(blocked_lv, "lvm.suspended", "suspended");
+        assert_has_property(blocked_lv, "lvm.lock-status", "failed");
+        assert_has_property(blocked_lv, "lvm.lock-failure", "resource busy");
+        assert_has_property(
+            blocked_lv,
+            "lvm.lock-reason",
+            "split-brain protection refused activation",
+        );
+        assert_has_property(blocked_lv, "lvm.tags", "blocked,split-brain");
+
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to.0 == "lvm-vg:vgshared" && edge.relationship == Relationship::MemberOf
+                })
+                .count(),
+            2
+        );
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.from.0 == "lvm-vg:vgshared" && edge.relationship == Relationship::Contains
+                })
+                .count(),
+            2
+        );
     }
 
     #[test]

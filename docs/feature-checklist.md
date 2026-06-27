@@ -124,9 +124,9 @@ Update rules:
 - [x] **Finished:** Real-world server/client NFS fixture coverage includes
   NFSv4 referrals, pNFS, export reload behavior, client remount drift, and
   Kerberos policy variants.
-- [ ] **Partial:** Real-world fixture coverage still needs additional
-  clustered storage samples for clustered LVM, shared VG locking, remote LV
-  activity, and split-brain or lock-manager failure states.
+- [x] **Finished:** Real-world clustered storage fixture coverage includes
+  clustered LVM, shared VG locking, remote LV activity, and split-brain or
+  lock-manager failure states.
 - [ ] **Partial:** Real-world fixture coverage still needs additional hardware
   enclosure and array samples covering SAS enclosure fixture variants, SES
   failures, vendor LUN metadata, and array-backed multipath identity drift.

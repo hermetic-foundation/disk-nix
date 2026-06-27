@@ -2189,6 +2189,11 @@
             ${pkgs.gnugrep}/bin/grep -q 'nvme_of_mixed_fabric_fixture_preserves_sharing_and_path_churn' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'node.identity.uuid' ${./crates/disk-nix-probe/src/nvme.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'Real-world clustered storage fixture coverage' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'DLM/lvmlockd failure fixture' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'split-brain protection refusal' ${./docs/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'clustered_lvm_failure_fixture_preserves_lock_manager_and_split_brain_state' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'lvm.vg-lock-failure' ${./crates/disk-nix-probe/src/lvm.rs}
             ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'Real-world server/client NFS fixture coverage' "$checklist"
