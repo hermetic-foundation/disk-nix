@@ -1113,6 +1113,16 @@ metadata, normalizing hex identity spellings before suppressing
 already-satisfied property updates. Missing devices stay marked
 `needs-domain-implementation`, while unsupported filesystem property keys are
 classified as unsupported before execution.
+Failed filesystem apply reports can carry rollback metadata for proven-safe
+automatic replay. `rollbackOptions`/`previousOptions` on a filesystem remount
+declaration records the pre-apply mount options that a proven-safe rollback
+recipe may replay with `mount -o remount,<options> <mountpoint>`.
+`rollbackValue`/`previousValue` on a filesystem property declaration records
+the pre-apply label, UUID, volume ID, or serial that a proven-safe rollback
+recipe may replay with the filesystem-specific property tool. Filesystem grow,
+scrub, repair, and failed-check boundaries are emitted as refused/operator-only
+rollback recipes because they cannot be generically reversed without risking
+data-preserving state.
 Btrfs subvolume property updates only treat read-only aliases (`readOnly`,
 `readonly`, `ro`, `btrfs.readonly`, and `btrfs.ro`) as safe planned property
 changes. Other Btrfs subvolume property keys are classified as unsupported so

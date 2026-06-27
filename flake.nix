@@ -2291,6 +2291,11 @@
             ${pkgs.gnugrep}/bin/grep -q 'receiptBinding.topologyPayloads' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'crate-level integration' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'proven_rollback_recipe_replays_and_emits_receipt_binding' ${./crates/disk-nix-exec/tests/rollback_replay.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystem_remount_failure_emits_proven_safe_rollback_recipe' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystem_property_failure_emits_proven_safe_rollback_recipe' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystem_check_scrub_and_repair_failures_emit_refused_rollback_recipes' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollbackOptions' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'rollbackValue' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses proven-safe recipes when' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises ambiguous rollback points' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises active consumers' ${./docs/feature-checklist.md}

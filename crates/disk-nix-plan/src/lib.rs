@@ -486,6 +486,8 @@ pub struct ActionContext {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub property_assignments: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollback_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fs_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mountpoint: Option<String>,
@@ -534,6 +536,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollback_options: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub namespace_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controllers: Option<String>,
@@ -568,6 +572,7 @@ impl ActionContext {
             && self.property.is_none()
             && self.property_value.is_none()
             && self.property_assignments.is_empty()
+            && self.rollback_value.is_none()
             && self.fs_type.is_none()
             && self.mountpoint.is_none()
             && self.desired_size.is_none()
@@ -592,6 +597,7 @@ impl ActionContext {
             && self.group.is_none()
             && self.lun.is_none()
             && self.options.is_none()
+            && self.rollback_options.is_none()
             && self.namespace_id.is_none()
             && self.controllers.is_none()
             && self.key_slot.is_none()
@@ -7912,6 +7918,20 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
             &["lun", "lunId", "lun-id", "lunNumber", "lun-number"],
         ),
         options: lifecycle_options(object),
+        rollback_options: metadata_string_field(
+            object,
+            &[
+                "rollbackOptions",
+                "rollback-options",
+                "rollback_options",
+                "previousOptions",
+                "previous-options",
+                "previous_options",
+                "preApplyOptions",
+                "pre-apply-options",
+                "pre_apply_options",
+            ],
+        ),
         namespace_id: metadata_string_field(object, &["namespaceId", "nsid"]),
         controllers: metadata_string_field(object, &["controllers", "controllerId", "controller"]),
         key_slot: metadata_string_field(object, &["keySlot", "key-slot", "slot"]),
@@ -7924,6 +7944,20 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
             .or_else(|| object.get("readonly"))
             .and_then(Value::as_bool),
         property_assignments: property_assignments(object),
+        rollback_value: metadata_string_field(
+            object,
+            &[
+                "rollbackValue",
+                "rollback-value",
+                "rollback_value",
+                "previousValue",
+                "previous-value",
+                "previous_value",
+                "preApplyValue",
+                "pre-apply-value",
+                "pre_apply_value",
+            ],
+        ),
         ..ActionContext::default()
     }
 }
@@ -8186,6 +8220,20 @@ fn add_filesystem_actions(actions: &mut Vec<PlannedAction>, name: &str, filesyst
             context: ActionContext {
                 collection: Some("filesystems".to_string()),
                 options: lifecycle_options(filesystem),
+                rollback_options: metadata_string_field(
+                    filesystem,
+                    &[
+                        "rollbackOptions",
+                        "rollback-options",
+                        "rollback_options",
+                        "previousOptions",
+                        "previous-options",
+                        "previous_options",
+                        "preApplyOptions",
+                        "pre-apply-options",
+                        "pre_apply_options",
+                    ],
+                ),
                 property_assignments: property_assignments(filesystem),
                 ..filesystem_context(
                     name,
@@ -8230,6 +8278,20 @@ fn add_filesystem_property_actions(
                 property: Some(property.to_string()),
                 property_value: Some(property_value(value)),
                 property_assignments: property_assignments(filesystem),
+                rollback_value: metadata_string_field(
+                    filesystem,
+                    &[
+                        "rollbackValue",
+                        "rollback-value",
+                        "rollback_value",
+                        "previousValue",
+                        "previous-value",
+                        "previous_value",
+                        "preApplyValue",
+                        "pre-apply-value",
+                        "pre_apply_value",
+                    ],
+                ),
                 ..filesystem_context(
                     name,
                     mountpoint,

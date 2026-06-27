@@ -818,8 +818,16 @@ include `rollbackRecipes`. Recipe version 1 is a stable review-only schema with
 separate `readOnlyValidation`, `reversibleMutations`, `destructiveMutations`,
 and `operatorOnlyHandoff` sections. It records the failed action id and command,
 requires binding to the original apply receipt and a fresh topology probe, and
-keeps mutation sections empty until future domain-specific safety gates prove an
-automatic rollback step safe. Recipes can declare `requiredTopologyEvidence`
+keeps mutation sections empty unless domain-specific safety gates prove an
+automatic rollback step safe. Filesystem failures can produce proven-safe
+automatic rollback recipes when the report contains deterministic old state: a
+mount verification failure can replay `umount <mountpoint>`, a remount failure
+can replay declared `rollbackOptions` with
+`mount -o remount,<options> <mountpoint>`, and a filesystem property failure
+can replay declared `rollbackValue` with the filesystem-specific
+label/UUID/serial tool. Filesystem grow, scrub, repair, and failed-check
+failures remain refused/operator-only rollback recipes because they have no
+generic data-preserving inverse. Recipes can declare `requiredTopologyEvidence`
 labels such as `expected`, `preApply`, `failedApply`, and `current`; replay
 receipts include `topologyEvidence` IDs and refuse execution when required
 evidence bindings are missing. The execution library materializes deterministic

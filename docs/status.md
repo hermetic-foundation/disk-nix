@@ -418,6 +418,12 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   `partialExecutionRecovery` sequencing with completed
   actions, failed action, failed command, retry/review actions, remaining
   actions, completed mutating command counts, and fresh-topology review notes.
+  Filesystem failed-apply reports now specialize rollback recipes: mount
+  verification failures can replay a receipt-bound `umount`, remount failures
+  can replay declared `rollbackOptions`, and filesystem property failures can
+  replay a declared `rollbackValue`; filesystem grow, scrub, repair, and
+  failed-check boundaries emit refused/operator-only recipes because they lack a
+  generic data-preserving inverse.
   The exec crate also has an integration test proving a failed apply report can
   bind fresh topology evidence and payloads, select a proven-safe rollback
   recipe, run read-only validation plus reversible mutation steps, and emit a
@@ -431,8 +437,8 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   multipath map recovery inspection, loop-device, backing-file, and
   device-mapper map recovery inspection, NFS export and client mount recovery
   inspection, plus receipt files that bind reports to their invocation
-  metadata. Domain-specific proven-safe rollback recipes and topology-specific
-  recovery proofs remain future work.
+  metadata. Block-stack, advanced-storage, network-storage, and deeper
+  topology-specific recovery proofs remain future work.
 - Live probe-status preflight validation against every distribution and
   privilege/container profile still needs broader validation. Probe reports now
   expose structured degradation categories, adapter-specific tool/package,

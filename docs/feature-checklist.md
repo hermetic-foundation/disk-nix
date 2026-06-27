@@ -392,9 +392,14 @@ Update rules:
 - [x] **Finished:** Failed apply reports include domain-specific recovery,
   current-topology roll-forward review, read-only rollback-precondition
   commands, verification actions, and recovery-point preservation actions.
-- [ ] **Desired:** Proven automatic rollback recipes need filesystem-level
+- [x] **Finished:** Proven automatic rollback recipes have filesystem-level
   recipes and fixtures for grow, mount/remount, property mutation, scrub,
-  repair, and failed-check recovery boundaries.
+  repair, and failed-check recovery boundaries. Mount verification failures
+  can replay a receipt-bound `umount`, remount failures can replay declared
+  `rollbackOptions`, filesystem property failures can replay declared
+  `rollbackValue`, and grow, scrub, repair, and failed-check boundaries emit
+  refused/operator-only recipes because they have no generic data-preserving
+  inverse.
 - [ ] **Desired:** Proven automatic rollback recipes need block-stack recipes
   and fixtures for partition, LUKS, LVM, MD RAID, device-mapper, loop,
   backing-file, swap, and zram mutations.

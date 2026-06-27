@@ -634,12 +634,41 @@ fn rollback_recipes_for_report(report: &ExecutionReport) -> Vec<RollbackRecipe> 
         return Vec::new();
     };
 
-    let source_action_id = partial.failed_action_id.clone();
-    let failed_command = partial.failed_command.clone();
-    vec![RollbackRecipe {
+    if let Some(step) = report
+        .command_plan
+        .iter()
+        .find(|step| step.action_id == partial.failed_action_id)
+    {
+        if let Some(recipe) = filesystem_rollback_recipe_for_step(partial, rollback_review, step) {
+            return vec![recipe];
+        }
+    }
+
+    vec![review_only_rollback_recipe(
+        partial,
+        rollback_review,
+        vec![
+            "automatic replay refused because this recipe is review-only".to_string(),
+            "domain-specific rollback mutation is not proven safe".to_string(),
+            "receipt-bound pre-rollback topology comparison has not been evaluated".to_string(),
+        ],
+        vec![
+            "this stable recipe schema separates validation from reversible, destructive, and operator-only rollback sections".to_string(),
+            "review-only recipes are evidence carriers for operators and future automation; they are not executable rollback approval".to_string(),
+        ],
+    )]
+}
+
+fn review_only_rollback_recipe(
+    partial: &PartialExecutionRecovery,
+    rollback_review: &RecoveryAction,
+    refusal_reasons: Vec<String>,
+    notes: Vec<String>,
+) -> RollbackRecipe {
+    RollbackRecipe {
         recipe_version: 1,
-        source_action_id,
-        failed_command,
+        source_action_id: partial.failed_action_id.clone(),
+        failed_command: partial.failed_command.clone(),
         status: RollbackRecipeStatus::ReviewOnly,
         receipt_binding_required: true,
         fresh_topology_probe_required: true,
@@ -675,16 +704,227 @@ fn rollback_recipes_for_report(report: &ExecutionReport) -> Vec<RollbackRecipe> 
             "failedApply".to_string(),
             "current".to_string(),
         ],
-        refusal_reasons: vec![
-            "automatic replay refused because this recipe is review-only".to_string(),
-            "domain-specific rollback mutation is not proven safe".to_string(),
-            "receipt-bound pre-rollback topology comparison has not been evaluated".to_string(),
+        refusal_reasons,
+        notes,
+    }
+}
+
+fn filesystem_rollback_recipe_for_step(
+    partial: &PartialExecutionRecovery,
+    rollback_review: &RecoveryAction,
+    step: &ExecutionStep,
+) -> Option<RollbackRecipe> {
+    if command_step_collection(step) != Some("filesystems") {
+        return None;
+    }
+
+    let validation_commands = rollback_review.commands.clone();
+    let mut recipe = review_only_rollback_recipe(
+        partial,
+        rollback_review,
+        filesystem_rollback_refusal_reasons(step),
+        filesystem_rollback_notes(step),
+    );
+
+    if let Some(command) = filesystem_proven_rollback_command(partial, step) {
+        recipe.status = RollbackRecipeStatus::ProvenSafe;
+        recipe.read_only_validation.notes.push(
+            "filesystem rollback validation must prove the target, source, and consumers still match the failed apply receipt".to_string(),
+        );
+        recipe.reversible_mutations = RollbackRecipeSection {
+            commands: vec![command],
+            notes: vec![
+                "filesystem rollback mutation is limited to a declared old property value, declared old remount options, or undoing a mount whose verification failed".to_string(),
+                "grow, scrub, repair, and failed-check boundaries remain refused because they do not have a generic data-preserving inverse".to_string(),
+            ],
+        };
+        recipe.operator_only_handoff = RollbackRecipeSection {
+            commands: Vec::new(),
+            notes: Vec::new(),
+        };
+        recipe.refusal_reasons = Vec::new();
+        recipe.notes.push(
+            "filesystem recipe is proven-safe only because the rollback command is derived from explicit pre-apply metadata or a failed verification boundary".to_string(),
+        );
+    } else if matches!(
+        step.operation,
+        Operation::Grow | Operation::Repair | Operation::Scrub | Operation::Check
+    ) {
+        recipe.status = RollbackRecipeStatus::Refused;
+        recipe.operator_only_handoff = RollbackRecipeSection {
+            commands: validation_commands,
+            notes: vec![
+                "filesystem grow, scrub, repair, and failed-check rollback requires operator review of data-preserving state".to_string(),
+                "prefer roll-forward validation, fresh topology inspection, backup/snapshot restore, or cloned-device repair instead of automated mutation".to_string(),
+            ],
+        };
+    }
+
+    Some(recipe)
+}
+
+fn filesystem_rollback_refusal_reasons(step: &ExecutionStep) -> Vec<String> {
+    match step.operation {
+        Operation::Grow => vec![
+            "filesystem grow rollback is refused because generic filesystem shrink is not data-preserving".to_string(),
         ],
-        notes: vec![
-            "this stable recipe schema separates validation from reversible, destructive, and operator-only rollback sections".to_string(),
-            "review-only recipes are evidence carriers for operators and future automation; they are not executable rollback approval".to_string(),
+        Operation::Repair => vec![
+            "filesystem repair rollback is refused because repair tools can rewrite metadata without a generic inverse".to_string(),
         ],
-    }]
+        Operation::Scrub => vec![
+            "filesystem scrub rollback is refused because scrub has no rollback mutation; review health and roll forward".to_string(),
+        ],
+        Operation::Check => vec![
+            "filesystem failed-check rollback is refused because read-only check failure requires diagnosis or repair, not mutation replay".to_string(),
+        ],
+        Operation::Mount | Operation::Remount | Operation::SetProperty => vec![
+            "filesystem rollback metadata is missing or insufficient for proven-safe replay".to_string(),
+        ],
+        _ => vec!["filesystem rollback for this operation remains review-only".to_string()],
+    }
+}
+
+fn filesystem_rollback_notes(step: &ExecutionStep) -> Vec<String> {
+    let boundary = match step.operation {
+        Operation::Grow => "grow",
+        Operation::Mount => "mount",
+        Operation::Remount => "mount/remount",
+        Operation::SetProperty => "property mutation",
+        Operation::Scrub => "scrub",
+        Operation::Repair => "repair",
+        Operation::Check => "failed-check",
+        _ => "filesystem",
+    };
+    vec![
+        format!("filesystem-level rollback recipe covers the {boundary} boundary"),
+        "read-only validation must be bound to expected, pre-apply, failed-apply, and current topology evidence".to_string(),
+    ]
+}
+
+fn filesystem_proven_rollback_command(
+    partial: &PartialExecutionRecovery,
+    step: &ExecutionStep,
+) -> Option<ExecutionCommand> {
+    match step.operation {
+        Operation::Remount => filesystem_remount_rollback_command(step),
+        Operation::Mount if partial.failed_phase == ExecutionPhase::Verification => {
+            filesystem_mount_verification_rollback_command(step)
+        }
+        Operation::SetProperty => filesystem_property_rollback_command(step),
+        _ => None,
+    }
+}
+
+fn filesystem_remount_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let target = filesystem_target_from_step(step)?;
+    let rollback_options = step_note_value(step, "rollback-options")?;
+    Some(command_vec(
+        vec![
+            "mount".to_string(),
+            "-o".to_string(),
+            format!("remount,{rollback_options}"),
+            target.to_string(),
+        ],
+        true,
+        "restore declared pre-apply filesystem mount options",
+    ))
+}
+
+fn filesystem_mount_verification_rollback_command(
+    step: &ExecutionStep,
+) -> Option<ExecutionCommand> {
+    let target = filesystem_target_from_step(step)?;
+    Some(command_vec(
+        vec!["umount".to_string(), target.to_string()],
+        true,
+        "undo the mount created by the failed apply after read-only validation",
+    ))
+}
+
+fn filesystem_property_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_value = step_note_value(step, "rollback-value")?;
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let tool = rollback_command.argv.first()?.as_str();
+    let argv = match tool {
+        "fatlabel" | "exfatlabel"
+            if rollback_command.argv.get(1).is_some_and(|arg| arg == "-i") =>
+        {
+            vec![
+                tool.to_string(),
+                "-i".to_string(),
+                rollback_command.argv.get(2)?.clone(),
+                rollback_value.to_string(),
+            ]
+        }
+        "e2label" | "fatlabel" | "ntfslabel" | "exfatlabel" | "f2fslabel"
+            if rollback_command.argv.len() >= 3 =>
+        {
+            vec![
+                tool.to_string(),
+                rollback_command.argv[1].clone(),
+                rollback_value.to_string(),
+            ]
+        }
+        "tune2fs" if rollback_command.argv.get(1).is_some_and(|arg| arg == "-U") => {
+            vec![
+                "tune2fs".to_string(),
+                "-U".to_string(),
+                rollback_value.to_string(),
+                rollback_command.argv.get(3)?.clone(),
+            ]
+        }
+        "xfs_admin"
+            if rollback_command
+                .argv
+                .get(1)
+                .is_some_and(|arg| arg == "-L" || arg == "-U") =>
+        {
+            vec![
+                "xfs_admin".to_string(),
+                rollback_command.argv[1].clone(),
+                rollback_value.to_string(),
+                rollback_command.argv.get(3)?.clone(),
+            ]
+        }
+        "btrfs"
+            if rollback_command
+                .argv
+                .get(1..3)
+                .is_some_and(|args| args == ["filesystem", "label"]) =>
+        {
+            vec![
+                "btrfs".to_string(),
+                "filesystem".to_string(),
+                "label".to_string(),
+                rollback_command.argv.get(3)?.clone(),
+                rollback_value.to_string(),
+            ]
+        }
+        "btrfstune" if rollback_command.argv.get(1).is_some_and(|arg| arg == "-U") => {
+            vec![
+                "btrfstune".to_string(),
+                "-U".to_string(),
+                rollback_value.to_string(),
+                rollback_command.argv.get(3)?.clone(),
+            ]
+        }
+        _ => return None,
+    };
+
+    Some(command_vec(
+        argv,
+        true,
+        "restore declared pre-apply filesystem property value",
+    ))
+}
+
+fn step_note_value<'a>(step: &'a ExecutionStep, key: &str) -> Option<&'a str> {
+    let prefix = format!("{key}:");
+    step.notes.iter().find_map(|note| {
+        note.strip_prefix(&prefix)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    })
 }
 
 fn rollback_recipe_safety_gates() -> Vec<String> {
@@ -5244,6 +5484,12 @@ fn execution_step(action: &PlannedAction) -> ExecutionStep {
                 .iter()
                 .map(|alternative| format!("alternative: {alternative}")),
         );
+    }
+    if let Some(rollback_value) = action.context.rollback_value.as_deref() {
+        notes.push(format!("rollback-value: {rollback_value}"));
+    }
+    if let Some(rollback_options) = action.context.rollback_options.as_deref() {
+        notes.push(format!("rollback-options: {rollback_options}"));
     }
 
     ExecutionStep {
@@ -31632,6 +31878,330 @@ mod tests {
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "/", "--json"] && !command.mutates
         }));
+        let recipe = report
+            .rollback_recipes
+            .first()
+            .expect("filesystem grow rollback recipe is reported");
+        assert_eq!(recipe.status, RollbackRecipeStatus::Refused);
+        assert!(recipe.reversible_mutations.commands.is_empty());
+        assert!(recipe.refusal_reasons.iter().any(|reason| {
+            reason.contains("filesystem grow rollback is refused")
+                && reason.contains("not data-preserving")
+        }));
+        assert!(
+            recipe
+                .operator_only_handoff
+                .notes
+                .iter()
+                .any(|note| { note.contains("grow") && note.contains("operator review") })
+        );
+    }
+
+    #[test]
+    fn filesystem_remount_failure_emits_proven_safe_rollback_recipe() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "scratch": {
+                    "mountpoint": "/scratch",
+                    "fsType": "xfs",
+                    "operation": "remount",
+                    "options": ["rw", "noatime"],
+                    "rollbackOptions": "ro,noatime"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_remount = ["mount", "-o", "remount,rw,noatime", "/scratch"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_remount,
+                status_code: Some(if argv == failed_remount { 32 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_remount {
+                    "remount failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        let recipe = report
+            .rollback_recipes
+            .first()
+            .expect("filesystem remount rollback recipe is reported");
+        assert_eq!(recipe.status, RollbackRecipeStatus::ProvenSafe);
+        assert!(recipe.refusal_reasons.is_empty());
+        assert!(
+            recipe.read_only_validation.commands.iter().all(|command| {
+                !command.mutates && command.readiness == CommandReadiness::Ready
+            })
+        );
+        assert_eq!(recipe.reversible_mutations.commands.len(), 1);
+        assert_eq!(
+            recipe.reversible_mutations.commands[0].argv,
+            ["mount", "-o", "remount,ro,noatime", "/scratch"]
+        );
+
+        let mut ran = Vec::new();
+        let replay = replay_proven_safe_rollback_recipe_with_runner(
+            &report,
+            0,
+            "receipt:remount".to_string(),
+            "topology:current".to_string(),
+            &mut |argv| {
+                ran.push(argv.to_vec());
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+        );
+        assert_eq!(replay.status, RollbackExecutionStatus::Succeeded);
+        assert!(ran.iter().any(|argv| {
+            argv == &[
+                "mount".to_string(),
+                "-o".to_string(),
+                "remount,ro,noatime".to_string(),
+                "/scratch".to_string(),
+            ]
+        }));
+    }
+
+    #[test]
+    fn filesystem_property_failure_emits_proven_safe_rollback_recipe() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "home": {
+                    "mountpoint": "/home",
+                    "device": "/dev/disk/by-label/home-old",
+                    "fsType": "ext4",
+                    "properties": {
+                      "label": "home-new"
+                    },
+                    "rollbackValue": "home-old"
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_label = ["e2label", "/dev/disk/by-label/home-old", "home-new"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_label,
+                status_code: Some(if argv == failed_label { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_label {
+                    "label failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        let recipe = report
+            .rollback_recipes
+            .first()
+            .expect("filesystem property rollback recipe is reported");
+        assert_eq!(recipe.status, RollbackRecipeStatus::ProvenSafe);
+        assert_eq!(
+            recipe.reversible_mutations.commands[0].argv,
+            ["e2label", "/dev/disk/by-label/home-old", "home-old"]
+        );
+
+        let replay = replay_proven_safe_rollback_recipe_with_runner(
+            &report,
+            0,
+            "receipt:property".to_string(),
+            "topology:current".to_string(),
+            &mut |_| CommandRunResult {
+                success: true,
+                status_code: Some(0),
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        );
+        assert_eq!(replay.status, RollbackExecutionStatus::Succeeded);
+    }
+
+    #[test]
+    fn filesystem_mount_verification_failure_emits_proven_safe_unmount_recipe() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "filesystems": {
+                  "media": {
+                    "mountpoint": "/media",
+                    "device": "/dev/disk/by-label/media",
+                    "fsType": "ext4",
+                    "operation": "mount",
+                    "options": ["rw", "nodev"]
+                  }
+                }
+              },
+              "apply": {
+                "allowOffline": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let failed_verification = ["findmnt", "--json", "/media"];
+        let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != failed_verification,
+                status_code: Some(if argv == failed_verification { 1 } else { 0 }),
+                stdout: String::new(),
+                stderr: if argv == failed_verification {
+                    "mount verification failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        });
+
+        assert_eq!(report.status, ExecutionStatus::Failed);
+        assert!(report.execution_results.iter().any(|result| {
+            result.success
+                && result.phase == ExecutionPhase::Command
+                && result.argv
+                    == [
+                        "mount",
+                        "-t",
+                        "ext4",
+                        "-o",
+                        "rw,nodev",
+                        "/dev/disk/by-label/media",
+                        "/media",
+                    ]
+        }));
+        let recipe = report
+            .rollback_recipes
+            .first()
+            .expect("filesystem mount rollback recipe is reported");
+        assert_eq!(recipe.status, RollbackRecipeStatus::ProvenSafe);
+        assert_eq!(
+            recipe.reversible_mutations.commands[0].argv,
+            ["umount", "/media"]
+        );
+    }
+
+    #[test]
+    fn filesystem_check_scrub_and_repair_failures_emit_refused_rollback_recipes() {
+        let cases: &[(&[u8], &[&str], &str)] = &[
+            (
+                br#"{
+                  "spec": {
+                    "filesystems": {
+                      "home": {
+                        "operation": "check",
+                        "mountpoint": "/home",
+                        "device": "/dev/disk/by-label/home",
+                        "fsType": "ext4"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"#,
+                &["e2fsck", "-n", "/dev/disk/by-label/home"],
+                "failed-check",
+            ),
+            (
+                br#"{
+                  "spec": {
+                    "filesystems": {
+                      "data": {
+                        "operation": "scrub",
+                        "mountpoint": "/data",
+                        "fsType": "btrfs"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"#,
+                &["btrfs", "scrub", "start", "-B", "/data"],
+                "scrub",
+            ),
+            (
+                br#"{
+                  "spec": {
+                    "filesystems": {
+                      "bulk": {
+                        "operation": "repair",
+                        "mountpoint": "/bulk",
+                        "device": "/dev/disk/by-label/bulk",
+                        "fsType": "xfs"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"#,
+                &["xfs_repair", "/dev/disk/by-label/bulk"],
+                "repair",
+            ),
+        ];
+
+        for (document, failed_command, boundary) in cases {
+            let (plan, policy) =
+                plan_and_policy_from_json_bytes(document).expect("document parses");
+            let failed_command: Vec<String> = failed_command
+                .iter()
+                .map(|part| (*part).to_string())
+                .collect();
+            let report =
+                prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+                    CommandRunResult {
+                        success: argv != failed_command,
+                        status_code: Some(if argv == failed_command { 1 } else { 0 }),
+                        stdout: String::new(),
+                        stderr: if argv == failed_command {
+                            format!("{boundary} failed")
+                        } else {
+                            String::new()
+                        },
+                    }
+                });
+
+            assert_eq!(report.status, ExecutionStatus::Failed);
+            let recipe = report
+                .rollback_recipes
+                .first()
+                .unwrap_or_else(|| panic!("{boundary} rollback recipe should be reported"));
+            assert_eq!(recipe.status, RollbackRecipeStatus::Refused);
+            assert!(recipe.reversible_mutations.commands.is_empty());
+            assert!(recipe.notes.iter().any(|note| note.contains(boundary)));
+            assert!(
+                recipe
+                    .operator_only_handoff
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("operator review"))
+            );
+        }
     }
 
     #[test]
