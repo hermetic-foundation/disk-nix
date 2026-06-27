@@ -693,12 +693,18 @@ When enabled, it:
 - executes a `filesystems.<name>.operation = "scrub"` apply plan
 - verifies the generated JSON report was written and the rendered
   `bcachefs scrub <mountpoint>` command succeeded
-- unmounts, detaches the loop device, and removes the backing file during
+- writes a sentinel file, applies a `filesystems.<name>.replaceDevices` plan
+  from the original loop device to a second loop device, verifies the rendered
+  `bcachefs device add`, `bcachefs data rereplicate`, and
+  `bcachefs device remove` commands succeeded, confirms replacement-device
+  superblock metadata with `bcachefs show-super`, and checks the sentinel
+  remains readable from the mounted filesystem
+- unmounts, detaches both loop devices, and removes the backing files during
   cleanup
 
-This test intentionally formats and mounts only the temporary backing file it
+This test intentionally formats and mounts only the temporary backing files it
 creates. It still requires destructive opt-in because it uses real loop, mount,
-and bcachefs tooling.
+and bcachefs tooling, including real member replacement.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 

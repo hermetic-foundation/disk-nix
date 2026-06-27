@@ -1848,6 +1848,13 @@
             ${pkgs.gnugrep}/bin/grep -q 'bcachefs format' ${./scripts/integration-bcachefs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mount -t bcachefs' ${./scripts/integration-bcachefs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'bcachefs", "scrub"' ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'replaceDevices' ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystems:bcachefsReplacement:replace-device:' ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'bcachefs", "device", "add"' ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'bcachefs", "data", "rereplicate"' ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'bcachefs", "device", "remove"' ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'bcachefs show-super' ${./scripts/integration-bcachefs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix bcachefs replacement sentinel' ${./scripts/integration-bcachefs-smoke.sh}
             touch "$out"
           '';
           integrationBcacheSmoke = pkgs.runCommand "disk-nix-integration-bcache-smoke-check" { } ''
@@ -2461,6 +2468,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real swap signature' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool device replacement' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real bcachefs member replacement' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real bcache property' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device' "$checklist"
@@ -2497,6 +2505,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'cached-origin ext4 sentinel' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation, real bcache cache detach/reattach' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache detach/reattach' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real bcachefs member replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file mode mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device read-only mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real zram property reconciliation' ${./docs/status.md}
@@ -2522,6 +2531,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'btrfsSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'filesystems.<name>.replaceDevices' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'bcachefs device add' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'swaps.swapSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'pools.<name>.properties.autotrim' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.properties.lvm.cache-mode' ${./docs/integration-tests.md}

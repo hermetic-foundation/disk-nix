@@ -521,6 +521,13 @@ Update rules:
   `btrfs replace start <old-loop> <new-loop> <mountpoint>`, verifies the
   replacement device appears in `btrfs filesystem show`, and confirms the
   sentinel remains readable from the mounted filesystem.
+- [x] **Finished:** Destructive integration tests include real bcachefs member replacement
+  coverage: the loop-backed bcachefs harness creates disposable
+  source and replacement devices, writes a sentinel file, applies
+  `filesystems.*.replaceDevices`, executes `bcachefs device add`,
+  `bcachefs data rereplicate`, and `bcachefs device remove`, verifies
+  replacement-device superblock metadata with `bcachefs show-super`, and
+  confirms the sentinel remains readable from the mounted filesystem.
 - [ ] **Partial:** Destructive integration tests need broader degraded-array
   variants covering missing members, stale superblocks, replacement races,
   partial rebuilds, failed detach, and failed reattach behavior.
