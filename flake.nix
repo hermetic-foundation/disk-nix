@@ -1928,6 +1928,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'mdadm --wait "$array"' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm "$array" --fail "$loop_c"' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm "$array" --remove "$loop_c"' ${./scripts/integration-mdraid-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'mdadm --examine "$loop_c"' ${./scripts/integration-mdraid-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'stale-member-examine' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'md.degraded-devices' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm", "--detail", "--scan"' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm", "--examine", "--scan"' ${./scripts/integration-mdraid-smoke.sh}
@@ -2392,6 +2394,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'MD RAID degraded' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real MD RAID member' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'mdadm <array> --replace <old-loop> --with <new-loop>' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'MD RAID stale-superblock' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'missing-member coverage: the loop-backed MD harness' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'layered block/filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'LVM cache data-survival' "$checklist"
@@ -2449,6 +2452,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real MD RAID member replacement' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'MD RAID stale-superblock evidence' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'missing-member MD RAID rescan' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel.properties.label' ${./docs/integration-tests.md}
@@ -2483,6 +2487,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'exports.<path>.properties.options' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'mdRaids.<name>.replaceDevices' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm <array> --replace <old-loop> --with <new-loop>' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'mdadm --examine <removed-loop>' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'fails and removes one RAID1 member' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'rollback review safety' ${./docs/status.md}

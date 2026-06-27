@@ -146,6 +146,8 @@ grep -q "$loop_c" "$tmpdir/replaced-detail.txt"
 
 mdadm "$array" --fail "$loop_c"
 mdadm "$array" --remove "$loop_c"
+mdadm --examine "$loop_c" > "$tmpdir/stale-member-examine.txt"
+grep -Eq 'Array UUID|Raid Level|this +[0-9]+' "$tmpdir/stale-member-examine.txt"
 mdadm --detail "$array" > "$tmpdir/degraded-detail.txt"
 grep -Eq 'State : .*degraded|Active Devices : 1' "$tmpdir/degraded-detail.txt"
 
@@ -181,4 +183,4 @@ jq -e --arg array "$array" '
 
 cmp "$tmpdir/degraded-apply.json" "$degraded_report" >/dev/null
 
-echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, replaced $loop_b with $loop_c, then verified degraded missing-member rescan"
+echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, replaced $loop_b with $loop_c, then verified stale-superblock and degraded missing-member rescan"

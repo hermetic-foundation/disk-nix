@@ -512,6 +512,11 @@ Update rules:
 - [ ] **Partial:** Destructive integration tests need broader degraded-array
   variants covering missing members, stale superblocks, replacement races,
   partial rebuilds, failed detach, and failed reattach behavior.
+- [x] **Finished:** Destructive integration tests include MD RAID stale-superblock
+  coverage: after the loop-backed MD harness replaces a member
+  and then fails/removes the replacement member, it runs
+  `mdadm --examine <removed-loop>` and verifies the removed member still
+  exposes stale array metadata before rerunning degraded-array inspection.
 - [x] **Finished:** Destructive integration tests include MD RAID degraded
   missing-member coverage: the loop-backed MD harness creates a temporary RAID1
   array, fails and removes one member, verifies `disk-nix inspect` still sees

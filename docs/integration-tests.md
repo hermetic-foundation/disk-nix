@@ -928,6 +928,8 @@ When enabled, it:
   replacement member appears in `mdadm --detail`
 - fails and removes one RAID1 member from the temporary array, using the
   replacement member to prove the degraded path after replacement
+- verifies stale member metadata remains inspectable with
+  `mdadm --examine <removed-loop>`
 - verifies `disk-nix inspect <array> --json` still sees the degraded array and
   the degraded rescan apply succeeds
 - stops the array, wipes member superblocks, detaches the loop devices, and
