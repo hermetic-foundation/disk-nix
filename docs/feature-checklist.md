@@ -207,9 +207,13 @@ Update rules:
 - [ ] **Desired:** Automatic rollback needs live post-failure topology probe
   capture that records full expected, pre-apply, failed-apply, and current
   topology payloads for replay instead of evidence IDs alone.
-- [ ] **Desired:** Automatic rollback needs post-failure topology comparison
-  that refuses rollback mutations when identity, size, holder, mount, export,
-  session, or mapping state diverges from the proven recipe.
+- [x] **Finished:** Automatic rollback replay refuses proven-safe recipes when
+  the failed report's topology comparison summary already reports missing
+  targets, size diagnostics, type conflicts, graph dependency conflicts, or
+  partially suppressed reconciliation groups.
+- [ ] **Desired:** Automatic rollback needs detailed post-failure topology
+  comparison that refuses rollback mutations when domain identity, holder,
+  mount, export, session, or mapping state diverges from the proven recipe.
 - [ ] **Desired:** Automatic rollback needs refusal behavior for ambiguous
   rollback points and stale identity data.
 - [ ] **Desired:** Automatic rollback needs refusal behavior for active

@@ -830,8 +830,11 @@ provide explicit evidence through
 read-only validation first, replays only proven-safe reversible mutation steps,
 binds the replay report to the original receipt and fresh topology probe, and
 refuses review-only, destructive, operator-only, not-ready, unbound, or
-missing-tool recipes before executing commands. It also refuses reversible
-rollback commands whose argv or metadata advertises destructive,
+missing-tool recipes before executing commands. It refuses recipes when the
+failed report's topology comparison summary already has missing targets, size
+diagnostics, type conflicts, graph dependency conflicts, or partially
+suppressed reconciliation groups. It also refuses reversible rollback commands
+whose argv or metadata advertises destructive,
 potential-data-loss, format, shrink, wipe, rollback, remove, delete, detach,
 flush, or discard semantics.
 `commandSummary` reports total steps, total commands, mutating commands,

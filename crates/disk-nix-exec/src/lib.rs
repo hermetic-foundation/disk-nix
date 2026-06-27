@@ -945,6 +945,7 @@ fn proven_safe_rollback_refusal_reasons(
             missing_topology_evidence.join(", ")
         ));
     }
+    reasons.extend(rollback_topology_comparison_refusal_reasons(failed_report));
     if !recipe.destructive_mutations.commands.is_empty() {
         reasons.push("automatic rollback replay refuses destructive mutation steps".to_string());
     }
@@ -1090,6 +1091,50 @@ fn missing_required_topology_evidence(
             (!present).then(|| label.clone())
         })
         .collect()
+}
+
+fn rollback_topology_comparison_refusal_reasons(failed_report: &ExecutionReport) -> Vec<String> {
+    let Some(comparison) = failed_report.topology_comparison.as_ref() else {
+        return Vec::new();
+    };
+    let summary = &comparison.summary;
+    let mut divergences = Vec::new();
+    if summary.missing_count > 0 {
+        divergences.push(format!("{} missing target(s)", summary.missing_count));
+    }
+    if summary.size_diagnostic_count > 0 {
+        divergences.push(format!(
+            "{} size diagnostic(s)",
+            summary.size_diagnostic_count
+        ));
+    }
+    if summary.type_conflict_count > 0 {
+        divergences.push(format!(
+            "{} type conflict diagnostic(s)",
+            summary.type_conflict_count
+        ));
+    }
+    if summary.graph_dependency_conflict_count > 0 {
+        divergences.push(format!(
+            "{} graph dependency conflict(s)",
+            summary.graph_dependency_conflict_count
+        ));
+    }
+    if summary.partially_suppressed_group_count > 0 {
+        divergences.push(format!(
+            "{} partially suppressed reconciliation group(s)",
+            summary.partially_suppressed_group_count
+        ));
+    }
+
+    if divergences.is_empty() {
+        Vec::new()
+    } else {
+        vec![format!(
+            "automatic rollback replay refuses divergent topology comparison: {}",
+            divergences.join(", ")
+        )]
+    }
 }
 
 fn missing_rollback_replay_tools(
@@ -28663,6 +28708,30 @@ mod tests {
         ])
     }
 
+    fn clean_topology_comparison() -> TopologyComparison {
+        TopologyComparison {
+            summary: disk_nix_plan::TopologyComparisonSummary {
+                action_count: 1,
+                matched_count: 1,
+                missing_count: 0,
+                size_diagnostic_count: 0,
+                type_conflict_count: 0,
+                already_satisfied_count: 0,
+                suppressed_action_count: 0,
+                graph_dependency_edge_count: 0,
+                graph_dependency_conflict_count: 0,
+                reconciliation_group_count: 0,
+                partially_suppressed_group_count: 0,
+                lifecycle_group_count: 0,
+                graph_derived_lifecycle_group_count: 0,
+            },
+            diagnostics: Vec::new(),
+            reconciliation_groups: Vec::new(),
+            lifecycle_groups: Vec::new(),
+            graph_dependency_conflict_resolutions: Vec::new(),
+        }
+    }
+
     fn proven_safe_rollback_recipe() -> RollbackRecipe {
         RollbackRecipe {
             recipe_version: 1,
@@ -28874,6 +28943,76 @@ mod tests {
                 .iter()
                 .any(|reason| reason.contains("fresh post-failure topology probe binding"))
         );
+    }
+
+    #[test]
+    fn rollback_replay_allows_clean_topology_comparison() {
+        let mut report = failed_report_for_rollback_replay();
+        report.rollback_recipes = vec![proven_safe_rollback_recipe()];
+        report.topology_comparison = Some(clean_topology_comparison());
+        let mut calls = Vec::new();
+
+        let replay = replay_proven_safe_rollback_recipe_with_runner(
+            &report,
+            0,
+            "receipt:apply-123".to_string(),
+            "topology:fresh-456".to_string(),
+            &mut |argv| {
+                calls.push(argv.to_vec());
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+        );
+
+        assert_eq!(replay.status, RollbackExecutionStatus::Succeeded);
+        assert_eq!(calls.len(), 2);
+    }
+
+    #[test]
+    fn rollback_replay_refuses_divergent_topology_comparison_before_running_commands() {
+        let mut report = failed_report_for_rollback_replay();
+        report.rollback_recipes = vec![proven_safe_rollback_recipe()];
+        let mut comparison = clean_topology_comparison();
+        comparison.summary.missing_count = 1;
+        comparison.summary.size_diagnostic_count = 1;
+        comparison.summary.type_conflict_count = 1;
+        comparison.summary.graph_dependency_conflict_count = 1;
+        comparison.summary.partially_suppressed_group_count = 1;
+        report.topology_comparison = Some(comparison);
+        let mut calls = Vec::new();
+
+        let replay = replay_proven_safe_rollback_recipe_with_runner(
+            &report,
+            0,
+            "receipt:apply-123".to_string(),
+            "topology:fresh-456".to_string(),
+            &mut |argv| {
+                calls.push(argv.to_vec());
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+        );
+
+        assert_eq!(replay.status, RollbackExecutionStatus::Refused);
+        assert!(calls.is_empty());
+        assert!(replay.validation_results.is_empty());
+        assert!(replay.rollback_results.is_empty());
+        assert!(replay.refusal_reasons.iter().any(|reason| {
+            reason.contains("divergent topology comparison")
+                && reason.contains("1 missing target")
+                && reason.contains("1 size diagnostic")
+                && reason.contains("1 type conflict")
+                && reason.contains("1 graph dependency conflict")
+                && reason.contains("1 partially suppressed reconciliation group")
+        }));
     }
 
     #[test]

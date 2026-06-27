@@ -403,8 +403,9 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   `replay_proven_safe_rollback_recipe_with_topology_evidence`. Replay binds the
   report to the original receipt, a fresh topology probe, and topology evidence
   IDs while refusing review-only, destructive, operator-only, not-ready,
-  unbound, missing-tool, missing-topology-evidence, or plausible-data-loss
-  command recipes before any command runs. Reports also
+  unbound, missing-tool, missing-topology-evidence, divergent topology
+  comparison summaries, or plausible-data-loss command recipes before any
+  command runs. Reports also
   expose `partialExecutionRecovery` sequencing with completed
   actions, failed action, failed command, retry/review actions, remaining
   actions, completed mutating command counts, and fresh-topology review notes.
