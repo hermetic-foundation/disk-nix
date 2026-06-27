@@ -522,7 +522,13 @@ Update rules:
   coverage for create, grow, attach, detach, delete, controller reconnect, and
   namespace identity drift.
 - [ ] **Partial:** Destructive integration tests need VM-backed LUN flow
-  coverage for multipath add/remove/flush paths.
+  coverage for multipath flush paths.
+- [x] **Finished:** Destructive integration tests include lab-backed multipath
+  path add/remove coverage: when `DISK_NIX_MULTIPATH_ADD_PATH` or
+  `DISK_NIX_MULTIPATH_REMOVE_PATH` is set, the multipath harness applies
+  `multipathMaps.paths.addDevices` and/or
+  `multipathMaps.paths.removeDevices` for the explicit paths and verifies
+  `multipathd add path <path>` and `multipathd del path <path>` succeed.
 - [x] **Finished:** Destructive integration tests include lab-backed multipath
   resize coverage: when `DISK_NIX_MULTIPATH_RESIZE=1` is set, the multipath
   harness applies `multipathMaps.resize.operation = "grow"` for the selected

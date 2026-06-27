@@ -1116,6 +1116,8 @@ maps:
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   DISK_NIX_MULTIPATH_MAP=mpatha \
   DISK_NIX_MULTIPATH_RESIZE=1 \
+  DISK_NIX_MULTIPATH_ADD_PATH=/dev/sdb \
+  DISK_NIX_MULTIPATH_REMOVE_PATH=/dev/sdc \
   nix run .#integration-multipath-smoke
 ```
 
@@ -1132,14 +1134,19 @@ When enabled, it:
   `multipathMaps.resize.operation = "grow"` with `target = <map>`
 - verifies the rendered `multipathd resize map <map>` and follow-up
   `multipath -r` commands succeeded
+- when `DISK_NIX_MULTIPATH_ADD_PATH` or `DISK_NIX_MULTIPATH_REMOVE_PATH` is
+  set, executes `multipathMaps.paths.addDevices` and/or
+  `multipathMaps.paths.removeDevices` for the explicitly named paths
+- verifies the rendered `multipathd add path <path>` and
+  `multipathd del path <path>` commands succeeded for those selected paths
 - verifies the generated JSON report was written
 
-This test does not add, remove, replace, or flush multipath paths. It still
-requires destructive opt-in because `multipath -r` reloads live maps and, when
-`DISK_NIX_MULTIPATH_RESIZE=1` is set, `multipathd resize map` asks multipathd
-to refresh the selected map size. It is intended for disposable lab hosts where
-the named map can be safely refreshed. Use an `mpath*` name such as `mpatha` or
-a `/dev/mapper/*` path.
+This test does not replace or flush multipath paths. It still requires
+destructive opt-in because `multipath -r` reloads live maps,
+`DISK_NIX_MULTIPATH_RESIZE=1` asks multipathd to resize the selected map, and
+the add/remove path variables mutate explicitly selected paths. It is intended
+for disposable lab hosts where the named map and paths can be safely refreshed.
+Use an `mpath*` name such as `mpatha` or a `/dev/mapper/*` path.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 

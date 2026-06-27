@@ -8,7 +8,9 @@ Refusing to run multipath integration smoke test.
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test reloads
 real multipath maps for the map provided through DISK_NIX_MULTIPATH_MAP.
 When DISK_NIX_MULTIPATH_RESIZE=1 is set, it also asks multipathd to resize the
-selected map. The harness does not add, remove, replace, or flush paths.
+selected map. When DISK_NIX_MULTIPATH_ADD_PATH or
+DISK_NIX_MULTIPATH_REMOVE_PATH is set, it mutates those explicitly named paths.
+The harness does not replace or flush paths.
 MSG
   exit 2
 fi
@@ -20,6 +22,8 @@ fi
 
 map="${DISK_NIX_MULTIPATH_MAP:-}"
 resize_map="${DISK_NIX_MULTIPATH_RESIZE:-0}"
+add_path="${DISK_NIX_MULTIPATH_ADD_PATH:-}"
+remove_path="${DISK_NIX_MULTIPATH_REMOVE_PATH:-}"
 if [[ -z "$map" ]]; then
   cat >&2 <<'MSG'
 DISK_NIX_MULTIPATH_MAP is required.
@@ -57,6 +61,8 @@ spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 resize_spec="$tmpdir/resize-spec.json"
 resize_report="$tmpdir/resize-apply-report.json"
+paths_spec="$tmpdir/paths-spec.json"
+paths_report="$tmpdir/paths-apply-report.json"
 
 multipath -ll "$map" > "$tmpdir/multipath-before.txt"
 lsscsi -t -s > "$tmpdir/lsscsi.txt"
@@ -145,4 +151,66 @@ if [[ "$resize_map" == "1" ]]; then
   echo "multipath integration smoke test rescanned and resized $map"
 else
   echo "multipath integration smoke test rescanned $map"
+fi
+
+if [[ -n "$add_path" || -n "$remove_path" ]]; then
+  if [[ -n "$add_path" && ! -e "$add_path" ]]; then
+    echo "multipath add path does not exist: $add_path" >&2
+    exit 2
+  fi
+  if [[ -n "$remove_path" && ! -e "$remove_path" ]]; then
+    echo "multipath remove path does not exist: $remove_path" >&2
+    exit 2
+  fi
+
+  jq -n \
+    --arg map "$map" \
+    --arg add_path "$add_path" \
+    --arg remove_path "$remove_path" \
+    '{
+      version: 1,
+      multipathMaps: {
+        paths: ({
+          target: $map
+        }
+        + (if $add_path == "" then {} else { addDevices: [ $add_path ] } end)
+        + (if $remove_path == "" then {} else { removeDevices: [ $remove_path ] } end))
+      },
+      apply: {
+        allowOffline: true,
+        allowDeviceReplacement: true,
+        allowPotentialDataLoss: true
+      }
+    }' > "$paths_spec"
+
+  "$disk_nix_bin" apply \
+    --spec "$paths_spec" \
+    --execute \
+    --report-out "$paths_report" \
+    --json > "$tmpdir/paths-apply.json"
+
+  jq -e --arg map "$map" --arg add_path "$add_path" --arg remove_path "$remove_path" '
+    .status == "succeeded"
+    and (if $add_path == "" then true else
+      (.commandPlan[] | select(.actionId == ("multipathMaps:paths:add-device:" + $add_path))
+        | .commands
+        | any(.argv == ["multipath", "-ll", $map])
+        and any(.argv == ["multipathd", "add", "path", $add_path]))
+      and (.executionResults
+        | any(.argv == ["multipathd", "add", "path", $add_path] and .success == true))
+    end)
+    and (if $remove_path == "" then true else
+      (.commandPlan[] | select(.actionId == ("multipathMaps:paths:remove-device:" + $remove_path))
+        | .commands
+        | any(.argv == ["multipath", "-ll", $map])
+        and any(.argv == ["multipathd", "del", "path", $remove_path]))
+      and (.executionResults
+        | any(.argv == ["multipathd", "del", "path", $remove_path] and .success == true))
+    end)
+  ' "$tmpdir/paths-apply.json" >/dev/null
+
+  cmp "$tmpdir/paths-apply.json" "$paths_report" >/dev/null
+  multipath -ll "$map" > "$tmpdir/multipath-paths-mutated.txt"
+
+  echo "multipath integration smoke test mutated selected paths for $map"
 fi
