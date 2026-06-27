@@ -119,6 +119,7 @@
             diskNix
             pkgs.coreutils
             pkgs.cryptsetup
+            pkgs.gnugrep
             pkgs.jq
             pkgs.util-linux
           ];
@@ -1756,6 +1757,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-luks-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup luksFormat' ${./scripts/integration-luks-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup open' ${./scripts/integration-luks-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel' ${./scripts/integration-luks-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'luks.devices:luksSmokeLabel:set-property:label' ${./scripts/integration-luks-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cryptsetup", "config"' ${./scripts/integration-luks-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disknix-luks' ${./scripts/integration-luks-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup", "close"' ${./scripts/integration-luks-smoke.sh}
             touch "$out"
           '';
@@ -2197,9 +2202,13 @@
             ${pkgs.gnugrep}/bin/grep -q 'layered block/filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'cache and network-storage' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real filesystem' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real LUKS header' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'cryptsetup config' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real LUKS header label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'rollback review safety' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'failed-and-resumed' ${./docs/status.md}

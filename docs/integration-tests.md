@@ -709,6 +709,11 @@ When enabled, it:
 - formats the temporary loop device as a LUKS container
 - opens it as a temporary `/dev/mapper/*` mapping
 - verifies `disk-nix inspect <mapper> --json` sees the mapping
+- applies `luks.devices.luksSmokeLabel.properties.label = "disknix-luks"`
+  against the real LUKS backing device
+- verifies the generated JSON report was written, the rendered
+  `cryptsetup config <loop> --label disknix-luks` command succeeded, and
+  `cryptsetup luksDump <loop>` reports the new header label
 - executes a `luks.devices.<name>.operation = "close"` apply plan with
   `allowOffline = true`
 - verifies the generated JSON report was written and the rendered

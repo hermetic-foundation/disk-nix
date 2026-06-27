@@ -20,7 +20,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" cryptsetup jq losetup truncate; do
+for tool in "$disk_nix_bin" cryptsetup grep jq losetup truncate; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -46,6 +46,8 @@ backing="$tmpdir/disk-nix-luks-smoke.img"
 keyfile="$tmpdir/keyfile"
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
+property_spec="$tmpdir/property-spec.json"
+property_report="$tmpdir/property-report.json"
 
 printf 'disk-nix integration test passphrase\n' > "$keyfile"
 chmod 0600 "$keyfile"
@@ -64,6 +66,41 @@ jq -e --arg mapper "$mapper" '
       or (.properties // [] | any(.key == "luks.mapper" and .value == $mapper))
     )
 ' "$tmpdir/inspect.json" >/dev/null
+
+jq -n --arg loopdev "$loopdev" --arg mapper "$mapper" '{
+  version: 1,
+  apply: {
+    allowOffline: true
+  },
+  luks: {
+    devices: {
+      luksSmokeLabel: {
+        device: $loopdev,
+        target: $mapper,
+        properties: {
+          label: "disknix-luks"
+        }
+      }
+    }
+  }
+}' > "$property_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$property_spec" \
+  --execute \
+  --report-out "$property_report" \
+  --json > "$tmpdir/property-apply.json"
+
+jq -e --arg loopdev "$loopdev" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == "luks.devices:luksSmokeLabel:set-property:label")
+    | .commands | any(.argv == ["cryptsetup", "config", $loopdev, "--label", "disknix-luks"]))
+  and (.executionResults
+    | any(.argv == ["cryptsetup", "config", $loopdev, "--label", "disknix-luks"] and .success == true))
+' "$tmpdir/property-apply.json" >/dev/null
+
+cmp "$tmpdir/property-apply.json" "$property_report" >/dev/null
+cryptsetup luksDump "$loopdev" | grep -Eq 'Label:[[:space:]]+disknix-luks'
 
 jq -n --arg loopdev "$loopdev" --arg mapper "$mapper" '{
   version: 1,
@@ -101,4 +138,4 @@ if [[ -e "/dev/mapper/$mapper" ]]; then
   exit 1
 fi
 
-echo "LUKS loop-backed integration smoke test closed mapper $mapper on $loopdev"
+echo "LUKS loop-backed integration smoke test labeled and closed mapper $mapper on $loopdev"

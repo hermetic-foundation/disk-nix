@@ -519,9 +519,14 @@ Update rules:
   property mutation coverage: the loop-backed ext4 harness applies a disk-nix
   `filesystems.*.properties.label` declaration, executes `e2label`, and verifies
   the resulting label on the disposable loop device.
+- [x] **Finished:** Destructive integration tests include real LUKS header
+  property mutation coverage: the loop-backed LUKS harness applies a disk-nix
+  `luks.devices.*.properties.label` declaration, executes `cryptsetup config`,
+  and verifies the resulting label with `cryptsetup luksDump` on the disposable
+  loop-backed container.
 - [ ] **Partial:** Destructive integration tests still need property mutation
-  coverage across LUKS, LVM, ZFS, Btrfs, VDO, bcache, NFS, target LUNs, loop
-  devices, backing files, swap, and zram.
+  coverage across LVM, ZFS, Btrfs, VDO, bcache, NFS, target LUNs, loop devices,
+  backing files, swap, and zram.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`
