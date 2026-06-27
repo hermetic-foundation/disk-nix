@@ -171,9 +171,9 @@ Update rules:
 - [x] **Finished:** Automatic rollback has a stable rollback recipe schema
   that separates read-only validation, reversible mutations, destructive
   mutations, and operator-only handoff steps.
-- [ ] **Desired:** Automatic rollback needs an execution engine that can replay
-  only proven-safe rollback steps after a failed apply and bind the result to
-  the original receipt and fresh topology probe.
+- [x] **Finished:** Automatic rollback has an execution engine that replays
+  only proven-safe reversible rollback steps after a failed apply and binds the
+  result to the original receipt plus a fresh topology probe.
 - [ ] **Desired:** Automatic rollback needs per-domain safety gates for
   filesystems, LUKS, LVM, MD RAID, ZFS, Btrfs, bcachefs, NFS, iSCSI,
   multipath, NVMe, target LUNs, VDO, bcache, loop devices, backing files, swap,

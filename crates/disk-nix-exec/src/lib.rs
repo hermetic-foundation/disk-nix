@@ -218,6 +218,36 @@ pub struct RollbackRecipe {
     pub notes: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RollbackExecutionStatus {
+    Succeeded,
+    Failed,
+    Refused,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RollbackReceiptBinding {
+    pub original_receipt_id: String,
+    pub source_action_id: String,
+    pub failed_command: Vec<String>,
+    pub fresh_topology_probe_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RollbackExecutionReport {
+    pub status: RollbackExecutionStatus,
+    pub recipe_version: u64,
+    pub source_action_id: String,
+    pub receipt_binding: RollbackReceiptBinding,
+    pub validation_results: Vec<ExecutionCommandResult>,
+    pub rollback_results: Vec<ExecutionCommandResult>,
+    pub messages: Vec<String>,
+    pub refusal_reasons: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CommandRunResult {
     success: bool,
@@ -632,7 +662,7 @@ fn rollback_recipes_for_report(report: &ExecutionReport) -> Vec<RollbackRecipe> 
             "missing tools, stale identity data, and ambiguous rollback targets keep the recipe review-only".to_string(),
         ],
         refusal_reasons: vec![
-            "automatic rollback execution engine is not implemented".to_string(),
+            "automatic replay refused because this recipe is review-only".to_string(),
             "domain-specific rollback mutation is not proven safe".to_string(),
             "receipt-bound pre-rollback topology comparison has not been evaluated".to_string(),
         ],
@@ -641,6 +671,240 @@ fn rollback_recipes_for_report(report: &ExecutionReport) -> Vec<RollbackRecipe> 
             "review-only recipes are evidence carriers for operators and future automation; they are not executable rollback approval".to_string(),
         ],
     }]
+}
+
+#[must_use]
+pub fn replay_proven_safe_rollback_recipe(
+    failed_report: &ExecutionReport,
+    recipe_index: usize,
+    original_receipt_id: impl Into<String>,
+    fresh_topology_probe_id: impl Into<String>,
+) -> RollbackExecutionReport {
+    let mut runner = run_command;
+    replay_proven_safe_rollback_recipe_with_runner(
+        failed_report,
+        recipe_index,
+        original_receipt_id.into(),
+        fresh_topology_probe_id.into(),
+        &mut runner,
+    )
+}
+
+fn replay_proven_safe_rollback_recipe_with_runner(
+    failed_report: &ExecutionReport,
+    recipe_index: usize,
+    original_receipt_id: String,
+    fresh_topology_probe_id: String,
+    runner: &mut impl FnMut(&[String]) -> CommandRunResult,
+) -> RollbackExecutionReport {
+    let Some(recipe) = failed_report.rollback_recipes.get(recipe_index) else {
+        return refused_rollback_report(
+            0,
+            "",
+            &[],
+            original_receipt_id,
+            fresh_topology_probe_id,
+            vec!["rollback recipe index does not exist".to_string()],
+        );
+    };
+
+    let mut refusal_reasons = proven_safe_rollback_refusal_reasons(
+        failed_report,
+        recipe,
+        &original_receipt_id,
+        &fresh_topology_probe_id,
+    );
+    if !refusal_reasons.is_empty() {
+        refusal_reasons.extend(recipe.refusal_reasons.iter().cloned());
+        return refused_rollback_report(
+            recipe.recipe_version,
+            &recipe.source_action_id,
+            &recipe.failed_command,
+            original_receipt_id,
+            fresh_topology_probe_id,
+            refusal_reasons,
+        );
+    }
+
+    let mut validation_results = Vec::new();
+    for command in &recipe.read_only_validation.commands {
+        let result = run_planned_command(
+            ExecutionPhase::Verification,
+            &recipe.source_action_id,
+            &command.argv,
+            runner,
+        );
+        let success = result.success;
+        validation_results.push(result);
+        if !success {
+            return RollbackExecutionReport {
+                status: RollbackExecutionStatus::Failed,
+                recipe_version: recipe.recipe_version,
+                source_action_id: recipe.source_action_id.clone(),
+                receipt_binding: rollback_receipt_binding(
+                    recipe,
+                    original_receipt_id,
+                    fresh_topology_probe_id,
+                ),
+                validation_results,
+                rollback_results: Vec::new(),
+                messages: vec![
+                    "rollback validation failed; reversible mutation steps were not executed"
+                        .to_string(),
+                ],
+                refusal_reasons: Vec::new(),
+            };
+        }
+    }
+
+    let mut rollback_results = Vec::new();
+    for command in &recipe.reversible_mutations.commands {
+        let result = run_planned_command(
+            ExecutionPhase::Command,
+            &recipe.source_action_id,
+            &command.argv,
+            runner,
+        );
+        let success = result.success;
+        rollback_results.push(result);
+        if !success {
+            return RollbackExecutionReport {
+                status: RollbackExecutionStatus::Failed,
+                recipe_version: recipe.recipe_version,
+                source_action_id: recipe.source_action_id.clone(),
+                receipt_binding: rollback_receipt_binding(
+                    recipe,
+                    original_receipt_id,
+                    fresh_topology_probe_id,
+                ),
+                validation_results,
+                rollback_results,
+                messages: vec![
+                    "proven-safe rollback mutation failed; capture a fresh topology probe before retrying or handoff".to_string(),
+                ],
+                refusal_reasons: Vec::new(),
+            };
+        }
+    }
+
+    RollbackExecutionReport {
+        status: RollbackExecutionStatus::Succeeded,
+        recipe_version: recipe.recipe_version,
+        source_action_id: recipe.source_action_id.clone(),
+        receipt_binding: rollback_receipt_binding(
+            recipe,
+            original_receipt_id,
+            fresh_topology_probe_id,
+        ),
+        validation_results,
+        rollback_results,
+        messages: vec![
+            "proven-safe rollback validation and reversible mutation steps completed".to_string(),
+            "capture and compare a fresh topology probe after rollback before resuming apply"
+                .to_string(),
+        ],
+        refusal_reasons: Vec::new(),
+    }
+}
+
+fn proven_safe_rollback_refusal_reasons(
+    failed_report: &ExecutionReport,
+    recipe: &RollbackRecipe,
+    original_receipt_id: &str,
+    fresh_topology_probe_id: &str,
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+
+    if failed_report.status != ExecutionStatus::Failed {
+        reasons.push("automatic rollback replay requires a failed apply report".to_string());
+    }
+    if recipe.status != RollbackRecipeStatus::ProvenSafe {
+        reasons.push("rollback recipe is not marked proven-safe".to_string());
+    }
+    if recipe.receipt_binding_required && original_receipt_id.trim().is_empty() {
+        reasons.push("original apply receipt binding is required".to_string());
+    }
+    if recipe.fresh_topology_probe_required && fresh_topology_probe_id.trim().is_empty() {
+        reasons.push("fresh post-failure topology probe binding is required".to_string());
+    }
+    if !recipe.destructive_mutations.commands.is_empty() {
+        reasons.push("automatic rollback replay refuses destructive mutation steps".to_string());
+    }
+    if !recipe.operator_only_handoff.commands.is_empty() {
+        reasons.push("automatic rollback replay refuses operator-only handoff steps".to_string());
+    }
+    if recipe.reversible_mutations.commands.is_empty() {
+        reasons.push("rollback recipe has no proven-safe reversible mutation steps".to_string());
+    }
+
+    for command in &recipe.read_only_validation.commands {
+        if command.mutates {
+            reasons.push(format!(
+                "read-only validation command mutates state: {}",
+                command.argv.join(" ")
+            ));
+        }
+        if command.readiness != CommandReadiness::Ready {
+            reasons.push(format!(
+                "read-only validation command is not ready: {}",
+                command.argv.join(" ")
+            ));
+        }
+    }
+    for command in &recipe.reversible_mutations.commands {
+        if !command.mutates {
+            reasons.push(format!(
+                "reversible rollback command is not marked mutating: {}",
+                command.argv.join(" ")
+            ));
+        }
+        if command.readiness != CommandReadiness::Ready {
+            reasons.push(format!(
+                "reversible rollback command is not ready: {}",
+                command.argv.join(" ")
+            ));
+        }
+    }
+
+    reasons
+}
+
+fn refused_rollback_report(
+    recipe_version: u64,
+    source_action_id: &str,
+    failed_command: &[String],
+    original_receipt_id: String,
+    fresh_topology_probe_id: String,
+    refusal_reasons: Vec<String>,
+) -> RollbackExecutionReport {
+    RollbackExecutionReport {
+        status: RollbackExecutionStatus::Refused,
+        recipe_version,
+        source_action_id: source_action_id.to_string(),
+        receipt_binding: RollbackReceiptBinding {
+            original_receipt_id,
+            source_action_id: source_action_id.to_string(),
+            failed_command: failed_command.to_vec(),
+            fresh_topology_probe_id,
+        },
+        validation_results: Vec::new(),
+        rollback_results: Vec::new(),
+        messages: vec!["automatic rollback replay refused before executing commands".to_string()],
+        refusal_reasons,
+    }
+}
+
+fn rollback_receipt_binding(
+    recipe: &RollbackRecipe,
+    original_receipt_id: String,
+    fresh_topology_probe_id: String,
+) -> RollbackReceiptBinding {
+    RollbackReceiptBinding {
+        original_receipt_id,
+        source_action_id: recipe.source_action_id.clone(),
+        failed_command: recipe.failed_command.clone(),
+        fresh_topology_probe_id,
+    }
 }
 
 fn recovery_actions_for_report(report: &ExecutionReport) -> Vec<RecoveryAction> {
@@ -27953,7 +28217,7 @@ mod tests {
             recipe
                 .refusal_reasons
                 .iter()
-                .any(|reason| reason.contains("execution engine is not implemented"))
+                .any(|reason| reason.contains("review-only"))
         );
         let value = serde_json::to_value(&report).expect("report should serialize");
         assert_eq!(
@@ -27967,6 +28231,254 @@ mod tests {
                 .len(),
             0
         );
+    }
+
+    fn failed_report_for_rollback_replay() -> ExecutionReport {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "snapshots": {
+                "tank/home@before": {
+                  "target": "tank/home",
+                  "rollback": true
+                }
+              },
+              "apply": {
+                "allowPotentialDataLoss": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
+            CommandRunResult {
+                success: argv != ["zfs", "rollback", "tank/home@before"],
+                status_code: Some(if argv == ["zfs", "rollback", "tank/home@before"] {
+                    1
+                } else {
+                    0
+                }),
+                stdout: String::new(),
+                stderr: if argv == ["zfs", "rollback", "tank/home@before"] {
+                    "rollback failed".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        })
+    }
+
+    fn rollback_replay_command(argv: &[&str], mutates: bool) -> ExecutionCommand {
+        ExecutionCommand {
+            argv: argv.iter().map(|part| (*part).to_string()).collect(),
+            mutates,
+            readiness: CommandReadiness::Ready,
+            unresolved_inputs: Vec::new(),
+            provider_capabilities: Vec::new(),
+            note: "test rollback replay command".to_string(),
+        }
+    }
+
+    fn proven_safe_rollback_recipe() -> RollbackRecipe {
+        RollbackRecipe {
+            recipe_version: 1,
+            source_action_id: "snapshot:tank/home@before:rollback".to_string(),
+            failed_command: vec![
+                "zfs".to_string(),
+                "rollback".to_string(),
+                "tank/home@before".to_string(),
+            ],
+            status: RollbackRecipeStatus::ProvenSafe,
+            receipt_binding_required: true,
+            fresh_topology_probe_required: true,
+            read_only_validation: RollbackRecipeSection {
+                commands: vec![rollback_replay_command(
+                    &["disk-nix-test-probe", "topology"],
+                    false,
+                )],
+                notes: vec!["validate current topology before mutation".to_string()],
+            },
+            reversible_mutations: RollbackRecipeSection {
+                commands: vec![rollback_replay_command(
+                    &["disk-nix-test-rollback", "restore"],
+                    true,
+                )],
+                notes: vec!["restore the recorded rollback point".to_string()],
+            },
+            destructive_mutations: RollbackRecipeSection {
+                commands: Vec::new(),
+                notes: Vec::new(),
+            },
+            operator_only_handoff: RollbackRecipeSection {
+                commands: Vec::new(),
+                notes: Vec::new(),
+            },
+            safety_gates: vec![
+                "original apply receipt must match this failed apply report".to_string(),
+                "fresh topology probe must be captured after the failure".to_string(),
+            ],
+            refusal_reasons: Vec::new(),
+            notes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn rollback_replay_runs_only_proven_safe_reversible_steps_with_receipt_binding() {
+        let mut report = failed_report_for_rollback_replay();
+        report.rollback_recipes = vec![proven_safe_rollback_recipe()];
+        let mut calls = Vec::new();
+
+        let replay = replay_proven_safe_rollback_recipe_with_runner(
+            &report,
+            0,
+            "receipt:apply-123".to_string(),
+            "topology:fresh-456".to_string(),
+            &mut |argv| {
+                calls.push(argv.to_vec());
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+        );
+
+        assert_eq!(replay.status, RollbackExecutionStatus::Succeeded);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0], ["disk-nix-test-probe", "topology"]);
+        assert_eq!(calls[1], ["disk-nix-test-rollback", "restore"]);
+        assert_eq!(replay.validation_results.len(), 1);
+        assert_eq!(
+            replay.validation_results[0].phase,
+            ExecutionPhase::Verification
+        );
+        assert_eq!(replay.rollback_results.len(), 1);
+        assert_eq!(replay.rollback_results[0].phase, ExecutionPhase::Command);
+        assert_eq!(
+            replay.receipt_binding.original_receipt_id,
+            "receipt:apply-123"
+        );
+        assert_eq!(
+            replay.receipt_binding.fresh_topology_probe_id,
+            "topology:fresh-456"
+        );
+        assert_eq!(
+            replay.receipt_binding.failed_command,
+            ["zfs", "rollback", "tank/home@before"]
+        );
+
+        let value = serde_json::to_value(&replay).expect("rollback replay report serializes");
+        assert_eq!(value["status"], "succeeded");
+        assert_eq!(
+            value["receiptBinding"]["originalReceiptId"],
+            "receipt:apply-123"
+        );
+        assert_eq!(
+            value["receiptBinding"]["freshTopologyProbeId"],
+            "topology:fresh-456"
+        );
+    }
+
+    #[test]
+    fn rollback_replay_refuses_review_only_recipes_without_running_commands() {
+        let report = failed_report_for_rollback_replay();
+        let mut calls = Vec::new();
+
+        let replay = replay_proven_safe_rollback_recipe_with_runner(
+            &report,
+            0,
+            "receipt:apply-123".to_string(),
+            "topology:fresh-456".to_string(),
+            &mut |argv| {
+                calls.push(argv.to_vec());
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+        );
+
+        assert_eq!(replay.status, RollbackExecutionStatus::Refused);
+        assert!(calls.is_empty());
+        assert!(replay.validation_results.is_empty());
+        assert!(replay.rollback_results.is_empty());
+        assert!(
+            replay
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("not marked proven-safe"))
+        );
+    }
+
+    #[test]
+    fn rollback_replay_requires_fresh_topology_binding_before_running_commands() {
+        let mut report = failed_report_for_rollback_replay();
+        report.rollback_recipes = vec![proven_safe_rollback_recipe()];
+        let mut calls = Vec::new();
+
+        let replay = replay_proven_safe_rollback_recipe_with_runner(
+            &report,
+            0,
+            "receipt:apply-123".to_string(),
+            String::new(),
+            &mut |argv| {
+                calls.push(argv.to_vec());
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+        );
+
+        assert_eq!(replay.status, RollbackExecutionStatus::Refused);
+        assert!(calls.is_empty());
+        assert!(
+            replay
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("fresh post-failure topology probe binding"))
+        );
+    }
+
+    #[test]
+    fn rollback_replay_stops_before_mutation_when_validation_fails() {
+        let mut report = failed_report_for_rollback_replay();
+        report.rollback_recipes = vec![proven_safe_rollback_recipe()];
+        let mut calls = Vec::new();
+
+        let replay = replay_proven_safe_rollback_recipe_with_runner(
+            &report,
+            0,
+            "receipt:apply-123".to_string(),
+            "topology:fresh-456".to_string(),
+            &mut |argv| {
+                calls.push(argv.to_vec());
+                CommandRunResult {
+                    success: argv != ["disk-nix-test-probe", "topology"],
+                    status_code: Some(if argv == ["disk-nix-test-probe", "topology"] {
+                        1
+                    } else {
+                        0
+                    }),
+                    stdout: String::new(),
+                    stderr: if argv == ["disk-nix-test-probe", "topology"] {
+                        "topology changed".to_string()
+                    } else {
+                        String::new()
+                    },
+                }
+            },
+        );
+
+        assert_eq!(replay.status, RollbackExecutionStatus::Failed);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0], ["disk-nix-test-probe", "topology"]);
+        assert_eq!(replay.validation_results.len(), 1);
+        assert!(replay.rollback_results.is_empty());
     }
 
     #[test]

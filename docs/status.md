@@ -388,10 +388,15 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   read-only rollback precondition review for concrete risky actions, and
   stable `rollbackRecipes` with separate read-only validation, reversible
   mutation, destructive mutation, and operator-only handoff sections, plus
-  receipt-binding and fresh-topology-probe requirements. Reports also expose
-  `partialExecutionRecovery` sequencing with completed actions, failed action,
-  failed command, retry/review actions, remaining actions, completed mutating
-  command counts, and fresh-topology review notes. They also include
+  receipt-binding and fresh-topology-probe requirements. The execution crate can
+  now replay proven-safe reversible rollback recipe steps through
+  `replay_proven_safe_rollback_recipe`, binding the replay report to the
+  original receipt and a fresh topology probe while refusing review-only,
+  destructive, operator-only, not-ready, or unbound recipes before any command
+  runs. Reports also expose `partialExecutionRecovery` sequencing with completed
+  actions, failed action, failed command, retry/review actions, remaining
+  actions, completed mutating command counts, and fresh-topology review notes.
+  They also include
   ZFS/Btrfs snapshot lifecycle changes, ZFS pool/dataset/zvol lifecycle
   changes, LVM VG/volume/thin/PV changes, LUKS mapper/header/keyslot/token
   changes, filesystem lifecycle updates, cache lifecycle changes, swap
@@ -400,8 +405,8 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   multipath map recovery inspection, loop-device, backing-file, and
   device-mapper map recovery inspection, NFS export and client mount recovery
   inspection, plus receipt files that bind reports to their invocation
-  metadata, but safe automated rollback remains out of scope until broader
-  topology-specific recovery proofs exist.
+  metadata. Domain-specific proven-safe rollback recipes and topology-specific
+  recovery proofs remain future work.
 - Live probe-status preflight validation against every distribution and
   privilege/container profile still needs broader validation. Probe reports now
   expose structured degradation categories, adapter-specific tool/package,
