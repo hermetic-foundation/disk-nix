@@ -8,6 +8,7 @@ Refusing to run target-side LUN integration smoke test.
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates
 a temporary loop-backed LIO block backstore and iSCSI target/LUN mapping,
 mutates a target-side LUN property, maps and unmaps a second target-side LUN,
+verifies target-side LUN data survives a failed and resumed detach apply,
 proves destructive target-side removal is refused without destructive policy,
 then removes the temporary target state and backing files during cleanup.
 MSG
@@ -25,7 +26,7 @@ lun_id="${DISK_NIX_TARGET_LUN_ID:-7}"
 attach_lun_id="${DISK_NIX_TARGET_LUN_ATTACH_ID:-8}"
 initiator_iqn="${DISK_NIX_TARGET_LUN_INITIATOR:-iqn.2026-06.example:disk-nix-initiator}"
 
-for tool in "$disk_nix_bin" cmp grep jq losetup modprobe targetcli truncate; do
+for tool in "$disk_nix_bin" cmp grep install jq losetup mkfs.ext4 modprobe mount mountpoint targetcli truncate umount; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -40,8 +41,12 @@ attach_backstore=""
 target_created=0
 backstore_created=0
 attach_backstore_created=0
+lun_mounted=0
 
 cleanup() {
+  if [[ "$lun_mounted" == "1" ]] && mountpoint -q "$tmpdir/lun-mnt"; then
+    umount "$tmpdir/lun-mnt" || true
+  fi
   if [[ "$target_created" == "1" ]]; then
     targetcli "/iscsi" delete "$target_iqn" >/dev/null 2>&1 || true
   fi
@@ -73,7 +78,9 @@ attach_spec="$tmpdir/attach-spec.json"
 attach_report="$tmpdir/attach-report.json"
 detach_spec="$tmpdir/detach-spec.json"
 detach_report="$tmpdir/detach-report.json"
+failed_detach_report="$tmpdir/failed-detach-report.json"
 destroy_refusal_spec="$tmpdir/destroy-refusal-spec.json"
+sentinel_expected="$tmpdir/target-lun-sentinel.expected"
 
 truncate --size 64M "$backing"
 truncate --size 64M "$attach_backing"
@@ -209,6 +216,58 @@ jq -n \
     }
   }' > "$detach_spec"
 
+mkfs.ext4 -F "$attach_loopdev" >/dev/null
+mkdir -p "$tmpdir/lun-mnt"
+mount "$attach_loopdev" "$tmpdir/lun-mnt"
+lun_mounted=1
+printf 'disk-nix target-side LUN sentinel %s %s\n' "$target_iqn" "$attach_loopdev" > "$sentinel_expected"
+install -m 0600 "$sentinel_expected" "$tmpdir/lun-mnt/disk-nix-target-lun-sentinel.txt"
+cmp "$sentinel_expected" "$tmpdir/lun-mnt/disk-nix-target-lun-sentinel.txt" >/dev/null
+
+fail_tools="$tmpdir/fake-target-lun-detach-tools"
+mkdir -p "$fail_tools"
+real_targetcli="$(command -v targetcli)"
+cat > "$fail_tools/targetcli" <<EOF
+#!/usr/bin/env bash
+if [[ "\$*" == "/iscsi/$target_iqn/tpg1/acls delete $initiator_iqn" ]]; then
+  echo "synthetic target-side LUN detach failure for disk-nix data-survival coverage" >&2
+  exit 77
+fi
+exec "$real_targetcli" "\$@"
+EOF
+chmod +x "$fail_tools/targetcli"
+
+if PATH="$fail_tools:$PATH" "$disk_nix_bin" apply \
+  --spec "$detach_spec" \
+  --execute \
+  --report-out "$failed_detach_report" \
+  --json > "$tmpdir/failed-detach-apply.json"; then
+  echo "expected injected target-side LUN detach failure to fail apply" >&2
+  exit 1
+fi
+
+jq -e \
+  --arg target_iqn "$target_iqn" \
+  --arg initiator_iqn "$initiator_iqn" \
+  --argjson attach_lun_id "$attach_lun_id" \
+  '
+  .status == "failed"
+  and (.executionResults
+    | any(
+        .argv == ["targetcli", ("/iscsi/" + $target_iqn + "/tpg1/acls"), "delete", $initiator_iqn]
+        and .success == false
+        and .statusCode == 77
+        and (.stderr | contains("synthetic target-side LUN detach failure"))
+      ))
+  and .partialExecutionRecovery.failedActionId == ("targetluns:" + $target_iqn + ":detach")
+  and (.partialExecutionRecovery.retryReviewActionIds | index("targetluns:" + $target_iqn + ":detach") != null)
+  and (.recoveryActions | any(.kind == "resume-after-fix"))
+  and (.recoveryActions | any(.kind == "domain-recovery"))
+' "$tmpdir/failed-detach-apply.json" >/dev/null
+
+cmp "$tmpdir/failed-detach-apply.json" "$failed_detach_report" >/dev/null
+cmp "$sentinel_expected" "$tmpdir/lun-mnt/disk-nix-target-lun-sentinel.txt" >/dev/null
+
 if ! "$disk_nix_bin" apply \
   --spec "$detach_spec" \
   --execute \
@@ -234,6 +293,7 @@ jq -e \
 ' "$tmpdir/detach-apply.json" >/dev/null
 
 cmp "$tmpdir/detach-apply.json" "$detach_report" >/dev/null
+cmp "$sentinel_expected" "$tmpdir/lun-mnt/disk-nix-target-lun-sentinel.txt" >/dev/null
 if targetcli "/iscsi/$target_iqn/tpg1/luns" ls | grep -E "lun[[:space:]]*$attach_lun_id|lun$attach_lun_id" >/dev/null; then
   echo "target-side LUN $attach_lun_id remained mapped after detach" >&2
   exit 1
@@ -281,4 +341,4 @@ jq -e \
 
 grep -F 'apply policy blocked 1 action(s)' "$tmpdir/destroy-refusal.stderr" >/dev/null
 
-echo "target-side LUN integration smoke test updated lio.writeCache for $target_iqn LUN $lun_id, mapped/unmapped LUN $attach_lun_id, and verified destructive destroy refusal"
+echo "target-side LUN integration smoke test updated lio.writeCache for $target_iqn LUN $lun_id, mapped/unmapped LUN $attach_lun_id, verified failed-and-resumed detach data survival, and verified destructive destroy refusal"

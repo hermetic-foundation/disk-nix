@@ -772,7 +772,7 @@ Update rules:
   detaches the cache with `lvconvert --uncache`, reattaches the cache with
   `lvconvert --type cache --cachepool`, and verifies the cache sentinel
   survives mutation, detach, reattach, and rescan plans.
-- [ ] **Partial:** Deeper destructive VM tests still need data-survival
+- [x] **Finished:** Deeper destructive VM tests include data-survival
   assertions across failed and resumed apply runs for network-storage scenarios.
 - [x] **Finished:** Deeper destructive tests include NFS failed-and-resumed remount data-survival
   coverage: when `DISK_NIX_NFS_DATA_SURVIVAL=1` is set,
@@ -787,6 +787,14 @@ Update rules:
   mounted LUN filesystem, injects a failed host-side LUN rescan, verifies
   `partialExecutionRecovery`, `resume-after-fix`, and domain recovery guidance,
   verifies the sentinel remains readable, reruns a clean LUN rescan apply, and
+  verifies the sentinel remains readable after the resumed network-storage
+  operation.
+- [x] **Finished:** Deeper destructive tests include target-side LUN failed-and-resumed
+  detach data-survival coverage: the loop-backed LIO target harness formats the
+  mapped LUN backing device, writes a sentinel file, injects a failed
+  target-side detach apply before target state is mutated, verifies
+  `partialExecutionRecovery`, `resume-after-fix`, and domain recovery guidance,
+  verifies the sentinel remains readable, reruns a clean detach apply, and
   verifies the sentinel remains readable after the resumed network-storage
   operation.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,

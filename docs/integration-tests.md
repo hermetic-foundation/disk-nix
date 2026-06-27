@@ -1345,8 +1345,14 @@ When enabled, it:
 - creates a second temporary backstore and applies
   `targetLuns.<iqn>.operation = "attach"` to map it as another LUN with a
   reviewed initiator ACL
+- formats the second loop-backed LUN as ext4, writes
+  `disk-nix-target-lun-sentinel.txt`, injects a failed target-side detach
+  apply before target state is mutated, verifies the partial-execution recovery
+  report includes `resume-after-fix` and domain recovery guidance, and verifies
+  the sentinel remains readable
 - applies `targetLuns.<iqn>.operation = "detach"` to remove that initiator ACL
-  and unmap the second LUN without deleting the backstore
+  and unmap the second LUN without deleting the backstore, then verifies the
+  sentinel remains readable after the resumed detach operation
 - verifies `targetLuns.<iqn>.destroy = true` is refused without
   `allowDestructive = true`, leaves the command plan empty, and reports
   non-destructive review-policy guidance

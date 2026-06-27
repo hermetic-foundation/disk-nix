@@ -252,6 +252,7 @@
           runtimeInputs = [
             diskNix
             pkgs.coreutils
+            pkgs.e2fsprogs
             pkgs.jq
             pkgs.kmod
             pkgs.targetcli-fb
@@ -2117,6 +2118,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'allowDestructive=true' ${./scripts/integration-target-lun-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lio.writeCache' ${./scripts/integration-target-lun-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix target-side LUN sentinel' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN detach failure for disk-nix data-survival coverage' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'failed-detach-apply.json' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'failed-and-resumed detach data survival' ${./scripts/integration-target-lun-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'target-side LUN integration smoke test' ${./scripts/integration-target-lun-smoke.sh}
             touch "$out"
           '';
@@ -2471,7 +2476,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'Status labels:' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Update rules:' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '\*\*Finished:\*\*' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q '\*\*Partial:\*\*' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q '`Partial`: useful support exists' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '`Desired`: not implemented yet' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Operator runbooks for high-risk workflows' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'multi-domain mutation' "$checklist"
@@ -2499,6 +2504,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'network-storage scenarios' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'NFS failed-and-resumed remount data-survival' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'iSCSI host-LUN failed-and-resumed rescan data-survival' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'target-side LUN failed-and-resumed' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace create/delete' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace grow' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace attach/detach' "$checklist"
