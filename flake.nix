@@ -224,11 +224,14 @@
           name = "disk-nix-integration-layered-vm-smoke";
           runtimeInputs = [
             diskNix
+            pkgs.cloud-utils
             pkgs.coreutils
             pkgs.cryptsetup
             pkgs.e2fsprogs
+            pkgs.gnugrep
             pkgs.jq
             pkgs.lvm2
+            pkgs.parted
             pkgs.util-linux
           ];
           text = builtins.readFile ./scripts/integration-layered-vm-smoke.sh;
@@ -2120,11 +2123,19 @@
           integrationLayeredVmSmoke = pkgs.runCommand "disk-nix-integration-layered-vm-smoke-check" { } ''
             ${pkgs.bash}/bin/bash -n ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'parted -s "$loopdev" mklabel gpt' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup luksFormat' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'pvcreate --force --yes' ${./scripts/integration-layered-vm-smoke.sh}
-            ${pkgs.gnugrep}/bin/grep -q 'lvextend --yes --size 192M' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'partitions:layeredPart:grow' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'growpart' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'luks.devices:layeredMapper:grow' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cryptsetup", "resize"' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'volumes:layeredRoot:grow' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'lvextend", "--resizefs", "--size", "192M"' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'filesystem:layeredRoot:grow' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'resize2fs' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystems:layeredRootRemount:remount' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'remount,rw,noatime' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'vgchange --activate n' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'luks.devices:layeredMapper:close' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup", "close"' ${./scripts/integration-layered-vm-smoke.sh}
@@ -2161,6 +2172,9 @@
             ${pkgs.gnugrep}/bin/grep -q '\*\*Partial:\*\*' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '`Desired`: not implemented yet' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Operator runbooks for high-risk workflows' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'multi-domain mutation' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'partition, LUKS, LVM, filesystem grow, and remount' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'multi-domain apply plan for' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'partiallySuppressed' ${./docs/cli.md}

@@ -159,11 +159,13 @@ behavior across real storage stacks.
   synthetic failed-apply recovery. The self-contained loop-backed harnesses
   create disposable backing files or arrays, verify real `inspect --json`,
   execute reviewed apply plans, and clean up temporary devices. A layered VM
-  harness creates loop, LUKS, LVM, and mounted ext4 layers on a disposable disk,
-  extends the LV, and executes the disk-nix filesystem grow path with
-  `resize2fs`; it then unmounts and deactivates the stack, executes a disk-nix
-  LUKS close plan, reopens the mapper, reactivates the VG, remounts the LV, and
-  verifies sentinel data survived. Lab-hardware harnesses for NFS, VDO, iSCSI,
+  harness creates partitioned loop, LUKS, LVM, and mounted ext4 layers on a
+  disposable disk, enlarges the backing file, and executes one disk-nix apply
+  run that grows the partition, resizes the LUKS mapper, grows the LV, grows the
+  filesystem, and remounts it with reviewed options; it then unmounts and
+  deactivates the stack, executes a disk-nix LUKS close plan, reopens the mapper,
+  reactivates the VG, remounts the LV, and verifies sentinel data survived.
+  Lab-hardware harnesses for NFS, VDO, iSCSI,
   multipath, and NVMe require explicit environment-selected existing targets
   and exercise non-destructive refresh or remount paths. The failure-recovery
   harness uses fake storage tools to prove `partialExecutionRecovery`,
@@ -346,8 +348,9 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property,
   bcache replacement, bcache property, bcache rescan, and LVM cache property
   paths.
-- A deeper VM-based destructive test harness that validates multi-layer apply
-  behavior on isolated disposable disks before trusting production mutations.
+- A deeper VM-based destructive test harness that validates multi-domain
+  partition, LUKS, LVM, filesystem grow, and remount behavior on isolated
+  disposable disks before trusting production mutations.
 - More reconciliation logic against the current storage graph for additional
   operation types and multi-action groups before command rendering. Topology
   comparison now emits `reconciliationGroups` so related actions sharing a

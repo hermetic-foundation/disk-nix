@@ -6,8 +6,8 @@ if [[ "${DISK_NIX_INTEGRATION_DESTRUCTIVE:-}" != "1" ]]; then
 Refusing to run layered VM integration smoke test.
 
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates
-a temporary loop-backed LUKS container, LVM volume group, logical volume, ext4
-filesystem, and mount. It is intended for disposable VMs.
+a temporary partitioned loop disk, LUKS container, LVM volume group, logical
+volume, ext4 filesystem, and mount. It is intended for disposable VMs.
 MSG
   exit 2
 fi
@@ -19,7 +19,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" blockdev cmp cryptsetup jq losetup lvcreate lvextend lvs mkfs.ext4 mount mountpoint pvcreate pvremove resize2fs truncate umount vgchange vgcreate vgremove vgs; do
+for tool in "$disk_nix_bin" blockdev cmp cryptsetup findmnt grep growpart jq losetup lsblk lvcreate lvextend lvs mkfs.ext4 mount mountpoint parted partprobe pvcreate pvremove resize2fs truncate umount vgchange vgcreate vgremove vgs; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -28,6 +28,7 @@ done
 
 tmpdir="$(mktemp -d)"
 loopdev=""
+partition=""
 mapper="disk_nix_layered_vm_$$"
 vg="disk_nix_layered_vm_$$"
 mountpoint="$tmpdir/mnt"
@@ -64,8 +65,28 @@ chmod 0600 "$keyfile"
 mkdir -p "$mountpoint"
 truncate --size 768M "$backing"
 loopdev="$(losetup --find --show "$backing")"
-cryptsetup luksFormat --batch-mode --key-file "$keyfile" "$loopdev"
-cryptsetup open --key-file "$keyfile" "$loopdev" "$mapper"
+parted -s "$loopdev" mklabel gpt
+parted -s "$loopdev" mkpart primary 1MiB 640MiB
+partprobe "$loopdev"
+for _ in {1..50}; do
+  if [[ -b "${loopdev}p1" ]]; then
+    partition="${loopdev}p1"
+    break
+  fi
+  if [[ -b "${loopdev}1" ]]; then
+    partition="${loopdev}1"
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$partition" ]]; then
+  echo "partition node did not appear for $loopdev" >&2
+  lsblk "$loopdev" >&2 || true
+  exit 1
+fi
+
+cryptsetup luksFormat --batch-mode --key-file "$keyfile" "$partition"
+cryptsetup open --key-file "$keyfile" "$partition" "$mapper"
 pvcreate --force --yes "/dev/mapper/$mapper"
 vgcreate "$vg" "/dev/mapper/$mapper"
 lvcreate --yes --size 128M --name root "$vg"
@@ -83,23 +104,59 @@ jq -e --arg mountpoint "$mountpoint" --arg lv_path "$lv_path" '
     )
 ' "$tmpdir/inspect-before.json" >/dev/null
 
+printf 'disk-nix layered vm persistence check\n' > "$sentinel"
 before_size="$(blockdev --getsize64 "$lv_path")"
-lvextend --yes --size 192M "$lv_path"
-after_size="$(blockdev --getsize64 "$lv_path")"
-if (( after_size <= before_size )); then
-  echo "layered LV did not report growth after lvextend" >&2
-  exit 1
-fi
+truncate --size 1152M "$backing"
+losetup --set-capacity "$loopdev"
 
-jq -n --arg lv_path "$lv_path" --arg mountpoint "$mountpoint" '{
+jq -n \
+  --arg loopdev "$loopdev" \
+  --arg partition "$partition" \
+  --arg mapper "$mapper" \
+  --arg lv_path "$lv_path" \
+  --arg mountpoint "$mountpoint" '{
   version: 1,
+  partitions: {
+    layeredPart: {
+      operation: "grow",
+      device: $loopdev,
+      target: $partition,
+      partitionNumber: 1
+    }
+  },
+  luks: {
+    devices: {
+      layeredMapper: {
+        operation: "grow",
+        device: $partition,
+        target: $mapper
+      }
+    }
+  },
+  volumes: {
+    layeredRoot: {
+      operation: "grow",
+      target: $lv_path,
+      desiredSize: "192M"
+    }
+  },
   filesystems: {
     layeredRoot: {
       device: $lv_path,
       fsType: "ext4",
       mountpoint: $mountpoint,
       resizePolicy: "grow-only"
+    },
+    layeredRootRemount: {
+      fsType: "ext4",
+      mountpoint: $mountpoint,
+      operation: "remount",
+      options: ["rw", "noatime"]
     }
+  },
+  apply: {
+    allowGrow: true,
+    allowOffline: true
   }
 }' > "$spec"
 
@@ -113,15 +170,37 @@ if ! "$disk_nix_bin" apply \
   exit 1
 fi
 
-jq -e --arg lv_path "$lv_path" '
+jq -e \
+  --arg loopdev "$loopdev" \
+  --arg mapper "$mapper" \
+  --arg lv_path "$lv_path" \
+  --arg mountpoint "$mountpoint" '
   .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == "partitions:layeredPart:grow")
+    | .commands | any(.argv == ["growpart", $loopdev, "1"]))
+  and (.commandPlan[] | select(.actionId == "luks.devices:layeredMapper:grow")
+    | .commands | any(.argv == ["cryptsetup", "resize", $mapper]))
+  and (.commandPlan[] | select(.actionId == "volumes:layeredRoot:grow")
+    | .commands | any(.argv == ["lvextend", "--resizefs", "--size", "192M", $lv_path]))
   and (.commandPlan[] | select(.actionId == "filesystem:layeredRoot:grow")
     | .commands | any(.argv == ["resize2fs", $lv_path]))
+  and (.commandPlan[] | select(.actionId == "filesystems:layeredRootRemount:remount")
+    | .commands | any(.argv == ["mount", "-o", "remount,rw,noatime", $mountpoint]))
+  and (.executionResults | any(.argv == ["growpart", $loopdev, "1"] and .success == true))
+  and (.executionResults | any(.argv == ["cryptsetup", "resize", $mapper] and .success == true))
+  and (.executionResults | any(.argv == ["lvextend", "--resizefs", "--size", "192M", $lv_path] and .success == true))
   and (.executionResults | any(.argv == ["resize2fs", $lv_path] and .success == true))
+  and (.executionResults | any(.argv == ["mount", "-o", "remount,rw,noatime", $mountpoint] and .success == true))
 ' "$tmpdir/apply.json" >/dev/null
 
 cmp "$tmpdir/apply.json" "$report" >/dev/null
-printf 'disk-nix layered vm persistence check\n' > "$sentinel"
+after_size="$(blockdev --getsize64 "$lv_path")"
+if (( after_size <= before_size )); then
+  echo "layered LV did not report growth after multi-domain disk-nix apply" >&2
+  exit 1
+fi
+findmnt -no OPTIONS "$mountpoint" | tr ',' '\n' | grep -qx noatime
+printf 'disk-nix layered vm persistence check\n' | cmp - "$sentinel" >/dev/null
 
 "$disk_nix_bin" inspect "$lv_path" --json > "$tmpdir/inspect-after.json"
 jq -e --arg mountpoint "$mountpoint" --arg lv_path "$lv_path" '
@@ -137,12 +216,12 @@ jq -e --arg mountpoint "$mountpoint" --arg lv_path "$lv_path" '
 umount "$mountpoint"
 vgchange --activate n "$vg"
 
-jq -n --arg loopdev "$loopdev" --arg mapper "$mapper" '{
+jq -n --arg partition "$partition" --arg mapper "$mapper" '{
   version: 1,
   luks: {
     devices: {
       layeredMapper: {
-        device: $loopdev,
+        device: $partition,
         target: $mapper,
         operation: "close"
       }
@@ -177,7 +256,7 @@ if [[ -e "/dev/mapper/$mapper" ]]; then
   exit 1
 fi
 
-cryptsetup open --key-file "$keyfile" "$loopdev" "$mapper"
+cryptsetup open --key-file "$keyfile" "$partition" "$mapper"
 vgchange --activate y "$vg"
 mount "$lv_path" "$mountpoint"
 printf 'disk-nix layered vm persistence check\n' | cmp - "$sentinel" >/dev/null
@@ -193,4 +272,4 @@ jq -e --arg mountpoint "$mountpoint" --arg lv_path "$lv_path" '
     )
 ' "$tmpdir/inspect-reopened.json" >/dev/null
 
-echo "layered VM integration smoke test grew ext4, closed LUKS through disk-nix, and reopened $lv_path mounted at $mountpoint"
+echo "layered VM integration smoke test grew partition, LUKS, LVM, ext4, remounted, closed LUKS through disk-nix, and reopened $lv_path mounted at $mountpoint"

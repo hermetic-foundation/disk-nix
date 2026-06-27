@@ -1023,18 +1023,23 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 
 When enabled, it:
 
-- creates a temporary loop-backed disk image
-- formats and opens a LUKS mapper on the loop device
+- creates a temporary partitioned loop-backed disk image
+- formats and opens a LUKS mapper on the loop partition
 - creates an LVM PV, VG, and root LV on the mapper
 - creates and mounts an ext4 filesystem on the LV
 - verifies `disk-nix inspect <mountpoint> --json` sees the layered topology
-- grows the LV with `lvextend`
-- executes a `filesystems.layeredRoot` grow apply plan
-- verifies the rendered `resize2fs <lv>` command succeeded and the JSON report
-  was written
-- verifies the mounted filesystem remains inspectable after the grow
-- writes a sentinel file, unmounts the filesystem, deactivates the VG, executes
-  a `luks.devices.layeredMapper` close apply plan, and verifies the rendered
+- writes a sentinel file, grows the loop backing file, and executes one
+  multi-domain apply plan for `partitions.layeredPart`,
+  `luks.devices.layeredMapper`, `volumes.layeredRoot`,
+  `filesystems.layeredRoot`, and `filesystems.layeredRootRemount`
+- verifies the rendered and executed `growpart <loop> 1`,
+  `cryptsetup resize <mapper>`, `lvextend --resizefs --size 192M <lv>`,
+  `resize2fs <lv>`, and `mount -o remount,rw,noatime <mountpoint>` commands
+  succeeded and the JSON report was written
+- verifies the LV grew, the remount option is active, the sentinel survived, and
+  the mounted filesystem remains inspectable after the grow
+- unmounts the filesystem, deactivates the VG, executes a
+  `luks.devices.layeredMapper` close apply plan, and verifies the rendered
   `cryptsetup close <mapper>` command succeeded
 - reopens the LUKS mapper with the temporary key, reactivates the VG, remounts
   the LV, verifies the sentinel survived, and inspects the reopened layered

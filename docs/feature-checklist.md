@@ -523,12 +523,15 @@ Update rules:
   fake-tool synthetic command failures.
 - [x] **Finished:** Default VM suite includes the synthetic failure-recovery
   harness.
-- [x] **Finished:** Disposable loop/LUKS/LVM/ext4 layered VM grow harness
-  executes `resize2fs` through disk-nix after an LV extension, then
-  unmounts/deactivates the stack, executes a disk-nix LUKS close plan, reopens
-  the mapper, remounts the LV, and verifies sentinel data survived.
-- [ ] **Partial:** Deeper destructive VM tests need multi-domain mutation
-  scenarios that combine partition growth, LUKS growth, LVM changes, filesystem
+- [x] **Finished:** Disposable partitioned loop/LUKS/LVM/ext4 layered VM grow
+  harness executes one disk-nix apply run that grows the partition with
+  `growpart`, resizes the LUKS mapper with `cryptsetup resize`, grows the LV
+  with `lvextend --resizefs`, executes `resize2fs`, remounts with reviewed
+  options, then unmounts/deactivates the stack, executes a disk-nix LUKS close
+  plan, reopens the mapper, remounts the LV, and verifies sentinel data
+  survived.
+- [x] **Finished:** Deeper destructive VM tests include a multi-domain mutation
+  scenario that combines partition growth, LUKS growth, LVM changes, filesystem
   growth, and mount/remount verification in one apply run.
 - [ ] **Partial:** Deeper destructive VM tests need injected command failures
   after one or more successful mutating commands, with assertions for recovery
