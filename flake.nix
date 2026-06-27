@@ -2149,6 +2149,9 @@
             ${pkgs.gnugrep}/bin/grep -q 'reversibleMutations.commands' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'destructiveMutations.commands' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'requiredTopologyEvidence' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'layeredResumeRemount' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'resume-apply.json' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'remount,rw,relatime' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'fresh topology' ${./scripts/integration-layered-vm-smoke.sh}
             touch "$out"
           '';
@@ -2187,10 +2190,14 @@
             ${pkgs.gnugrep}/bin/grep -q 'fresh-topology review' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'rollback-review behavior' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'operator-only guidance instead of automated unsafe rollback' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'layered block/filesystem' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'cache and network-storage' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'rollback review safety' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'failed-and-resumed' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'VM-backed failure-injection apply' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'rollback review stays non-mutating' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'clean follow-up apply' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'partition, LUKS, LVM, filesystem grow, and remount' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'multi-domain apply plan for' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' "$checklist"

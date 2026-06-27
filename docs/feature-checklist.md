@@ -544,9 +544,14 @@ Update rules:
   recovery-point preservation guidance, refused rollback recipe status, required
   topology evidence, empty reversible/destructive mutation sections, and
   operator-only guidance instead of automated unsafe rollback.
-- [ ] **Partial:** Deeper destructive VM tests need data-survival assertions
-  across failed and resumed apply runs for layered block, filesystem, cache,
-  and network-storage scenarios.
+- [x] **Finished:** Deeper destructive VM tests assert layered block/filesystem
+  data survival across failed and resumed apply runs: after the injected
+  `xfs_growfs` failure, the harness runs a resumed remount apply, verifies the
+  sentinel remains readable, then closes/reopens the LUKS stack and verifies the
+  sentinel again.
+- [ ] **Partial:** Deeper destructive VM tests still need data-survival
+  assertions across failed and resumed apply runs for cache and network-storage
+  scenarios.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
   checks for root privilege plus missing, failing, stderr-only, and empty-output

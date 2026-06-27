@@ -1049,6 +1049,9 @@ When enabled, it:
   are read-only, the rollback recipe is `refused`, reversible and destructive
   mutation sections are empty, required topology evidence is listed, and
   operator-only guidance is emitted instead of an automated unsafe rollback
+- resumes with a clean follow-up apply for the remaining remount action,
+  verifies `mount -o remount,rw,relatime <mountpoint>` succeeds, and confirms the
+  sentinel remains readable after the failed-and-resumed apply sequence
 - verifies the failed apply report was written, the LV growth before the failure
   is visible, and sentinel data still survives after the failed apply
 - unmounts the filesystem, deactivates the VG, executes a

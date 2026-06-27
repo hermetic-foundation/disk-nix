@@ -59,6 +59,8 @@ close_spec="$tmpdir/close-spec.json"
 close_report="$tmpdir/close-report.json"
 failure_spec="$tmpdir/failure-spec.json"
 failure_report="$tmpdir/failure-report.json"
+resume_spec="$tmpdir/resume-spec.json"
+resume_report="$tmpdir/resume-report.json"
 lv_path="/dev/$vg/root"
 sentinel="$mountpoint/disk-nix-layered-sentinel"
 
@@ -314,6 +316,43 @@ if (( after_failure_size <= after_size )); then
   echo "layered LV did not report growth before injected VM apply failure" >&2
   exit 1
 fi
+printf 'disk-nix layered vm persistence check\n' | cmp - "$sentinel" >/dev/null
+
+jq -n --arg mountpoint "$mountpoint" '{
+  version: 1,
+  filesystems: {
+    layeredResumeRemount: {
+      fsType: "ext4",
+      mountpoint: $mountpoint,
+      operation: "remount",
+      options: ["rw", "relatime"]
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$resume_spec"
+
+if ! "$disk_nix_bin" apply \
+  --spec "$resume_spec" \
+  --execute \
+  --report-out "$resume_report" \
+  --json > "$tmpdir/resume-apply.json"; then
+  cat "$tmpdir/resume-apply.json" >&2 || true
+  cat "$resume_report" >&2 || true
+  exit 1
+fi
+
+jq -e --arg mountpoint "$mountpoint" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == "filesystems:layeredResumeRemount:remount")
+    | .commands | any(.argv == ["mount", "-o", "remount,rw,relatime", $mountpoint]))
+  and (.executionResults
+    | any(.argv == ["mount", "-o", "remount,rw,relatime", $mountpoint] and .success == true))
+' "$tmpdir/resume-apply.json" >/dev/null
+
+cmp "$tmpdir/resume-apply.json" "$resume_report" >/dev/null
+findmnt -no OPTIONS "$mountpoint" | tr ',' '\n' | grep -qx relatime
 printf 'disk-nix layered vm persistence check\n' | cmp - "$sentinel" >/dev/null
 
 umount "$mountpoint"

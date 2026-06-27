@@ -174,6 +174,9 @@ behavior across real storage stacks.
   read-only, rollback recipes are refused for unsafe filesystem grow rollback,
   reversible and destructive mutation sections stay empty, required topology
   evidence is listed, and the handoff stays operator-only instead of automated.
+  It then resumes with the remaining remount action, verifies the remount
+  succeeds, confirms sentinel data remains readable after the failed-and-resumed
+  sequence, and repeats the sentinel check after the LUKS close/reopen cycle.
   Lab-hardware harnesses for NFS, VDO, iSCSI,
   multipath, and NVMe require explicit environment-selected existing targets
   and exercise non-destructive refresh or remount paths. The failure-recovery
