@@ -914,7 +914,7 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 
 When enabled, it:
 
-- creates two temporary 64 MiB backing files
+- creates three temporary 64 MiB backing files
 - attaches them to the next available `/dev/loop*` devices
 - creates a temporary RAID1 MD array with `mdadm`
 - verifies `disk-nix inspect <array> --json` sees the array
@@ -922,7 +922,12 @@ When enabled, it:
 - verifies the generated JSON report was written and the rendered
   `mdadm --detail`, `mdadm --detail --scan`, `mdadm --examine --scan`, and
   `/proc/mdstat` inventory commands succeeded
-- fails and removes one RAID1 member from the temporary array
+- applies an `mdRaids.<name>.replaceDevices` plan, verifies
+  `mdadm <array> --replace <old-loop> --with <new-loop>` succeeds, waits for
+  replacement completion with `mdadm --wait <array>`, and verifies the
+  replacement member appears in `mdadm --detail`
+- fails and removes one RAID1 member from the temporary array, using the
+  replacement member to prove the degraded path after replacement
 - verifies `disk-nix inspect <array> --json` still sees the degraded array and
   the degraded rescan apply succeeds
 - stops the array, wipes member superblocks, detaches the loop devices, and

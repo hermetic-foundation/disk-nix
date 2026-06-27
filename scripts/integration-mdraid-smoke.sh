@@ -6,8 +6,9 @@ if [[ "${DISK_NIX_INTEGRATION_DESTRUCTIVE:-}" != "1" ]]; then
 Refusing to run MD RAID loop-backed integration smoke test.
 
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates,
-rescans, stops, and wipes a temporary loop-backed MD RAID array. Backing files
-are created in a temporary directory and removed during cleanup.
+rescans, replaces a member, degrades, stops, and wipes a temporary loop-backed
+MD RAID array. Backing files are created in a temporary directory and removed
+during cleanup.
 MSG
   exit 2
 fi
@@ -29,18 +30,19 @@ done
 tmpdir="$(mktemp -d)"
 loop_a=""
 loop_b=""
+loop_c=""
 array="/dev/md/disk-nix-md-smoke-$$"
 
 cleanup() {
   if [[ -e "$array" ]]; then
     mdadm --stop "$array" >/dev/null 2>&1 || true
   fi
-  for dev in "$loop_a" "$loop_b"; do
+  for dev in "$loop_a" "$loop_b" "$loop_c"; do
     if [[ -n "$dev" ]]; then
       mdadm --zero-superblock --force "$dev" >/dev/null 2>&1 || true
     fi
   done
-  for dev in "$loop_a" "$loop_b"; do
+  for dev in "$loop_a" "$loop_b" "$loop_c"; do
     if [[ -n "$dev" ]] && losetup --list "$dev" >/dev/null 2>&1; then
       losetup --detach "$dev"
     fi
@@ -51,13 +53,17 @@ trap cleanup EXIT
 
 backing_a="$tmpdir/disk-nix-md-a.img"
 backing_b="$tmpdir/disk-nix-md-b.img"
+backing_c="$tmpdir/disk-nix-md-c.img"
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
+replace_spec="$tmpdir/replace-spec.json"
+replace_report="$tmpdir/replace-apply-report.json"
 degraded_report="$tmpdir/degraded-apply-report.json"
 
-truncate --size 64M "$backing_a" "$backing_b"
+truncate --size 64M "$backing_a" "$backing_b" "$backing_c"
 loop_a="$(losetup --find --show "$backing_a")"
 loop_b="$(losetup --find --show "$backing_b")"
+loop_c="$(losetup --find --show "$backing_c")"
 mdadm --create "$array" --run --metadata=1.2 --level=1 --raid-devices=2 "$loop_a" "$loop_b"
 
 "$disk_nix_bin" inspect "$array" --json > "$tmpdir/inspect.json"
@@ -103,8 +109,43 @@ jq -e --arg array "$array" '
 cmp "$tmpdir/apply.json" "$report" >/dev/null
 mdadm --detail "$array" >/dev/null
 
-mdadm "$array" --fail "$loop_b"
-mdadm "$array" --remove "$loop_b"
+jq -n --arg array "$array" --arg old "$loop_b" --arg new "$loop_c" '{
+  version: 1,
+  apply: {
+    allowOffline: true,
+    allowDeviceReplacement: true
+  },
+  mdRaids: {
+    replacement: {
+      target: $array,
+      replaceDevices: {
+        ($old): $new
+      }
+    }
+  }
+}' > "$replace_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$replace_spec" \
+  --execute \
+  --report-out "$replace_report" \
+  --json > "$tmpdir/replace-apply.json"
+
+jq -e --arg array "$array" --arg old "$loop_b" --arg new "$loop_c" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("mdRaids:replacement:replace-device:" + $old))
+    | .commands | any(.argv == ["mdadm", $array, "--replace", $old, "--with", $new]))
+  and (.executionResults
+    | any(.argv == ["mdadm", $array, "--replace", $old, "--with", $new] and .success == true))
+' "$tmpdir/replace-apply.json" >/dev/null
+
+cmp "$tmpdir/replace-apply.json" "$replace_report" >/dev/null
+mdadm --wait "$array"
+mdadm --detail "$array" > "$tmpdir/replaced-detail.txt"
+grep -q "$loop_c" "$tmpdir/replaced-detail.txt"
+
+mdadm "$array" --fail "$loop_c"
+mdadm "$array" --remove "$loop_c"
 mdadm --detail "$array" > "$tmpdir/degraded-detail.txt"
 grep -Eq 'State : .*degraded|Active Devices : 1' "$tmpdir/degraded-detail.txt"
 
@@ -140,4 +181,4 @@ jq -e --arg array "$array" '
 
 cmp "$tmpdir/degraded-apply.json" "$degraded_report" >/dev/null
 
-echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, then verified degraded missing-member rescan"
+echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, replaced $loop_b with $loop_c, then verified degraded missing-member rescan"

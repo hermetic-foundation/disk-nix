@@ -503,6 +503,12 @@ Update rules:
 - [ ] **Partial:** Destructive integration tests need real or VM-backed device
   replacement coverage for MD RAID, ZFS pools, Btrfs filesystems, bcachefs,
   bcache, LVM cache, and multipath-backed stacks.
+- [x] **Finished:** Destructive integration tests include real MD RAID member
+  replacement coverage: the loop-backed MD harness creates a disposable RAID1
+  array, applies `mdRaids.*.replaceDevices`, executes
+  `mdadm <array> --replace <old-loop> --with <new-loop>`, waits for replacement
+  completion with `mdadm --wait`, and verifies the replacement member appears
+  in `mdadm --detail` before later degraded-array checks.
 - [ ] **Partial:** Destructive integration tests need broader degraded-array
   variants covering missing members, stale superblocks, replacement races,
   partial rebuilds, failed detach, and failed reattach behavior.

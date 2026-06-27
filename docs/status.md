@@ -180,9 +180,10 @@ behavior across real storage stacks.
   `multipathd add path` and `multipathd del path`, verify lab-backed
   multipath flush with `multipath -f`, then verify
   real VDO write-policy mutation with `vdo changeWritePolicy`, verify
-  real NFS export option mutation with `exportfs -i`, and verify degraded
-  missing-member MD RAID rescan after failing and removing one temporary RAID1
-  member, then clean up temporary devices. A layered VM
+  real NFS export option mutation with `exportfs -i`, verify real MD RAID member replacement
+  with `mdadm --replace` and `mdadm --wait`, and verify
+  degraded missing-member MD RAID rescan after failing and removing one
+  temporary RAID1 member, then clean up temporary devices. A layered VM
   harness creates partitioned loop, LUKS, LVM, and mounted ext4 layers on a
   disposable disk, enlarges the backing file, and executes one disk-nix apply
   run that grows the partition, resizes the LUKS mapper, grows the LV, grows the
