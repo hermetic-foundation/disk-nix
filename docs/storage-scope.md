@@ -250,8 +250,10 @@ The current probe layer normalizes:
   with shared VG metadata, sanlock lock hints, remote LV activity, fabrics path
   state, ANA state, and controller-to-namespace relationships, plus Fibre
   Channel multipath paths with FC transport WWPN pairs, SCSI unit names, ALUA
-  path groups, active/standby state, failed path metadata, and multipath backing
-  edges, plus native NVMe/TCP multipath paths with live and reconnecting fabrics
+  path groups, active/standby state, failed path metadata, additional adapters,
+  zoning-style fabric/WWPN layouts, optimized and non-optimized ALUA paths,
+  blocked failed path evidence, and multipath backing edges, plus native
+  NVMe/TCP multipath paths with live and reconnecting fabrics
   controllers, optimized and inaccessible ANA states, failed path metadata, and
   multipath backing edges. iSCSI parser fixtures also cover bracketed IPv6
   portals, concise open-iscsi node records, attached LUN disks, iSER/RDMA

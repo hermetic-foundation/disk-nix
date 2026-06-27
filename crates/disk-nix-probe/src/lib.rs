@@ -2698,6 +2698,62 @@ size=2.0T features='2 queue_if_no_path pg_init_retries 50' hwhandler='1 alua' wp
   `- 7:0:3:12 sde 8:64 failed faulty offline standby
 "#;
 
+    const FC_ZONED_LSSCSI_LIST: &[u8] = br#"
+[8:0:1:23]   disk    NETAPP   LUN C-Mode      9171  /dev/sdf   /dev/sg8   4.00T
+  device_blocked=0
+  fabric_name=0x1000000533fedcba
+  port_name=0x100000109babcdef
+  queue_depth=128
+  state=running
+  target_port_name=0x500a098299aabb01
+[9:0:2:23]   disk    NETAPP   LUN C-Mode      9171  /dev/sdg   /dev/sg9   4.00T
+  device_blocked=0
+  fabric_name=0x1000000533fedcbb
+  port_name=0x100000109babcd00
+  queue_depth=128
+  state=running
+  target_port_name=0x500a098399aabb01
+[10:0:3:23]  disk    NETAPP   LUN C-Mode      9171  /dev/sdh   /dev/sg10  4.00T
+  device_blocked=0
+  fabric_name=0x1000000533fedcba
+  port_name=0x100000109babcdef
+  queue_depth=128
+  state=running
+  target_port_name=0x500a098299aabb02
+[11:0:4:23]  disk    NETAPP   LUN C-Mode      9171  /dev/sdi   /dev/sg11  4.00T
+  device_blocked=1
+  fabric_name=0x1000000533fedcbb
+  port_name=0x100000109babcd00
+  queue_depth=128
+  state=blocked
+  target_port_name=0x500a098399aabb02
+"#;
+
+    const FC_ZONED_LSSCSI_TRANSPORT: &[u8] = br#"
+[8:0:1:23]   disk    fc:0x100000109babcdef,0x500a098299aabb01           /dev/sdf   /dev/sg8   /dev/disk/by-id/scsi-3600a098038314f6f2b5d514d43594c33  /dev/disk/by-id/wwn-0x600a098038314f6f2b5d514d43594c33  4.00T
+[9:0:2:23]   disk    fc:0x100000109babcd00,0x500a098399aabb01           /dev/sdg   /dev/sg9   /dev/disk/by-id/scsi-3600a098038314f6f2b5d514d43594c33  /dev/disk/by-id/wwn-0x600a098038314f6f2b5d514d43594c33  4.00T
+[10:0:3:23]  disk    fc:0x100000109babcdef,0x500a098299aabb02           /dev/sdh   /dev/sg10  /dev/disk/by-id/scsi-3600a098038314f6f2b5d514d43594c33  /dev/disk/by-id/wwn-0x600a098038314f6f2b5d514d43594c33  4.00T
+[11:0:4:23]  disk    fc:0x100000109babcd00,0x500a098399aabb02           /dev/sdi   /dev/sg11  /dev/disk/by-id/scsi-3600a098038314f6f2b5d514d43594c33  /dev/disk/by-id/wwn-0x600a098038314f6f2b5d514d43594c33  4.00T
+"#;
+
+    const FC_ZONED_LSSCSI_UNIT: &[u8] = br#"
+[8:0:1:23]   disk    3600a098038314f6f2b5d514d43594c33                  /dev/sdf   /dev/sg8   /dev/disk/by-id/scsi-3600a098038314f6f2b5d514d43594c33  /dev/disk/by-id/wwn-0x600a098038314f6f2b5d514d43594c33  4.00T
+[9:0:2:23]   disk    3600a098038314f6f2b5d514d43594c33                  /dev/sdg   /dev/sg9   /dev/disk/by-id/scsi-3600a098038314f6f2b5d514d43594c33  /dev/disk/by-id/wwn-0x600a098038314f6f2b5d514d43594c33  4.00T
+[10:0:3:23]  disk    3600a098038314f6f2b5d514d43594c33                  /dev/sdh   /dev/sg10  /dev/disk/by-id/scsi-3600a098038314f6f2b5d514d43594c33  /dev/disk/by-id/wwn-0x600a098038314f6f2b5d514d43594c33  4.00T
+[11:0:4:23]  disk    3600a098038314f6f2b5d514d43594c33                  /dev/sdi   /dev/sg11  /dev/disk/by-id/scsi-3600a098038314f6f2b5d514d43594c33  /dev/disk/by-id/wwn-0x600a098038314f6f2b5d514d43594c33  4.00T
+"#;
+
+    const FC_ZONED_MULTIPATH: &[u8] = br#"
+mpathfczone (3600a098038314f6f2b5d514d43594c33) dm-11 NETAPP,LUN C-Mode
+size=4.0T features='2 queue_if_no_path retain_attached_hw_handler' hwhandler='1 alua' wp=rw
+|-+- policy='service-time 0' prio=50 status=active
+| |- 8:0:1:23 sdf 8:80 active ready running optimized
+| `- 9:0:2:23 sdg 8:96 active ready running optimized
+`-+- policy='service-time 0' prio=10 status=enabled
+  |- 10:0:3:23 sdh 8:112 active ready running nonoptimized
+  `- 11:0:4:23 sdi 8:128 failed faulty offline standby
+"#;
+
     const ENCRYPTED_DEGRADED_MDSTAT: &[u8] = br#"
 Personalities : [raid1]
 md127 : active raid1 nvme1n1p2[1](F) nvme0n1p2[0]
@@ -3589,6 +3645,131 @@ nas01.example:/exports/projects mounted on /mnt/projects:
                 })
                 .count(),
             2
+        );
+    }
+
+    #[test]
+    fn fibre_channel_zoned_fixture_preserves_adapter_alua_and_failed_paths() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_list_output(FC_ZONED_LSSCSI_LIST)
+                .expect("zoned FC lsscsi list fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_transport_output(FC_ZONED_LSSCSI_TRANSPORT)
+                .expect("zoned FC lsscsi transport fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            lsscsi::normalize_lsscsi_unit_output(FC_ZONED_LSSCSI_UNIT)
+                .expect("zoned FC lsscsi unit fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            multipath::normalize_multipath_output(FC_ZONED_MULTIPATH)
+                .expect("zoned FC multipath fixture should parse"),
+        );
+
+        let map = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "multipath:mpathfczone")
+            .expect("zoned FC multipath map should exist");
+        assert_eq!(map.kind, NodeKind::MultipathDevice);
+        assert_eq!(map.size_bytes, Some(4_000_000_000_000));
+        assert_has_property(map, "multipath.wwid", "3600a098038314f6f2b5d514d43594c33");
+        assert_has_property(map, "multipath.hwhandler", "1 alua");
+        assert_has_property(
+            map,
+            "multipath.features",
+            "2 queue_if_no_path retain_attached_hw_handler",
+        );
+
+        let fabric_a_optimized = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdf")
+            .expect("fabric A optimized path should exist");
+        assert_has_property(
+            fabric_a_optimized,
+            "scsi.fc-initiator-wwpn",
+            "0x100000109babcdef",
+        );
+        assert_has_property(
+            fabric_a_optimized,
+            "scsi.fc-target-wwpn",
+            "0x500a098299aabb01",
+        );
+        assert_has_property(fabric_a_optimized, "multipath.group-status", "active");
+        assert_has_property(fabric_a_optimized, "multipath.path-flags", "optimized");
+        let fabric_a_lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:8:0:1:23")
+            .expect("fabric A optimized LUN should exist");
+        assert_has_property(fabric_a_lun, "scsi.fabric-name", "0x1000000533fedcba");
+
+        let fabric_b_optimized = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdg")
+            .expect("fabric B optimized path should exist");
+        assert_has_property(
+            fabric_b_optimized,
+            "scsi.fc-initiator-wwpn",
+            "0x100000109babcd00",
+        );
+        assert_has_property(
+            fabric_b_optimized,
+            "scsi.fc-target-wwpn",
+            "0x500a098399aabb01",
+        );
+        assert_has_property(fabric_b_optimized, "multipath.path-flags", "optimized");
+        let fabric_b_lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:9:0:2:23")
+            .expect("fabric B optimized LUN should exist");
+        assert_has_property(fabric_b_lun, "scsi.fabric-name", "0x1000000533fedcbb");
+
+        let nonoptimized = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdh")
+            .expect("non-optimized ALUA path should exist");
+        assert_has_property(nonoptimized, "multipath.group-status", "enabled");
+        assert_has_property(nonoptimized, "multipath.path-flags", "nonoptimized");
+        assert_has_property(nonoptimized, "scsi.fc-target-wwpn", "0x500a098299aabb02");
+
+        let failed = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdi")
+            .expect("failed standby FC path should exist");
+        assert_has_property(failed, "multipath.dm-state", "failed");
+        assert_has_property(failed, "multipath.checker-state", "faulty");
+        assert_has_property(failed, "multipath.online-state", "offline");
+        assert_has_property(failed, "multipath.path-flags", "standby");
+        assert_has_property(failed, "scsi.fc-target-wwpn", "0x500a098399aabb02");
+        let failed_lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:11:0:4:23")
+            .expect("failed standby FC LUN should exist");
+        assert_has_property(failed_lun, "scsi.device-blocked", "1");
+        assert_has_property(failed_lun, "scsi.state", "blocked");
+
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to.0 == "multipath:mpathfczone" && edge.relationship == Relationship::Backs
+                })
+                .count(),
+            4
         );
     }
 

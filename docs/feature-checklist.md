@@ -112,8 +112,8 @@ Update rules:
 - [x] **Finished:** LVM-backed VDO fixture merges native VDO status, vdostats
   usage, verbose VDO block counters, LVM VDO LV metadata, VDO segment policy,
   and backing-pool dependency edges.
-- [ ] **Partial:** Real-world fixture coverage still needs additional physical
-  Fibre Channel samples from more adapters, switch zoning layouts, ALUA states,
+- [x] **Finished:** Real-world physical Fibre Channel fixture coverage includes
+  additional adapters, switch zoning-style fabric/WWPN layouts, ALUA states,
   and failed-path conditions.
 - [ ] **Partial:** Real-world fixture coverage still needs additional NVMe-oF
   samples beyond the current NVMe/TCP multipath fixture, including RoCE,

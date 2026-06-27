@@ -222,8 +222,10 @@ metadata, plus a clustered LVM over NVMe-oF fixture covering shared/clustered
 VG metadata, sanlock lock hints, remote LV activity, NVMe fabrics controller
 paths, ANA state, and namespace-to-controller edges, plus a Fibre Channel
 multipath fixture covering FC transport WWPN pairs, SCSI unit names, ALUA path
-groups, active/standby path state, failed path metadata, and multipath backing
-edges, plus an NVMe/TCP multipath fixture covering native NVMe namespace paths,
+groups, active/standby path state, failed path metadata, multipath backing edges,
+additional adapters, zoning-style fabric/WWPN layouts, optimized and
+non-optimized ALUA paths, and blocked failed path evidence, plus an NVMe/TCP multipath
+fixture covering native NVMe namespace paths,
 live and reconnecting fabrics controllers, ANA optimized/inaccessible states,
 failed path metadata, and multipath backing edges, plus an NFS server/client fixture
 covering merged `findmnt`, `nfsstat`, and `exportfs` state, negotiated Kerberos

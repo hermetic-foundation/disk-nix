@@ -80,6 +80,9 @@ fn add_record(graph: &mut StorageGraph, record: ScsiRecord) {
     }
     if let Some(value) = &record.transport {
         lun = lun.with_property("scsi.transport", value);
+        for (key, value) in transport_properties(value) {
+            lun = lun.with_property(key, value);
+        }
     }
     if let Some(value) = &record.unit_name {
         lun = lun.with_property("scsi.unit-name", value);
@@ -112,6 +115,9 @@ fn add_record(graph: &mut StorageGraph, record: ScsiRecord) {
             }
             if let Some(value) = &record.transport {
                 block = block.with_property("scsi.transport", value);
+                for (key, value) in transport_properties(value) {
+                    block = block.with_property(key, value);
+                }
             }
             if let Some(value) = &record.unit_name {
                 block = block.with_property("scsi.unit-name", value);
@@ -133,6 +139,22 @@ fn add_record(graph: &mut StorageGraph, record: ScsiRecord) {
                 Relationship::Backs,
             ));
         }
+    }
+}
+
+fn transport_properties(transport: &str) -> Vec<(&'static str, String)> {
+    let Some(wwpns) = transport.strip_prefix("fc:") else {
+        return Vec::new();
+    };
+    let mut parts = wwpns.split(',');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(initiator), Some(target), None) if !initiator.is_empty() && !target.is_empty() => {
+            vec![
+                ("scsi.fc-initiator-wwpn", initiator.to_string()),
+                ("scsi.fc-target-wwpn", target.to_string()),
+            ]
+        }
+        _ => Vec::new(),
     }
 }
 
@@ -443,6 +465,35 @@ mod tests {
             .expect("unit lun exists");
         assert!(unit_lun.properties.iter().any(|property| {
             property.key == "scsi.unit-name" && property.value == "5000c500a5a461dc"
+        }));
+    }
+
+    #[test]
+    fn normalizes_fc_transport_wwpn_pairs() {
+        let graph = normalize_lsscsi_transport_output(
+            br#"[8:0:1:23]   disk    fc:0x100000109babcdef,0x500a098299aabb01 /dev/sdf /dev/sg8 /dev/disk/by-id/scsi-3600a098038314f6f2b5d514d43594c33 /dev/disk/by-id/wwn-0x600a098038314f6f2b5d514d43594c33 4.00T
+"#,
+        )
+        .expect("fixture parses");
+        let lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "scsi-lun:8:0:1:23")
+            .expect("FC LUN exists");
+        assert!(lun.properties.iter().any(|property| {
+            property.key == "scsi.fc-initiator-wwpn" && property.value == "0x100000109babcdef"
+        }));
+        assert!(lun.properties.iter().any(|property| {
+            property.key == "scsi.fc-target-wwpn" && property.value == "0x500a098299aabb01"
+        }));
+
+        let block = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/sdf")
+            .expect("FC block path exists");
+        assert!(block.properties.iter().any(|property| {
+            property.key == "scsi.fc-target-wwpn" && property.value == "0x500a098299aabb01"
         }));
     }
 

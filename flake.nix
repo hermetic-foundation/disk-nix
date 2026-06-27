@@ -2173,9 +2173,14 @@
             ${pkgs.gnugrep}/bin/grep -q 'discovery.sendtargets.auth.authmethod' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q 'iser-rdma0' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q '2001:db8:40::10' ${./crates/disk-nix-probe/src/iscsi.rs}
-            ${pkgs.gnugrep}/bin/grep -q 'FC transport WWPN pairs' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'Fibre Channel multipath fixture' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'Real-world physical Fibre Channel fixture coverage' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'zoning-style fabric/WWPN layouts' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'zoning-style fabric/WWPN layouts' ${./docs/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'fibre_channel_zoned_fixture_preserves_adapter_alua_and_failed_paths' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'scsi.fc-target-wwpn' ${./crates/disk-nix-probe/src/lsscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q 'NVMe/TCP multipath fixture' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'NVMe/TCP multipath fixture' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'native NVMe namespace paths' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'nvme_tcp_multipath_fixture_preserves_native_path_state' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'uuid.aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' "$checklist"
