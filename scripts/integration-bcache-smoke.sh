@@ -8,8 +8,8 @@ Refusing to run bcache integration smoke test.
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates
 temporary loop-backed bcache backing and cache devices, mutates a real bcache
 sysfs property, detaches and reattaches the real cache set, replaces the cache
-device, stops the generated bcache device, and removes the temporary backing
-files during cleanup.
+device, verifies cache-device failure-state recovery, stops the generated
+bcache device, and removes the temporary backing files during cleanup.
 MSG
   exit 2
 fi
@@ -73,6 +73,8 @@ spec="$tmpdir/property-spec.json"
 report="$tmpdir/property-report.json"
 detach_spec="$tmpdir/detach-spec.json"
 detach_report="$tmpdir/detach-report.json"
+failed_attach_spec="$tmpdir/failed-attach-spec.json"
+failed_attach_report="$tmpdir/failed-attach-report.json"
 attach_spec="$tmpdir/attach-spec.json"
 attach_report="$tmpdir/attach-report.json"
 replace_spec="$tmpdir/replace-spec.json"
@@ -185,6 +187,42 @@ jq -e --arg bcachedev "$bcachedev" --arg cache_set_uuid "$cache_set_uuid" '
 ' "$tmpdir/detach-apply.json" >/dev/null
 
 cmp "$tmpdir/detach-apply.json" "$detach_report" >/dev/null
+cat "/sys/block/${bcachedev#/dev/}/bcache/state" >/dev/null
+
+invalid_cache_set_uuid="00000000-0000-0000-0000-000000000000"
+jq -n --arg bcachedev "$bcachedev" --arg invalid_cache_set_uuid "$invalid_cache_set_uuid" '{
+  version: 1,
+  caches: {
+    bcacheFailedAttach: {
+      target: $bcachedev,
+      addDevices: [$invalid_cache_set_uuid]
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$failed_attach_spec"
+
+if "$disk_nix_bin" apply \
+  --spec "$failed_attach_spec" \
+  --execute \
+  --report-out "$failed_attach_report" \
+  --json > "$tmpdir/failed-attach-apply.json"; then
+  echo "expected failed bcache cache-set attach to fail apply" >&2
+  exit 1
+fi
+
+jq -e --arg bcachedev "$bcachedev" --arg invalid_cache_set_uuid "$invalid_cache_set_uuid" '
+  .status == "failed"
+  and (.executionResults
+    | any(.argv == ["sh", "-c", "printf '\''%s\\n'\'' \"$2\" > \"/sys/block/${1#/dev/}/bcache/attach\"", "disk-nix-bcache-attach", $bcachedev, $invalid_cache_set_uuid] and .success == false))
+  and .partialExecutionRecovery.failedActionId == ("caches:bcacheFailedAttach:add-device:" + $invalid_cache_set_uuid)
+  and (.partialExecutionRecovery.retryReviewActionIds | index("caches:bcacheFailedAttach:add-device:" + $invalid_cache_set_uuid) != null)
+  and (.recoveryActions | any(.kind == "domain-recovery"))
+  and (.recoveryActions | any(.kind == "roll-forward-review"))
+' "$tmpdir/failed-attach-apply.json" >/dev/null
+
+cmp "$tmpdir/failed-attach-apply.json" "$failed_attach_report" >/dev/null
 cat "/sys/block/${bcachedev#/dev/}/bcache/state" >/dev/null
 
 jq -n --arg bcachedev "$bcachedev" --arg cache_set_uuid "$cache_set_uuid" '{
@@ -320,4 +358,4 @@ jq -e --arg bcachedev "$bcachedev" '
 
 cmp "$tmpdir/rescan-apply.json" "$rescan_report" >/dev/null
 
-echo "bcache integration smoke test passed for $bcachedev, including cache_mode property mutation, cache detach/reattach, cache replacement, and read-only rescan"
+echo "bcache integration smoke test passed for $bcachedev, including cache_mode property mutation, cache detach/reattach, failed cache attach recovery, cache replacement, and read-only rescan"

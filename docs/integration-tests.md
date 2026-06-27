@@ -736,6 +736,11 @@ When enabled, it:
 - derives the live cache-set UUID from `/sys/block/<bcache>/bcache/cache`
 - applies `caches.bcacheSmoke.removeDevices = [ "<cache-set-uuid>" ]` and
   verifies the rendered `disk-nix-bcache-detach` sysfs write succeeded
+- applies `caches.bcacheFailedAttach.addDevices = [ "<invalid-cache-set-uuid>" ]`
+  while detached, verifies the rendered `disk-nix-bcache-attach` sysfs write
+  fails, and checks the failed-attach recovery report includes
+  partial-execution metadata, retry review, domain recovery, and roll-forward
+  review
 - applies `caches.bcacheSmoke.addDevices = [ "<cache-set-uuid>" ]`, verifies
   the rendered `disk-nix-bcache-attach` sysfs write succeeded, reapplies
   `bcache.cache-mode = "writethrough"`, and checks the cache mode again

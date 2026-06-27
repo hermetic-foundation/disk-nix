@@ -1868,6 +1868,9 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-detach' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'caches:bcacheSmoke:add-device:' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-attach' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'bcacheFailedAttach' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'expected failed bcache cache-set attach' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'caches:bcacheFailedAttach:add-device:' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'replacement_cache_loop=' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'replaceDevices' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cacheSetUuid' ${./scripts/integration-bcache-smoke.sh}
@@ -2475,6 +2478,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'LVM cache data-survival' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'LVM cache, and multipath-backed stacks' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'replacement data-survival coverage' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'cache-device failure-state coverage' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real bcache read-only' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache detach/reattach' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'rescan coverage: the loop-backed bcache harness' "$checklist"
@@ -2532,6 +2536,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'cached-origin ext4 sentinel' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation, real bcache cache detach/reattach' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache detach/reattach' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache failed-attach recovery' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcachefs member replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file mode mutation' ${./docs/status.md}
@@ -2575,6 +2580,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheReplacement.replaceDevices' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-replace' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.removeDevices' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheFailedAttach.addDevices' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'failed-attach recovery' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.addDevices' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.operation = "rescan"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'backingFiles.<path>.properties.mode' ${./docs/integration-tests.md}

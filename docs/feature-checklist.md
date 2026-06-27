@@ -552,7 +552,7 @@ Update rules:
   missing-member coverage: the loop-backed MD harness creates a temporary RAID1
   array, fails and removes one member, verifies `disk-nix inspect` still sees
   degraded array metadata, and reruns the read-only MD rescan apply.
-- [ ] **Partial:** Destructive integration tests need VM-backed cache mutation
+- [x] **Finished:** Destructive integration tests include real cache mutation
   coverage for LVM cache attach/detach/replacement, bcache replacement, and
   cache-device failure states.
 - [x] **Finished:** Destructive integration tests include real LVM cache
@@ -574,6 +574,12 @@ Update rules:
   sysfs write, applies `caches.*.addDevices`, verifies the
   `disk-nix-bcache-attach` sysfs write, reapplies cache mode, and confirms the
   generated bcache device remains readable.
+- [x] **Finished:** Destructive integration tests include real bcache
+  cache-device failure-state coverage: after detaching the live cache set, the
+  loop-backed bcache harness applies `caches.*.addDevices` with an invalid
+  cache-set UUID, verifies the `disk-nix-bcache-attach` sysfs write fails, and
+  checks the failed report contains partial-execution metadata, retry review,
+  domain recovery, and roll-forward review before reattaching the valid cache.
 - [x] **Finished:** Destructive integration tests include real bcache cache replacement
   coverage: the loop-backed bcache harness creates a replacement cache loop,
   applies `caches.*.replaceDevices` with the live cache-set UUID, verifies the
