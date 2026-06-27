@@ -45,6 +45,8 @@ pub struct ExecutionReport {
     pub partial_execution_recovery: Option<PartialExecutionRecovery>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recovery_actions: Vec<RecoveryAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rollback_recipes: Vec<RollbackRecipe>,
     pub messages: Vec<String>,
 }
 
@@ -183,6 +185,39 @@ pub struct RecoveryAction {
     pub notes: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RollbackRecipeStatus {
+    ReviewOnly,
+    ProvenSafe,
+    Refused,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RollbackRecipeSection {
+    pub commands: Vec<ExecutionCommand>,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RollbackRecipe {
+    pub recipe_version: u64,
+    pub source_action_id: String,
+    pub failed_command: Vec<String>,
+    pub status: RollbackRecipeStatus,
+    pub receipt_binding_required: bool,
+    pub fresh_topology_probe_required: bool,
+    pub read_only_validation: RollbackRecipeSection,
+    pub reversible_mutations: RollbackRecipeSection,
+    pub destructive_mutations: RollbackRecipeSection,
+    pub operator_only_handoff: RollbackRecipeSection,
+    pub safety_gates: Vec<String>,
+    pub refusal_reasons: Vec<String>,
+    pub notes: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CommandRunResult {
     success: bool,
@@ -276,6 +311,7 @@ fn prepare_execution_with_runner_and_tool_checker(
             execution_results: Vec::new(),
             partial_execution_recovery: None,
             recovery_actions: Vec::new(),
+            rollback_recipes: Vec::new(),
             messages: vec![format!("apply policy blocked {blocked_count} action(s)")],
         });
     }
@@ -305,6 +341,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                 execution_results: Vec::new(),
                 partial_execution_recovery: None,
                 recovery_actions: Vec::new(),
+                rollback_recipes: Vec::new(),
             })
         }
         ExecutionMode::Execute => {
@@ -321,6 +358,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                     execution_results: Vec::new(),
                     partial_execution_recovery: None,
                     recovery_actions: Vec::new(),
+                    rollback_recipes: Vec::new(),
                     messages: vec![
                         "execute refused: every planned command must be ready before mutating storage"
                             .to_string(),
@@ -342,6 +380,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                     execution_results: Vec::new(),
                     partial_execution_recovery: None,
                     recovery_actions: Vec::new(),
+                    rollback_recipes: Vec::new(),
                     messages: vec![format!(
                         "execute refused: current topology comparison reported {graph_dependency_conflict_count} graph dependency conflict(s); split the plan or review ordering before mutating storage"
                     )],
@@ -360,6 +399,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                     execution_results: Vec::new(),
                     partial_execution_recovery: None,
                     recovery_actions: Vec::new(),
+                    rollback_recipes: Vec::new(),
                     messages: vec![format!(
                         "execute refused: current topology comparison reported {partially_suppressed_group_count} partially suppressed reconciliation group(s); re-plan against fresh topology or split the grouped mutation before mutating storage"
                     )],
@@ -378,6 +418,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                     execution_results: Vec::new(),
                     partial_execution_recovery: None,
                     recovery_actions: Vec::new(),
+                    rollback_recipes: Vec::new(),
                     messages: vec![format!(
                         "execute refused: required tool(s) are not available: {missing_tools_message}"
                     )],
@@ -415,6 +456,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                 execution_results,
                 partial_execution_recovery,
                 recovery_actions: Vec::new(),
+                rollback_recipes: Vec::new(),
                 messages,
             })
         }
@@ -529,7 +571,76 @@ fn partial_execution_recovery_for_results(
 
 fn attach_recovery_actions(mut report: ExecutionReport) -> ExecutionReport {
     report.recovery_actions = recovery_actions_for_report(&report);
+    report.rollback_recipes = rollback_recipes_for_report(&report);
     report
+}
+
+fn rollback_recipes_for_report(report: &ExecutionReport) -> Vec<RollbackRecipe> {
+    if report.status != ExecutionStatus::Failed {
+        return Vec::new();
+    }
+    let Some(partial) = report.partial_execution_recovery.as_ref() else {
+        return Vec::new();
+    };
+    let Some(rollback_review) = report
+        .recovery_actions
+        .iter()
+        .find(|action| action.kind == RecoveryActionKind::RollbackReview)
+    else {
+        return Vec::new();
+    };
+
+    let source_action_id = partial.failed_action_id.clone();
+    let failed_command = partial.failed_command.clone();
+    vec![RollbackRecipe {
+        recipe_version: 1,
+        source_action_id,
+        failed_command,
+        status: RollbackRecipeStatus::ReviewOnly,
+        receipt_binding_required: true,
+        fresh_topology_probe_required: true,
+        read_only_validation: RollbackRecipeSection {
+            commands: rollback_review.commands.clone(),
+            notes: vec![
+                "all commands in this section must be read-only validation commands".to_string(),
+                "compare read-only validation output with the original receipt, failed apply report, and a fresh topology probe".to_string(),
+            ],
+        },
+        reversible_mutations: RollbackRecipeSection {
+            commands: Vec::new(),
+            notes: vec![
+                "no reversible rollback mutation is proven by this schema-only recipe".to_string(),
+                "a future rollback engine may populate this section only after domain safety gates prove idempotency and data preservation".to_string(),
+            ],
+        },
+        destructive_mutations: RollbackRecipeSection {
+            commands: Vec::new(),
+            notes: vec![
+                "destructive rollback mutation steps are intentionally empty until a domain recipe proves the operation safe".to_string(),
+                "commands that can discard data must remain refused or operator-only without explicit receipt binding and fresh topology evidence".to_string(),
+            ],
+        },
+        operator_only_handoff: RollbackRecipeSection {
+            commands: Vec::new(),
+            notes: rollback_review.notes.clone(),
+        },
+        safety_gates: vec![
+            "original apply receipt must match this failed apply report".to_string(),
+            "fresh topology probe must be captured after the failure".to_string(),
+            "rollback point identity must still match the failed action target".to_string(),
+            "active consumers, mounts, exports, sessions, or open mappings must be reviewed before any mutation".to_string(),
+            "missing tools, stale identity data, and ambiguous rollback targets keep the recipe review-only".to_string(),
+        ],
+        refusal_reasons: vec![
+            "automatic rollback execution engine is not implemented".to_string(),
+            "domain-specific rollback mutation is not proven safe".to_string(),
+            "receipt-bound pre-rollback topology comparison has not been evaluated".to_string(),
+        ],
+        notes: vec![
+            "this stable recipe schema separates validation from reversible, destructive, and operator-only rollback sections".to_string(),
+            "review-only recipes are evidence carriers for operators and future automation; they are not executable rollback approval".to_string(),
+        ],
+    }]
 }
 
 fn recovery_actions_for_report(report: &ExecutionReport) -> Vec<RecoveryAction> {
@@ -27806,6 +27917,55 @@ mod tests {
                 .notes
                 .iter()
                 .any(|note| note.contains("read-only checks"))
+        );
+        assert_eq!(report.rollback_recipes.len(), 1);
+        let recipe = &report.rollback_recipes[0];
+        assert_eq!(recipe.recipe_version, 1);
+        assert_eq!(
+            recipe.source_action_id,
+            "snapshot:tank/home@before:rollback"
+        );
+        assert_eq!(
+            recipe.failed_command,
+            ["zfs", "rollback", "tank/home@before"]
+        );
+        assert_eq!(recipe.status, RollbackRecipeStatus::ReviewOnly);
+        assert!(recipe.receipt_binding_required);
+        assert!(recipe.fresh_topology_probe_required);
+        assert!(!recipe.read_only_validation.commands.is_empty());
+        assert!(
+            recipe
+                .read_only_validation
+                .commands
+                .iter()
+                .all(|command| !command.mutates)
+        );
+        assert!(recipe.reversible_mutations.commands.is_empty());
+        assert!(recipe.destructive_mutations.commands.is_empty());
+        assert!(recipe.operator_only_handoff.commands.is_empty());
+        assert!(
+            recipe
+                .safety_gates
+                .iter()
+                .any(|gate| gate.contains("original apply receipt"))
+        );
+        assert!(
+            recipe
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("execution engine is not implemented"))
+        );
+        let value = serde_json::to_value(&report).expect("report should serialize");
+        assert_eq!(
+            value["rollbackRecipes"][0]["readOnlyValidation"]["commands"][0]["mutates"],
+            false
+        );
+        assert_eq!(
+            value["rollbackRecipes"][0]["reversibleMutations"]["commands"]
+                .as_array()
+                .expect("reversible mutation command section is an array")
+                .len(),
+            0
         );
     }
 

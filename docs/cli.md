@@ -758,6 +758,8 @@ The report includes:
 - `verificationPlan`
 - `executionResults` when `--execute` runs commands
 - `recoveryActions` for blocked, non-ready, or failed execution reports
+- `rollbackRecipes` for failed execution reports with inspectable rollback
+  preconditions
 - `messages`
 
 The default policy allows online grow and property-change intents, but blocks
@@ -811,6 +813,13 @@ commands, and notes requiring fresh topology comparison before resuming. This is
 intended for multi-layer workflows where lower layers may already have changed
 before a later filesystem, mapper, volume, LUN, or network-storage command
 failed.
+When rollback preconditions are inspectable, failed execution reports also
+include `rollbackRecipes`. Recipe version 1 is a stable review-only schema with
+separate `readOnlyValidation`, `reversibleMutations`, `destructiveMutations`,
+and `operatorOnlyHandoff` sections. It records the failed action id and command,
+requires binding to the original apply receipt and a fresh topology probe, and
+keeps mutation sections empty until future domain-specific safety gates prove an
+automatic rollback step safe.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

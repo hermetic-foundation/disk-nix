@@ -169,7 +169,7 @@ Update rules:
 - [x] **Finished:** Apply reports provide recovery guidance, current-topology
   roll-forward review, read-only rollback precondition review, and recovery
   point preservation actions.
-- [ ] **Desired:** Automatic rollback needs a stable rollback recipe schema
+- [x] **Finished:** Automatic rollback has a stable rollback recipe schema
   that separates read-only validation, reversible mutations, destructive
   mutations, and operator-only handoff steps.
 - [ ] **Desired:** Automatic rollback needs an execution engine that can replay

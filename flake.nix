@@ -2197,6 +2197,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_generic_host_verification_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'arrayId' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'target-lun.array-id.declared' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_recipes' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'read_only_validation' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollbackRecipes' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'operatorOnlyHandoff' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'scstadmin' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'initiatorGroup' ${./docs/planning.md}
             runbooks=${./docs/operator-runbooks.md}

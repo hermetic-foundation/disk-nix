@@ -372,6 +372,9 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   apply runs. Apply reports now expose generic recovery actions, targeted
   failed-action domain recovery guidance, current-topology roll-forward review,
   read-only rollback precondition review for concrete risky actions, and
+  stable `rollbackRecipes` with separate read-only validation, reversible
+  mutation, destructive mutation, and operator-only handoff sections, plus
+  receipt-binding and fresh-topology-probe requirements. Reports also expose
   `partialExecutionRecovery` sequencing with completed actions, failed action,
   failed command, retry/review actions, remaining actions, completed mutating
   command counts, and fresh-topology review notes. They also include

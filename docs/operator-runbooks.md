@@ -157,6 +157,12 @@ Preflight:
 1. Review `recoveryActions` in the failed apply report. Run only read-only
    inspection commands first.
 
+1. If the report includes `rollbackRecipes`, treat them as review-only recipe
+   records. Check `readOnlyValidation` first, keep `reversibleMutations` and
+   `destructiveMutations` empty unless a future domain recipe proves them safe,
+   and bind any operator rollback decision to the original receipt plus the
+   fresh topology captured above.
+
 Decision:
 
 - Choose roll-forward when the partially completed topology is closer to the
