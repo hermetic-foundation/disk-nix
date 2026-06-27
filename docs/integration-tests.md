@@ -184,8 +184,9 @@ fake storage tools ahead of `PATH` for eighty-seven failed apply paths:
   `targetcli` inventory, ACL removal, LUN unmap, and target removal succeed and
   fake `targetcli /backstores/block delete _dev_zvol_tank_root` fails
 - a target-side LUN grow plus property update through the Linux LIO provider
-  where execute mode refuses the non-ready provider handoffs after rendering
-  concrete `targetcli` target and backstore inventory for review
+  where fake `targetcli`, `blockdev`, `lsscsi`, `multipath`, and `disk-nix`
+  probes prove the native grow path validates backing capacity, persists target
+  state, and verifies host-visible capacity
 - a target-side LUN property update through the Linux LIO provider where fake
   target and backstore inventory succeeds and fake
   `targetcli /backstores/block/_dev_zvol_tank_root set attribute emulate_write_cache=0`
@@ -415,9 +416,9 @@ The test verifies that the failed report and receipt preserve:
 - the failed LIO `targetcli /backstores/block delete _dev_zvol_tank_root`
   command and non-zero status after target-side inventory, ACL removal, LUN
   unmap, and target removal
-- a LIO target-side grow/property `not-ready` report with zero execution
-  results, concrete target/backstore inventory commands, and provider handoff
-  commands marked `needs-domain-implementation`
+- a LIO target-side grow/property success report with concrete target/backstore
+  inventory, backing-capacity validation, `saveconfig`, and host-visible
+  verification results
 - `partialExecutionRecovery.failedActionId` as
   `targetluns:iqn.2026-06.example:tgt.root:destroy`
 - the failed Linux tgt `tgtadm --lld iscsi --mode target --op delete --tid 42`
@@ -1083,8 +1084,8 @@ ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement,
 ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
 namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
 LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
-target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete
-property rendering, target-side LUN LIO property, target-side LUN LIO rescan,
+target-side LUN LIO destroy, target-side LUN LIO native grow with backing
+capacity and host verification, target-side LUN LIO property, target-side LUN LIO rescan,
 target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
 detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
 concrete property rendering, target-side LUN tgt property, target-side LUN tgt

@@ -11355,6 +11355,9 @@ fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec
                 &format!("verify LIO portal mapping for {portal} after provider action"),
             ));
         }
+        if action.operation == Operation::Grow {
+            commands.extend(target_lun_generic_host_verification_commands(target));
+        }
         return commands;
     }
     if target_lun_tgt_provider(action) {
@@ -11536,13 +11539,20 @@ fn target_lun_lio_commands(action: &PlannedAction, target: &str) -> Vec<Executio
             commands.push(target_lun_lio_backstore_inventory_command(
                 action,
                 &backstore,
-                "inspect the reviewed LIO backstore before target-side LUN growth handoff",
+                "inspect the reviewed LIO backstore before target-side LUN growth",
             ));
-            commands.push(target_lun_provider_command(
+            commands.push(target_lun_lio_backing_size_command(
                 action,
-                target,
-                "grow",
-                action.context.desired_size.as_deref(),
+                "validate the reviewed LIO backing object exposes the grown capacity",
+            ));
+            commands.push(target_lun_lio_lun_inventory_command(
+                &tpg,
+                "inspect LIO TPG LUN mappings before initiator capacity refresh",
+            ));
+            commands.push(target_lun_lio_saveconfig_command());
+            commands.push(target_lun_lio_lun_inventory_command(
+                &tpg,
+                "inspect LIO TPG LUN mappings after target-side grow refresh",
             ));
         }
         Operation::SetProperty => {
@@ -11626,6 +11636,43 @@ fn target_lun_lio_backstore_inventory_command(
         unresolved_inputs,
         note,
     )
+}
+
+fn target_lun_lio_lun_inventory_command(tpg: &str, note: &str) -> ExecutionCommand {
+    command_vec(
+        vec![
+            "targetcli".to_string(),
+            format!("{tpg}/luns"),
+            "ls".to_string(),
+        ],
+        false,
+        note,
+    )
+}
+
+fn target_lun_lio_backing_size_command(action: &PlannedAction, note: &str) -> ExecutionCommand {
+    match action.context.device.as_deref() {
+        Some(device) => command_vec(
+            vec![
+                "blockdev".to_string(),
+                "--getsize64".to_string(),
+                device.to_string(),
+            ],
+            false,
+            note,
+        ),
+        None => command_vec_with_readiness(
+            vec![
+                "blockdev".to_string(),
+                "--getsize64".to_string(),
+                "<backing-block-device-or-file>".to_string(),
+            ],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["LIO backing block device or file for capacity validation"],
+            note,
+        ),
+    }
 }
 
 fn target_lun_lio_backstore_create_command(
@@ -31256,7 +31303,7 @@ mod tests {
     }
 
     #[test]
-    fn target_lun_lio_grow_and_property_use_native_inventory_with_handoff() {
+    fn target_lun_lio_grow_and_property_use_native_inventory_and_capacity_validation() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
               "spec": {
@@ -31283,8 +31330,8 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
-        assert!(!report.command_summary.all_commands_ready());
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
 
         let grow = report
             .command_plan
@@ -31302,26 +31349,55 @@ mod tests {
                 && command.readiness == CommandReadiness::Ready
         }));
         assert!(grow.commands.iter().any(|command| {
+            command.argv == ["blockdev", "--getsize64", "/dev/zvol/tank/root"]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(grow.commands.iter().any(|command| {
             command.argv
                 == [
-                    "<target-lun-provider:lio>",
-                    "grow-lun",
-                    "--target",
-                    "iqn.2026-06.example:storage.root",
-                    "--provider",
-                    "lio",
-                    "--size",
-                    "4TiB",
-                    "--backing",
-                    "/dev/zvol/tank/root",
-                    "--lun",
-                    "7",
+                    "targetcli",
+                    "/iscsi/iqn.2026-06.example:storage.root/tpg1/luns",
+                    "ls",
                 ]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(grow.commands.iter().any(|command| {
+            command.argv == ["targetcli", "saveconfig"]
                 && command.mutates
-                && command.readiness == CommandReadiness::NeedsDomainImplementation
-                && command
-                    .unresolved_inputs
-                    .contains(&"lio target LUN provider implementation".to_string())
+                && command.readiness == CommandReadiness::Ready
+        }));
+        let grow_verification = report
+            .verification_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:storage.root:grow")
+            .expect("LIO target-side LUN grow verification plan exists");
+        assert!(grow_verification.commands.iter().any(|command| {
+            command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
+                && !command.mutates
+        }));
+        assert!(
+            grow_verification
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
+        assert!(
+            grow_verification
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
+        );
+        assert!(grow_verification.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "disk-nix",
+                    "inspect",
+                    "iqn.2026-06.example:storage.root",
+                    "--json",
+                ]
+                && !command.mutates
         }));
 
         let property = report

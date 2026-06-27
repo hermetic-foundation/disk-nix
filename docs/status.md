@@ -179,8 +179,8 @@ behavior across real storage stacks.
   failure, LUKS keyslot remove failure, LUKS token remove failure, LUKS
   property failure, ZFS pool
   replacement failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
-  delete failures, target-side LUN LIO create, attach, detach, and destroy
-  failures, target-side LUN LIO grow not-ready, property, and rescan failures,
+  delete failures, target-side LUN LIO create, attach, detach, destroy, native
+  grow, property, and rescan paths,
   Linux tgt create, attach, detach, and destroy failures, Linux tgt grow
   not-ready, property, and rescan failures, SCST create, attach, detach,
   destroy, grow, property, and rescan failures, multipath
@@ -275,8 +275,11 @@ plans instead of guessing. Target-side LUN provisioning is modeled through
 `targetLuns`;
 `provider = "lio"` now renders concrete Linux LIO `targetcli` inventory,
 backstore, target, LUN mapping, ACL, target removal, reviewed backstore removal,
-and persistence commands; grow/property updates include native target/backstore
-inventory around an explicit non-ready provider handoff. `provider = "tgt"` or
+and persistence commands; grow updates validate the reviewed backing object with
+`blockdev --getsize64`, refresh target/LUN inventory, persist target state, and
+verify host-visible SCSI, multipath, and modeled graph state, while property
+updates include native target/backstore inventory and concrete reviewed
+attribute updates. `provider = "tgt"` or
 `"tgtadm"` renders concrete Linux tgt `tgtadm` inventory, target
 creation/removal, logical-unit creation/removal, and initiator-address
 bind/unbind commands when the reviewed `targetId`/`tid`, `lun`, backing object,
@@ -316,8 +319,8 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   NVMe namespace create, NVMe namespace grow, NVMe
   namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
   LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
-  target-side LUN LIO destroy, target-side LUN LIO grow not-ready with concrete
-  property rendering, target-side LUN LIO property, target-side LUN LIO rescan,
+  target-side LUN LIO destroy, target-side LUN LIO native grow with backing
+  capacity and host-visibility verification, target-side LUN LIO property, target-side LUN LIO rescan,
   target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
   detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
   concrete property rendering, target-side LUN tgt property, target-side LUN tgt

@@ -270,10 +270,12 @@ Update rules:
   object, LUN, optional group, and initiators are declared.
 - [x] **Finished:** Provider handoffs carry declared `targetId`/`tid` and
   `lun` values.
-- [ ] **Partial:** LIO target-side LUN grow needs a fully native implementation
-  that validates the backing object, expands or refreshes the exported
-  backstore where supported, persists target state, and verifies initiator-visible
-  capacity.
+- [x] **Finished:** LIO target-side LUN grow has a native reviewed block
+  backstore path that validates backing capacity, refreshes LIO target/LUN
+  inventory, persists target state, and verifies initiator-visible capacity.
+- [ ] **Desired:** LIO target-side LUN grow needs provider-specific forced
+  backstore resize primitives if future LIO backstore types require more than
+  backing-device capacity validation and initiator refresh.
 - [ ] **Partial:** tgt target-side LUN grow needs a fully native implementation
   that validates the backing object, refreshes exported logical-unit capacity
   where supported, persists target state, and verifies initiator-visible

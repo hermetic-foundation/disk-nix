@@ -1959,7 +1959,7 @@
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN LIO attach ACL failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN LIO detach unmap failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN LIO destroy backstore failure' ${./scripts/integration-failure-recovery-smoke.sh}
-                ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN LIO grow handoff should stay not-ready' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'target-side LUN LIO native grow with backing capacity and host verification' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN LIO property failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN LIO rescan inventory failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt create failure' ${./scripts/integration-failure-recovery-smoke.sh}
@@ -2223,6 +2223,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'providerCapabilities' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'provider capability contracts' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'target-lun.capacity.expand' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'target_lun_lio_backing_size_command' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'LIO target-side LUN grow has a native reviewed block' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Generic target LUN verification plans' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_generic_host_verification_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'arrayId' ${./docs/planning.md}

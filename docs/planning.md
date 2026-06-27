@@ -441,10 +441,11 @@ Examples:
   object, LUN number, and initiators are declared. LIO write-cache property
   updates render native target/backstore inventory and concrete
   `targetcli ... set attribute emulate_write_cache=...` commands when the
-  backing object and reviewed boolean value are declared. LIO grow still
-  renders native target/backstore inventory around an explicit non-ready
-  provider handoff so operators can review the real targetcli state before
-  adapter-specific mutation. `provider = "tgt"` or `"tgtadm"` renders concrete
+  backing object and reviewed boolean value are declared. LIO grow validates
+  the reviewed backing object with `blockdev --getsize64`, refreshes target/LUN
+  inventory, persists target state with `saveconfig`, and verifies
+  host-visible SCSI, multipath, and modeled graph state. `provider = "tgt"` or
+  `"tgtadm"` renders concrete
   Linux tgt `tgtadm` inventory, target creation, logical-unit creation/removal,
   initiator-address bind/unbind, and target removal when `targetId`/`tid`,
   `lun`, backing object, and initiator-address or `ALL` ACL values are declared.
