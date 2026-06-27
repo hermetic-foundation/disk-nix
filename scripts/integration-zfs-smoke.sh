@@ -6,8 +6,9 @@ if [[ "${DISK_NIX_INTEGRATION_DESTRUCTIVE:-}" != "1" ]]; then
 Refusing to run ZFS loop-backed integration smoke test.
 
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates,
-scrubs, destroys, and removes a temporary loop-backed ZFS pool. The backing file
-is created in a temporary directory and removed during cleanup.
+scrubs, replaces a pool member, destroys, and removes a temporary loop-backed
+ZFS pool. The backing files are created in a temporary directory and removed
+during cleanup.
 MSG
   exit 2
 fi
@@ -28,6 +29,7 @@ done
 
 tmpdir="$(mktemp -d)"
 loopdev=""
+replacement_loopdev=""
 pool="disknix_zfs_smoke_$$"
 pool_created=0
 
@@ -38,20 +40,28 @@ cleanup() {
   if [[ -n "$loopdev" ]] && losetup --list "$loopdev" >/dev/null 2>&1; then
     losetup --detach "$loopdev"
   fi
+  if [[ -n "$replacement_loopdev" ]] && losetup --list "$replacement_loopdev" >/dev/null 2>&1; then
+    losetup --detach "$replacement_loopdev"
+  fi
   rm -rf "$tmpdir"
 }
 trap cleanup EXIT
 
 backing="$tmpdir/disk-nix-zfs-smoke.img"
+replacement_backing="$tmpdir/disk-nix-zfs-replacement.img"
 mountpoint_path="$tmpdir/mnt"
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 property_spec="$tmpdir/property-spec.json"
 property_report="$tmpdir/property-report.json"
+replace_spec="$tmpdir/replace-spec.json"
+replace_report="$tmpdir/replace-report.json"
 
 mkdir -p "$mountpoint_path"
 truncate --size 512M "$backing"
+truncate --size 512M "$replacement_backing"
 loopdev="$(losetup --find --show "$backing")"
+replacement_loopdev="$(losetup --find --show "$replacement_backing")"
 zpool create -f -m "$mountpoint_path" "$pool" "$loopdev"
 pool_created=1
 
@@ -125,4 +135,37 @@ cmp "$tmpdir/apply.json" "$report" >/dev/null
 zpool status "$pool" >/dev/null
 mountpoint -q "$mountpoint_path"
 
-echo "ZFS loop-backed integration smoke test set autotrim and scrubbed $pool on $loopdev"
+jq -n --arg pool "$pool" --arg old "$loopdev" --arg new "$replacement_loopdev" '{
+  version: 1,
+  pools: {
+    ($pool): {
+      replaceDevices: {
+        ($old): $new
+      }
+    }
+  },
+  apply: {
+    allowDeviceReplacement: true
+  }
+}' > "$replace_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$replace_spec" \
+  --execute \
+  --report-out "$replace_report" \
+  --json > "$tmpdir/replace-apply.json"
+
+jq -e --arg pool "$pool" --arg old "$loopdev" --arg new "$replacement_loopdev" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("pools:" + $pool + ":replace-device:" + $old))
+    | .commands | any(.argv == ["zpool", "replace", $pool, $old, $new]))
+  and (.executionResults
+    | any(.argv == ["zpool", "replace", $pool, $old, $new] and .success == true))
+' "$tmpdir/replace-apply.json" >/dev/null
+
+cmp "$tmpdir/replace-apply.json" "$replace_report" >/dev/null
+zpool status "$pool" >/dev/null
+zpool status -P "$pool" | grep -F "$replacement_loopdev" >/dev/null
+mountpoint -q "$mountpoint_path"
+
+echo "ZFS loop-backed integration smoke test set autotrim, scrubbed, and replaced $loopdev with $replacement_loopdev in $pool"

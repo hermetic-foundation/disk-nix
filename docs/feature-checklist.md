@@ -509,6 +509,11 @@ Update rules:
   `mdadm <array> --replace <old-loop> --with <new-loop>`, waits for replacement
   completion with `mdadm --wait`, and verifies the replacement member appears
   in `mdadm --detail` before later degraded-array checks.
+- [x] **Finished:** Destructive integration tests include real ZFS pool device replacement
+  coverage: the loop-backed ZFS harness creates disposable source
+  and replacement vdevs, applies `pools.*.replaceDevices`, executes
+  `zpool replace <pool> <old-loop> <new-loop>`, verifies the replacement device
+  appears in `zpool status -P`, and confirms the pool mountpoint remains active.
 - [ ] **Partial:** Destructive integration tests need broader degraded-array
   variants covering missing members, stale superblocks, replacement races,
   partial rebuilds, failed detach, and failed reattach behavior.

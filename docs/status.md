@@ -162,7 +162,8 @@ behavior across real storage stacks.
   label mutation on a disposable loop device, verify real LUKS header label mutation
   with `cryptsetup config`, verify real Btrfs filesystem label mutation with
   `btrfs filesystem label`, verify real loop-backed swap label mutation with
-  `swaplabel`, verify real ZFS pool property mutation with `zpool set`, verify
+  `swaplabel`, verify real ZFS pool property mutation with `zpool set`, real ZFS pool device replacement
+  with `zpool replace`, verify
   real LVM cache property mutation with `lvchange --cachemode`, real LVM cache detach and reattach
   with `lvconvert --uncache` and
   `lvconvert --type cache --cachepool`, while a cached-origin ext4 sentinel

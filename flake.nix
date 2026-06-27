@@ -1953,6 +1953,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'zpool", "set", "autotrim=on"' ${./scripts/integration-zfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'zpool get -H -o value autotrim' ${./scripts/integration-zfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'zpool", "scrub"' ${./scripts/integration-zfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'replaceDevices' ${./scripts/integration-zfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'pools:" + $pool + ":replace-device:" + $old' ${./scripts/integration-zfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'zpool", "replace"' ${./scripts/integration-zfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'zpool status -P' ${./scripts/integration-zfs-smoke.sh}
             touch "$out"
           '';
           integrationNfsSmoke = pkgs.runCommand "disk-nix-integration-nfs-smoke-check" { } ''
@@ -2450,6 +2454,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real swap signature' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool device replacement' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real bcache property' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device' "$checklist"
@@ -2479,6 +2484,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real loop-backed swap label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool property mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool device replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache detach and reattach' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'cached-origin ext4 sentinel' ${./docs/status.md}

@@ -980,13 +980,19 @@ When enabled, it:
 - executes a `pools.<name>.operation = "scrub"` apply plan
 - verifies the generated JSON report was written and the rendered
   `zpool scrub <pool>` command succeeded
-- destroys the temporary pool, detaches the loop device, and removes the
-  backing file during cleanup
+- applies a `pools.<name>.replaceDevices` plan from the original loop vdev to a
+  second loop vdev, verifies the rendered
+  `zpool replace <pool> <old-loop> <new-loop>` command succeeded, confirms the
+  replacement vdev appears in `zpool status -P`, and checks the mountpoint still
+  remains active
+- destroys the temporary pool, detaches both loop devices, and removes the
+  backing files during cleanup
 
 This test intentionally writes ZFS pool labels only to the temporary backing
-file it creates. It still requires destructive opt-in because it uses real
-loop and ZFS tooling. The host or guest must already have working ZFS kernel
-support; on NixOS this usually also means a configured `networking.hostId`.
+files it creates. It still requires destructive opt-in because it uses real
+loop and ZFS tooling, including a real pool-device replacement. The host or
+guest must already have working ZFS kernel support; on NixOS this usually also
+means a configured `networking.hostId`.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 
