@@ -1202,13 +1202,21 @@ When enabled, it:
 - executes an `nvmeNamespaces.<controller>.operation = "rescan"` apply plan
 - verifies the rendered `nvme list-ns`, `nvme list-subsys`, and
   `nvme ns-rescan <controller>` commands succeeded
+- when `DISK_NIX_NVME_ATTACH_DETACH=1` is set with
+  `DISK_NIX_NVME_NAMESPACE_ID` and `DISK_NIX_NVME_CONTROLLERS`, applies an
+  `nvmeNamespaces.<controller>.operation = "attach"` plan, verifies
+  `nvme attach-ns <controller> --namespace-id <id> --controllers <ids>` and
+  `nvme ns-rescan <controller>` succeed, then applies a matching detach plan
+  and verifies `nvme detach-ns <controller> --namespace-id <id> --controllers <ids>` plus a final namespace rescan succeed
 - verifies the generated JSON report was written
 
-This test does not create, grow, attach, detach, or delete NVMe namespaces. It
-still requires destructive opt-in because `nvme ns-rescan` refreshes live
-controller namespace state and is intended for disposable lab hosts where the
-selected controller can be safely rescanned. Use a controller path such as
-`/dev/nvme0`, not a namespace path such as `/dev/nvme0n1`.
+By default this test does not create, grow, attach, detach, or delete NVMe
+namespaces. The attach/detach mode is deliberately opt-in and requires a
+disposable namespace that can safely end detached from the selected controller.
+The harness still requires destructive opt-in because `nvme ns-rescan` refreshes
+live controller namespace state and attach/detach changes namespace visibility.
+Use a controller path such as `/dev/nvme0`, not a namespace path such as
+`/dev/nvme0n1`.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 

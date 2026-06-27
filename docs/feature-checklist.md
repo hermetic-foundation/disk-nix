@@ -539,6 +539,12 @@ Update rules:
 - [ ] **Partial:** Destructive integration tests need VM-backed NVMe namespace
   coverage for create, grow, attach, detach, delete, controller reconnect, and
   namespace identity drift.
+- [x] **Finished:** Destructive integration tests include lab-backed NVMe namespace attach/detach
+  coverage: when `DISK_NIX_NVME_ATTACH_DETACH=1` is set with an explicit
+  disposable namespace id and controller list, the NVMe harness applies
+  `nvmeNamespaces.<controller>.operation = "attach"`, verifies
+  `nvme attach-ns` and `nvme ns-rescan`, applies the matching detach plan, and
+  verifies `nvme detach-ns` and a final namespace rescan.
 - [x] **Finished:** Destructive integration tests include lab-backed multipath
   flush coverage: when `DISK_NIX_MULTIPATH_FLUSH=1` is set, the multipath
   harness applies `multipathMaps.flush.destroy = true` with
