@@ -589,6 +589,10 @@ Update rules:
   `nvme attach-ns`, and namespace rescan, then applies a destructive cleanup
   plan and verifies `nvme detach-ns`, `nvme delete-ns`, and final namespace
   inventory.
+- [x] **Finished:** Destructive integration tests include lab-backed NVMe namespace identity-drift assertions
+  for create/delete: the harness verifies the
+  selected namespace id appears in `nvme list-ns --all --output-format=json`
+  after create and is absent after delete.
 - [x] **Finished:** Destructive integration tests include lab-backed NVMe namespace grow
   coverage: when `DISK_NIX_NVME_GROW=1` is set, the NVMe harness applies
   `nvmeNamespaces.<controller>.operation = "grow"` with reviewed grow policy

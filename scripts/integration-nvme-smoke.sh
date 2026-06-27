@@ -92,6 +92,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
+namespace_present() {
+  local inventory="$1"
+  local expected_id="$2"
+  jq -e --arg expected_id "$expected_id" '
+    [
+      .. | objects
+      | (.nsid? // .NSID? // .namespace? // .Namespace? // .NameSpace? // .nsid_decimal? // empty)
+      | tostring
+    ]
+    | index($expected_id) != null
+  ' "$inventory" >/dev/null
+}
+
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 grow_spec="$tmpdir/grow-spec.json"
@@ -235,6 +248,10 @@ if [[ "$create_delete" == "1" ]]; then
 
   cmp "$tmpdir/create-apply.json" "$create_report" >/dev/null
   nvme list-ns "$controller" --all --output-format=json > "$tmpdir/list-ns-created.json"
+  if ! namespace_present "$tmpdir/list-ns-created.json" "$namespace_id"; then
+    echo "NVMe namespace identity drift: namespace $namespace_id was not visible after create" >&2
+    exit 1
+  fi
 
   jq -n \
     --arg controller "$controller" \
@@ -281,6 +298,10 @@ if [[ "$create_delete" == "1" ]]; then
 
   cmp "$tmpdir/destroy-apply.json" "$destroy_report" >/dev/null
   nvme list-ns "$controller" --all --output-format=json > "$tmpdir/list-ns-deleted.json"
+  if namespace_present "$tmpdir/list-ns-deleted.json" "$namespace_id"; then
+    echo "NVMe namespace identity drift: namespace $namespace_id remained visible after delete" >&2
+    exit 1
+  fi
 fi
 
 if [[ "$attach_detach" == "1" ]]; then

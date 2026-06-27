@@ -2075,6 +2075,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "delete-ns"' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'list-ns-created' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'list-ns-deleted' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'namespace_present' ${./scripts/integration-nvme-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'NVMe namespace identity drift' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "attach-ns"' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "detach-ns"' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'list-ns-attached' ${./scripts/integration-nvme-smoke.sh}
@@ -2477,6 +2479,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace create/delete' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace grow' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace attach/detach' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'NVMe namespace identity-drift assertions' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed multipath' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'path replacement coverage' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real filesystem' "$checklist"
@@ -2544,6 +2547,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace create/delete' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace grow' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace attach/detach' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'NVMe namespace identity-drift assertions' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real MD RAID member replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'MD RAID stale-superblock evidence' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'MD RAID failed-detach recovery' ${./docs/status.md}
@@ -2588,6 +2592,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_CREATE_DELETE=1' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_GROW=1' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_ATTACH_DETACH=1' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'namespace identity drift' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'nvme create-ns <controller>' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'nvme delete-ns <controller>' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'nvme attach-ns <controller>' ${./docs/integration-tests.md}

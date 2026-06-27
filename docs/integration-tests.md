@@ -1262,6 +1262,9 @@ When enabled, it:
   `nvme detach-ns <controller> --namespace-id <id> --controllers <ids>`,
   `nvme delete-ns <controller> --namespace-id <id>`, and final namespace
   inventory succeed
+- verifies namespace identity drift for that create/delete path by checking
+  `nvme list-ns <controller> --all --output-format=json` contains the selected
+  namespace id after create and no longer contains it after delete
 - when `DISK_NIX_NVME_GROW=1` is set, applies an
   `nvmeNamespaces.<controller>.operation = "grow"` plan and verifies the
   rendered `nvme list-subsys` and `nvme ns-rescan <controller>` commands
