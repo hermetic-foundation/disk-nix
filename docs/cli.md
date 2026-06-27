@@ -819,7 +819,10 @@ separate `readOnlyValidation`, `reversibleMutations`, `destructiveMutations`,
 and `operatorOnlyHandoff` sections. It records the failed action id and command,
 requires binding to the original apply receipt and a fresh topology probe, and
 keeps mutation sections empty until future domain-specific safety gates prove an
-automatic rollback step safe. The execution library exposes
+automatic rollback step safe. Recipes can declare `requiredTopologyEvidence`
+labels such as `expected`, `preApply`, `failedApply`, and `current`; replay
+receipts include the supplied `topologyEvidence` IDs and refuse execution when
+required evidence bindings are missing. The execution library exposes
 `replay_proven_safe_rollback_recipe` for already-proven recipes; it runs
 read-only validation first, replays only proven-safe reversible mutation steps,
 binds the replay report to the original receipt and fresh topology probe, and

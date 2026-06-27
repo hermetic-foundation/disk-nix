@@ -195,8 +195,16 @@ Update rules:
   rolled-back topology states.
 - [ ] **Desired:** Automatic rollback needs idempotency checks for externally
   modified topology states.
-- [ ] **Desired:** Automatic rollback needs post-failure topology probes that
-  capture expected, pre-apply, failed-apply, and current topology identities.
+- [x] **Finished:** Automatic rollback recipes declare required topology
+  evidence labels for expected, pre-apply, failed-apply, and current topology
+  identities, and replay receipts bind the supplied evidence IDs.
+- [x] **Finished:** Automatic rollback replay refuses proven-safe recipes
+  before command execution when required topology evidence bindings are missing
+  or empty.
+- [ ] **Desired:** Automatic rollback needs post-failure topology probe
+  capture that materializes expected, pre-apply, failed-apply, and current
+  topology identities for replay instead of accepting caller-supplied evidence
+  IDs alone.
 - [ ] **Desired:** Automatic rollback needs post-failure topology comparison
   that refuses rollback mutations when identity, size, holder, mount, export,
   session, or mapping state diverges from the proven recipe.

@@ -394,12 +394,15 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   read-only rollback precondition review for concrete risky actions, and
   stable `rollbackRecipes` with separate read-only validation, reversible
   mutation, destructive mutation, and operator-only handoff sections, plus
-  receipt-binding and fresh-topology-probe requirements. The execution crate can
+  receipt-binding, fresh-topology-probe, and required topology evidence
+  bindings for expected, pre-apply, failed-apply, and current topology
+  identities. The execution crate can
   now replay proven-safe reversible rollback recipe steps through
   `replay_proven_safe_rollback_recipe`, binding the replay report to the
-  original receipt and a fresh topology probe while refusing review-only,
-  destructive, operator-only, not-ready, unbound, missing-tool, or
-  plausible-data-loss command recipes before any command runs. Reports also
+  original receipt, a fresh topology probe, and supplied topology evidence
+  IDs while refusing review-only, destructive, operator-only, not-ready,
+  unbound, missing-tool, missing-topology-evidence, or plausible-data-loss
+  command recipes before any command runs. Reports also
   expose `partialExecutionRecovery` sequencing with completed
   actions, failed action, failed command, retry/review actions, remaining
   actions, completed mutating command counts, and fresh-topology review notes.
