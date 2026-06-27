@@ -654,12 +654,17 @@ When enabled, it:
 - executes a `filesystems.<name>.operation = "scrub"` apply plan
 - verifies the generated JSON report was written and the rendered
   `btrfs scrub start -B <mountpoint>` command succeeded
-- unmounts, detaches the loop device, and removes the backing file during
+- writes a sentinel file, applies a `filesystems.<name>.replaceDevices` plan
+  from the original loop device to a second loop device, verifies the rendered
+  `btrfs replace start <old-loop> <new-loop> <mountpoint>` command succeeded,
+  confirms the replacement device appears in `btrfs filesystem show`, and
+  checks the sentinel remains readable from the mounted filesystem
+- unmounts, detaches both loop devices, and removes the backing files during
   cleanup
 
-This test intentionally formats and mounts only the temporary backing file it
+This test intentionally formats and mounts only the temporary backing files it
 creates. It still requires destructive opt-in because it uses real loop, mount,
-and Btrfs tooling.
+and Btrfs tooling, including a real filesystem device replacement.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 

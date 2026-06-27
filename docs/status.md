@@ -161,7 +161,8 @@ behavior across real storage stacks.
   execute reviewed apply plans, verify ext4 grow plus real `e2label` filesystem
   label mutation on a disposable loop device, verify real LUKS header label mutation
   with `cryptsetup config`, verify real Btrfs filesystem label mutation with
-  `btrfs filesystem label`, verify real loop-backed swap label mutation with
+  `btrfs filesystem label`, real Btrfs filesystem device replacement with
+  `btrfs replace start`, verify real loop-backed swap label mutation with
   `swaplabel`, verify real ZFS pool property mutation with `zpool set`, real ZFS pool device replacement
   with `zpool replace`, verify
   real LVM cache property mutation with `lvchange --cachemode`, real LVM cache detach and reattach

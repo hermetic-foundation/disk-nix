@@ -514,6 +514,13 @@ Update rules:
   and replacement vdevs, applies `pools.*.replaceDevices`, executes
   `zpool replace <pool> <old-loop> <new-loop>`, verifies the replacement device
   appears in `zpool status -P`, and confirms the pool mountpoint remains active.
+- [x] **Finished:** Destructive integration tests include real Btrfs filesystem
+  device replacement coverage: the loop-backed Btrfs harness creates disposable
+  source and replacement devices, writes a sentinel file, applies
+  `filesystems.*.replaceDevices`, executes
+  `btrfs replace start <old-loop> <new-loop> <mountpoint>`, verifies the
+  replacement device appears in `btrfs filesystem show`, and confirms the
+  sentinel remains readable from the mounted filesystem.
 - [ ] **Partial:** Destructive integration tests need broader degraded-array
   variants covering missing members, stale superblocks, replacement races,
   partial rebuilds, failed detach, and failed reattach behavior.

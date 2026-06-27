@@ -1833,6 +1833,12 @@
             ${pkgs.gnugrep}/bin/grep -q 'btrfs", "filesystem", "label"' ${./scripts/integration-btrfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disknix-btrfs' ${./scripts/integration-btrfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'btrfs", "scrub", "start", "-B"' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'replaceDevices' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystems:btrfsReplacement:replace-device:' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'btrfs", "replace", "start"' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'btrfs filesystem show' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'btrfs replace status' ${./scripts/integration-btrfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix Btrfs replacement sentinel' ${./scripts/integration-btrfs-smoke.sh}
             touch "$out"
           '';
           integrationBcachefsSmoke = pkgs.runCommand "disk-nix-integration-bcachefs-smoke-check" { } ''
@@ -2482,6 +2488,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem label mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem device replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real loop-backed swap label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool device replacement' ${./docs/status.md}
@@ -2514,6 +2521,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'btrfsSmokeLabel.properties.label' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystems.<name>.replaceDevices' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'swaps.swapSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'pools.<name>.properties.autotrim' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.properties.lvm.cache-mode' ${./docs/integration-tests.md}
