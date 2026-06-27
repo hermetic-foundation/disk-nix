@@ -1132,6 +1132,16 @@ bounded to the new mapper name or opened mapper. Partition, LVM, MD RAID, loop,
 backing-file, swap deactivation, and zram generated-state mutation boundaries
 stay refused/operator-only unless a future domain recipe can prove a
 data-preserving inverse from stronger topology evidence.
+Advanced-storage declarations also use `rollbackValue`/`previousValue` for
+property rollback metadata. ZFS dataset, zvol, and pool property changes, VDO
+write-policy changes, bcache property changes, and Btrfs subvolume read-only
+property changes can use the pre-apply value for proven-safe rollback replay.
+ZFS and Btrfs rename failures only become automatic when the rename mutation
+succeeded and verification failed, so the inverse is bounded to the new object
+name or path. ZFS snapshot rollback/clone, VDO growth, bcache replacement, LVM
+cache mutation, Btrfs qgroup mutation, pool topology, and dataset/zvol
+lifecycle boundaries stay refused/operator-only without stronger topology
+evidence.
 Btrfs subvolume property updates only treat read-only aliases (`readOnly`,
 `readonly`, `ro`, `btrfs.readonly`, and `btrfs.ro`) as safe planned property
 changes. Other Btrfs subvolume property keys are classified as unsupported so

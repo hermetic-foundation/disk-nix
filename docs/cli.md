@@ -833,12 +833,19 @@ LUKS identity property failures can replay declared `rollbackValue`,
 device-mapper rename verification failures can replay `dmsetup rename <new> <old>`, and LUKS open verification failures can replay `cryptsetup close <mapper>`. Partition growth, LVM growth, MD RAID replacement, loop attach
 creation, backing-file growth, swap deactivation command failures, and zram
 generated-state mutation boundaries remain refused/operator-only unless
-stronger topology proof is available. Recipes can declare
-`requiredTopologyEvidence` labels such as `expected`, `preApply`,
-`failedApply`, and `current`; replay receipts include `topologyEvidence` IDs
-and refuse execution when required evidence bindings are missing. The execution
-library materializes deterministic evidence IDs from the failed execution report
-and fresh probe ID unless callers provide explicit evidence through
+stronger topology proof is available. Advanced-storage failures can produce
+proven-safe recipes when old state is explicit: ZFS, VDO, bcache, and Btrfs
+subvolume property failures can replay declared `rollbackValue`, and
+ZFS/Btrfs rename verification failures can replay a bounded inverse rename.
+ZFS snapshot rollback/clone, VDO growth, bcache replacement, LVM cache
+mutation, Btrfs qgroup mutation, pool topology, and dataset/zvol lifecycle
+boundaries remain refused/operator-only without stronger topology proof.
+Recipes can declare `requiredTopologyEvidence` labels such as `expected`,
+`preApply`, `failedApply`, and `current`; replay receipts include
+`topologyEvidence` IDs and refuse execution when required evidence bindings are
+missing. The execution library materializes deterministic evidence IDs from the
+failed execution report and fresh probe ID unless callers provide explicit
+evidence through
 `replay_proven_safe_rollback_recipe_with_topology_evidence`.
 `replay_proven_safe_rollback_recipe` handles already-proven recipes; it runs
 read-only validation first, replays only proven-safe reversible mutation steps,

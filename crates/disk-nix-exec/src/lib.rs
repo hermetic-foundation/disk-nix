@@ -645,6 +645,11 @@ fn rollback_recipes_for_report(report: &ExecutionReport) -> Vec<RollbackRecipe> 
         if let Some(recipe) = block_stack_rollback_recipe_for_step(partial, rollback_review, step) {
             return vec![recipe];
         }
+        if let Some(recipe) =
+            advanced_storage_rollback_recipe_for_step(partial, rollback_review, step)
+        {
+            return vec![recipe];
+        }
     }
 
     vec![review_only_rollback_recipe(
@@ -1250,6 +1255,322 @@ fn swap_deactivate_verification_rollback_command(step: &ExecutionStep) -> Option
         vec!["swapon".to_string(), target.clone()],
         true,
         "reactivate swap target disabled by the failed apply after read-only validation",
+    ))
+}
+
+fn advanced_storage_rollback_recipe_for_step(
+    partial: &PartialExecutionRecovery,
+    rollback_review: &RecoveryAction,
+    step: &ExecutionStep,
+) -> Option<RollbackRecipe> {
+    if !advanced_storage_collection(command_step_collection(step)?) {
+        return None;
+    }
+
+    let validation_commands = rollback_review.commands.clone();
+    let mut recipe = review_only_rollback_recipe(
+        partial,
+        rollback_review,
+        advanced_storage_rollback_refusal_reasons(step),
+        advanced_storage_rollback_notes(step),
+    );
+
+    if let Some(command) = advanced_storage_proven_rollback_command(partial, step) {
+        recipe.status = RollbackRecipeStatus::ProvenSafe;
+        recipe.read_only_validation.notes.push(
+            "advanced-storage rollback validation must prove object identity, old metadata, and dependent consumers still match the failed apply receipt".to_string(),
+        );
+        recipe.reversible_mutations = RollbackRecipeSection {
+            commands: vec![command],
+            notes: vec![
+                "advanced-storage rollback mutation is limited to declared old property values or verification-bound rename inverses".to_string(),
+                "growth, creation, destruction, snapshot rollback, clone, promotion, cache topology, and pool membership boundaries remain refused without stronger domain proof".to_string(),
+            ],
+        };
+        recipe.operator_only_handoff = RollbackRecipeSection {
+            commands: Vec::new(),
+            notes: Vec::new(),
+        };
+        recipe.refusal_reasons = Vec::new();
+        recipe.notes.push(
+            "advanced-storage recipe is proven-safe only because the rollback command is derived from explicit pre-apply metadata or a failed verification boundary".to_string(),
+        );
+    } else if advanced_storage_refused_operation(step) {
+        recipe.status = RollbackRecipeStatus::Refused;
+        recipe.operator_only_handoff = RollbackRecipeSection {
+            commands: validation_commands,
+            notes: vec![
+                "advanced-storage rollback requires operator review of snapshots, clones, cache state, pool topology, allocation, and active consumers before mutation".to_string(),
+                "prefer roll-forward validation, fresh topology inspection, retained snapshots, cloned recovery datasets, or cache/pool repair workflows instead of automated mutation".to_string(),
+            ],
+        };
+    }
+
+    Some(recipe)
+}
+
+fn advanced_storage_collection(collection: &str) -> bool {
+    matches!(
+        collection,
+        "pools"
+            | "datasets"
+            | "zvols"
+            | "snapshots"
+            | "btrfsSubvolumes"
+            | "btrfsQgroups"
+            | "caches"
+            | "lvmCaches"
+            | "vdoVolumes"
+    )
+}
+
+fn advanced_storage_refused_operation(step: &ExecutionStep) -> bool {
+    matches!(
+        step.operation,
+        Operation::AddDevice
+            | Operation::Attach
+            | Operation::Clone
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Detach
+            | Operation::Export
+            | Operation::Grow
+            | Operation::Import
+            | Operation::Promote
+            | Operation::Rebalance
+            | Operation::RemoveDevice
+            | Operation::ReplaceDevice
+            | Operation::Rollback
+            | Operation::SetProperty
+            | Operation::Start
+            | Operation::Stop
+    )
+}
+
+fn advanced_storage_rollback_refusal_reasons(step: &ExecutionStep) -> Vec<String> {
+    let collection = command_step_collection(step).unwrap_or("advanced-storage");
+    match (collection, step.operation) {
+        ("pools" | "datasets" | "zvols", Operation::SetProperty) => vec![
+            "ZFS property rollback metadata is missing or insufficient for proven-safe replay".to_string(),
+        ],
+        ("datasets" | "zvols" | "snapshots" | "btrfsSubvolumes", Operation::Rename) => vec![
+            "advanced-storage rename rollback is only automatic when rename succeeded and verification failed".to_string(),
+        ],
+        ("caches", Operation::SetProperty) => vec![
+            "bcache property rollback metadata is missing or insufficient for proven-safe replay".to_string(),
+        ],
+        ("vdoVolumes", Operation::SetProperty) => vec![
+            "VDO property rollback metadata is missing or insufficient for proven-safe replay".to_string(),
+        ],
+        ("btrfsSubvolumes", Operation::SetProperty) => vec![
+            "Btrfs subvolume property rollback metadata is missing or insufficient for proven-safe replay".to_string(),
+        ],
+        ("pools", Operation::AddDevice | Operation::RemoveDevice | Operation::Create | Operation::Destroy | Operation::Import | Operation::Export) => vec![
+            "ZFS pool rollback is refused because vdev topology, import/export state, and allocation changes require operator review".to_string(),
+        ],
+        ("datasets" | "zvols", Operation::Create | Operation::Destroy | Operation::Grow | Operation::Promote) => vec![
+            "ZFS dataset and zvol rollback is refused for create, destroy, grow, and promote boundaries without retained snapshot or clone proof".to_string(),
+        ],
+        ("snapshots", Operation::Create | Operation::Destroy | Operation::Clone | Operation::Rollback | Operation::SetProperty) => vec![
+            "snapshot rollback is refused because recovery points, holds, clones, and newer data require operator review".to_string(),
+        ],
+        ("btrfsSubvolumes" | "btrfsQgroups", _) => vec![
+            "Btrfs advanced rollback is refused without subvolume, qgroup, snapshot, send/receive, and mount-state proof".to_string(),
+        ],
+        ("caches" | "lvmCaches", _) => vec![
+            "cache rollback is refused without dirty data, cache-set, origin, and active consumer proof".to_string(),
+        ],
+        ("vdoVolumes", Operation::Create | Operation::Destroy | Operation::Grow | Operation::Start | Operation::Stop) => vec![
+            "VDO rollback is refused for lifecycle and growth boundaries because operating mode, backing capacity, and dedupe metadata require operator review".to_string(),
+        ],
+        _ => vec![
+            "advanced-storage rollback for this operation remains review-only".to_string(),
+        ],
+    }
+}
+
+fn advanced_storage_rollback_notes(step: &ExecutionStep) -> Vec<String> {
+    let collection = command_step_collection(step).unwrap_or("advanced-storage");
+    let boundary = match collection {
+        "pools" | "datasets" | "zvols" => "ZFS",
+        "snapshots" => "snapshot/clone",
+        "btrfsSubvolumes" | "btrfsQgroups" => "Btrfs",
+        "caches" => "bcache",
+        "lvmCaches" => "LVM cache",
+        "vdoVolumes" => "VDO",
+        _ => "advanced-storage",
+    };
+    vec![
+        format!("advanced-storage rollback recipe covers the {boundary} boundary"),
+        "read-only validation must be bound to expected, pre-apply, failed-apply, and current topology evidence".to_string(),
+    ]
+}
+
+fn advanced_storage_proven_rollback_command(
+    partial: &PartialExecutionRecovery,
+    step: &ExecutionStep,
+) -> Option<ExecutionCommand> {
+    let collection = command_step_collection(step)?;
+    match (collection, step.operation) {
+        ("pools" | "datasets" | "zvols", Operation::SetProperty) => {
+            zfs_property_rollback_command(step)
+        }
+        ("caches", Operation::SetProperty) => bcache_property_rollback_command(step),
+        ("vdoVolumes", Operation::SetProperty) => vdo_property_rollback_command(step),
+        ("btrfsSubvolumes", Operation::SetProperty) => {
+            btrfs_subvolume_property_rollback_command(step)
+        }
+        ("datasets" | "zvols" | "snapshots", Operation::Rename)
+            if partial.failed_phase == ExecutionPhase::Verification =>
+        {
+            zfs_rename_verification_rollback_command(step)
+        }
+        ("btrfsSubvolumes", Operation::Rename)
+            if partial.failed_phase == ExecutionPhase::Verification =>
+        {
+            btrfs_subvolume_rename_verification_rollback_command(step)
+        }
+        _ => None,
+    }
+}
+
+fn zfs_property_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_value = step_note_value(step, "rollback-value")?;
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let [tool, subcommand, assignment, target] = rollback_command.argv.as_slice() else {
+        return None;
+    };
+    if tool != "zfs" || subcommand != "set" {
+        return None;
+    }
+    let property = assignment.split_once('=')?.0;
+    Some(command_vec(
+        vec![
+            "zfs".to_string(),
+            "set".to_string(),
+            format!("{property}={rollback_value}"),
+            target.clone(),
+        ],
+        true,
+        "restore declared pre-apply ZFS property value",
+    ))
+}
+
+fn bcache_property_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_value = step_note_value(step, "rollback-value")?;
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let argv = rollback_command.argv.as_slice();
+    if argv.len() != 7 || argv.first().is_none_or(|tool| tool != "sh") {
+        return None;
+    }
+    let mut rollback_argv = rollback_command.argv.clone();
+    rollback_argv[5] = rollback_value.to_string();
+    Some(command_vec(
+        rollback_argv,
+        true,
+        "restore declared pre-apply bcache property value",
+    ))
+}
+
+fn vdo_property_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_value = step_note_value(step, "rollback-value")?;
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let argv = match rollback_command.argv.as_slice() {
+        [tool, subcommand, name_flag, name, policy_flag, _]
+            if tool == "vdo"
+                && subcommand == "changeWritePolicy"
+                && name_flag == "--name"
+                && policy_flag == "--writePolicy" =>
+        {
+            vec![
+                "vdo".to_string(),
+                "changeWritePolicy".to_string(),
+                "--name".to_string(),
+                name.clone(),
+                "--writePolicy".to_string(),
+                rollback_value.to_string(),
+            ]
+        }
+        _ => return None,
+    };
+    Some(command_vec(
+        argv,
+        true,
+        "restore declared pre-apply VDO property value",
+    ))
+}
+
+fn btrfs_subvolume_property_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_value = step_note_value(step, "rollback-value")?;
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let [tool, subcommand, action, flag, target, property, _] = rollback_command.argv.as_slice()
+    else {
+        return None;
+    };
+    if tool != "btrfs"
+        || subcommand != "property"
+        || action != "set"
+        || flag != "-ts"
+        || property != "ro"
+    {
+        return None;
+    }
+    Some(command_vec(
+        vec![
+            "btrfs".to_string(),
+            "property".to_string(),
+            "set".to_string(),
+            "-ts".to_string(),
+            target.clone(),
+            "ro".to_string(),
+            rollback_value.to_string(),
+        ],
+        true,
+        "restore declared pre-apply Btrfs subvolume property value",
+    ))
+}
+
+fn zfs_rename_verification_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let [tool, subcommand, old_name, new_name] = rollback_command.argv.as_slice() else {
+        return None;
+    };
+    if tool != "zfs" || subcommand != "rename" {
+        return None;
+    }
+    let rollback_name = step_note_value(step, "rollback-value").unwrap_or(old_name);
+    Some(command_vec(
+        vec![
+            "zfs".to_string(),
+            "rename".to_string(),
+            new_name.clone(),
+            rollback_name.to_string(),
+        ],
+        true,
+        "restore declared pre-apply ZFS object name after failed rename verification",
+    ))
+}
+
+fn btrfs_subvolume_rename_verification_rollback_command(
+    step: &ExecutionStep,
+) -> Option<ExecutionCommand> {
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let [tool, flag, old_path, new_path] = rollback_command.argv.as_slice() else {
+        return None;
+    };
+    if tool != "mv" || flag != "--" {
+        return None;
+    }
+    let rollback_path = step_note_value(step, "rollback-value").unwrap_or(old_path);
+    Some(command_vec(
+        vec![
+            "mv".to_string(),
+            "--".to_string(),
+            new_path.clone(),
+            rollback_path.to_string(),
+        ],
+        true,
+        "restore declared pre-apply Btrfs subvolume path after failed rename verification",
     ))
 }
 
@@ -2487,6 +2808,18 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                 Some("snapshots")
             )
             | (
+                Operation::Create
+                    | Operation::Destroy
+                    | Operation::Rename
+                    | Operation::Rescan
+                    | Operation::SetProperty,
+                Some("btrfsSubvolumes")
+            )
+            | (
+                Operation::Create | Operation::Destroy | Operation::Rescan | Operation::SetProperty,
+                Some("btrfsQgroups")
+            )
+            | (
                 Operation::AddDevice
                     | Operation::Create
                     | Operation::Destroy
@@ -3158,6 +3491,35 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             step,
             "confirm snapshot state before rollback decisions",
         ),
+        (
+            Operation::Create
+            | Operation::Destroy
+            | Operation::Rename
+            | Operation::Rescan
+            | Operation::SetProperty,
+            Some("btrfsSubvolumes"),
+            Some(target),
+        ) => vec![
+            command_vec(
+                ["btrfs", "subvolume", "show", target],
+                false,
+                "confirm Btrfs subvolume state before rollback decisions",
+            ),
+            command_vec(
+                ["btrfs", "property", "get", "-ts", target, "ro"],
+                false,
+                "confirm Btrfs subvolume read-only state before rollback decisions",
+            ),
+        ],
+        (
+            Operation::Create | Operation::Destroy | Operation::Rescan | Operation::SetProperty,
+            Some("btrfsQgroups"),
+            Some(target),
+        ) => vec![command_vec(
+            ["btrfs", "qgroup", "show", "--raw", "-reF", target],
+            false,
+            "confirm Btrfs qgroup limits and usage before rollback decisions",
+        )],
         (
             Operation::RemoveDevice | Operation::ReplaceDevice,
             Some("volumeGroups"),
@@ -4087,6 +4449,8 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
             "snapshot" => "snapshots",
             "filesystem" => "filesystems",
             "backingfiles" => "backingFiles",
+            "btrfsqgroups" => "btrfsQgroups",
+            "btrfssubvolumes" => "btrfsSubvolumes",
             "dmmaps" => "dmMaps",
             "iscsisessions" => "iscsiSessions",
             "loopdevices" => "loopDevices",
@@ -4100,6 +4464,7 @@ fn command_step_collection(step: &ExecutionStep) -> Option<&str> {
             "thinpools" => "thinPools",
             "volumegroups" => "volumeGroups",
             "vdovolumes" => "vdoVolumes",
+            "zvols" => "zvols",
             other => other,
         })
 }
@@ -4140,6 +4505,16 @@ fn command_step_target(step: &ExecutionStep) -> Option<&str> {
     }
     if command_step_collection(step) == Some("snapshots") {
         if let Some(target) = snapshot_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if command_step_collection(step) == Some("btrfsSubvolumes") {
+        if let Some(target) = btrfs_subvolume_target_from_step(step) {
+            return Some(target);
+        }
+    }
+    if command_step_collection(step) == Some("btrfsQgroups") {
+        if let Some(target) = btrfs_qgroup_target_from_step(step) {
             return Some(target);
         }
     }
@@ -5314,6 +5689,80 @@ fn snapshot_target_from_step(step: &ExecutionStep) -> Option<&str> {
             _ => None,
         }
         .filter(|target| !target.starts_with('<'))
+    })
+}
+
+fn btrfs_subvolume_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        if command
+            .argv
+            .get(0..3)
+            .is_some_and(|args| args == ["btrfs", "subvolume", "show"])
+            || command
+                .argv
+                .get(0..3)
+                .is_some_and(|args| args == ["btrfs", "subvolume", "create"])
+            || command
+                .argv
+                .get(0..3)
+                .is_some_and(|args| args == ["btrfs", "subvolume", "delete"])
+        {
+            return command.argv.get(3).map(String::as_str);
+        }
+        if command
+            .argv
+            .get(0..4)
+            .is_some_and(|args| args == ["btrfs", "property", "set", "-ts"])
+            || command
+                .argv
+                .get(0..4)
+                .is_some_and(|args| args == ["btrfs", "property", "get", "-ts"])
+        {
+            return command.argv.get(4).map(String::as_str);
+        }
+        if command
+            .argv
+            .get(0..2)
+            .is_some_and(|args| args == ["mv", "--"])
+        {
+            return command.argv.get(2).map(String::as_str);
+        }
+        None
+    })
+}
+
+fn btrfs_qgroup_target_from_step(step: &ExecutionStep) -> Option<&str> {
+    step.commands.iter().find_map(|command| {
+        if command
+            .argv
+            .get(0..5)
+            .is_some_and(|args| args == ["btrfs", "qgroup", "show", "--raw", "-reF"])
+        {
+            return command.argv.get(5).map(String::as_str);
+        }
+        if command
+            .argv
+            .get(0..3)
+            .is_some_and(|args| args == ["btrfs", "qgroup", "create"])
+            || command
+                .argv
+                .get(0..3)
+                .is_some_and(|args| args == ["btrfs", "qgroup", "destroy"])
+        {
+            return command.argv.get(4).map(String::as_str);
+        }
+        if command
+            .argv
+            .get(0..3)
+            .is_some_and(|args| args == ["btrfs", "qgroup", "limit"])
+        {
+            return if command.argv.get(3).is_some_and(|arg| arg == "-e") {
+                command.argv.get(6).map(String::as_str)
+            } else {
+                command.argv.get(5).map(String::as_str)
+            };
+        }
+        None
     })
 }
 
@@ -29719,7 +30168,7 @@ mod tests {
             recipe.failed_command,
             ["zfs", "rollback", "tank/home@before"]
         );
-        assert_eq!(recipe.status, RollbackRecipeStatus::ReviewOnly);
+        assert_eq!(recipe.status, RollbackRecipeStatus::Refused);
         assert!(recipe.receipt_binding_required);
         assert!(recipe.fresh_topology_probe_required);
         assert!(!recipe.read_only_validation.commands.is_empty());
@@ -29732,7 +30181,13 @@ mod tests {
         );
         assert!(recipe.reversible_mutations.commands.is_empty());
         assert!(recipe.destructive_mutations.commands.is_empty());
-        assert!(recipe.operator_only_handoff.commands.is_empty());
+        assert!(
+            recipe
+                .operator_only_handoff
+                .notes
+                .iter()
+                .any(|note| note.contains("operator review"))
+        );
         assert!(
             recipe
                 .safety_gates
@@ -29757,7 +30212,7 @@ mod tests {
             recipe
                 .refusal_reasons
                 .iter()
-                .any(|reason| reason.contains("review-only"))
+                .any(|reason| reason.contains("snapshot rollback is refused"))
         );
         let value = serde_json::to_value(&report).expect("report should serialize");
         assert_eq!(
@@ -33045,6 +33500,406 @@ mod tests {
                 .iter()
                 .any(|note| note.contains("operator review"))
         );
+    }
+
+    #[test]
+    fn advanced_storage_property_failures_emit_proven_safe_rollback_recipes() {
+        for (case, spec, failed_command, expected_rollback) in [
+            (
+                "ZFS dataset property",
+                br#"{
+                  "spec": {
+                    "datasets": {
+                      "tank/home": {
+                        "properties": {
+                          "compression": "zstd"
+                        },
+                        "rollbackValue": "lz4"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowPropertyChanges": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "zfs".to_string(),
+                    "set".to_string(),
+                    "compression=zstd".to_string(),
+                    "tank/home".to_string(),
+                ],
+                vec![
+                    "zfs".to_string(),
+                    "set".to_string(),
+                    "compression=lz4".to_string(),
+                    "tank/home".to_string(),
+                ],
+            ),
+            (
+                "VDO write policy",
+                br#"{
+                  "spec": {
+                    "vdoVolumes": {
+                      "archive": {
+                        "properties": {
+                          "writePolicy": "sync"
+                        },
+                        "rollbackValue": "async"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowPropertyChanges": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "vdo".to_string(),
+                    "changeWritePolicy".to_string(),
+                    "--name".to_string(),
+                    "archive".to_string(),
+                    "--writePolicy".to_string(),
+                    "sync".to_string(),
+                ],
+                vec![
+                    "vdo".to_string(),
+                    "changeWritePolicy".to_string(),
+                    "--name".to_string(),
+                    "archive".to_string(),
+                    "--writePolicy".to_string(),
+                    "async".to_string(),
+                ],
+            ),
+            (
+                "bcache cache mode",
+                br#"{
+                  "spec": {
+                    "caches": {
+                      "/dev/bcache1": {
+                        "path": "/dev/bcache1",
+                        "rollbackValue": "writeback",
+                        "properties": {
+                          "bcache.cache-mode": "writearound"
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowPropertyChanges": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "sh".to_string(),
+                    "-c".to_string(),
+                    "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"".to_string(),
+                    "disk-nix-bcache-property".to_string(),
+                    "/dev/bcache1".to_string(),
+                    "writearound".to_string(),
+                    "cache_mode".to_string(),
+                ],
+                vec![
+                    "sh".to_string(),
+                    "-c".to_string(),
+                    "printf '%s\\n' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"".to_string(),
+                    "disk-nix-bcache-property".to_string(),
+                    "/dev/bcache1".to_string(),
+                    "writeback".to_string(),
+                    "cache_mode".to_string(),
+                ],
+            ),
+            (
+                "Btrfs subvolume readonly",
+                br#"{
+                  "spec": {
+                    "btrfsSubvolumes": {
+                      "/mnt/persist/@home": {
+                        "path": "/mnt/persist/@home",
+                        "rollbackValue": "false",
+                        "properties": {
+                          "readonly": true
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "btrfs".to_string(),
+                    "property".to_string(),
+                    "set".to_string(),
+                    "-ts".to_string(),
+                    "/mnt/persist/@home".to_string(),
+                    "ro".to_string(),
+                    "true".to_string(),
+                ],
+                vec![
+                    "btrfs".to_string(),
+                    "property".to_string(),
+                    "set".to_string(),
+                    "-ts".to_string(),
+                    "/mnt/persist/@home".to_string(),
+                    "ro".to_string(),
+                    "false".to_string(),
+                ],
+            ),
+        ] {
+            let (plan, policy) = plan_and_policy_from_json_bytes(spec).expect("document parses");
+            let report = prepare_execution_with_runner_and_tool_checker(
+                &plan,
+                policy,
+                ExecutionMode::Execute,
+                |argv| CommandRunResult {
+                    success: argv != failed_command.as_slice(),
+                    status_code: Some(if argv == failed_command.as_slice() {
+                        22
+                    } else {
+                        0
+                    }),
+                    stdout: String::new(),
+                    stderr: if argv == failed_command.as_slice() {
+                        format!("{case} failed")
+                    } else {
+                        String::new()
+                    },
+                },
+                |_| true,
+            );
+
+            assert_eq!(report.status, ExecutionStatus::Failed, "{case}");
+            let recipe = report
+                .rollback_recipes
+                .first()
+                .unwrap_or_else(|| panic!("{case} rollback recipe is reported"));
+            assert_eq!(recipe.status, RollbackRecipeStatus::ProvenSafe, "{case}");
+            assert_eq!(
+                recipe.reversible_mutations.commands[0].argv, expected_rollback,
+                "{case}"
+            );
+
+            let replay = replay_proven_safe_rollback_recipe_with_runner(
+                &report,
+                0,
+                "receipt:advanced-property".to_string(),
+                "topology:advanced-property".to_string(),
+                &mut |_| CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                },
+            );
+            assert_eq!(
+                replay.status,
+                RollbackExecutionStatus::Succeeded,
+                "{case}: {:?}",
+                replay.refusal_reasons
+            );
+        }
+    }
+
+    #[test]
+    fn advanced_storage_refused_boundaries_emit_operator_only_rollback_recipes() {
+        for (boundary, spec, failed_command, reason_fragment) in [
+            (
+                "ZFS snapshot rollback",
+                br#"{
+                  "spec": {
+                    "snapshots": {
+                      "tank/home@before": {
+                        "target": "tank/home",
+                        "rollback": true
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowPotentialDataLoss": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "zfs".to_string(),
+                    "rollback".to_string(),
+                    "tank/home@before".to_string(),
+                ],
+                "snapshot rollback is refused",
+            ),
+            (
+                "ZFS snapshot clone",
+                br#"{
+                  "spec": {
+                    "snapshots": {
+                      "before-clone": {
+                        "name": "tank/home@before",
+                        "target": "tank/home",
+                        "cloneTo": "tank/home-review"
+                      }
+                    }
+                  },
+                  "apply": {}
+                }"# as &[u8],
+                vec![
+                    "zfs".to_string(),
+                    "clone".to_string(),
+                    "tank/home@before".to_string(),
+                    "tank/home-review".to_string(),
+                ],
+                "snapshot rollback is refused",
+            ),
+            (
+                "VDO grow",
+                br#"{
+                  "spec": {
+                    "vdoVolumes": {
+                      "archive": {
+                        "operation": "grow",
+                        "desiredSize": "4TiB"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowGrow": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "vdo".to_string(),
+                    "growLogical".to_string(),
+                    "--name".to_string(),
+                    "archive".to_string(),
+                    "--vdoLogicalSize".to_string(),
+                    "4TiB".to_string(),
+                ],
+                "VDO rollback is refused",
+            ),
+            (
+                "bcache replacement",
+                br#"{
+                  "spec": {
+                    "caches": {
+                      "/dev/bcache0": {
+                        "path": "/dev/bcache0",
+                        "cacheSetUuid": "11111111-2222-3333-4444-555555555555",
+                        "replaceDevices": {
+                          "/dev/disk/by-id/old-cache": "/dev/disk/by-id/new-cache"
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowDeviceReplacement": true,
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "sh".to_string(),
+                    "-c".to_string(),
+                    "make-bcache -C \"$2\" --cset-uuid \"$3\" --writeback && printf '1\\n' > \"/sys/block/${1#/dev/}/bcache/detach\" && printf '%s\\n' \"$3\" > \"/sys/block/${1#/dev/}/bcache/attach\"".to_string(),
+                    "disk-nix-bcache-replace".to_string(),
+                    "/dev/bcache0".to_string(),
+                    "/dev/disk/by-id/new-cache".to_string(),
+                    "11111111-2222-3333-4444-555555555555".to_string(),
+                ],
+                "cache rollback is refused",
+            ),
+            (
+                "LVM cache property",
+                br#"{
+                  "spec": {
+                    "lvmCaches": {
+                      "vg0/root": {
+                        "properties": {
+                          "lvm.cache-mode": "writethrough"
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowPropertyChanges": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "lvchange".to_string(),
+                    "--cachemode".to_string(),
+                    "writethrough".to_string(),
+                    "vg0/root".to_string(),
+                ],
+                "cache rollback is refused",
+            ),
+            (
+                "Btrfs qgroup limit",
+                br#"{
+                  "spec": {
+                    "btrfsQgroups": {
+                      "0/257": {
+                        "target": "/mnt/persist",
+                        "properties": {
+                          "limit": "10GiB"
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "btrfs".to_string(),
+                    "qgroup".to_string(),
+                    "limit".to_string(),
+                    "10GiB".to_string(),
+                    "0/257".to_string(),
+                    "/mnt/persist".to_string(),
+                ],
+                "Btrfs advanced rollback is refused",
+            ),
+        ] {
+            let (plan, policy) = plan_and_policy_from_json_bytes(spec).expect("document parses");
+            let report = prepare_execution_with_runner_and_tool_checker(
+                &plan,
+                policy,
+                ExecutionMode::Execute,
+                |argv| CommandRunResult {
+                    success: argv != failed_command.as_slice(),
+                    status_code: Some(if argv == failed_command.as_slice() {
+                        23
+                    } else {
+                        0
+                    }),
+                    stdout: String::new(),
+                    stderr: if argv == failed_command.as_slice() {
+                        format!("{boundary} failed")
+                    } else {
+                        String::new()
+                    },
+                },
+                |_| true,
+            );
+
+            assert_eq!(report.status, ExecutionStatus::Failed, "{boundary}");
+            let recipe = report
+                .rollback_recipes
+                .first()
+                .unwrap_or_else(|| panic!("{boundary} rollback recipe should be reported"));
+            assert_eq!(recipe.status, RollbackRecipeStatus::Refused, "{boundary}");
+            assert!(
+                recipe.reversible_mutations.commands.is_empty(),
+                "{boundary} should not emit automatic rollback mutation"
+            );
+            assert!(
+                recipe
+                    .operator_only_handoff
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("operator review")),
+                "{boundary} should hand off to operator review"
+            );
+            assert!(
+                recipe
+                    .refusal_reasons
+                    .iter()
+                    .any(|reason| reason.contains(reason_fragment)),
+                "{boundary} should explain refusal"
+            );
+        }
     }
 
     #[test]

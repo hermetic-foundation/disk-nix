@@ -409,9 +409,14 @@ Update rules:
   growth, swap deactivation failures, and zram generated-state mutation
   boundaries emit refused/operator-only recipes unless stronger topology proof
   is available.
-- [ ] **Desired:** Proven automatic rollback recipes need advanced storage
+- [x] **Finished:** Proven automatic rollback recipes have advanced-storage
   recipes and fixtures for ZFS, Btrfs, bcachefs, bcache, LVM cache, VDO, and
-  snapshot or clone operations.
+  snapshot or clone boundaries. ZFS, VDO, bcache, and Btrfs subvolume property
+  failures can replay declared `rollbackValue`; ZFS/Btrfs rename verification
+  boundaries have bounded inverse recipes; ZFS snapshot rollback/clone, VDO
+  growth, bcache replacement, LVM cache mutation, Btrfs qgroup mutation, pool
+  topology, and dataset/zvol lifecycle boundaries emit refused/operator-only
+  recipes without stronger topology proof.
 - [ ] **Desired:** Proven automatic rollback recipes need network-storage
   recipes and fixtures for NFS, iSCSI, multipath, NVMe-oF, host-side LUNs, and
   target-side LUN providers.

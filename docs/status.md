@@ -431,6 +431,13 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   Partition growth, LVM growth, MD RAID replacement, loop create, backing-file
   growth, swap deactivation command failures, and zram generated-state mutation
   boundaries remain refused/operator-only without stronger topology proof.
+  Advanced-storage failed-apply reports now specialize rollback recipes too:
+  ZFS, VDO, bcache, and Btrfs subvolume property failures can replay declared
+  `rollbackValue`, while ZFS/Btrfs rename verification failures can use a
+  bounded inverse rename. Snapshot rollback/clone, VDO growth, bcache
+  replacement, LVM cache mutation, Btrfs qgroup mutation, pool topology, and
+  dataset/zvol lifecycle boundaries remain refused/operator-only without
+  stronger topology proof.
   The exec crate also has an integration test proving a failed apply report can
   bind fresh topology evidence and payloads, select a proven-safe rollback
   recipe, run read-only validation plus reversible mutation steps, and emit a
