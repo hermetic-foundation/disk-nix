@@ -165,7 +165,8 @@ behavior across real storage stacks.
   `swaplabel`, verify real ZFS pool property mutation with `zpool set`, verify
   real LVM cache property mutation with `lvchange --cachemode` while a
   cached-origin ext4 sentinel remains readable, verify
-  real bcache cache-mode mutation with a `disk-nix-bcache-property` sysfs write,
+  real bcache cache-mode mutation and read-only rescan with
+  `disk-nix-bcache-property` and `disk-nix-bcache-read` sysfs operations,
   verify real backing-file mode mutation with `chmod`, verify
   real loop-device read-only mutation with `blockdev --setro` and `blockdev --setrw`, verify
   real zram property reconciliation with `zramctl`, `swapon`, and `disk-nix zram`, then verify

@@ -20,7 +20,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" blockdev jq losetup make-bcache modprobe truncate; do
+for tool in "$disk_nix_bin" blockdev cat cmp jq losetup make-bcache modprobe truncate; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -65,6 +65,8 @@ backing="$tmpdir/disk-nix-bcache-backing.img"
 cache="$tmpdir/disk-nix-bcache-cache.img"
 spec="$tmpdir/property-spec.json"
 report="$tmpdir/property-report.json"
+rescan_spec="$tmpdir/rescan-spec.json"
+rescan_report="$tmpdir/rescan-report.json"
 
 truncate --size 256M "$backing"
 truncate --size 128M "$cache"
@@ -134,4 +136,41 @@ if [[ "$cache_mode_value" != "writethrough" ]] && [[ "$cache_mode_value" != *"[w
   exit 1
 fi
 
-echo "bcache integration smoke test passed for $bcachedev, including cache_mode property mutation"
+jq -n --arg bcachedev "$bcachedev" '{
+  version: 1,
+  caches: {
+    bcacheSmoke: {
+      target: $bcachedev,
+      operation: "rescan"
+    }
+  },
+  apply: {
+    allowOffline: true
+  }
+}' > "$rescan_spec"
+
+if ! "$disk_nix_bin" apply \
+  --spec "$rescan_spec" \
+  --execute \
+  --report-out "$rescan_report" \
+  --json > "$tmpdir/rescan-apply.json"; then
+  cat "$tmpdir/rescan-apply.json" >&2 || true
+  cat "$rescan_report" >&2 || true
+  exit 1
+fi
+
+jq -e --arg bcachedev "$bcachedev" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == "caches:bcacheSmoke:rescan")
+    | .commands | any(.argv == ["disk-nix", "inspect", $bcachedev]))
+  and (.executionResults
+    | any(.argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", $bcachedev, "state"] and .success == true))
+  and (.executionResults
+    | any(.argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", $bcachedev, "cache_mode"] and .success == true))
+  and (.executionResults
+    | any(.argv == ["sh", "-c", "cat \"/sys/block/${1#/dev/}/bcache/$2\"", "disk-nix-bcache-read", $bcachedev, "dirty_data"] and .success == true))
+' "$tmpdir/rescan-apply.json" >/dev/null
+
+cmp "$tmpdir/rescan-apply.json" "$rescan_report" >/dev/null
+
+echo "bcache integration smoke test passed for $bcachedev, including cache_mode property mutation and read-only rescan"

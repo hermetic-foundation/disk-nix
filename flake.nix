@@ -1849,7 +1849,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'make-bcache -B' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'modprobe bcache' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'caches:bcacheSmoke:set-property:bcache.cache-mode' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'caches:bcacheSmoke:rescan' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-property' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-read' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'dirty_data' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cache_mode' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'writethrough' ${./scripts/integration-bcache-smoke.sh}
             touch "$out"
@@ -2358,6 +2361,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'operator-only guidance instead of automated unsafe rollback' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'layered block/filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'LVM cache data-survival' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache read-only' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'rescan coverage: the loop-backed bcache harness' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'network-storage scenarios' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header' "$checklist"
@@ -2392,7 +2397,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'cached-origin ext4 sentinel' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation and read-only rescan' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file mode mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device read-only mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real zram property reconciliation' ${./docs/status.md}
@@ -2407,6 +2412,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.properties.lvm.cache-mode' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'cache sentinel survives' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.properties."bcache.cache-mode"' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.operation = "rescan"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'backingFiles.<path>.properties.mode' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopDevices.<loop>.properties."loop.read-only"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'zram.properties.algorithm' ${./docs/integration-tests.md}

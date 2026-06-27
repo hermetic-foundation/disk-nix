@@ -507,8 +507,13 @@ Update rules:
   variants covering missing members, stale superblocks, replacement races,
   partial rebuilds, failed detach, and failed reattach behavior.
 - [ ] **Partial:** Destructive integration tests need VM-backed cache mutation
-  coverage for LVM cache attach/detach/replacement/property, bcache
-  replacement/property/rescan, and cache-device failure states.
+  coverage for LVM cache attach/detach/replacement, bcache replacement, and
+  cache-device failure states.
+- [x] **Finished:** Destructive integration tests include real bcache read-only
+  rescan coverage: the loop-backed bcache harness applies
+  `caches.bcacheSmoke.operation = "rescan"` against the generated bcache
+  device and verifies `disk-nix inspect` plus `disk-nix-bcache-read` checks for
+  `state`, `cache_mode`, and `dirty_data` all succeed.
 - [ ] **Partial:** Destructive integration tests need VM-backed NVMe namespace
   coverage for create, grow, attach, detach, delete, controller reconnect, and
   namespace identity drift.

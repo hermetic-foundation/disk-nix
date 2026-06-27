@@ -722,6 +722,10 @@ When enabled, it:
 - applies `caches.bcacheSmoke.properties."bcache.cache-mode" = "writethrough"`
 - verifies the rendered `disk-nix-bcache-property` sysfs write succeeded
 - checks `/sys/block/<bcache>/bcache/cache_mode` reports `writethrough`
+- executes `caches.bcacheSmoke.operation = "rescan"` against the same generated
+  bcache device
+- verifies the read-only rescan ran `disk-nix inspect <bcache>` and
+  `disk-nix-bcache-read` checks for `state`, `cache_mode`, and `dirty_data`
 - stops the generated bcache device, detaches the loops, and removes the
   backing files during cleanup
 
