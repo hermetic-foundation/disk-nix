@@ -170,7 +170,8 @@ behavior across real storage stacks.
   `lvconvert --type cache --cachepool`, while a cached-origin ext4 sentinel
   remains readable, verify
   real bcache cache-mode mutation, real bcache cache detach/reattach with
-  `disk-nix-bcache-detach` and `disk-nix-bcache-attach`, verify
+  `disk-nix-bcache-detach` and `disk-nix-bcache-attach`, real bcache cache replacement
+  with `disk-nix-bcache-replace`, verify
   real bcachefs member replacement with `bcachefs device add`,
   `bcachefs data rereplicate`, and `bcachefs device remove`, and read-only rescan
   with `disk-nix-bcache-property` and `disk-nix-bcache-read` sysfs operations,

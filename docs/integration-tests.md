@@ -725,8 +725,8 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 
 When enabled, it:
 
-- creates temporary backing and cache image files
-- attaches both files to disposable `/dev/loop*` devices
+- creates temporary backing, cache, and replacement-cache image files
+- attaches all three files to disposable `/dev/loop*` devices
 - loads the `bcache` kernel module and initializes a real bcache backing/cache
   pair with `make-bcache`
 - finds the generated `/dev/bcache*` device for the temporary backing loop
@@ -739,6 +739,10 @@ When enabled, it:
 - applies `caches.bcacheSmoke.addDevices = [ "<cache-set-uuid>" ]`, verifies
   the rendered `disk-nix-bcache-attach` sysfs write succeeded, reapplies
   `bcache.cache-mode = "writethrough"`, and checks the cache mode again
+- applies `caches.bcacheReplacement.replaceDevices` from the original cache
+  loop to the replacement cache loop with the live `cacheSetUuid`, verifies the
+  rendered `disk-nix-bcache-replace` wrapper succeeded, and confirms the
+  generated bcache device remains readable after replacement
 - executes `caches.bcacheSmoke.operation = "rescan"` against the same generated
   bcache device
 - verifies the read-only rescan ran `disk-nix inspect <bcache>` and

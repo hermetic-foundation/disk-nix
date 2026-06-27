@@ -7,8 +7,9 @@ Refusing to run bcache integration smoke test.
 
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates
 temporary loop-backed bcache backing and cache devices, mutates a real bcache
-sysfs property, detaches and reattaches the real cache set, stops the generated
-bcache device, and removes the temporary backing files during cleanup.
+sysfs property, detaches and reattaches the real cache set, replaces the cache
+device, stops the generated bcache device, and removes the temporary backing
+files during cleanup.
 MSG
   exit 2
 fi
@@ -30,6 +31,7 @@ done
 tmpdir="$(mktemp -d)"
 backing_loop=""
 cache_loop=""
+replacement_cache_loop=""
 bcachedev=""
 
 cleanup() {
@@ -41,6 +43,9 @@ cleanup() {
   fi
   if [[ -n "$cache_loop" ]] && losetup --list "$cache_loop" >/dev/null 2>&1; then
     losetup --detach "$cache_loop" || true
+  fi
+  if [[ -n "$replacement_cache_loop" ]] && losetup --list "$replacement_cache_loop" >/dev/null 2>&1; then
+    losetup --detach "$replacement_cache_loop" || true
   fi
   rm -rf "$tmpdir"
 }
@@ -63,19 +68,24 @@ modprobe bcache
 
 backing="$tmpdir/disk-nix-bcache-backing.img"
 cache="$tmpdir/disk-nix-bcache-cache.img"
+replacement_cache="$tmpdir/disk-nix-bcache-replacement-cache.img"
 spec="$tmpdir/property-spec.json"
 report="$tmpdir/property-report.json"
 detach_spec="$tmpdir/detach-spec.json"
 detach_report="$tmpdir/detach-report.json"
 attach_spec="$tmpdir/attach-spec.json"
 attach_report="$tmpdir/attach-report.json"
+replace_spec="$tmpdir/replace-spec.json"
+replace_report="$tmpdir/replace-report.json"
 rescan_spec="$tmpdir/rescan-spec.json"
 rescan_report="$tmpdir/rescan-report.json"
 
 truncate --size 256M "$backing"
 truncate --size 128M "$cache"
+truncate --size 128M "$replacement_cache"
 backing_loop="$(losetup --find --show "$backing")"
 cache_loop="$(losetup --find --show "$cache")"
+replacement_cache_loop="$(losetup --find --show "$replacement_cache")"
 
 make-bcache -B "$backing_loop" -C "$cache_loop" --writeback >/dev/null
 printf '%s\n' "$backing_loop" > /sys/fs/bcache/register_quiet || true
@@ -218,6 +228,61 @@ if [[ "$cache_mode_value" != "writethrough" ]] && [[ "$cache_mode_value" != *"[w
   exit 1
 fi
 
+jq -n --arg bcachedev "$bcachedev" --arg old_cache "$cache_loop" --arg new_cache "$replacement_cache_loop" --arg cache_set_uuid "$cache_set_uuid" '{
+  version: 1,
+  caches: {
+    bcacheReplacement: {
+      target: $bcachedev,
+      replaceDevices: {
+        ($old_cache): $new_cache
+      },
+      cacheSetUuid: $cache_set_uuid
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowDeviceReplacement: true
+  }
+}' > "$replace_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$replace_spec" \
+  --execute \
+  --report-out "$replace_report" \
+  --json > "$tmpdir/replace-apply.json"
+
+jq -e --arg bcachedev "$bcachedev" --arg old_cache "$cache_loop" --arg new_cache "$replacement_cache_loop" --arg cache_set_uuid "$cache_set_uuid" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("caches:bcacheReplacement:replace-device:" + $old_cache))
+    | .commands | any(.argv == [
+        "sh",
+        "-c",
+        "make-bcache -C \"$2\" --cset-uuid \"$3\" --writeback && printf '\''1\\n'\'' > \"/sys/block/${1#/dev/}/bcache/detach\" && printf '\''%s\\n'\'' \"$3\" > \"/sys/block/${1#/dev/}/bcache/attach\"",
+        "disk-nix-bcache-replace",
+        $bcachedev,
+        $new_cache,
+        $cache_set_uuid
+      ]))
+  and (.executionResults
+    | any(.argv == [
+        "sh",
+        "-c",
+        "make-bcache -C \"$2\" --cset-uuid \"$3\" --writeback && printf '\''1\\n'\'' > \"/sys/block/${1#/dev/}/bcache/detach\" && printf '\''%s\\n'\'' \"$3\" > \"/sys/block/${1#/dev/}/bcache/attach\"",
+        "disk-nix-bcache-replace",
+        $bcachedev,
+        $new_cache,
+        $cache_set_uuid
+      ] and .success == true))
+' "$tmpdir/replace-apply.json" >/dev/null
+
+cmp "$tmpdir/replace-apply.json" "$replace_report" >/dev/null
+blockdev --getsize64 "$bcachedev" >/dev/null
+cache_mode_value="$(cat "/sys/block/${bcachedev#/dev/}/bcache/cache_mode")"
+if [[ "$cache_mode_value" != "writethrough" ]] && [[ "$cache_mode_value" != *"[writethrough]"* ]] && [[ "$cache_mode_value" != "writeback" ]] && [[ "$cache_mode_value" != *"[writeback]"* ]]; then
+  echo "bcache cache_mode was not readable after disk-nix cache replacement" >&2
+  exit 1
+fi
+
 jq -n --arg bcachedev "$bcachedev" '{
   version: 1,
   caches: {
@@ -255,4 +320,4 @@ jq -e --arg bcachedev "$bcachedev" '
 
 cmp "$tmpdir/rescan-apply.json" "$rescan_report" >/dev/null
 
-echo "bcache integration smoke test passed for $bcachedev, including cache_mode property mutation, cache detach/reattach, and read-only rescan"
+echo "bcache integration smoke test passed for $bcachedev, including cache_mode property mutation, cache detach/reattach, cache replacement, and read-only rescan"

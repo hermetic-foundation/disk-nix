@@ -562,6 +562,12 @@ Update rules:
   sysfs write, applies `caches.*.addDevices`, verifies the
   `disk-nix-bcache-attach` sysfs write, reapplies cache mode, and confirms the
   generated bcache device remains readable.
+- [x] **Finished:** Destructive integration tests include real bcache cache replacement
+  coverage: the loop-backed bcache harness creates a replacement cache loop,
+  applies `caches.*.replaceDevices` with the live cache-set UUID, verifies the
+  rendered `disk-nix-bcache-replace` wrapper initializes the replacement cache,
+  detaches the prior cache, attaches the replacement cache set, and confirms
+  the generated bcache device remains readable after replacement.
 - [x] **Finished:** Destructive integration tests include real bcache read-only
   rescan coverage: the loop-backed bcache harness applies
   `caches.bcacheSmoke.operation = "rescan"` against the generated bcache

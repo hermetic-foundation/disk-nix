@@ -1868,6 +1868,11 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-detach' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'caches:bcacheSmoke:add-device:' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-attach' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'replacement_cache_loop=' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'replaceDevices' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cacheSetUuid' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'caches:bcacheReplacement:replace-device:' ${./scripts/integration-bcache-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-replace' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'caches:bcacheSmoke:rescan' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-property' ${./scripts/integration-bcache-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-read' ${./scripts/integration-bcache-smoke.sh}
@@ -2471,6 +2476,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real bcachefs member replacement' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real bcache property' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache replacement' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real zram property' "$checklist"
@@ -2505,6 +2511,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'cached-origin ext4 sentinel' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation, real bcache cache detach/reattach' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache detach/reattach' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcachefs member replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file mode mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device read-only mutation' ${./docs/status.md}
@@ -2539,6 +2546,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.addDevices' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'cache sentinel survives' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.properties."bcache.cache-mode"' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheReplacement.replaceDevices' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-replace' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.removeDevices' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.addDevices' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.operation = "rescan"' ${./docs/integration-tests.md}
