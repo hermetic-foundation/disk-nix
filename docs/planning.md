@@ -430,7 +430,11 @@ Examples:
   `operation = "attach"` and `operation = "detach"` model mapping and unmapping
   the reviewed target LUN to initiators. These actions are provider-specific:
   declarations can set `provider`, `storageProvider`, or `arrayProvider` to
-  label the intended array adapter. `provider = "lio"` renders concrete
+  label the intended array adapter. Array-backed declarations can also pass
+  `vendor`, `arrayId`, `storagePool`, `volumeId`, `snapshotId`, `cloneSource`,
+  and `maskingGroup`/`hostGroup`/`igroup` so provider handoffs carry stable
+  array identity, capacity placement, mapping/masking scope, and snapshot or
+  clone lineage data. `provider = "lio"` renders concrete
   `targetcli` inventory, backstore creation, target creation, LUN mapping,
   ACL mapping/unmapping, target removal, reviewed backstore removal, and
   `saveconfig` commands for Linux LIO targets when the target IQN, backing
@@ -456,8 +460,9 @@ Examples:
   LUN number, optional `group`/`initiatorGroup`, and initiators are declared.
   Other providers still emit non-ready `<target-lun-provider[:provider]>`
   handoff commands carrying the target identity, provider label, desired size,
-  backing object, target id, LUN number, portal, and initiators, plus read-only
-  inventory verification
+  backing object, target id, LUN number, portal, initiators, array identity,
+  volume identity, masking group, and snapshot or clone handoff fields, plus
+  read-only inventory verification
   placeholders. Host-side `luns`, `iscsiSessions`, and `multipathMaps` rescans
   should be staged after target-side verification.
   Current-topology comparison suppresses attach actions only when the declared

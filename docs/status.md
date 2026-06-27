@@ -274,7 +274,11 @@ use provider-labeled handoff commands and verification placeholders until
 concrete adapters are added, but those handoffs now carry a
 `providerCapabilities` contract naming the required create, grow, map, unmap,
 remove, rescan, property, persistence, verification, and refusal behavior that
-an external adapter must implement. Generic target LUN verification plans also
+an external adapter must implement. Array-backed provider handoffs also carry
+declared `vendor`, `arrayId`, `storagePool`, `volumeId`, `snapshotId`,
+`cloneSource`, and `maskingGroup`/`hostGroup`/`igroup` model fields for vendor
+or site-specific LUN identity, capacity placement, mapping, masking, and
+snapshot or clone handoff data. Generic target LUN verification plans also
 include executable `lsscsi -t -s`, `multipath -ll`, and
 `disk-nix inspect <target> --json` probes so provider-specific placeholders are
 paired with host-visible path, multipath, and modeled-consumer checks.

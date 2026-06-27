@@ -2192,6 +2192,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'target-lun.capacity.expand' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'Generic target LUN verification plans' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_generic_host_verification_commands' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'arrayId' ${./docs/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'target-lun.array-id.declared' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'scstadmin' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'initiatorGroup' ${./docs/planning.md}
             runbooks=${./docs/operator-runbooks.md}
@@ -2378,6 +2380,12 @@
               and ."$defs".lifecycleObject.properties.provider.type == "string"
               and ."$defs".lifecycleObject.properties.storageProvider.type == "string"
               and ."$defs".lifecycleObject.properties.arrayProvider.type == "string"
+              and ."$defs".lifecycleObject.properties.arrayId.type == "string"
+              and ."$defs".lifecycleObject.properties.storagePool.type == "string"
+              and ."$defs".lifecycleObject.properties.volumeId.type == "string"
+              and ."$defs".lifecycleObject.properties.snapshotId.type == "string"
+              and ."$defs".lifecycleObject.properties.cloneSource.type == "string"
+              and ."$defs".lifecycleObject.properties.maskingGroup.type == "string"
               and ."$defs".lifecycleObject.properties.lun.type == ["string", "number"]
               and ."$defs".snapshot.properties.operation["$ref"] == "#/$defs/operation"
               and ."$defs".snapshot.properties.action["$ref"] == "#/$defs/operation"

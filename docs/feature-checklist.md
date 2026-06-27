@@ -262,7 +262,7 @@ Update rules:
 - [x] **Finished:** Other target provider adapters have a provider capability
   contract for create, grow, map, unmap, remove, rescan, property mutation,
   persistence, verification, and refusal behavior.
-- [ ] **Partial:** Array-backed target providers need concrete adapter models
+- [x] **Finished:** Array-backed target providers have concrete adapter models
   for vendor or site-specific LUN identity, capacity, mapping, masking, and
   snapshot or clone handoff data.
 - [x] **Finished:** Target provider verification placeholders include executable

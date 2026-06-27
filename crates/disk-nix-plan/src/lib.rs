@@ -510,6 +510,20 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub vendor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub array_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage_pool: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clone_source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub masking_group: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub target_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
@@ -564,7 +578,15 @@ impl ActionContext {
             && self.client.is_none()
             && self.portal.is_none()
             && self.provider.is_none()
+            && self.vendor.is_none()
+            && self.array_id.is_none()
+            && self.storage_pool.is_none()
+            && self.volume_id.is_none()
+            && self.snapshot_id.is_none()
+            && self.clone_source.is_none()
+            && self.masking_group.is_none()
             && self.target_id.is_none()
+            && self.group.is_none()
             && self.lun.is_none()
             && self.options.is_none()
             && self.namespace_id.is_none()
@@ -7789,6 +7811,71 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
                 "storage-provider",
                 "arrayProvider",
                 "array-provider",
+            ],
+        ),
+        vendor: metadata_string_field(object, &["vendor", "arrayVendor", "array-vendor"]),
+        array_id: metadata_string_field(
+            object,
+            &[
+                "arrayId",
+                "arrayID",
+                "array-id",
+                "array_id",
+                "systemId",
+                "system-id",
+            ],
+        ),
+        storage_pool: metadata_string_field(
+            object,
+            &[
+                "storagePool",
+                "storage-pool",
+                "poolName",
+                "pool-name",
+                "aggregate",
+            ],
+        ),
+        volume_id: metadata_string_field(
+            object,
+            &[
+                "volumeId",
+                "volumeID",
+                "volume-id",
+                "volume_id",
+                "volumeName",
+            ],
+        ),
+        snapshot_id: metadata_string_field(
+            object,
+            &[
+                "snapshotId",
+                "snapshotID",
+                "snapshot-id",
+                "snapshot_id",
+                "snapshotName",
+            ],
+        ),
+        clone_source: metadata_string_field(
+            object,
+            &[
+                "cloneSource",
+                "clone-source",
+                "sourceSnapshot",
+                "source-snapshot",
+                "sourceVolume",
+                "source-volume",
+            ],
+        ),
+        masking_group: metadata_string_field(
+            object,
+            &[
+                "maskingGroup",
+                "masking-group",
+                "hostGroup",
+                "host-group",
+                "initiatorGroup",
+                "initiator-group",
+                "igroup",
             ],
         ),
         target_id: metadata_string_field(
@@ -27686,6 +27773,13 @@ mod tests {
                   "desiredSize": "2TiB",
                   "source": "pool-a/volumes/root",
                   "provider": "netapp-ontap",
+                  "vendor": "netapp",
+                  "arrayId": "ontap-cluster-a",
+                  "storagePool": "aggr1",
+                  "volumeId": "vol-root",
+                  "snapshotId": "snap-before",
+                  "cloneSource": "vol-root@snap-before",
+                  "maskingGroup": "linux-hosts",
                   "lun": 7,
                   "portal": "192.0.2.10:3260",
                   "client": "iqn.2026-06.example:host.primary",
@@ -27723,6 +27817,16 @@ mod tests {
             Some("pool-a/volumes/root")
         );
         assert_eq!(create.context.provider.as_deref(), Some("netapp-ontap"));
+        assert_eq!(create.context.vendor.as_deref(), Some("netapp"));
+        assert_eq!(create.context.array_id.as_deref(), Some("ontap-cluster-a"));
+        assert_eq!(create.context.storage_pool.as_deref(), Some("aggr1"));
+        assert_eq!(create.context.volume_id.as_deref(), Some("vol-root"));
+        assert_eq!(create.context.snapshot_id.as_deref(), Some("snap-before"));
+        assert_eq!(
+            create.context.clone_source.as_deref(),
+            Some("vol-root@snap-before")
+        );
+        assert_eq!(create.context.masking_group.as_deref(), Some("linux-hosts"));
         assert_eq!(create.context.lun.as_deref(), Some("7"));
         assert_eq!(create.context.portal.as_deref(), Some("192.0.2.10:3260"));
         assert_eq!(

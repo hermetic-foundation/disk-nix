@@ -12361,6 +12361,34 @@ fn target_lun_provider_command(
         argv.push("--provider".to_string());
         argv.push(provider.to_string());
     }
+    if let Some(vendor) = action.context.vendor.as_deref() {
+        argv.push("--vendor".to_string());
+        argv.push(vendor.to_string());
+    }
+    if let Some(array_id) = action.context.array_id.as_deref() {
+        argv.push("--array-id".to_string());
+        argv.push(array_id.to_string());
+    }
+    if let Some(storage_pool) = action.context.storage_pool.as_deref() {
+        argv.push("--storage-pool".to_string());
+        argv.push(storage_pool.to_string());
+    }
+    if let Some(volume_id) = action.context.volume_id.as_deref() {
+        argv.push("--volume-id".to_string());
+        argv.push(volume_id.to_string());
+    }
+    if let Some(snapshot_id) = action.context.snapshot_id.as_deref() {
+        argv.push("--snapshot-id".to_string());
+        argv.push(snapshot_id.to_string());
+    }
+    if let Some(clone_source) = action.context.clone_source.as_deref() {
+        argv.push("--clone-source".to_string());
+        argv.push(clone_source.to_string());
+    }
+    if let Some(masking_group) = action.context.masking_group.as_deref() {
+        argv.push("--masking-group".to_string());
+        argv.push(masking_group.to_string());
+    }
     if matches!(action.operation, Operation::Create | Operation::Grow) {
         match desired_size {
             Some(size) => {
@@ -12493,6 +12521,27 @@ fn target_lun_provider_capabilities(action: &PlannedAction) -> Vec<String> {
 
     if action.context.target_id.is_some() {
         capabilities.push("target-lun.target-id.declared".to_string());
+    }
+    if action.context.vendor.is_some() {
+        capabilities.push("target-lun.vendor.declared".to_string());
+    }
+    if action.context.array_id.is_some() {
+        capabilities.push("target-lun.array-id.declared".to_string());
+    }
+    if action.context.storage_pool.is_some() {
+        capabilities.push("target-lun.storage-pool.declared".to_string());
+    }
+    if action.context.volume_id.is_some() {
+        capabilities.push("target-lun.volume-id.declared".to_string());
+    }
+    if action.context.snapshot_id.is_some() {
+        capabilities.push("target-lun.snapshot-id.declared".to_string());
+    }
+    if action.context.clone_source.is_some() {
+        capabilities.push("target-lun.clone-source.declared".to_string());
+    }
+    if action.context.masking_group.is_some() {
+        capabilities.push("target-lun.masking-group.declared".to_string());
     }
     if action.context.lun.is_some() {
         capabilities.push("target-lun.lun-id.declared".to_string());
@@ -30155,6 +30204,13 @@ mod tests {
                     "desiredSize": "2TiB",
                     "source": "pool-a/volumes/root",
                     "provider": "netapp-ontap",
+                    "vendor": "netapp",
+                    "arrayId": "ontap-cluster-a",
+                    "storagePool": "aggr1",
+                    "volumeId": "vol-root",
+                    "snapshotId": "snap-before",
+                    "cloneSource": "vol-root@snap-before",
+                    "maskingGroup": "linux-hosts",
                     "portal": "192.0.2.10:3260",
                     "client": "iqn.2026-06.example:host.primary",
                     "initiators": [
@@ -30196,6 +30252,20 @@ mod tests {
                     "array-a/root",
                     "--provider",
                     "netapp-ontap",
+                    "--vendor",
+                    "netapp",
+                    "--array-id",
+                    "ontap-cluster-a",
+                    "--storage-pool",
+                    "aggr1",
+                    "--volume-id",
+                    "vol-root",
+                    "--snapshot-id",
+                    "snap-before",
+                    "--clone-source",
+                    "vol-root@snap-before",
+                    "--masking-group",
+                    "linux-hosts",
                     "--size",
                     "2TiB",
                     "--backing",
@@ -30224,6 +30294,21 @@ mod tests {
                 && command
                     .provider_capabilities
                     .contains(&"target-lun.initiator-scope.declared".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.array-id.declared".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.volume-id.declared".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.snapshot-id.declared".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.clone-source.declared".to_string())
+                && command
+                    .provider_capabilities
+                    .contains(&"target-lun.masking-group.declared".to_string())
         }));
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "targetluns:array-a/root:create"

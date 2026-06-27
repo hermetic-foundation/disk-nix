@@ -1121,7 +1121,12 @@ Target-side array provisioning is modeled separately through `targetLuns`.
 target-side allocation or capacity changes, while `operation = "attach"` and
 `operation = "detach"` model target-side mapping and unmapping. Declarations
 can set `provider`, `storageProvider`, or `arrayProvider` to label the intended
-adapter. `provider = "lio"` renders concrete Linux LIO `targetcli` command
+adapter. Array-backed provider handoffs accept `vendor`, `arrayId`,
+`storagePool`, `volumeId`, `snapshotId`, `cloneSource`, and
+`maskingGroup`/`hostGroup`/`igroup` fields, and render them as provider argv
+plus `providerCapabilities` markers so a site adapter can bind LUN identity,
+capacity placement, masking scope, and snapshot or clone lineage explicitly.
+`provider = "lio"` renders concrete Linux LIO `targetcli` command
 plans for inventory, backstore creation, target creation, LUN mapping, ACL
 mapping/unmapping, target removal, reviewed backstore removal, and `saveconfig`
 when the target IQN, backing object, LUN number, and initiators are declared.
