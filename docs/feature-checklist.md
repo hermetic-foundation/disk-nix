@@ -539,9 +539,11 @@ Update rules:
   successful real mutating command and assert the recovery report includes
   completed action ids, failed action id, failed command, remaining action ids,
   completed mutating command count, recovery actions, and fresh-topology review.
-- [ ] **Partial:** Deeper destructive VM tests need rollback-review assertions
-  that verify rollback precondition commands, recovery-point preservation
-  guidance, and refusal to automate unsafe rollback.
+- [x] **Finished:** Deeper destructive VM tests assert rollback-review behavior
+  for the layered VM failed apply: read-only rollback precondition commands,
+  recovery-point preservation guidance, refused rollback recipe status, required
+  topology evidence, empty reversible/destructive mutation sections, and
+  operator-only guidance instead of automated unsafe rollback.
 - [ ] **Partial:** Deeper destructive VM tests need data-survival assertions
   across failed and resumed apply runs for layered block, filesystem, cache,
   and network-storage scenarios.

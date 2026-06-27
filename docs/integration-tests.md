@@ -1045,6 +1045,10 @@ When enabled, it:
   completed LV grow action, failed filesystem action, failed command, remaining
   remount action, completed mutating command count, fresh-topology review notes,
   and domain, roll-forward, rollback, and recovery-point preservation actions
+- verifies rollback review stays non-mutating: rollback precondition commands
+  are read-only, the rollback recipe is `refused`, reversible and destructive
+  mutation sections are empty, required topology evidence is listed, and
+  operator-only guidance is emitted instead of an automated unsafe rollback
 - verifies the failed apply report was written, the LV growth before the failure
   is visible, and sentinel data still survives after the failed apply
 - unmounts the filesystem, deactivates the VG, executes a

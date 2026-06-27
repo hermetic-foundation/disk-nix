@@ -279,8 +279,33 @@ jq -e \
   and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
   and (.recoveryActions | any(.kind == "domain-recovery"))
   and (.recoveryActions | any(.kind == "roll-forward-review"))
-  and (.recoveryActions | any(.kind == "rollback-review"))
+  and (.recoveryActions | any(
+    .kind == "rollback-review"
+    and (.commands | length > 0)
+    and (.commands | all(.mutates == false))
+    and (.commands | any(.argv == ["disk-nix", "inspect", $mountpoint, "--json"]))
+    and (.notes | any(contains("read-only checks")))
+  ))
   and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+  and (.rollbackRecipes | length == 1)
+  and .rollbackRecipes[0].recipeVersion == 1
+  and .rollbackRecipes[0].sourceActionId == "filesystem:layeredFailureFilesystem:grow"
+  and .rollbackRecipes[0].failedCommand == ["xfs_growfs", $mountpoint]
+  and .rollbackRecipes[0].status == "refused"
+  and .rollbackRecipes[0].receiptBindingRequired == true
+  and .rollbackRecipes[0].freshTopologyProbeRequired == true
+  and (.rollbackRecipes[0].readOnlyValidation.commands | length > 0)
+  and (.rollbackRecipes[0].readOnlyValidation.commands | all(.mutates == false))
+  and (.rollbackRecipes[0].reversibleMutations.commands | length == 0)
+  and (.rollbackRecipes[0].destructiveMutations.commands | length == 0)
+  and (.rollbackRecipes[0].operatorOnlyHandoff.commands | all(.mutates == false))
+  and (.rollbackRecipes[0].operatorOnlyHandoff.notes | any(contains("instead of automated mutation")))
+  and (.rollbackRecipes[0].requiredTopologyEvidence | index("expected") != null)
+  and (.rollbackRecipes[0].requiredTopologyEvidence | index("preApply") != null)
+  and (.rollbackRecipes[0].requiredTopologyEvidence | index("failedApply") != null)
+  and (.rollbackRecipes[0].requiredTopologyEvidence | index("current") != null)
+  and (.rollbackRecipes[0].refusalReasons | any(contains("filesystem grow rollback is refused")))
+  and (.rollbackRecipes[0].safetyGates | any(contains("original apply receipt")))
 ' "$tmpdir/failure-apply.json" >/dev/null
 
 cmp "$tmpdir/failure-apply.json" "$failure_report" >/dev/null

@@ -169,7 +169,11 @@ behavior across real storage stacks.
   successfully extends the LV with `lvextend --resizefs`, then fails a real
   `xfs_growfs` command against the ext4 mount and asserts completed, failed, and
   remaining action ids, completed mutating command count, recovery actions, and
-  fresh-topology guidance while sentinel data remains readable.
+  fresh-topology guidance while sentinel data remains readable. The VM failure
+  path also checks rollback review safety: rollback precondition commands remain
+  read-only, rollback recipes are refused for unsafe filesystem grow rollback,
+  reversible and destructive mutation sections stay empty, required topology
+  evidence is listed, and the handoff stays operator-only instead of automated.
   Lab-hardware harnesses for NFS, VDO, iSCSI,
   multipath, and NVMe require explicit environment-selected existing targets
   and exercise non-destructive refresh or remount paths. The failure-recovery
