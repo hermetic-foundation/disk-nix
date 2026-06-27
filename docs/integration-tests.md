@@ -605,6 +605,10 @@ When enabled, it:
 - executes a safe `loopDevices.<loop>.operation = "rescan"` apply plan
 - grows the temporary backing file, refreshes the loop device capacity, and
   executes an ext4 `resizePolicy = "grow-only"` apply plan
+- executes an ext4 filesystem property apply plan that sets
+  `filesystems.loopSmokeLabel.properties.label`
+- verifies the rendered `e2label <loop> disknix-loop` command succeeded and the
+  loop device reports the new label
 - verifies the generated JSON report was written and all executed commands
   succeeded
 - detaches the loop device and removes the backing file during cleanup

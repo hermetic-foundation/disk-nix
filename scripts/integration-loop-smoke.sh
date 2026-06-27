@@ -19,7 +19,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" blockdev jq losetup mkfs.ext4 mount mountpoint resize2fs truncate umount; do
+for tool in "$disk_nix_bin" blockdev e2label jq losetup mkfs.ext4 mount mountpoint resize2fs truncate umount; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -46,6 +46,8 @@ spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 grow_spec="$tmpdir/grow-spec.json"
 grow_report="$tmpdir/grow-report.json"
+property_spec="$tmpdir/property-spec.json"
+property_report="$tmpdir/property-report.json"
 
 truncate --size 64M "$backing"
 mkdir -p "$mountpoint"
@@ -132,4 +134,41 @@ jq -e --arg loopdev "$loopdev" '
 
 cmp "$tmpdir/grow-apply.json" "$grow_report" >/dev/null
 
-echo "loop-backed integration smoke test passed for $loopdev, including ext4 grow"
+jq -n --arg loopdev "$loopdev" --arg mountpoint "$mountpoint" '{
+  version: 1,
+  filesystems: {
+    loopSmokeLabel: {
+      device: $loopdev,
+      fsType: "ext4",
+      mountpoint: $mountpoint,
+      properties: {
+        label: "disknix-loop"
+      }
+    }
+  }
+}' > "$property_spec"
+
+if ! "$disk_nix_bin" apply \
+  --spec "$property_spec" \
+  --execute \
+  --report-out "$property_report" \
+  --json > "$tmpdir/property-apply.json"; then
+  cat "$tmpdir/property-apply.json" >&2 || true
+  cat "$property_report" >&2 || true
+  exit 1
+fi
+
+jq -e --arg loopdev "$loopdev" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == "filesystems:loopSmokeLabel:set-property:label")
+    | .commands | any(.argv == ["e2label", $loopdev, "disknix-loop"]))
+  and (.executionResults | any(.argv == ["e2label", $loopdev, "disknix-loop"] and .success == true))
+' "$tmpdir/property-apply.json" >/dev/null
+
+cmp "$tmpdir/property-apply.json" "$property_report" >/dev/null
+if [[ "$(e2label "$loopdev")" != "disknix-loop" ]]; then
+  echo "loop device ext4 label did not match after disk-nix property mutation" >&2
+  exit 1
+fi
+
+echo "loop-backed integration smoke test passed for $loopdev, including ext4 grow and label mutation"

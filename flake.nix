@@ -1726,6 +1726,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'losetup --set-capacity' ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mkfs.ext4' ${./scripts/integration-loop-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'resize2fs' ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel' ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystems:loopSmokeLabel:set-property:label' ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'e2label' ${./scripts/integration-loop-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disknix-loop' ${./scripts/integration-loop-smoke.sh}
             touch "$out"
           '';
           integrationBtrfsSmoke = pkgs.runCommand "disk-nix-integration-btrfs-smoke-check" { } ''
@@ -2192,6 +2196,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'operator-only guidance instead of automated unsafe rollback' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'layered block/filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'cache and network-storage' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real filesystem' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'rollback review safety' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'failed-and-resumed' ${./docs/status.md}

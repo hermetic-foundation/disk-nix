@@ -515,9 +515,13 @@ Update rules:
 - [ ] **Partial:** Destructive integration tests need VM-backed LUN flow
   coverage for host-side rescan, multipath resize, multipath add/remove/flush,
   target-side map/unmap, and target-side destroy refusal paths.
-- [ ] **Partial:** Destructive integration tests need property mutation
-  coverage across filesystems, LUKS, LVM, ZFS, Btrfs, VDO, bcache, NFS,
-  target LUNs, loop devices, backing files, swap, and zram.
+- [x] **Finished:** Destructive integration tests include real filesystem
+  property mutation coverage: the loop-backed ext4 harness applies a disk-nix
+  `filesystems.*.properties.label` declaration, executes `e2label`, and verifies
+  the resulting label on the disposable loop device.
+- [ ] **Partial:** Destructive integration tests still need property mutation
+  coverage across LUKS, LVM, ZFS, Btrfs, VDO, bcache, NFS, target LUNs, loop
+  devices, backing files, swap, and zram.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`

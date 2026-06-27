@@ -158,7 +158,8 @@ behavior across real storage stacks.
   bcachefs, LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, NVMe, and
   synthetic failed-apply recovery. The self-contained loop-backed harnesses
   create disposable backing files or arrays, verify real `inspect --json`,
-  execute reviewed apply plans, and clean up temporary devices. A layered VM
+  execute reviewed apply plans, verify ext4 grow plus real `e2label` filesystem
+  label mutation on a disposable loop device, and clean up temporary devices. A layered VM
   harness creates partitioned loop, LUKS, LVM, and mounted ext4 layers on a
   disposable disk, enlarges the backing file, and executes one disk-nix apply
   run that grows the partition, resizes the LUKS mapper, grows the LV, grows the
