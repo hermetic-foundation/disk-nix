@@ -231,7 +231,9 @@ covering non-block SES enclosure records,
 enclosure identifiers, SAS addresses, and attached disk LUN backing edges, plus
 an LVM-backed VDO fixture that correlates native VDO status, vdostats usage,
 verbose VDO block counters, LVM VDO LV metadata, VDO segment policy, and
-backing-pool dependency edges. See
+backing-pool dependency edges, plus a stressed VDO fixture covering
+physical-space pressure, index rebuild state, dedupe/compression policy drift,
+and start/stop failure metadata. See
 [storage-scope.md](storage-scope.md) for the
 detailed field-level coverage.
 See [feature-checklist.md](feature-checklist.md) for a checklist view of

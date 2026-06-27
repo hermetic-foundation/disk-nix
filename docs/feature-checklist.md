@@ -131,10 +131,9 @@ Update rules:
 - [ ] **Partial:** Real-world fixture coverage still needs additional hardware
   enclosure and array samples covering SAS enclosure fixture variants, SES
   failures, vendor LUN metadata, and array-backed multipath identity drift.
-- [ ] **Partial:** Real-world fixture coverage still needs additional VDO
-  samples beyond the current LVM-backed VDO fixture, including physical-space
-  pressure, index rebuild state, dedupe/compression policy drift, and VDO
-  start/stop failure states.
+- [x] **Finished:** Real-world VDO fixture coverage includes additional samples
+  beyond the LVM-backed VDO fixture for physical-space pressure, index rebuild
+  state, dedupe/compression policy drift, and VDO start/stop failure states.
 
 ## Planning and apply safety
 

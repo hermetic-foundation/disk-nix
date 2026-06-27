@@ -2180,6 +2180,9 @@
             ${pkgs.gnugrep}/bin/grep -q 'nfs.export-option-sec", "krb5p' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'SAS enclosure fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'stressed VDO fixture' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'vdo_pressure_fixture_preserves_rebuild_policy_and_failure_state' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'physical-space pressure' ${./docs/storage-scope.md}
             ${pkgs.gnugrep}/bin/grep -q 'non-block SES enclosure records' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'active/standby state' ${./docs/storage-scope.md}

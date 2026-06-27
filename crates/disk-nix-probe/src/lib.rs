@@ -3158,6 +3158,69 @@ Device                         1K-blocks     Used Available Use% Space saving%
       }]
     }"#;
 
+    const VDO_PRESSURE_STATUS: &[u8] = br#"
+VDO status:
+  Date: '2026-06-26 11:00:00-05:00'
+VDOs:
+  archive-pressure:
+    VDO device: /dev/mapper/archive-pressure
+    Storage device: /dev/disk/by-id/scsi-vdo-pressure
+    Logical size: 8T
+    Physical size: 1T
+    Compression: disabled
+    Deduplication: enabled
+    Configured write policy: sync
+    Write policy: async
+    Operating mode: recovering
+    Index state: rebuilding
+    Index rebuild progress: 42%
+    Physical space status: near-full
+    Last start result: failed
+    Last stop result: timeout
+  archive-stopped:
+    VDO device: /dev/mapper/archive-stopped
+    Storage device: /dev/disk/by-id/scsi-vdo-stopped
+    Logical size: 4T
+    Physical size: 2T
+    Compression: enabled
+    Deduplication: disabled
+    Configured write policy: auto
+    Write policy: read-only
+    Operating mode: read-only
+    VDO service state: stopped
+    Last start result: device busy
+    Last stop result: failed
+"#;
+
+    const VDO_PRESSURE_STATS: &[u8] = br#"
+Device                         1K-blocks     Used Available Use% Space saving%
+/dev/mapper/archive-pressure          8T     7.6T     400G  95%           12%
+/dev/mapper/archive-stopped           4T     3.8T     200G  95%            0%
+"#;
+
+    const VDO_PRESSURE_VERBOSE: &[u8] = br#"
+/dev/mapper/archive-pressure:
+  operating mode: recovering
+  recovery percentage: 42
+  index state: rebuilding
+  physical space status: near-full
+  compression state: offline
+  deduplication state: online
+  data blocks used: 1992294
+  overhead blocks used: 204800
+  logical blocks used: 2097152
+/dev/mapper/archive-stopped:
+  operating mode: read-only
+  recovery percentage: 0
+  index state: offline
+  physical space status: full
+  compression state: online
+  deduplication state: offline
+  data blocks used: 996147
+  overhead blocks used: 102400
+  logical blocks used: 1048576
+"#;
+
     const NFS_SERVER_CLIENT_FINDMNT: &[u8] = br#"{
       "filesystems": [
         {
@@ -3861,6 +3924,84 @@ nas01.example:/exports/projects mounted on /mnt/projects:
             edge.from.0 == "lvm-seg:vgvdo/vdoarchive:0"
                 && edge.to.0 == "lvm-lv:vgvdo/vdopool"
                 && edge.relationship == Relationship::DependsOn
+        }));
+    }
+
+    #[test]
+    fn vdo_pressure_fixture_preserves_rebuild_policy_and_failure_state() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            vdo::normalize_vdo_status(VDO_PRESSURE_STATUS)
+                .expect("VDO pressure status fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            vdo::normalize_vdostats_table(VDO_PRESSURE_STATS)
+                .expect("VDO pressure stats fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            vdo::normalize_vdostats_verbose(VDO_PRESSURE_VERBOSE)
+                .expect("VDO pressure verbose fixture should parse"),
+        );
+
+        let pressure = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "vdo:archive-pressure")
+            .expect("pressure VDO runtime node should exist");
+        assert_eq!(pressure.kind, NodeKind::VdoVolume);
+        assert_eq!(
+            pressure.path.as_deref(),
+            Some("/dev/mapper/archive-pressure")
+        );
+        assert_eq!(pressure.size_bytes, Some(8_796_093_022_208));
+        assert_has_property(
+            pressure,
+            "vdo.storage-device",
+            "/dev/disk/by-id/scsi-vdo-pressure",
+        );
+        assert_has_property(pressure, "vdo.physical-space-status", "near-full");
+        assert_has_property(pressure, "vdo.operating-mode", "recovering");
+        assert_has_property(pressure, "vdo.index-state", "rebuilding");
+        assert_has_property(pressure, "vdo.index-rebuild-progress", "42%");
+        assert_has_property(pressure, "vdo.compression", "disabled");
+        assert_has_property(pressure, "vdo.compression-state", "offline");
+        assert_has_property(pressure, "vdo.deduplication-state", "online");
+        assert_has_property(pressure, "vdo.configured-write-policy", "sync");
+        assert_has_property(pressure, "vdo.write-policy", "async");
+        assert_has_property(pressure, "vdo.last-start-result", "failed");
+        assert_has_property(pressure, "vdo.last-stop-result", "timeout");
+        assert_has_property(pressure, "vdo.use-percent", "95");
+        assert_has_property(pressure, "vdo.space-saving-percent", "12");
+        assert_has_property(pressure, "vdo.data-blocks-used-bytes", "8160436224");
+        assert_has_property(pressure, "vdo.overhead-blocks-used-bytes", "838860800");
+
+        let stopped = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "vdo:archive-stopped")
+            .expect("stopped VDO runtime node should exist");
+        assert_eq!(stopped.kind, NodeKind::VdoVolume);
+        assert_has_property(stopped, "vdo.operating-mode", "read-only");
+        assert_has_property(stopped, "vdo.vdo-service-state", "stopped");
+        assert_has_property(stopped, "vdo.deduplication", "disabled");
+        assert_has_property(stopped, "vdo.deduplication-state", "offline");
+        assert_has_property(stopped, "vdo.physical-space-status", "full");
+        assert_has_property(stopped, "vdo.last-start-result", "device busy");
+        assert_has_property(stopped, "vdo.last-stop-result", "failed");
+        assert_has_property(stopped, "vdo.space-saving-percent", "0");
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "block:/dev/disk/by-id/scsi-vdo-pressure"
+                && edge.to.0 == "vdo:archive-pressure"
+                && edge.relationship == Relationship::Backs
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "block:/dev/disk/by-id/scsi-vdo-stopped"
+                && edge.to.0 == "vdo:archive-stopped"
+                && edge.relationship == Relationship::Backs
         }));
     }
 

@@ -154,12 +154,14 @@ The current probe layer normalizes:
   VDO segment settings, and dependencies on backing PV devices or internal LVs
 - VDO `vdo status` output for VDO device path, backing storage device,
   logical/physical size, compression, deduplication, write policy, index, and
-  cache settings; VDO lifecycle plans can start or stop existing VDO volumes
+  cache settings, physical-space pressure, service state, and start/stop
+  failure metadata; VDO lifecycle plans can start or stop existing VDO volumes
   without recreating or removing metadata
 - VDO `vdostats --human-readable` output for runtime size, used/free capacity,
   utilization percentage, and space-saving percentage; `vdostats --verbose`
   output for operating mode, recovery percentage, configured and active write
-  policy, version/release metadata, detailed VDO block/accounting metadata, and
+  policy, index rebuild state, compression/deduplication runtime state,
+  version/release metadata, detailed VDO block/accounting metadata, and
   byte-normalized data, overhead, and logical block accounting
 - exFAT metadata through `tune.exfat` and `dump.exfat` for visible volume
   labels, GUID, serial, volume length, FAT/cluster offsets, cluster counts,
