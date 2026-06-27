@@ -824,7 +824,10 @@ automatic rollback step safe. The execution library exposes
 read-only validation first, replays only proven-safe reversible mutation steps,
 binds the replay report to the original receipt and fresh topology probe, and
 refuses review-only, destructive, operator-only, not-ready, unbound, or
-missing-tool recipes before executing commands.
+missing-tool recipes before executing commands. It also refuses reversible
+rollback commands whose argv or metadata advertises destructive,
+potential-data-loss, format, shrink, wipe, rollback, remove, delete, detach,
+flush, or discard semantics.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

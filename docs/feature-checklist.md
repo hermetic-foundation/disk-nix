@@ -207,9 +207,13 @@ Update rules:
   other live-use blockers.
 - [x] **Finished:** Automatic rollback replay refuses missing required tools
   before running read-only validation or reversible mutation commands.
-- [ ] **Desired:** Automatic rollback needs refusal behavior for any path with
-  plausible data-loss risk beyond already-refused destructive and operator-only
-  recipe sections.
+- [x] **Finished:** Automatic rollback replay refuses reversible mutation
+  commands whose argv or command metadata advertises plausible data-loss
+  semantics beyond already-refused destructive and operator-only recipe
+  sections.
+- [ ] **Desired:** Automatic rollback needs topology-aware refusal behavior for
+  domain-specific plausible data-loss paths that cannot be proven from rollback
+  command argv, notes, unresolved inputs, or provider capability metadata alone.
 
 ## Lifecycle operations
 

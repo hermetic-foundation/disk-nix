@@ -893,9 +893,68 @@ fn proven_safe_rollback_refusal_reasons(
                 command.argv.join(" ")
             ));
         }
+        if let Some(reason) = rollback_command_data_loss_risk_reason(command) {
+            reasons.push(reason);
+        }
     }
 
     reasons
+}
+
+fn rollback_command_data_loss_risk_reason(command: &ExecutionCommand) -> Option<String> {
+    let risky_arg_tokens = [
+        "destroy",
+        "delete",
+        "detach",
+        "discard",
+        "flush",
+        "format",
+        "kill-slot",
+        "remove",
+        "rollback",
+        "shrink",
+        "wipe",
+    ];
+    if command.argv.iter().any(|part| {
+        let part = part.to_ascii_lowercase();
+        risky_arg_tokens
+            .iter()
+            .any(|token| part == *token || part.starts_with(&format!("{token}=")))
+    }) {
+        return Some(format!(
+            "automatic rollback replay refuses plausible data-loss command: {}",
+            command.argv.join(" ")
+        ));
+    }
+
+    let risky_phrases = [
+        "data loss",
+        "data-loss",
+        "destructive",
+        "discard data",
+        "discard newer data",
+        "format",
+        "potential data loss",
+        "potential-data-loss",
+        "shrink",
+        "wipe",
+    ];
+    let mut risk_fields = command
+        .provider_capabilities
+        .iter()
+        .chain(command.unresolved_inputs.iter())
+        .chain(std::iter::once(&command.note));
+    if risk_fields.any(|field| {
+        let field = field.to_ascii_lowercase();
+        risky_phrases.iter().any(|phrase| field.contains(phrase))
+    }) {
+        return Some(format!(
+            "automatic rollback replay refuses plausible data-loss command metadata: {}",
+            command.argv.join(" ")
+        ));
+    }
+
+    None
 }
 
 fn missing_rollback_replay_tools(
@@ -28737,6 +28796,29 @@ mod tests {
                     recipe
                 },
                 "reversible rollback command is not ready",
+            ),
+            (
+                "data-loss-argv",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.reversible_mutations.commands = vec![rollback_replay_command(
+                        &["zfs", "rollback", "tank/home@before"],
+                        true,
+                    )];
+                    recipe
+                },
+                "plausible data-loss command",
+            ),
+            (
+                "data-loss-metadata",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.reversible_mutations.commands[0]
+                        .provider_capabilities
+                        .push("risk.potential-data-loss".to_string());
+                    recipe
+                },
+                "plausible data-loss command metadata",
             ),
         ];
 

@@ -398,8 +398,9 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   now replay proven-safe reversible rollback recipe steps through
   `replay_proven_safe_rollback_recipe`, binding the replay report to the
   original receipt and a fresh topology probe while refusing review-only,
-  destructive, operator-only, not-ready, unbound, or missing-tool recipes before
-  any command runs. Reports also expose `partialExecutionRecovery` sequencing with completed
+  destructive, operator-only, not-ready, unbound, missing-tool, or
+  plausible-data-loss command recipes before any command runs. Reports also
+  expose `partialExecutionRecovery` sequencing with completed
   actions, failed action, failed command, retry/review actions, remaining
   actions, completed mutating command counts, and fresh-topology review notes.
   They also include
