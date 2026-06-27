@@ -16681,6 +16681,7 @@ fn set_property_command(
         }
         Some("caches") => bcache_property_command(target, property, assignment, cache_set_uuid),
         Some("loopDevices") => loop_property_command(target, property, assignment),
+        Some("backingFiles") => backing_file_property_command(target, property, assignment),
         Some("vdoVolumes") => vdo_property_command(target, property, assignment),
         _ => command_with_readiness(
             ["<set-property-tool>", target, property],
@@ -16688,6 +16689,32 @@ fn set_property_command(
             CommandReadiness::NeedsDomainImplementation,
             ["property update tool"],
             "apply the storage-domain property update",
+        ),
+    }
+}
+
+fn backing_file_property_command(
+    target: &str,
+    property: &str,
+    assignment: &str,
+) -> ExecutionCommand {
+    let value = assignment
+        .split_once('=')
+        .map(|(_, value)| value)
+        .unwrap_or(assignment);
+    match normalize_property_name(property).as_str() {
+        "mode" | "filemode" | "file-mode" | "permissions" | "filepermissions"
+        | "file-permissions" => command(
+            ["chmod", value, target],
+            true,
+            "set backing-file permissions",
+        ),
+        _ => command_with_readiness(
+            ["<backing-file-property-tool>", target, property],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["supported backing-file property"],
+            "apply a backing-file property update after selecting a supported file property",
         ),
     }
 }
@@ -29202,6 +29229,39 @@ mod tests {
             step.action_id == "backingfiles:/var/lib/images/root.img:grow"
                 && step.commands.iter().any(|command| {
                     command.argv == ["disk-nix", "inspect", "/var/lib/images/root.img", "--json"]
+                })
+        }));
+    }
+
+    #[test]
+    fn backing_file_property_reports_chmod_command() {
+        let (plan, policy) = plan_and_policy_from_json_bytes(
+            br#"{
+              "spec": {
+                "backingFiles": {
+                  "/var/lib/images/root.img": {
+                    "properties": {
+                      "mode": "0600"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowPropertyChanges": true
+              }
+            }"#,
+        )
+        .expect("document parses");
+
+        let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+
+        assert_eq!(report.status, ExecutionStatus::DryRun);
+        assert!(report.command_plan.iter().any(|step| {
+            step.action_id == "backingFiles:/var/lib/images/root.img:set-property:mode"
+                && step.commands.iter().any(|command| {
+                    command.argv == ["chmod", "0600", "/var/lib/images/root.img"]
+                        && command.mutates
+                        && command.readiness == CommandReadiness::Ready
                 })
         }));
     }

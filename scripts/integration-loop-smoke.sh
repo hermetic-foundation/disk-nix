@@ -19,7 +19,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" blockdev e2label jq losetup mkfs.ext4 mount mountpoint resize2fs truncate umount; do
+for tool in "$disk_nix_bin" blockdev chmod e2label jq losetup mkfs.ext4 mount mountpoint resize2fs stat truncate umount; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -42,6 +42,8 @@ cleanup() {
 trap cleanup EXIT
 
 backing="$tmpdir/disk-nix-loop-smoke.img"
+backing_property_spec="$tmpdir/backing-property-spec.json"
+backing_property_report="$tmpdir/backing-property-report.json"
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 grow_spec="$tmpdir/grow-spec.json"
@@ -54,6 +56,43 @@ property_spec="$tmpdir/property-spec.json"
 property_report="$tmpdir/property-report.json"
 
 truncate --size 64M "$backing"
+jq -n --arg backing "$backing" '{
+  version: 1,
+  backingFiles: {
+    ($backing): {
+      properties: {
+        mode: "0600"
+      }
+    }
+  },
+  apply: {
+    allowPropertyChanges: true
+  }
+}' > "$backing_property_spec"
+
+if ! "$disk_nix_bin" apply \
+  --spec "$backing_property_spec" \
+  --execute \
+  --report-out "$backing_property_report" \
+  --json > "$tmpdir/backing-property-apply.json"; then
+  cat "$tmpdir/backing-property-apply.json" >&2 || true
+  cat "$backing_property_report" >&2 || true
+  exit 1
+fi
+
+jq -e --arg backing "$backing" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("backingFiles:" + $backing + ":set-property:mode"))
+    | .commands | any(.argv == ["chmod", "0600", $backing]))
+  and (.executionResults | any(.argv == ["chmod", "0600", $backing] and .success == true))
+' "$tmpdir/backing-property-apply.json" >/dev/null
+
+cmp "$tmpdir/backing-property-apply.json" "$backing_property_report" >/dev/null
+if [[ "$(stat -c %a "$backing")" != "600" ]]; then
+  echo "backing file mode did not match after disk-nix property mutation" >&2
+  exit 1
+fi
+
 mkdir -p "$mountpoint"
 loopdev="$(losetup --find --show "$backing")"
 
@@ -250,4 +289,4 @@ if [[ "$(e2label "$loopdev")" != "disknix-loop" ]]; then
   exit 1
 fi
 
-echo "loop-backed integration smoke test passed for $loopdev, including loop read-only, ext4 grow, and label mutation"
+echo "loop-backed integration smoke test passed for $loopdev, including backing-file mode, loop read-only, ext4 grow, and label mutation"

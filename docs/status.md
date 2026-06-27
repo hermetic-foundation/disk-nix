@@ -165,10 +165,11 @@ behavior across real storage stacks.
   `swaplabel`, verify real ZFS pool property mutation with `zpool set`, verify
   real LVM cache property mutation with `lvchange --cachemode`, verify
   real bcache cache-mode mutation with a `disk-nix-bcache-property` sysfs write,
-  verify real loop-device read-only mutation with `blockdev --setro` and
-  `blockdev --setrw`, then verify real VDO write-policy mutation with
-  `vdo changeWritePolicy`, and verify real NFS export option mutation with
-  `exportfs -i`, then clean up temporary devices. A layered VM
+  verify real backing-file mode mutation with `chmod`, verify
+  real loop-device read-only mutation with `blockdev --setro` and `blockdev --setrw`, then verify
+  real VDO write-policy mutation with `vdo changeWritePolicy`, and verify
+  real NFS export option mutation with `exportfs -i`, then clean up temporary
+  devices. A layered VM
   harness creates partitioned loop, LUKS, LVM, and mounted ext4 layers on a
   disposable disk, enlarges the backing file, and executes one disk-nix apply
   run that grows the partition, resizes the LUKS mapper, grows the LV, grows the

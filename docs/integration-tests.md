@@ -599,6 +599,8 @@ The harness refuses to run unless `DISK_NIX_INTEGRATION_DESTRUCTIVE=1` is set.
 When enabled, it:
 
 - creates a temporary 64 MiB backing file
+- applies `backingFiles.<path>.properties.mode = "0600"` and verifies the
+  rendered `chmod 0600 <path>` command changed the temporary backing file mode
 - attaches it to the next available `/dev/loop*`
 - applies `loopDevices.<loop>.properties."loop.read-only" = true`, verifies the
   rendered `blockdev --setro <loop>` command succeeded, then applies `false`

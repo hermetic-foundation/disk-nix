@@ -564,8 +564,12 @@ Update rules:
   `loopDevices.*.properties."loop.read-only"` to a disposable loop device,
   executes `blockdev --setro` and `blockdev --setrw`, and verifies the
   read-only state with `blockdev --getro`.
+- [x] **Finished:** Destructive integration tests include real backing-file
+  property mutation coverage: the loop harness applies
+  `backingFiles.*.properties.mode` to its temporary backing image, executes
+  `chmod 0600`, and verifies the mode with `stat`.
 - [ ] **Partial:** Destructive integration tests still need property mutation
-  coverage across target LUNs, backing files, and zram.
+  coverage across target LUNs and zram.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`
