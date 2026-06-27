@@ -2468,11 +2468,24 @@
             touch "$out"
           '';
           documentation = pkgs.runCommand "disk-nix-documentation-check" { } ''
+            ${pkgs.nodejs}/bin/node ${./scripts/check-docs-legibility.mjs} ${self}
+            ${pkgs.nodejs}/bin/node --check ${./scripts/render-docs.mjs}
+            ${pkgs.nodejs}/bin/node --check ${./scripts/check-docs-legibility.mjs}
             checklist=${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'docs/index.md' ${./README.md}
+            ${pkgs.gnugrep}/bin/grep -q 'docs/user-guide.md' ${./README.md}
             ${pkgs.gnugrep}/bin/grep -q 'docs/feature-checklist.md' ${./README.md}
             ${pkgs.gnugrep}/bin/grep -q 'docs/operator-runbooks.md' ${./README.md}
             ${pkgs.gnugrep}/bin/grep -q 'feature-checklist.md' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'operator-runbooks.md' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'node scripts/render-docs.mjs' ${./docs/index.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Documentation index' ${./docs/index.md}
+            ${pkgs.gnugrep}/bin/grep -q 'User guide' ${./docs/index.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Common Workflows' ${./docs/user-guide.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Recover From A Failed Apply' ${./docs/user-guide.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Use The NixOS Module' ${./docs/user-guide.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Hardening beyond the checklist' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Further integration hardening' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'Status labels:' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Update rules:' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '\*\*Finished:\*\*' "$checklist"

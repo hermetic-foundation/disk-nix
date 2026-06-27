@@ -68,179 +68,122 @@ and selected `services.nfs.server.exports` entries.
 Raw `spec` remains available for storage domains whose typed NixOS options have
 not been implemented yet.
 
-The module also writes `/etc/disk-nix/steady-state.json`. That file is a
-machine-readable inventory of the native NixOS storage state derived from the
-same declaration: active `fileSystems`, `swapDevices`, zram settings, initrd
-LUKS devices, supported filesystem types, NFS export lines, iSCSI service and
-boot initiator settings, active storage identities for mounts, swaps, LUKS
-keyslots and tokens, LVM, VDO, dm, MD RAID, multipath, ZFS, Btrfs, caches,
-loop devices, backing files, NVMe namespaces, and snapshots, active
-network-storage identities for iSCSI session targets, host-side LUN paths, and
-NFS export path/client selectors, and native storage service flags for LVM, LVM
-thin, LVM VDO, MD RAID, multipath, ZFS extra pools, bcache, and NFS server
-support.
-It also includes `lifecycleManaged`, a domain-keyed index of active
-disk-nix-managed resources that are not teardown/export/logout/unmount style
-declarations. Each entry records the stable identity used for duplicate checks,
-the requested operation or action, and available target/path/device/mount/source,
-client, portal, and desired-size data so post-mutation review tooling can see
-which imperative lifecycle declarations still need declarative follow-up.
-It also includes `declarativeHandoff`, a compact index of native NixOS surfaces
-that should be checked or edited after successful imperative changes:
-`fileSystems` mountpoints, `swapDevices`, LUKS mapper names, NFS export
-selectors, iSCSI session targets, whether iSCSI boot is active, and generated
-artifact paths such as `/etc/disk-nix/spec.json`, `/etc/disk-nix/steady-state.json`,
-`/etc/disk-nix/declarative-handoff.nix`, and configured apply
-script/report/receipt outputs.
-Planner and apply tooling can use it to compare imperative storage changes
-with the declarative steady state that NixOS will keep enforcing.
+The module also writes `/etc/disk-nix/steady-state.json`.
 
-The module also writes `/etc/disk-nix/declarative-handoff.nix`. This is a
-reviewable Nix module snippet containing the native steady-state declarations
-derived from active disk-nix options, including `fileSystems`, `swapDevices`,
-`zramSwap`, initrd LUKS devices, supported filesystems, NFS exports, iSCSI
-settings, and native storage service flags. It is intentionally not imported by
-default. Operators should review it after successful imperative mutation and
-copy the relevant declarations into their real NixOS configuration, or enable
-the guarded auto-import option described below.
-The module also writes `/etc/disk-nix/declarative-handoff-import.patch`, a
-reviewable patch skeleton that adds the handoff module to an `imports` list.
-The patch is indexed in `/etc/disk-nix/steady-state.json` as
-`declarativeHandoff.importPatch`.
+That file is a machine-readable inventory of native NixOS storage state derived
+from the same declaration.
 
-`services.disk-nix.apply.declarativeHandoff.autoImport.enable = true` applies
-that import patch automatically after a successful `disk-nix apply --execute`
-service run. It requires `apply.execute = true`, backs up the configured NixOS
-configuration file to `backupDirectory`, skips the edit when the handoff module
-is already imported, and then applies
-`/etc/disk-nix/declarative-handoff-import.patch` to `configurationPath`.
-Defaults are `/etc/nixos/configuration.nix` and `/var/backups/disk-nix`.
-`steady-state.json` records the auto-import setting, target configuration path,
-and backup directory under `declarativeHandoff.autoImport`.
+It records:
 
-`toolPackages` defaults to the storage tools used by the probe and executor
-adapters, including bash shell wrappers, coreutils file helpers, Btrfs,
-bcachefs, ext, XFS, F2FS, exFAT, LVM, cryptsetup, MD RAID, multipath, NFS,
-iSCSI, SCSI inventory, NVMe, SMART, VDO, Linux LIO `targetcli`, Linux tgt
-`tgtadm`, bcache, ZFS,
-partitioning, cloud-utils `growpart`, and util-linux tooling. The apply service adds these
-packages to `PATH`, and the same packages are installed in
-`environment.systemPackages`. Override the list to pin site-specific tool
-builds or to trim unused storage domains.
+- active `fileSystems`, `swapDevices`, zram settings, initrd LUKS devices, and
+  supported filesystem types
+- NFS export lines plus iSCSI service and boot initiator settings
+- active identities for mounts, swaps, LUKS keyslots and tokens, LVM, VDO, dm,
+  MD RAID, multipath, ZFS, Btrfs, caches, loops, backing files, NVMe namespaces,
+  and snapshots
+- network-storage identities for iSCSI session targets, host-side LUN paths, and
+  NFS export path/client selectors
+- native service flags for LVM, LVM thin, LVM VDO, MD RAID, multipath, ZFS extra
+  pools, bcache, and NFS server support
 
-Typed NFS export declarations derive regular NixOS NFS server export lines
-only when they are active declarations with explicit `client` and `options`
-fields. `operation = "unexport"`, destructive, or under-specified export
-declarations remain in the disk-nix planner spec for review instead of being
-re-added to `/etc/exports`.
-Typed swap and LUKS declarations follow the same split: `operation = "destroy"`
-or `destroy = true` stays in the generated disk-nix spec, but is not re-added
-to NixOS `swapDevices` or `boot.initrd.luks.devices`. LUKS `operation = "close"`
-is treated the same way: it remains a reviewed disk-nix mapper teardown without
-re-declaring the mapper for initrd unlock.
+It also includes `lifecycleManaged`, a domain-keyed index of active disk-nix-managed resources that are not teardown/export/logout/unmount style declarations. Each entry records the stable identity used for duplicate checks, the requested operation or action, and available target/path/device/mount/source, client, portal, and desired-size data so post-mutation review tooling can see which imperative lifecycle declarations still need declarative follow-up.
+
+It also includes `declarativeHandoff`, a compact index of native NixOS surfaces that should be checked or edited after successful imperative changes: `fileSystems` mountpoints, `swapDevices`, LUKS mapper names, NFS export selectors, iSCSI session targets, whether iSCSI boot is active, and generated artifact paths such as `/etc/disk-nix/spec.json`, `/etc/disk-nix/steady-state.json`, `/etc/disk-nix/declarative-handoff.nix`, and configured apply script/report/receipt outputs.
+
+Planner and apply tooling can use it to compare imperative storage changes with the declarative steady state that NixOS will keep enforcing.
+
+The module also writes `/etc/disk-nix/declarative-handoff.nix`.
+
+This reviewable Nix module snippet contains native steady-state declarations
+derived from active disk-nix options.
+
+It covers `fileSystems`, `swapDevices`, `zramSwap`, initrd LUKS devices,
+supported filesystems, NFS exports, iSCSI settings, and native storage service
+flags.
+
+It is intentionally not imported by default. Operators should review it after successful imperative mutation and copy the relevant declarations into their real NixOS configuration, or enable the guarded auto-import option described below.
+
+The module also writes `/etc/disk-nix/declarative-handoff-import.patch`, a reviewable patch skeleton that adds the handoff module to an `imports` list. The patch is indexed in `/etc/disk-nix/steady-state.json` as `declarativeHandoff.importPatch`.
+
+`services.disk-nix.apply.declarativeHandoff.autoImport.enable = true` applies that import patch automatically after a successful `disk-nix apply --execute` service run. It requires `apply.execute = true`, backs up the configured NixOS configuration file to `backupDirectory`, skips the edit when the handoff module is already imported, and then applies `/etc/disk-nix/declarative-handoff-import.patch` to `configurationPath`.
+
+Defaults are `/etc/nixos/configuration.nix` and `/var/backups/disk-nix`. `steady-state.json` records the auto-import setting, target configuration path, and backup directory under `declarativeHandoff.autoImport`.
+
+`toolPackages` defaults to the storage tools used by the probe and executor adapters, including bash shell wrappers, coreutils file helpers, Btrfs, bcachefs, ext, XFS, F2FS, exFAT, LVM, cryptsetup, MD RAID, multipath, NFS, iSCSI, SCSI inventory, NVMe, SMART, VDO, Linux LIO `targetcli`, Linux tgt `tgtadm`, bcache, ZFS, partitioning, cloud-utils `growpart`, and util-linux tooling.
+
+The apply service adds these packages to `PATH`, and the same packages are installed in `environment.systemPackages`. Override the list to pin site-specific tool builds or to trim unused storage domains.
+
+Typed NFS export declarations derive regular NixOS NFS server export lines only when they are active declarations with explicit `client` and `options` fields. `operation = "unexport"`, destructive, or under-specified export declarations remain in the disk-nix planner spec for review instead of being re-added to `/etc/exports`.
+
+Typed swap and LUKS declarations follow the same split: `operation = "destroy"` or `destroy = true` stays in the generated disk-nix spec, but is not re-added to NixOS `swapDevices` or `boot.initrd.luks.devices`. LUKS `operation = "close"` is treated the same way: it remains a reviewed disk-nix mapper teardown without re-declaring the mapper for initrd unlock.
+
 The module fails evaluation for ambiguous active declarations that would
-otherwise overwrite generated NixOS state: duplicate local/NFS mountpoints,
-duplicate concrete swap paths, duplicate LUKS mapper names, duplicate concrete
-MD RAID array targets, duplicate Btrfs subvolume paths, duplicate Btrfs qgroup
-selectors, duplicate VDO identities, duplicate physical-volume paths, duplicate
-loop-device targets, duplicate multipath map identities, duplicate LVM volume
-group, logical volume, thin pool, or cache identities, duplicate snapshot
-identities, duplicate pool, dataset, or zvol identities, duplicate iSCSI target
-identities, duplicate LUN host paths, and duplicate NFS export path/client pairs.
-Typed zram declarations are modeled separately from persistent swap devices.
-`services.disk-nix.zram.enable = true` emits `spec.zram` for inventory and
-lifecycle context, and derives NixOS `zramSwap` so `/dev/zram*` devices are
-created by the upstream generator instead of being added to `swapDevices`.
-Current-topology comparison reconciles declared zram algorithm, stream count,
-disk size, memory limit, compression ratio, and priority against discovered
-`/dev/zram*` plus active swap metadata.
-Typed NFS client mounts also keep `unmount` and legacy destroy operations in
-the generated disk-nix spec while filtering them out of the derived NixOS
-`fileSystems` entries. `operation = "mount"` and `operation = "remount"` stay
-in both places: NixOS owns the steady-state mount declaration, and disk-nix can
-render reviewed mount or non-destructive remount commands to apply changes.
-Typed filesystem declarations can also use `operation = "mount"` or
-`operation = "remount"` to render reviewed local filesystem mount commands
-while keeping the persistent source, type, mountpoint, and options in the same
-NixOS `fileSystems` entry. `operation = "unmount"` remains in the generated
-disk-nix spec for imperative review, but is filtered out of derived NixOS
-`fileSystems` so NixOS does not immediately re-establish a mount that disk-nix
-was asked to tear down. `destroy = true` follows the same planner-only path for
-local filesystems. Teardown-only filesystem declarations are also filtered out
-of `boot.supportedFilesystems`; only active steady-state filesystems drive NixOS
-filesystem support.
-The same `filesystems` option is also the typed path for non-block mounted
-filesystems that NixOS represents through `fileSystems`, including tmpfs,
-bind mounts, and overlayfs. Declare `device = "tmpfs"; fsType = "tmpfs"` for
-tmpfs mounts, `options = [ "bind" ... ]` for bind mounts, and
-`device = "overlay"; fsType = "overlay"` with `lowerdir`, `upperdir`, and
-`workdir` options for overlayfs. These declarations are emitted to the
-disk-nix spec for planning/probing context and to NixOS `fileSystems` for
-steady-state mounting.
-Typed active LVM declarations enable NixOS LVM support and initrd LVM support by
-default, and typed thin-pool or LVM-cache declarations also enable NixOS thin
-support. Typed active MD RAID declarations enable `boot.swraid` and add the same
-no-op `PROGRAM` line used by the installer profile unless the host overrides
-`boot.swraid.mdadmConf`. Typed active multipath map declarations enable
-`services.multipath` so stage-1 and stage-2 include the daemon and kernel
-support expected by `/dev/mapper/mpath*` consumers.
-Lifecycle declarations that intentionally remove a resource from active service
-state stay in `/etc/disk-nix/spec.json` for reviewed imperative execution, but
-are excluded from `/etc/disk-nix/steady-state.json` active identity lists and
-from generated native service enablement. This includes `operation = "close"`,
-`"deactivate"`, `"logout"`, `"unmount"`, `"unexport"`, `"detach"`, and
-`"stop"` as well as destroy-style declarations. For domains where
-`operation = "export"` means detaching an existing local resource, such as ZFS
-pools and LVM volume groups, export declarations follow the same planner-only
-path. NFS export declarations are different: `operation = "export"` describes
-the active published export and can still derive `services.nfs.server.exports`.
-Typed active ZFS pool, dataset, zvol, and ZFS snapshot declarations add their
-pool names to `boot.zfs.extraPools` and include `zfs` in
-`boot.supportedFilesystems`, so NixOS imports pools that disk-nix is asked to
-manage even when no legacy-mounted ZFS `fileSystems` entry references them.
-They also default `boot.zfs.forceImportRoot = false` to avoid the legacy
-force-import path unless the host explicitly overrides it. NixOS requires
-`networking.hostId` whenever ZFS support is enabled.
-Typed active bcache cache declarations enable NixOS bcache support and initrd
-bcache udev support by default, so `/dev/bcache*` mappings are assembled before
-early consumers try to mount or inspect them.
-Typed active VDO declarations enable the NixOS VDO-capable LVM stack and initrd
-LVM support by default. Upstream NixOS requires a kernel with `dm-vdo` support
-for `services.lvm.boot.vdo.enable`. VDO `start` and `stop` declarations remain
-in the generated planner spec as imperative lifecycle actions; they do not
-rewrite or remove VDO metadata.
-Typed active iSCSI session declarations with `portal` metadata derive both
-regular `services.openiscsi.discoverPortal` and
-`boot.iscsi-initiator.discoverPortal` when the corresponding global or boot
-portal option is not set. A regular initiator still requires
-`iscsi.initiatorName`, because the upstream NixOS `services.openiscsi.name`
-option has no implicit safe default. Session `login` and `logout` declarations
-remain in the generated planner spec as imperative lifecycle actions; `logout`
-is excluded from active NixOS auto-login derivation.
+otherwise overwrite generated NixOS state.
 
-Lifecycle declaration attribute names are usable object names only for domains
-whose native tools address objects by name, such as ZFS datasets, ZFS pools,
-VDO volumes, and iSCSI target IQNs. ZFS dataset and zvol declarations may also
-use logical attribute names when `target` or `path` supplies the concrete
-`pool/name` object. Domains addressed by kernel paths or compound LVM names need
-concrete targets before `apply --execute` can run: swap and NFS exports need
-local paths, loop devices need `/dev/loop*`, MD RAID arrays need `/dev/md*`,
-multipath maps need `mpath*` or `/dev/mapper/*`, bcache operations need
-`/dev/bcache*` through `target`, `path`, or `device`, and LVM logical volumes
-and thin pools need canonical `vg/lv` or `vg/pool` targets. Declarations that
-omit these concrete addresses still produce reviewable plans, but their command
-plans stay non-ready instead of guessing from logical keys.
-For loop devices, `target` or `path` supplies the `/dev/loop*` address and
-`device` remains the backing file or block device used by create plans.
-For LVM logical volumes and thin pools, `target` or `path` supplies the
-canonical `vg/lv` or `vg/pool` name while the Nix attribute can remain a
-logical object name.
-MD RAID assemble, stop, member add, replacement, and removal declarations use
-the same explicit array target requirement as create and grow plans. Assemble
-also requires explicit reviewed member devices. MD RAID rescan declarations can
-refresh array metadata inventory without assembling arrays. Multipath replacement
-declarations use the concrete map target for preflight inspection, then render
-separate path add and delete commands from the `replaceDevices` mapping.
+Rejected duplicates include:
+
+- local or NFS mountpoints
+- concrete swap paths
+- LUKS mapper names
+- concrete MD RAID array targets
+- Btrfs subvolume paths and qgroup selectors
+- VDO identities and physical-volume paths
+- loop-device targets and multipath map identities
+- LVM volume group, logical volume, thin pool, and cache identities
+- snapshot, pool, dataset, and zvol identities
+- iSCSI target identities
+- LUN host paths
+- NFS export path/client pairs
+
+Typed zram declarations are modeled separately from persistent swap devices. `services.disk-nix.zram.enable = true` emits `spec.zram` for inventory and lifecycle context, and derives NixOS `zramSwap` so `/dev/zram*` devices are created by the upstream generator instead of being added to `swapDevices`.
+
+Current-topology comparison reconciles declared zram algorithm, stream count, disk size, memory limit, compression ratio, and priority against discovered `/dev/zram*` plus active swap metadata.
+
+Typed NFS client mounts also keep `unmount` and legacy destroy operations in the generated disk-nix spec while filtering them out of the derived NixOS `fileSystems` entries. `operation = "mount"` and `operation = "remount"` stay in both places: NixOS owns the steady-state mount declaration, and disk-nix can render reviewed mount or non-destructive remount commands to apply changes.
+
+Typed filesystem declarations can also use `operation = "mount"` or `operation = "remount"` to render reviewed local filesystem mount commands while keeping the persistent source, type, mountpoint, and options in the same NixOS `fileSystems` entry.
+
+`operation = "unmount"` remains in the generated disk-nix spec for imperative review, but is filtered out of derived NixOS `fileSystems` so NixOS does not immediately re-establish a mount that disk-nix was asked to tear down.
+
+`destroy = true` follows the same planner-only path for local filesystems. Teardown-only filesystem declarations are also filtered out of `boot.supportedFilesystems`; only active steady-state filesystems drive NixOS filesystem support. The same `filesystems` option is also the typed path for non-block mounted filesystems that NixOS represents through `fileSystems`, including tmpfs, bind mounts, and overlayfs.
+
+Declare `device = "tmpfs"; fsType = "tmpfs"` for tmpfs mounts, `options = [ "bind" ... ]` for bind mounts, and `device = "overlay"; fsType = "overlay"` with `lowerdir`, `upperdir`, and `workdir` options for overlayfs. These declarations are emitted to the disk-nix spec for planning/probing context and to NixOS `fileSystems` for steady-state mounting.
+
+Typed active LVM declarations enable NixOS LVM support and initrd LVM support by default, and typed thin-pool or LVM-cache declarations also enable NixOS thin support. Typed active MD RAID declarations enable `boot.swraid` and add the same no-op `PROGRAM` line used by the installer profile unless the host overrides `boot.swraid.mdadmConf`.
+
+Typed active multipath map declarations enable `services.multipath` so stage-1 and stage-2 include the daemon and kernel support expected by `/dev/mapper/mpath*` consumers. Lifecycle declarations that intentionally remove a resource from active service state stay in `/etc/disk-nix/spec.json` for reviewed imperative execution, but are excluded from `/etc/disk-nix/steady-state.json` active identity lists and from generated native service enablement.
+
+This includes `operation = "close"`, `"deactivate"`, `"logout"`, `"unmount"`, `"unexport"`, `"detach"`, and `"stop"` as well as destroy-style declarations. For domains where `operation = "export"` means detaching an existing local resource, such as ZFS pools and LVM volume groups, export declarations follow the same planner-only path. NFS export declarations are different:
+
+`operation = "export"` describes the active published export and can still derive `services.nfs.server.exports`. Typed active ZFS pool, dataset, zvol, and ZFS snapshot declarations add their pool names to `boot.zfs.extraPools` and include `zfs` in `boot.supportedFilesystems`, so NixOS imports pools that disk-nix is asked to manage even when no legacy-mounted ZFS `fileSystems` entry references them.
+
+They also default `boot.zfs.forceImportRoot = false` to avoid the legacy force-import path unless the host explicitly overrides it. NixOS requires `networking.hostId` whenever ZFS support is enabled. Typed active bcache cache declarations enable NixOS bcache support and initrd bcache udev support by default, so `/dev/bcache*` mappings are assembled before early consumers try to mount or inspect them.
+
+Typed active VDO declarations enable the NixOS VDO-capable LVM stack and initrd LVM support by default. Upstream NixOS requires a kernel with `dm-vdo` support for `services.lvm.boot.vdo.enable`. VDO `start` and `stop` declarations remain in the generated planner spec as imperative lifecycle actions; they do not rewrite or remove VDO metadata.
+
+Typed active iSCSI session declarations with `portal` metadata derive both regular `services.openiscsi.discoverPortal` and `boot.iscsi-initiator.discoverPortal` when the corresponding global or boot portal option is not set. A regular initiator still requires `iscsi.initiatorName`, because the upstream NixOS `services.openiscsi.name` option has no implicit safe default. Session `login` and `logout` declarations remain in the generated planner spec as imperative lifecycle actions;
+
+`logout` is excluded from active NixOS auto-login derivation.
+
+Lifecycle declaration attribute names are usable object names only for domains whose native tools address objects by name, such as ZFS datasets, ZFS pools, VDO volumes, and iSCSI target IQNs. ZFS dataset and zvol declarations may also use logical attribute names when `target` or `path` supplies the concrete `pool/name` object.
+
+Domains addressed by kernel paths or compound LVM names need concrete targets
+before `apply --execute` can run.
+
+Required concrete targets include:
+
+- local paths for swap and NFS exports
+- `/dev/loop*` for loop devices
+- `/dev/md*` for MD RAID arrays
+- `mpath*` or `/dev/mapper/*` for multipath maps
+- `/dev/bcache*` through `target`, `path`, or `device` for bcache
+- canonical `vg/lv` or `vg/pool` targets for LVM volumes and thin pools
+
+Declarations that omit these concrete addresses still produce reviewable plans, but their command plans stay non-ready instead of guessing from logical keys. For loop devices, `target` or `path` supplies the `/dev/loop*` address and `device` remains the backing file or block device used by create plans.
+
+For LVM logical volumes and thin pools, `target` or `path` supplies the canonical `vg/lv` or `vg/pool` name while the Nix attribute can remain a logical object name. MD RAID assemble, stop, member add, replacement, and removal declarations use the same explicit array target requirement as create and grow plans.
+
+Assemble also requires explicit reviewed member devices. MD RAID rescan declarations can refresh array metadata inventory without assembling arrays. Multipath replacement declarations use the concrete map target for preflight inspection, then render separate path add and delete commands from the `replaceDevices` mapping.
 
 Typed filesystem declarations include:
 
@@ -269,46 +212,25 @@ the desired filesystem size.
 inspection context can be carried without changing the generated NixOS
 `fileSystems` entry.
 
-For ext filesystems, `device` is also used by disk-nix grow, shrink, check, and
-repair command plans for `resize2fs` and `e2fsck`. If only `mountpoint` is
-declared, source-device maintenance commands remain non-ready until the backing
-block device is selected explicitly. XFS label changes also use `device` for
-`xfs_admin -L`; FAT/vfat label changes use `device` for `fatlabel`; NTFS label
-changes use `device` for `ntfslabel`; exFAT label changes use `device` for
-`exfatlabel`. Btrfs, ext, FAT/vfat, NTFS, exFAT, and XFS UUID, volume-ID, or
-volume-serial changes use `device` for `btrfstune -U`, `tune2fs -U`,
-`fatlabel -i`, `ntfslabel --new-serial`, `exfatlabel -i`, and `xfs_admin -U`
-and are offline-required. Check and repair declarations require a stable source
-device for tools such as `e2fsck`, `xfs_repair`, `btrfs check`, `fsck.fat`,
-`fsck.exfat`, or `ntfsfix`; NTFS repair remains limited Linux-side remediation,
-not a replacement for Windows `chkdsk`.
-Local filesystem `operation = "mount"` command plans use the same `device`,
-`fsType`, `mountpoint`, and `options` fields that derive NixOS `fileSystems`.
-Local filesystem `operation = "rescan"` command plans use the same `mountpoint`
-field for read-only `findmnt` and graph inventory refreshes, and remain in the
-derived NixOS `fileSystems` entry because they describe an active steady-state
-mount.
-Local filesystem `operation = "unmount"` command plans use `mountpoint`, remain
-offline-gated by apply policy, and are kept out of generated `fileSystems`.
-For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, `operation = "trim"`, device add/remove/replace operations, and filesystem property
-updates such as labels or balance filters while still deriving the regular
-NixOS `fileSystems` entry from the same declaration.
-For bcachefs filesystems, typed declarations can request `operation = "scrub"`
-to render reviewed `bcachefs scrub` plans for mounted filesystems while still
-deriving the regular NixOS `fileSystems` entry from the same declaration.
-Typed Btrfs subvolume declarations can request `operation = "rename"` with
-`renameTo` to stage a path move before final cleanup.
-For ZFS pools, typed declarations can request `operation = "scrub"` to render
-reviewed `zpool scrub` plans, `operation = "import"` to import an existing
-pool, or `operation = "export"` to detach a pool without deleting data.
-`readOnly = true` on an import renders `zpool import -o readonly=on <pool>`.
-Typed ZFS dataset and zvol declarations can request `operation = "promote"` to
-render reviewed `zfs promote` plans for clones after snapshot-based validation.
-Typed snapshot declarations can request `operation = "clone"` with `cloneTo` to
-render reviewed `zfs clone <snapshot> <dataset>` plans through the NixOS module.
-When `probeCurrent = true`, clone topology comparison checks the concrete
-source snapshot and reports missing or available clone sources before module
-apply policy evaluates execution.
+For ext filesystems, `device` is also used by disk-nix grow, shrink, check, and repair command plans for `resize2fs` and `e2fsck`. If only `mountpoint` is declared, source-device maintenance commands remain non-ready until the backing block device is selected explicitly. XFS label changes also use `device` for `xfs_admin -L`;
+
+FAT/vfat label changes use `device` for `fatlabel`; NTFS label changes use `device` for `ntfslabel`; exFAT label changes use `device` for `exfatlabel`. Btrfs, ext, FAT/vfat, NTFS, exFAT, and XFS UUID, volume-ID, or volume-serial changes use `device` for `btrfstune -U`, `tune2fs -U`, `fatlabel -i`, `ntfslabel --new-serial`, `exfatlabel -i`, and `xfs_admin -U` and are offline-required.
+
+Check and repair declarations require a stable source device for tools such as `e2fsck`, `xfs_repair`, `btrfs check`, `fsck.fat`, `fsck.exfat`, or `ntfsfix`; NTFS repair remains limited Linux-side remediation, not a replacement for Windows `chkdsk`. Local filesystem `operation = "mount"` command plans use the same `device`, `fsType`, `mountpoint`, and `options` fields that derive NixOS `fileSystems`.
+
+Local filesystem `operation = "rescan"` command plans use the same `mountpoint` field for read-only `findmnt` and graph inventory refreshes, and remain in the derived NixOS `fileSystems` entry because they describe an active steady-state mount. Local filesystem `operation = "unmount"` command plans use `mountpoint`, remain offline-gated by apply policy, and are kept out of generated `fileSystems`.
+
+For Btrfs filesystems, typed declarations can also request `operation = "rebalance"`, `operation = "check"`, `operation = "repair"`, `operation = "scrub"`, `operation = "trim"`, device add/remove/replace operations, and filesystem property updates such as labels or balance filters while still deriving the regular NixOS `fileSystems` entry from the same declaration.
+
+For bcachefs filesystems, typed declarations can request `operation = "scrub"` to render reviewed `bcachefs scrub` plans for mounted filesystems while still deriving the regular NixOS `fileSystems` entry from the same declaration. Typed Btrfs subvolume declarations can request `operation = "rename"` with `renameTo` to stage a path move before final cleanup.
+
+For ZFS pools, typed declarations can request `operation = "scrub"` to render reviewed `zpool scrub` plans, `operation = "import"` to import an existing pool, or `operation = "export"` to detach a pool without deleting data. `readOnly = true` on an import renders `zpool import -o readonly=on <pool>`.
+
+Typed ZFS dataset and zvol declarations can request `operation = "promote"` to render reviewed `zfs promote` plans for clones after snapshot-based validation.
+
+Typed snapshot declarations can request `operation = "clone"` with `cloneTo` to render reviewed `zfs clone <snapshot> <dataset>` plans through the NixOS module.
+
+When `probeCurrent = true`, clone topology comparison checks the concrete source snapshot and reports missing or available clone sources before module apply policy evaluates execution.
 
 Typed swap declarations include:
 
@@ -440,17 +362,20 @@ Typed lifecycle declarations are available for:
 - `caches`
 
 Active path-addressed declarations must resolve to unique concrete targets.
-The module rejects duplicate filesystem mountpoints, swap paths, LUKS mapper
-names, LUKS device/keyslot selectors, LUKS device/token selectors, disk device
-paths, partition selectors, backing-file paths, device-mapper `/dev/mapper/*`
-or `/dev/dm-*` targets, `/dev/md*` array targets, Btrfs subvolume paths,
-Btrfs qgroup/filesystem selectors, VDO identities, physical-volume device
-paths, loop-device targets, multipath map identities, concrete snapshot
-identities, LVM volume group identities, LVM logical volume identities, LVM
-thin pool identities, LVM cache identities, cache identities, pool identities,
-dataset identities, zvol identities, iSCSI target identities, NVMe
-controller/namespace selectors, LUN host paths, and NFS export path/client
-pairs before generating an apply plan.
+
+Before generating an apply plan, the module rejects duplicate identities for:
+
+- filesystem mountpoints, swap paths, and LUKS mapper names
+- LUKS keyslot and token selectors
+- disk device paths, partition selectors, and backing-file paths
+- device-mapper targets and `/dev/md*` array targets
+- Btrfs subvolume paths and qgroup/filesystem selectors
+- VDO, physical volume, loop-device, multipath, cache, pool, dataset, and zvol
+  identities
+- LVM volume group, logical volume, thin pool, and cache identities
+- snapshot identities
+- iSCSI targets, NVMe controller/namespace selectors, LUN host paths, and NFS
+  export path/client pairs
 
 `volumeGroups.<name>.operation = "import"` and `"export"` render reviewed
 `vgimport <name>` and `vgexport <name>` plans for moving existing VGs without
@@ -978,25 +903,10 @@ Mutation policy should remain explicit:
 - `reportOut`
 - `receiptOut`
 
-`requireBackup` and `requireConfirmation` are additional safety gates for
-high-risk actions. `allowPotentialDataLoss` is the explicit opt-in for reviewed
-rollback, shrink, and device-removal workflows, and backup or confirmation
-requirements still apply when enabled. `requireConfirmationFile` stores the
-expected file path in the generated policy; `disk-nix apply` only treats it as
-confirmed when the file contains a standalone line equal to `disk-nix confirm`.
-`failOnBlocked` defaults to true. When false, activation and install modes keep
-writing the same report data but use `disk-nix validate`, which exits
-successfully even when policy blocks planned actions.
-`execute` defaults to false. When true, activation and install modes run
-`disk-nix apply --execute` after policy validation and command-readiness checks
-pass. The module requires `failOnBlocked = true` for this mode because
-`disk-nix validate` is report-only.
-`scriptOut` must be an absolute path. The apply service creates its parent
-directory before asking the CLI to write the review script; script generation
-still refuses policy-blocked or graph-conflicting plans so activation artifacts
-do not imply a runnable order where none has been proven.
-`reportOut` must also be an absolute path. The apply service creates its parent
-directory before asking the CLI to write the JSON apply report.
-`receiptOut` must also be an absolute path. The apply service creates its
-parent directory before asking the CLI to write the receipt envelope containing
-the report and invocation metadata.
+`requireBackup` and `requireConfirmation` are additional safety gates for high-risk actions. `allowPotentialDataLoss` is the explicit opt-in for reviewed rollback, shrink, and device-removal workflows, and backup or confirmation requirements still apply when enabled. `requireConfirmationFile` stores the expected file path in the generated policy; `disk-nix apply` only treats it as confirmed when the file contains a standalone line equal to `disk-nix confirm`.
+
+`failOnBlocked` defaults to true. When false, activation and install modes keep writing the same report data but use `disk-nix validate`, which exits successfully even when policy blocks planned actions. `execute` defaults to false. When true, activation and install modes run `disk-nix apply --execute` after policy validation and command-readiness checks pass.
+
+The module requires `failOnBlocked = true` for this mode because `disk-nix validate` is report-only. `scriptOut` must be an absolute path. The apply service creates its parent directory before asking the CLI to write the review script; script generation still refuses policy-blocked or graph-conflicting plans so activation artifacts do not imply a runnable order where none has been proven.
+
+`reportOut` must also be an absolute path. The apply service creates its parent directory before asking the CLI to write the JSON apply report. `receiptOut` must also be an absolute path. The apply service creates its parent directory before asking the CLI to write the receipt envelope containing the report and invocation metadata.

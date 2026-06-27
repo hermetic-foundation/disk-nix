@@ -35,45 +35,23 @@ or the NixOS module wrapper written to `/etc/disk-nix/spec.json`:
 }
 ```
 
-Current planning is intentionally conservative. It classifies filesystem
-resize policy, preservation intent, and lifecycle operations for disks,
-partitions, swap, LUKS containers, Btrfs subvolumes, VDO volumes, volumes, LVM
-thin pools, LVM snapshots, loop-device mappings, MD RAID arrays, multipath
-maps, pools, datasets, zvols, LUNs, iSCSI sessions, exports, cache layers, and
-snapshots. It reports
-destructive or potentially destructive behavior with alternatives instead of
-silently accepting unsafe mutation.
+Current planning is intentionally conservative. It classifies filesystem resize policy, preservation intent, and lifecycle operations for disks, partitions, swap, LUKS containers, Btrfs subvolumes, VDO volumes, volumes, LVM thin pools, LVM snapshots, loop-device mappings, MD RAID arrays, multipath maps, pools, datasets, zvols, LUNs, iSCSI sessions, exports, cache layers, and snapshots.
 
-Planned actions are ordered by coarse storage dependency layers after parsing.
-Create, attach, open, grow, and other build/update operations run from lower
-layers toward upper layers; shrink, remove, unmount, detach, close, and destroy
-operations run from upper layers back down. Actions in the same layer keep
-their declaration order. Plan JSON includes `dependencyOrder`, a
-machine-readable audit trail for that ordering with the action id,
-build/mutate/teardown phase, lower-first or upper-first direction, collection
-layer rank, inferred `dependsOn` and `unblocks` edges where declared identities
-tie adjacent layers together, reverse `recoveryDependsOn` and
-`recoveryUnblocks` edges for partial-failure review, and explanatory notes. This
-documents the current ordering rationale and gives automation explicit preflight
-and recovery-review edges for common layered changes. When current topology
-probing is enabled, matched graph paths also add dependency edges across direct
-and multi-hop storage relationships.
-Lower-to-upper paths such as LUN to multipath to partition to mapper to volume
-to filesystem are emitted in build/grow order, while teardown actions reverse
-the path so consumers are handled before backing layers. Each graph-derived
-action edge also appears as an informational `graph-dependency-order`
-diagnostic with the matched graph path, dependent action, prerequisite action,
-and lower-layer or consumer-first rationale. The recovery edges reverse those
-relationships so partial-failure review can walk from consumers back toward
-backing layers before retrying or rolling forward. Mixed-direction actions on
-the same graph path are reported as warning `graph-dependency-conflict`
-diagnostics and counted as `graphDependencyConflictCount`. Topology comparison
-JSON also includes `graphDependencyConflictResolutions`, which names the
-conflicting path, lower and upper action ids, each dependency direction, a
-`buildOrUpdatePass`, a `teardownOrRecoveryPass`, and a recommendation to split
-the work into reviewed passes. Apply dry-runs preserve those diagnostics and
-split-pass proposals for review, while `--execute` refuses to mutate storage
-until the conflict count is zero.
+It reports destructive or potentially destructive behavior with alternatives instead of silently accepting unsafe mutation.
+
+Planned actions are ordered by coarse storage dependency layers after parsing. Create, attach, open, grow, and other build/update operations run from lower layers toward upper layers; shrink, remove, unmount, detach, close, and destroy operations run from upper layers back down. Actions in the same layer keep their declaration order.
+
+Plan JSON includes `dependencyOrder`, a machine-readable audit trail for that ordering with the action id, build/mutate/teardown phase, lower-first or upper-first direction, collection layer rank, inferred `dependsOn` and `unblocks` edges where declared identities tie adjacent layers together, reverse `recoveryDependsOn` and `recoveryUnblocks` edges for partial-failure review, and explanatory notes.
+
+This documents the current ordering rationale and gives automation explicit preflight and recovery-review edges for common layered changes. When current topology probing is enabled, matched graph paths also add dependency edges across direct and multi-hop storage relationships.
+
+Lower-to-upper paths such as LUN to multipath to partition to mapper to volume to filesystem are emitted in build/grow order, while teardown actions reverse the path so consumers are handled before backing layers.
+
+Each graph-derived action edge also appears as an informational `graph-dependency-order` diagnostic with the matched graph path, dependent action, prerequisite action, and lower-layer or consumer-first rationale. The recovery edges reverse those relationships so partial-failure review can walk from consumers back toward backing layers before retrying or rolling forward.
+
+Mixed-direction actions on the same graph path are reported as warning `graph-dependency-conflict` diagnostics and counted as `graphDependencyConflictCount`. Topology comparison JSON also includes `graphDependencyConflictResolutions`, which names the conflicting path, lower and upper action ids, each dependency direction, a `buildOrUpdatePass`, a `teardownOrRecoveryPass`, and a recommendation to split the work into reviewed passes.
+
+Apply dry-runs preserve those diagnostics and split-pass proposals for review, while `--execute` refuses to mutate storage until the conflict count is zero.
 
 Examples:
 
@@ -552,14 +530,13 @@ Examples:
   when that concrete source is missing, and keeps present rename sources
   actionable with snapshot metadata because rename remains offline-required.
 
-The checked-in specs under `examples/` are part of `nix flake check`. The
-flake validates stable plan summaries, selected action ids, allowed simple
-apply output, blocked lifecycle apply output, and review-script generation.
-`disk-nix schema` emits a JSON Schema-style contract for direct specs, NixOS
-module wrapper specs, lifecycle collections, snapshot declarations, and apply
-policy fields. The current supported contract is version `1`. Specs may omit
-`version`, but if `version` or `spec.version` is present it must be integer
-`1`; unsupported future versions are rejected before planning.
+The checked-in specs under `examples/` are part of `nix flake check`. The flake validates stable plan summaries, selected action ids, allowed simple apply output, blocked lifecycle apply output, and review-script generation.
+
+`disk-nix schema` emits a JSON Schema-style contract for direct specs, NixOS module wrapper specs, lifecycle collections, snapshot declarations, and apply policy fields.
+
+The current supported contract is version `1`. Specs may omit `version`, but if `version` or `spec.version` is present it must be integer `1`;
+
+unsupported future versions are rejected before planning.
 
 Lifecycle collections currently accepted by the planner:
 
@@ -591,45 +568,27 @@ Lifecycle collections currently accepted by the planner:
 - `caches`
 - `snapshots`
 
-Multipath map lifecycle treats path membership and whole-map removal
-separately. Path removal is potential-data-loss because it can break
-redundancy, while `multipathMaps.<name>.operation = "destroy"` is
-offline-required host map flushing through `multipath -f`; target-side LUN data
-is not deleted, but filesystems, LVM, dm, and services must move away first.
-Current-topology comparison suppresses destroy actions when the map is already
-absent and keeps present maps actionable with a warning that includes the WWID
-or dm map name when probe metadata reports it. It also suppresses path add when
-probed `Backs` edges show the path already feeds the map, and suppresses path
-removal when the path is already absent from the matched map. Path add requests
-against an absent map remain actionable with a warning, because the target map
-must be reviewed or recreated before path membership can be confirmed.
+Multipath map lifecycle treats path membership and whole-map removal separately. Path removal is potential-data-loss because it can break redundancy, while `multipathMaps.<name>.operation = "destroy"` is offline-required host map flushing through `multipath -f`; target-side LUN data is not deleted, but filesystems, LVM, dm, and services must move away first.
 
-ZFS dataset and zvol `operation = "rescan"` actions are online read-only
-refreshes. Dataset rescan renders `zfs list -t filesystem`, `zfs get`, and
-graph inspection for mountpoint, quota, reservation, snapshot, clone, mount,
-and export relationships. Zvol rescan renders the equivalent
-`zfs list -t volume`, `zfs get`, and graph inspection for volsize,
-reservation, and block consumers. Logical declaration keys can use `target` or
-`path` for the concrete dataset or zvol name. Use property updates or grow only
-when state must actually change. Current-topology comparison suppresses
-concrete dataset create actions when the matched node is already a ZFS dataset,
-and concrete zvol create actions when the matched node is already a ZFS zvol
-and any declared desired size is already satisfied. Existing wrong-kind or
-wrong-size create targets stay actionable with warnings. Dataset and zvol
-destroy actions are suppressed only when the declared `pool/name` target is
-already absent; present targets stay actionable with ZFS metadata warnings.
+Current-topology comparison suppresses destroy actions when the map is already absent and keeps present maps actionable with a warning that includes the WWID or dm map name when probe metadata reports it.
 
-Btrfs qgroup `operation = "rescan"` actions are online read-only refreshes for
-quota hierarchy, referenced/exclusive usage, and limits. Qgroup create,
-destroy, limit, and rescan declarations use the qgroup id as the graph identity
-and the mounted filesystem path as executor context. Current-topology
-comparison suppresses concrete numeric qgroup create actions when the matched
-node is already a Btrfs qgroup, and suppresses destroy actions such as `0/257`
-only when that qgroup is already absent. Existing non-qgroup matches stay
-actionable for create with warnings; present qgroups stay actionable for destroy
-with warnings that include usage, limit, parent, or child metadata when
-available. Logical qgroup names remain actionable unless a graph node actually
-matches them.
+It also suppresses path add when probed `Backs` edges show the path already feeds the map, and suppresses path removal when the path is already absent from the matched map.
+
+Path add requests against an absent map remain actionable with a warning, because the target map must be reviewed or recreated before path membership can be confirmed.
+
+ZFS dataset and zvol `operation = "rescan"` actions are online read-only refreshes. Dataset rescan renders `zfs list -t filesystem`, `zfs get`, and graph inspection for mountpoint, quota, reservation, snapshot, clone, mount, and export relationships. Zvol rescan renders the equivalent `zfs list -t volume`, `zfs get`, and graph inspection for volsize, reservation, and block consumers.
+
+Logical declaration keys can use `target` or `path` for the concrete dataset or zvol name. Use property updates or grow only when state must actually change.
+
+Current-topology comparison suppresses concrete dataset create actions when the matched node is already a ZFS dataset, and concrete zvol create actions when the matched node is already a ZFS zvol and any declared desired size is already satisfied.
+
+Existing wrong-kind or wrong-size create targets stay actionable with warnings. Dataset and zvol destroy actions are suppressed only when the declared `pool/name` target is already absent; present targets stay actionable with ZFS metadata warnings.
+
+Btrfs qgroup `operation = "rescan"` actions are online read-only refreshes for quota hierarchy, referenced/exclusive usage, and limits. Qgroup create, destroy, limit, and rescan declarations use the qgroup id as the graph identity and the mounted filesystem path as executor context.
+
+Current-topology comparison suppresses concrete numeric qgroup create actions when the matched node is already a Btrfs qgroup, and suppresses destroy actions such as `0/257` only when that qgroup is already absent.
+
+Existing non-qgroup matches stay actionable for create with warnings; present qgroups stay actionable for destroy with warnings that include usage, limit, parent, or child metadata when available. Logical qgroup names remain actionable unless a graph node actually matches them.
 
 Lifecycle objects may use:
 
@@ -685,152 +644,87 @@ replacement, property, property value, filesystem type, mountpoint, and
 desired or physical size, plus partition start, end, and type. Apply reports
 use this context to build command plans without relying on action-id parsing.
 
-`disk-nix plan --probe-current --spec <path>` probes the current host and adds
-a `topologyComparison` section to the plan. The comparison matches action
-targets against the storage graph and reports missing targets, current size
-state versus `desiredSize`, filesystem type conflicts, matching filesystem
-format types that still require destructive review, and already-satisfied
-mount, remount, NFS export, iSCSI login, Btrfs subvolume or qgroup destroy,
-generic snapshot destroy, or property updates where the current graph has
-enough data. Remount
-reconciliation treats declared options as a required subset of the current
-mount options, allowing kernel-added defaults to remain. Filesystem and NFS
-unmount reconciliation treats an absent mountpoint as already satisfied and
-keeps currently mounted targets actionable with a warning.
-LVM activation/deactivation reconciliation uses `lvm.active` topology metadata
-to suppress already-active `volumes`, `thinPools`, and `lvmSnapshots`
-activation actions and already-inactive deactivation actions, and to warn when
-a matched LVM object is in the opposite state. Absent activation targets remain
-actionable with an LVM warning, while absent deactivation targets are treated
-as already inactive.
-LUKS open/close reconciliation uses `cryptsetup.active` topology metadata to
-suppress mapper opens that are already active and mapper closes that are
-already inactive or absent; opposite-state mappers and absent mapper opens
-remain actionable with a warning.
-LUKS keyslot and token removal reconciliation matches the declared backing
-device to the LUKS container and uses `cryptsetup.luks-keyslots` or
-`cryptsetup.luks-tokens` from `luksDump` metadata to suppress only removals
-whose slot or token id is already absent. Present slots and tokens remain
-actionable with warnings that include keyslot priority, cipher, PBKDF, token
-type, or token keyslot binding metadata when available. Missing LUKS containers
-for keyslot or token removals remain actionable with header review warnings.
-LVM cache detach reconciliation matches the origin LV and suppresses detach
-only when the current LV no longer reports cache or writecache metadata.
-Still-attached cache origins remain actionable with warnings that include cache
-pool, mode, policy, dirty blocks, and utilization when available. Absent cache
-origins remain actionable with LVM metadata review warnings instead of generic
-missing-target diagnostics.
-LVM logical-volume, thin-pool, and volume-group rename reconciliation compares
-source and destination identities. Source-present renames remain actionable with
-current LVM metadata, destination-present renames are suppressed as already
-reflected in topology, and source-absent/destination-absent renames stay
-actionable with LVM review warnings.
-Loop-device create/destroy reconciliation uses `loop.back-file` topology
-metadata to suppress create actions only when the loop device already maps the
-declared backing file and suppress destroy/detach actions only when the loop
-device is already absent; occupied loop devices with different backing files
-stay actionable with a warning.
-NVMe namespace attach/detach reconciliation suppresses attach actions only
-when the declared namespace path is already visible and suppresses detach
-actions only when the declared namespace path is already absent; opposite
-states stay actionable with a warning.
-VDO create reconciliation warns when the target already has VDO metadata or
-matches another current node kind. VDO grow reconciliation suppresses growth
-when current byte size or VDO logical-size metadata already satisfies
-`desiredSize`; below-target, unknown, or absent current targets stay
-actionable with VDO grow diagnostics. VDO destroy reconciliation suppresses
-removal only when the VDO volume is already absent. Present VDO removal
-targets stay actionable with warnings that include available operating-mode,
-size, backing-device, write-policy, and LVM VDO utilization metadata. VDO start/stop
-reconciliation uses
-`vdo.operating-mode` topology metadata to suppress start actions only when the
-volume is already in `normal` mode and stop actions only when the mode
-explicitly reports stopped, not-running, or inactive, or when the volume is
-already absent; absent starts and opposite states stay actionable with a warning.
-VDO property reconciliation compares declared
-`writePolicy`, `compression`, and `deduplication` settings with native
-`vdo.*` metadata and LVM `lvm.vdo-*` metadata, including boolean normalization
-for compression and deduplication aliases, before deciding whether to suppress
-an already-satisfied property update.
-Btrfs subvolume destroy reconciliation suppresses concrete absolute-path
-targets only when they are already absent. Present subvolumes stay actionable
-with warnings that include available subvolume id, generation, parent,
-top-level, and UUID metadata.
-ZFS dataset and zvol destroy reconciliation suppresses concrete `pool/name`
-targets only when they are already absent. Present targets stay actionable with
-warnings that include available mountpoint, quota, reservation, encryption, key
-status, origin, usage, volsize, or compression metadata.
-ZFS dataset and zvol promote reconciliation compares probed `zfs.origin`
-metadata. Clones with an origin remain actionable for reviewed promotion, while
-already-promoted objects without origin metadata are suppressed as satisfied.
-ZFS dataset and zvol rename reconciliation compares the old and new
-`pool/name` identities. Source-present renames remain actionable with current
-metadata, while source-absent and destination-present renames are suppressed as
-already reflected in topology. Source-absent and destination-absent renames
-stay actionable with ZFS metadata review warnings.
-Generic snapshot destroy reconciliation suppresses concrete ZFS snapshot names
-and absolute Btrfs snapshot paths only when they are already absent. Present
-snapshots stay actionable with warnings that include available ZFS
-user-reference, hold tag, usage, compression, or encryption metadata, or Btrfs
-subvolume id, generation, parent, top-level, and UUID metadata.
-ZFS snapshot hold and release reconciliation compares requested tags against
-probed `zfs.holds` and `zfs.hold.<tag>` metadata so already-present holds and
-already-absent releases are treated as satisfied instead of reissued.
-Generic snapshot clone reconciliation compares the concrete source ZFS
-snapshot name or absolute Btrfs snapshot path before considering the clone
-destination. Missing clone sources stay actionable with warning diagnostics;
-available clone sources are reported with snapshot metadata and the requested
-destination.
-Generic snapshot rename reconciliation compares the concrete source ZFS
-snapshot name or absolute Btrfs snapshot path, not just the source dataset or
-subvolume. Missing and present rename sources both stay actionable with warning
-diagnostics; present sources include snapshot metadata and the requested
-destination.
-ZFS snapshot rollback reconciliation compares the concrete rollback snapshot,
-not just the target dataset. Missing rollback points and available rollback
-points both stay actionable with warning diagnostics; available points include
-snapshot metadata so reviewers can inspect usage, holds, and recursive rollback
-intent before policy-gated execution.
-NFS export reconciliation compares the declared client and options against
-`nfs.export-client` and `nfs.export-option-*` topology properties. Absent
-exports remain actionable as domain-specific export work rather than generic
-missing storage targets; matching exports are suppressed, and differing
-client/options stay actionable for review.
-iSCSI session reconciliation checks all matching target and session nodes so an
-active session is not hidden by a configured but disconnected target. Login
-actions are suppressed only when a logged-in session is present; logout actions
-are suppressed only when the target is known and no logged-in session is
-present.
-Already-satisfied grow, shrink, device-mapper destroy, multipath destroy,
-bcache detach, iSCSI login/logout, LVM activation/deactivation, LUKS open, loop
-create/destroy, LUN attach/detach, NVMe namespace attach/detach, mount,
-unmount, remount, NFS export/unexport, VDO destroy, VDO start, VDO stop, MD
-assemble, Btrfs subvolume destroy, ZFS dataset/zvol destroy, ZFS pool import,
-LVM volume-group import/export, and set-property actions with no warning diagnostics are
-suppressed from the actionable plan and counted in
+`disk-nix plan --probe-current --spec <path>` probes the current host and adds a
+`topologyComparison` section to the plan.
+
+The comparison matches action targets against the storage graph and reports:
+
+- missing targets
+- current size state versus `desiredSize`
+- filesystem type conflicts
+- matching format targets that still require destructive review
+- already-satisfied mount, remount, NFS export, iSCSI login, destroy, and
+  property updates when the graph has enough data
+
+Remount reconciliation treats declared options as a required subset of the current mount options, allowing kernel-added defaults to remain. Filesystem and NFS unmount reconciliation treats an absent mountpoint as already satisfied and keeps currently mounted targets actionable with a warning.
+
+LVM activation/deactivation reconciliation uses `lvm.active` topology metadata to suppress already-active `volumes`, `thinPools`, and `lvmSnapshots` activation actions and already-inactive deactivation actions, and to warn when a matched LVM object is in the opposite state.
+
+Absent activation targets remain actionable with an LVM warning, while absent deactivation targets are treated as already inactive. LUKS open/close reconciliation uses `cryptsetup.active` topology metadata to suppress mapper opens that are already active and mapper closes that are already inactive or absent; opposite-state mappers and absent mapper opens remain actionable with a warning.
+
+LUKS keyslot and token removal reconciliation matches the declared backing device to the LUKS container and uses `cryptsetup.luks-keyslots` or `cryptsetup.luks-tokens` from `luksDump` metadata to suppress only removals whose slot or token id is already absent. Present slots and tokens remain actionable with warnings that include keyslot priority, cipher, PBKDF, token type, or token keyslot binding metadata when available.
+
+Missing LUKS containers for keyslot or token removals remain actionable with header review warnings. LVM cache detach reconciliation matches the origin LV and suppresses detach only when the current LV no longer reports cache or writecache metadata. Still-attached cache origins remain actionable with warnings that include cache pool, mode, policy, dirty blocks, and utilization when available.
+
+Absent cache origins remain actionable with LVM metadata review warnings instead of generic missing-target diagnostics. LVM logical-volume, thin-pool, and volume-group rename reconciliation compares source and destination identities. Source-present renames remain actionable with current LVM metadata, destination-present renames are suppressed as already reflected in topology, and source-absent/destination-absent renames stay actionable with LVM review warnings.
+
+Loop-device create/destroy reconciliation uses `loop.back-file` topology metadata to suppress create actions only when the loop device already maps the declared backing file and suppress destroy/detach actions only when the loop device is already absent; occupied loop devices with different backing files stay actionable with a warning.
+
+NVMe namespace attach/detach reconciliation suppresses attach actions only when the declared namespace path is already visible and suppresses detach actions only when the declared namespace path is already absent; opposite states stay actionable with a warning. VDO create reconciliation warns when the target already has VDO metadata or matches another current node kind.
+
+VDO grow reconciliation suppresses growth when current byte size or VDO logical-size metadata already satisfies `desiredSize`; below-target, unknown, or absent current targets stay actionable with VDO grow diagnostics.
+
+VDO destroy reconciliation suppresses removal only when the VDO volume is already absent. Present VDO removal targets stay actionable with warnings that include available operating-mode, size, backing-device, write-policy, and LVM VDO utilization metadata.
+
+VDO start/stop reconciliation uses `vdo.operating-mode` topology metadata to suppress start actions only when the volume is already in `normal` mode and stop actions only when the mode explicitly reports stopped, not-running, or inactive, or when the volume is already absent; absent starts and opposite states stay actionable with a warning.
+
+VDO property reconciliation compares declared `writePolicy`, `compression`, and `deduplication` settings with native `vdo.*` metadata and LVM `lvm.vdo-*` metadata, including boolean normalization for compression and deduplication aliases, before deciding whether to suppress an already-satisfied property update. Btrfs subvolume destroy reconciliation suppresses concrete absolute-path targets only when they are already absent.
+
+Present subvolumes stay actionable with warnings that include available subvolume id, generation, parent, top-level, and UUID metadata. ZFS dataset and zvol destroy reconciliation suppresses concrete `pool/name` targets only when they are already absent. Present targets stay actionable with warnings that include available mountpoint, quota, reservation, encryption, key status, origin, usage, volsize, or compression metadata.
+
+ZFS dataset and zvol promote reconciliation compares probed `zfs.origin` metadata. Clones with an origin remain actionable for reviewed promotion, while already-promoted objects without origin metadata are suppressed as satisfied.
+
+ZFS dataset and zvol rename reconciliation compares the old and new `pool/name` identities. Source-present renames remain actionable with current metadata, while source-absent and destination-present renames are suppressed as already reflected in topology.
+
+Source-absent and destination-absent renames stay actionable with ZFS metadata review warnings. Generic snapshot destroy reconciliation suppresses concrete ZFS snapshot names and absolute Btrfs snapshot paths only when they are already absent. Present snapshots stay actionable with warnings that include available ZFS user-reference, hold tag, usage, compression, or encryption metadata, or Btrfs subvolume id, generation, parent, top-level, and UUID metadata.
+
+ZFS snapshot hold and release reconciliation compares requested tags against probed `zfs.holds` and `zfs.hold.<tag>` metadata so already-present holds and already-absent releases are treated as satisfied instead of reissued. Generic snapshot clone reconciliation compares the concrete source ZFS snapshot name or absolute Btrfs snapshot path before considering the clone destination.
+
+Missing clone sources stay actionable with warning diagnostics; available clone sources are reported with snapshot metadata and the requested destination. Generic snapshot rename reconciliation compares the concrete source ZFS snapshot name or absolute Btrfs snapshot path, not just the source dataset or subvolume. Missing and present rename sources both stay actionable with warning diagnostics;
+
+present sources include snapshot metadata and the requested destination. ZFS snapshot rollback reconciliation compares the concrete rollback snapshot, not just the target dataset. Missing rollback points and available rollback points both stay actionable with warning diagnostics; available points include snapshot metadata so reviewers can inspect usage, holds, and recursive rollback intent before policy-gated execution.
+
+NFS export reconciliation compares the declared client and options against `nfs.export-client` and `nfs.export-option-*` topology properties. Absent exports remain actionable as domain-specific export work rather than generic missing storage targets;
+
+matching exports are suppressed, and differing client/options stay actionable for review. iSCSI session reconciliation checks all matching target and session nodes so an active session is not hidden by a configured but disconnected target.
+
+Login actions are suppressed only when a logged-in session is present.
+
+Logout actions are suppressed only when the target is known and no logged-in
+session is present.
+
+Already-satisfied actions with no warning diagnostics are suppressed from the
+actionable plan and counted in
 `topologyComparison.summary.suppressedActionCount`.
-`topologyComparison.reconciliationGroups` summarizes related actions that share
-a concrete target, backing, portal, mountpoint, path, or parent identity before
-suppressed actions are removed. Each group records all action ids, remaining
-planned action ids, suppressed action ids, counts, and whether the group is
-partially suppressed. `partiallySuppressed = true` means only part of a related
-group remains actionable after current-topology suppression, so dry-run reports
-remain reviewable but generated shell scripts and `apply --execute` are refused
-until the plan is refreshed against current topology or split into safer groups.
-Group identities include normalized NFS export paths derived from client mount
-sources and normalized device-mapper names derived from `/dev/mapper/*`
-consumers so cross-domain export/mount and dm/filesystem changes are reported
-together.
-`topologyComparison.lifecycleGroups` summarizes connected lifecycle mutations
-after current-topology dependency edges are known. Each group records the
-connected action ids, total dependency edge count, graph-derived edge count,
-dependency phases, dependency directions, and a recommendation to review and
-apply the group as one ordered mutation or split it into independently verified
-passes. This exposes grouped updates such as iSCSI LUN refresh, multipath
-refresh, partition growth, LUKS/LVM resize, and filesystem growth even when no
-action is suppressed as already satisfied.
-Absent mountpoints for mount actions remain actionable with mount-required
-diagnostics rather than generic missing-target diagnostics.
+
+Examples include grow, shrink, mapper destroy, multipath destroy, bcache detach,
+iSCSI login/logout, LVM activation/deactivation, LUKS open, loop create/destroy,
+LUN attach/detach, mount, unmount, remount, NFS export/unexport, VDO
+start/stop/destroy, MD assemble, Btrfs subvolume destroy, ZFS dataset/zvol
+destroy, ZFS pool import, LVM volume-group import/export, and set-property
+actions.
+
+`topologyComparison.reconciliationGroups` summarizes related actions that share a concrete target, backing, portal, mountpoint, path, or parent identity before suppressed actions are removed.
+
+Each group records all action ids, remaining planned action ids, suppressed action ids, counts, and whether the group is partially suppressed.
+
+`partiallySuppressed = true` means only part of a related group remains actionable after current-topology suppression, so dry-run reports remain reviewable but generated shell scripts and `apply --execute` are refused until the plan is refreshed against current topology or split into safer groups.
+
+Group identities include normalized NFS export paths derived from client mount sources and normalized device-mapper names derived from `/dev/mapper/*` consumers so cross-domain export/mount and dm/filesystem changes are reported together.
+
+`topologyComparison.lifecycleGroups` summarizes connected lifecycle mutations after current-topology dependency edges are known. Each group records the connected action ids, total dependency edge count, graph-derived edge count, dependency phases, dependency directions, and a recommendation to review and apply the group as one ordered mutation or split it into independently verified passes.
+
+This exposes grouped updates such as iSCSI LUN refresh, multipath refresh, partition growth, LUKS/LVM resize, and filesystem growth even when no action is suppressed as already satisfied. Absent mountpoints for mount actions remain actionable with mount-required diagnostics rather than generic missing-target diagnostics.
 
 ## Apply policy
 
@@ -839,358 +733,186 @@ planned actions against the top-level `apply` policy, and reports whether each
 action is allowed or blocked. By default it is a dry run. With `--execute`, it
 requires a fully ready command plan before running any storage command.
 
-Apply reports include `blockedSummary` counters for offline-required,
-destructive, potential-data-loss, and unsupported blocked actions in addition
-to the detailed blocked action list. When policy allows an action, the report
-also includes a `commandSummary` plus a `commandPlan` with planned command
-argv, mutation markers, manual-review flags, readiness, unresolved inputs,
-provider capability contracts for generic target-side LUN handoffs, and notes.
-If `--probe-current` is set, the report also includes the same
-`topologyComparison` emitted by `plan`, including any safe no-op actions
-suppressed before command rendering. It also includes a
-`verificationSummary` plus a `verificationPlan` with read-only post-apply
-commands and checks for the relevant storage domain. Generic target-side LUN
-provider verification combines the provider-specific inventory placeholder with
-executable host probes for SCSI path visibility, multipath grouping, and
-modeled consumer state. Executed reports also include `executionResults` with
-command phase, argv, success, exit status, stdout, and stderr for each command
-that ran.
-Blocked, non-ready, and failed execution reports include structured
-`recoveryActions`. Failed risky actions keep the generic current-state capture
-and preserve-recovery-point advice, then add domain-specific recovery,
-`roll-forward-review`, and, where read-only preconditions are available,
-`rollback-review` entries. Roll-forward review starts with a manual-only
-`disk-nix apply --spec <spec> --probe-current --json` dry run against the
-current graph and adds domain inspection plus post-apply verification commands
-when they were rendered. Rollback review is intentionally read-only and covers
-concrete domains such as ZFS rollback points, ZFS/Btrfs snapshot lifecycle
-changes, LVM snapshot merges, VG device migration, LVM VG/volume/thin/PV changes,
-cache lifecycle changes, ZFS pool/dataset/zvol lifecycle changes, swap
-signature/activation changes, filesystem lifecycle updates, disk and
-partition-table lifecycle changes, LUKS mapper, header, keyslot, and token
-changes, MD RAID member replacement, NVMe namespace changes, iSCSI session
-login/logout, VDO lifecycle changes, multipath map changes, loop-device,
-backing-file, and device-mapper map changes, NFS export and client mount
-changes, and host-side LUN detach; it does not run rollback commands
-automatically.
-Cache command plans include bcache-aware sysfs updates for existing cache-set
-attachment, cache-mode property changes, `bcache.set-*` cache-set tuning
-updates, read-only rescans, dirty-data checks, and replacement steps that remain
-non-ready until the replacement cache device, concrete `/dev/bcache*` target,
-and new cache-set UUID are declared. Once `cacheSetUuid` is declared,
-replacement renders `make-bcache --cset-uuid`, detach, and attach steps without
-guessing generated identity. Current-topology comparison maps declared bcache
-`cacheMode`/`cachePolicy` aliases and cache-set tuning properties onto
-`bcache.cache-mode`, `bcache.cache-policy`, and `bcache.set-*` metadata, with
-cache-mode value normalization for dashed spellings. bcache device sysfs
-operations require a concrete `/dev/bcache*` target; cache-set sysfs property
-updates require `cacheSetUuid`, `cache-set-uuid`, or equivalent metadata so the
-plan can write `/sys/fs/bcache/<set>/<field>`. Logical cache declaration names
-become ready when `target`, `path`, or `device` declares the backing bcache
-device path. Current-topology comparison keeps logical cache names actionable as
-missing unless the graph can match them, so a logical name is not treated as
-absent proof for detach.
-Loop-device command plans require a `/dev/loop*` target for grow, rescan, and
-detach operations. Logical loop declaration names can supply that target with
-`target` or `path`; `device` remains the backing file or block device for
-create plans.
-LVM cache command plans include read-only `lvs` status refresh for
-`lvmCaches.<origin>.operation = "rescan"` before any later mode, detach, or
-replacement work.
-NFS export command plans use `exportfs -i -o <options> <client>:<path>` for
-reviewed `operation = "export"` and option-update operations and
-read-only `exportfs -v` plus graph inspection for `operation = "rescan"`, and
-`exportfs -u <client>:<path>` for reviewed `operation = "unexport"` operations,
-with unresolved-input markers when clients, options, or the local export path
-are missing. Logical export names can declare the local export path through
-`target` or `path`. Current-topology comparison suppresses export actions only
-when the probed export client and requested option subset already match, and it
-keeps absent exports actionable as planned export work. It suppresses unexport
-actions only when the export is already absent. Published unexport targets
-remain actionable with a warning. Legacy export `create` and `destroy` map to
-the same commands.
-NFS client mount command plans use
-`mount -t <nfs|nfs4> -o <options> <source> <mountpoint>` for reviewed
-`operation = "mount"` actions, `mount -o remount,<options> <mountpoint>` for
-reviewed option updates, read-only `findmnt`, `nfsstat -m`, and graph
-inspection for `operation = "rescan"`, and `umount <mountpoint>` for reviewed
-`operation = "unmount"` actions. Legacy NFS mount `create` and `destroy` map to
-the same mount/unmount command plans. Missing sources or concrete mountpoint
-paths keep the command plan non-ready. Logical NFS mount names can declare the
-local mount path through `mountpoint`. With current-topology comparison, absent
-NFS mountpoints remain actionable as mount-required work.
-Disk and partition `operation = "rescan"` actions are online refreshes that
-render `partprobe <disk>` plus `blockdev --rereadpt <disk>` and verify with
-`parted -lm <disk>`. They do not edit partition geometry; use `grow` or
-`create` when the table itself must change.
-Partition `create` actions reconcile existing matched partition targets before
-command rendering. Existing partitions suppress create when any declared
-desired size matches; different or unknown sizes and matched non-partition
-nodes stay actionable with warnings and data-preservation guidance.
-Partition `grow` actions reconcile parseable byte-sized `end` values against
-the probed partition size when current-topology comparison is enabled. Already
-satisfied numeric growth is suppressed before command rendering, while
-percentage geometry such as `100%` remains actionable because it depends on the
-current table layout and free-space review.
-Filesystem `operation = "remount"` actions are online, non-destructive updates
-that render `mount -o remount,<options> <mountpoint>`. Missing concrete
-mountpoints remain non-ready, and long-lived options should be kept in the
-matching NixOS `fileSystems` entry.
-Filesystem `operation = "rescan"` actions are online, read-only refreshes that
-render `findmnt --json <mountpoint>` and `disk-nix inspect <mountpoint>`.
-They refresh modeled mount and graph state without mounting, remounting,
-unmounting, formatting, or checking filesystem metadata. Missing concrete
-mountpoints remain non-ready.
-Filesystem `operation = "mount"` and `operation = "unmount"` actions render
-reviewable `mount [-t <fsType>] [-o <options>] <device> <mountpoint>` and
-`umount <mountpoint>` command plans from the same `fileSystems`-compatible
-declarations. Mounts are online namespace changes; unmounts are offline-gated,
-non-destructive operations because they can interrupt services, sessions, bind
-mounts, and automount units. Missing devices or concrete mountpoint paths keep
-the command plan non-ready. With current-topology comparison, absent
-mountpoints for mount actions remain actionable as mount-required work.
-LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>`
-for `volume` create operations and `lvremove --yes <vg>/<lv>` only after
-destructive policy gates allow removal. LV grow and remove commands require
-canonical `vg/lv` targets from the declaration key, `target`, or `path`.
-Current-topology comparison suppresses create actions only when the matched LVM
-logical volume already exists and any declared desired size exactly matches;
-existing LVs with different or unknown size stay planned with warnings that
-point to grow or shrink lifecycle instead of recreate.
-LVM thin-pool command plans require canonical `vg/pool` targets for grow and
-remove operations, supplied by the declaration key, `target`, or `path`.
-Current-topology comparison applies the same create reconciliation to
-thin-pools, but only when the matched node is an LVM thin pool. LVM logical
-volume and thin-pool rename reconciliation suppresses already-renamed objects
-when the old `vg/lv` or `vg/pool` source is absent and the new target exists;
-short rename targets are resolved within the original volume group.
-LVM volume group grow and add-device command plans use `vgextend <vg> <pv>`
-when a physical volume device is declared. Replacement plans render
-`vgextend <vg> <new-pv>`, `pvmove <old-pv> <new-pv>`, and
-`vgreduce <vg> <old-pv>` when both PVs are explicit. Device topology operations
-remain unresolved until the device to add, the source device, the replacement
-device, or the device to remove is declared explicitly.
-Volume group `operation = "rescan"` refreshes LVM metadata with
-`pvscan --cache`, `vgscan`, and `vgchange --refresh <vg>` without recreating
-the VG. Volume-group rename reconciliation suppresses already-renamed groups
-when the old VG name is absent and the new VG exists.
-LVM physical volume command plans use `pvcreate`, `pvresize`,
-`pvscan --cache`, and `pvremove` for `physicalVolumes` lifecycle declarations.
-Create, grow, and remove plans require a concrete path-shaped declaration key,
-`target`, `path`, or `device`; rescan can refresh all visible PV metadata when
-no path-shaped target is declared. Current-topology comparison suppresses
-`operation = "create"` only when the matched target already has LVM PV metadata;
-matched non-PV devices, duplicate PVs, and missing PVs remain planned with
-warnings so destructive `pvcreate` is reviewed explicitly. PV removal advice
-recommends `pvmove` plus `vgreduce` before `pvremove`.
-LVM logical volume and thin-pool command plans require canonical `vg/lv` or
-`vg/pool` targets. Logical declaration names can provide those targets through
-`target` or `path` so command planning stays executable without encoding the
-native LVM name in the Nix attribute key.
-LVM volume group create comparison suppresses `operation = "create"` when the
-VG already exists without exported, partial, or missing-PV metadata; existing
-exported, partial, or missing-PV VGs stay planned with warnings instead of
-silently treating a destructive `vgcreate` as safe. Import/export comparison
-uses `lvm.vg-exported`: already visible volume groups without an exported
-marker suppress import actions, already-exported volume groups suppress export
-actions, and opposite-state volume groups remain planned with a warning.
-LUKS keyslot and token command plans use explicit `add-key`, `remove-key`,
-`import-token`, and `remove-token` lifecycle declarations for
-`cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and
-`cryptsetup token remove`. Legacy preserved `create` and `destroy` map to the
-same access-material command plans. `luksChangeKey` is used for key-file
-property updates, and keyslot `priority` updates render
-`cryptsetup config <device> --key-slot <slot> --priority <prefer|normal|ignore>`.
-Executable keyslot add/change plans require a LUKS backing device and
-replacement key file; keyslot priority updates require a LUKS backing device,
-slot number, and one of `prefer`, `normal`, or `ignore`; token imports require
-a token JSON file. Removal requires both the device and keyslot number or token
-id, and remains blocked by the potential-data-loss policy. Logical keyslot and
-token names can declare concrete slot/token ids with `keySlot`, `key-slot`,
-`slot`, `tokenId`, `token-id`, or `token`. With current-topology probing,
-already-absent keyslots/tokens are suppressed only after the backing container
-is matched and the specific id is missing from probed LUKS header metadata;
-still-present entries stay actionable. Keyslot priority property actions are
-suppressed when the probed keyslot already has the requested priority.
-LVM cache command plans use `lvconvert --type cache`, `lvconvert --uncache`,
-and `lvchange --cachemode` or `--cachepolicy` for `lvmCaches` lifecycle
-declarations. Executable attach plans require an origin `vg/lv` target and a
-cache-pool LV through `device` or `addDevices`. With current-topology probing,
-detach actions are suppressed only after the origin LV is matched and no
-cache/writecache metadata remains; still-cached origins remain planned.
-NVMe namespace command plans use `nvme create-ns`, `nvme attach-ns`,
-explicit `operation = "rescan"` plans through `nvme ns-rescan`,
-`nvme detach-ns`, and `nvme delete-ns`. Create and delete are destructive
-controller namespace-management operations. Standalone attach is online;
-standalone detach is offline-required and preserves the namespace. Rescan is
-online and refreshes host namespace inventory plus subsystem path state through
-`nvme list-subsys --output-format=json`. Grow is offline-required and means
-host namespace and subsystem path rescan after controller-side resize or
-replacement.
-Executable create plans require a `/dev/nvme*` controller path from the
-declaration key, `target`, `path`, or `device`, plus `desiredSize`; attach,
-detach, and delete flows require `namespaceId` plus `controllers` when
-attachment state is changed. Use `target` or `path` for the controller and
-`device` for the host-visible namespace path when the same declaration should
-also reconcile topology visibility.
-Swap grow, format, label, UUID, priority, and rescan command plans require a
-path-shaped swap target from the declaration key, `target`, `path`, or `device`.
-Label and UUID updates render `swaplabel --label` and `swaplabel --uuid`;
-priority updates render `swapoff` followed by `swapon --priority`;
-`operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph
-inspection before any later grow or identity change. Current-topology comparison
-maps declared swap label, UUID, and priority properties onto probed identity,
-signature, and active swap metadata before suppressing already-satisfied
-property updates. It warns when a swap format target already has swap metadata
-or matches another node kind,
-while keeping the destructive `mkswap` action reviewable. MD RAID
-assemble, stop, create, grow, member add,
-replacement, and removal command plans require an explicit array path such as
-`/dev/md/root`; assemble also requires explicit reviewed member devices. MD
-create reconciliation suppresses only already clean active arrays and keeps
-degraded, inactive, or wrong-kind matches actionable with warnings. MD stop
-reconciliation suppresses absent or inactive arrays and keeps active,
-unknown-state, or wrong-kind matches actionable with warnings. MD membership
-reconciliation suppresses already-attached adds, already-absent removals, and
-completed replacements where the old member is gone and the new member is
-attached. MD
-RAID rescan plans render read-only `mdadm --detail --scan`,
-`mdadm --examine --scan`, and `/proc/mdstat` inventory checks without
-assembling arrays. Current-topology comparison suppresses assemble actions only
-when the probed array has `md.state` indicating an active or clean array and
-both `md.degraded-devices` and `md.failed-devices` are zero; degraded or failed
-arrays stay planned and emit a warning.
-Loop-device refresh, rescan, and detach command plans require `/dev/loop*`
-targets. Rescan reads `losetup --json --list` and graph state without changing
-capacity; grow uses `losetup -c` after backing size changes.
-Multipath map growth and path replacement preflight require a concrete map
-target such as `mpatha` or `/dev/mapper/mpatha`, either as the declaration name
-or through explicit `target`/`device` fields. Growth and rescan plans capture
-host-visible SCSI path transport and size with `lsscsi -t -s` before map reload
-or resize. Replacement renders separate path add and delete steps so each
-command can be reviewed independently.
-ZFS pool device removal renders reviewed `zpool remove <pool> <device>` steps
-when the pool layout supports evacuation. LVM volume group device removal
-renders reviewed `pvmove <pv>` then `vgreduce <vg> <pv>` steps so allocated
-extents are evacuated before the physical volume is reduced. These remain
-potential-data-loss intents unless a safer explicit workflow is selected.
-Btrfs filesystem device topology plans support add, replace, and remove
-operations. Removal stays potential-data-loss, while rebalance plans render
-`btrfs balance start` with optional declared data, metadata, and system filters
-from lifecycle properties.
-Btrfs subvolume rename plans render reviewed `mv -- <old> <new>` commands and
-stay offline-required so mounts, qgroups, snapshots, and send/receive jobs can
-move together without deleting the original subvolume.
-Current-topology comparison suppresses Btrfs subvolume deletion only for
-concrete absolute paths that are already absent. Present subvolumes stay
-actionable with subvolume id, generation, parent, top-level, and UUID metadata
-when available.
-bcachefs filesystem topology plans support add, replace, remove, grow,
-rebalance, and scrub operations. Device growth uses `bcachefs device resize`
-against a declared member device and desired size. Device add/remove uses
-`bcachefs device add` and `bcachefs device remove` against the mounted
-filesystem. Replacement is rendered as add replacement capacity, `bcachefs data rereplicate`, then remove the old member, keeping each data-preserving step
-visible for review. Rebalance-style plans use `bcachefs data rereplicate`, and
-scrub plans use `bcachefs scrub`.
-Btrfs filesystem label property updates render
-`btrfs filesystem label <path> <label>`. Ext filesystem label updates render
-`e2label <device> <label>` when the filesystem declaration includes a backing
-device. FAT/vfat label updates render `fatlabel <device> <label>`. NTFS label
-updates render `ntfslabel <device> <label>`. exFAT label updates render
-`exfatlabel <device> <label>`. F2FS label updates render
-`f2fslabel <device> <label>`. XFS filesystem label updates render
-`xfs_admin -L <label> <device>`. Btrfs, ext, FAT/vfat, NTFS, exFAT, and XFS
-filesystem UUID, volume-ID, or volume-serial updates render
-`btrfstune -U <uuid> <device>`, `tune2fs -U <uuid> <device>`,
-`fatlabel -i <device> <volume-id>`, `ntfslabel --new-serial=<serial> <device>`,
-`exfatlabel -i <device> <serial>`, and `xfs_admin -U <uuid> <device>` and are
-offline-required because they mutate filesystem identity used by mounts and boot
-paths. FAT volume IDs and exFAT volume serials must be 8 hex digits, and NTFS
-volume serials must be 16 hex digits; all allow optional dash grouping.
-Current-topology comparison maps declared label, UUID, FAT volume-ID, NTFS
-serial, and exFAT serial aliases onto probed node identity and filesystem
-metadata, normalizing hex identity spellings before suppressing
-already-satisfied property updates. Missing devices stay marked
-`needs-domain-implementation`, while unsupported filesystem property keys are
-classified as unsupported before execution.
-Failed filesystem apply reports can carry rollback metadata for proven-safe
-automatic replay. `rollbackOptions`/`previousOptions` on a filesystem remount
-declaration records the pre-apply mount options that a proven-safe rollback
-recipe may replay with `mount -o remount,<options> <mountpoint>`.
-`rollbackValue`/`previousValue` on a filesystem property declaration records
-the pre-apply label, UUID, volume ID, or serial that a proven-safe rollback
-recipe may replay with the filesystem-specific property tool. Filesystem grow,
-scrub, repair, and failed-check boundaries are emitted as refused/operator-only
-rollback recipes because they cannot be generically reversed without risking
-data-preserving state.
-Block-stack property declarations use the same `rollbackValue`/`previousValue`
-metadata for supported identity metadata. Swap label/UUID changes and LUKS
-label/subsystem/UUID changes can use that pre-apply value for proven-safe
-rollback replay. Device-mapper rename and LUKS open failures only become
-automatic when the mutation succeeded and verification failed, so the inverse is
-bounded to the new mapper name or opened mapper. Partition, LVM, MD RAID, loop,
-backing-file, swap deactivation, and zram generated-state mutation boundaries
-stay refused/operator-only unless a future domain recipe can prove a
-data-preserving inverse from stronger topology evidence.
-Advanced-storage declarations also use `rollbackValue`/`previousValue` for
-property rollback metadata. ZFS dataset, zvol, and pool property changes, VDO
-write-policy changes, bcache property changes, and Btrfs subvolume read-only
-property changes can use the pre-apply value for proven-safe rollback replay.
-ZFS and Btrfs rename failures only become automatic when the rename mutation
-succeeded and verification failed, so the inverse is bounded to the new object
-name or path. ZFS snapshot rollback/clone, VDO growth, bcache replacement, LVM
-cache mutation, Btrfs qgroup mutation, pool topology, and dataset/zvol
-lifecycle boundaries stay refused/operator-only without stronger topology
-evidence.
-Network-storage declarations also use `rollbackValue`/`previousValue` for
-option and property rollback metadata. NFS remount/export option changes and
-target-side LUN property changes can use the pre-apply value for proven-safe
-rollback replay. NFS mount and iSCSI login failures only become automatic when
-the mutation succeeded and verification failed, so the inverse is bounded to the
-mounted path or logged-in target/portal. NFS unmount/unexport, iSCSI logout,
-host or target LUN growth, target LUN attach/detach, remote export lifecycle,
-and LUN topology boundaries stay refused/operator-only without stronger
-initiator, target, active-consumer, and backing-store proof.
-Btrfs subvolume property updates only treat read-only aliases (`readOnly`,
-`readonly`, `ro`, `btrfs.readonly`, and `btrfs.ro`) as safe planned property
-changes. Other Btrfs subvolume property keys are classified as unsupported so
-apply policy blocks them before command execution.
-Ext filesystem grow and shrink actions also carry the declared filesystem
-`device` or `disk` into `resize2fs` and `e2fsck` command plans. Mountpoint-only
-ext declarations keep source-device mutations marked unresolved until the block
-device is explicitly selected. F2FS grow actions render `resize.f2fs <device>`
-or `resize.f2fs -t <sectors> <device>` when a target sector count is declared,
-and keep mountpoint-only plans unresolved until a source device is selected.
-Filesystem check and repair actions carry the declared `device` or `disk` into
-read-only and mutating maintenance command plans. Ext uses `e2fsck`, XFS uses
-`xfs_repair`, Btrfs uses `btrfs check`, FAT/vfat uses `fsck.fat`, exFAT uses
-`fsck.exfat`, F2FS uses `fsck.f2fs`, bcachefs uses `bcachefs fsck`, and NTFS
-uses `ntfsfix`; repair variants remain offline-required and should be reviewed
-after a read-only check. NTFS repair is limited Linux-side remediation and not a
-replacement for Windows `chkdsk`.
-Btrfs scrub actions use the mounted path and render `btrfs scrub start -B`;
-bcachefs scrub actions render `bcachefs scrub`; ZFS pool scrub actions render
-`zpool scrub`.
-Filesystem trim actions render `fstrim -v` against the mounted target and remain
-online maintenance operations.
-`disk-nix apply --script-out <path>` writes those allowed command and
-verification plans as a reviewable bash script after policy validation passes
-and graph dependency conflict checks are clean. Commands with unresolved inputs
-remain commented as not ready.
-`disk-nix apply --report-out <path>` writes the JSON report before returning a
-blocked-policy, not-ready, or failed-execution error, preserving the decision
-record for automation and review.
-`disk-nix apply --receipt-out <path>` writes an audit receipt that wraps the
-same report with receipt version, command name, spec path, probe-current flag,
-execute flag, and generation timestamp. This is the preferred artifact for
-apply journals and recovery handoff because it preserves how the report was
-produced.
-`disk-nix validate --spec <path>` emits the same dry-run report but treats
-blocked policy as a successful command result, making it the better fit for
-CI, preflight checks, and NixOS validation paths that need to inspect blocked
-details. `validate --report-out <path>` writes the same report to disk, while
-`validate --receipt-out <path>` writes a receipt with `command = "validate"`
-and `executeRequested = false`.
+Apply reports include `blockedSummary` counters for offline-required, destructive, potential-data-loss, and unsupported blocked actions in addition to the detailed blocked action list. When policy allows an action, the report also includes a `commandSummary` plus a `commandPlan` with planned command argv, mutation markers, manual-review flags, readiness, unresolved inputs, provider capability contracts for generic target-side LUN handoffs, and notes.
+
+If `--probe-current` is set, the report also includes the same `topologyComparison` emitted by `plan`, including any safe no-op actions suppressed before command rendering.
+
+It also includes a `verificationSummary` plus a `verificationPlan` with read-only post-apply commands and checks for the relevant storage domain. Generic target-side LUN provider verification combines the provider-specific inventory placeholder with executable host probes for SCSI path visibility, multipath grouping, and modeled consumer state.
+
+Executed reports also include `executionResults` with command phase, argv, success, exit status, stdout, and stderr for each command that ran. Blocked, non-ready, and failed execution reports include structured `recoveryActions`. Failed risky actions keep the generic current-state capture and preserve-recovery-point advice, then add domain-specific recovery, `roll-forward-review`, and, where read-only preconditions are available, `rollback-review` entries.
+
+Roll-forward review starts with a manual-only
+`disk-nix apply --spec <spec> --probe-current --json` dry run against the current
+graph.
+
+It adds domain inspection plus post-apply verification commands when they were
+rendered.
+
+Rollback review is intentionally read-only and covers concrete domains such as:
+
+- ZFS rollback points and ZFS/Btrfs snapshot lifecycle changes
+- LVM snapshot merges, VG device migration, and LVM VG/volume/thin/PV changes
+- cache lifecycle changes
+- ZFS pool, dataset, and zvol lifecycle changes
+- swap signature and activation changes
+- filesystem lifecycle updates
+- disk and partition-table lifecycle changes
+- LUKS mapper, header, keyslot, and token changes
+- MD RAID member replacement
+- NVMe namespace changes
+- iSCSI session login/logout
+- VDO lifecycle changes
+- multipath map changes
+- loop-device, backing-file, and device-mapper map changes
+- NFS export and client mount changes
+- host-side LUN detach
+
+it does not run rollback commands automatically. Cache command plans include bcache-aware sysfs updates for existing cache-set attachment, cache-mode property changes, `bcache.set-*` cache-set tuning updates, read-only rescans, dirty-data checks, and replacement steps that remain non-ready until the replacement cache device, concrete `/dev/bcache*` target, and new cache-set UUID are declared.
+
+Once `cacheSetUuid` is declared, replacement renders `make-bcache --cset-uuid`, detach, and attach steps without guessing generated identity. Current-topology comparison maps declared bcache `cacheMode`/`cachePolicy` aliases and cache-set tuning properties onto `bcache.cache-mode`, `bcache.cache-policy`, and `bcache.set-*` metadata, with cache-mode value normalization for dashed spellings. bcache device sysfs operations require a concrete `/dev/bcache*` target;
+
+cache-set sysfs property updates require `cacheSetUuid`, `cache-set-uuid`, or equivalent metadata so the plan can write `/sys/fs/bcache/<set>/<field>`. Logical cache declaration names become ready when `target`, `path`, or `device` declares the backing bcache device path. Current-topology comparison keeps logical cache names actionable as missing unless the graph can match them, so a logical name is not treated as absent proof for detach.
+
+Loop-device command plans require a `/dev/loop*` target for grow, rescan, and detach operations. Logical loop declaration names can supply that target with `target` or `path`; `device` remains the backing file or block device for create plans. LVM cache command plans include read-only `lvs` status refresh for `lvmCaches.<origin>.operation = "rescan"` before any later mode, detach, or replacement work.
+
+NFS export command plans use `exportfs -i -o <options> <client>:<path>` for reviewed `operation = "export"` and option-update operations and read-only `exportfs -v` plus graph inspection for `operation = "rescan"`, and `exportfs -u <client>:<path>` for reviewed `operation = "unexport"` operations, with unresolved-input markers when clients, options, or the local export path are missing.
+
+Logical export names can declare the local export path through `target` or `path`. Current-topology comparison suppresses export actions only when the probed export client and requested option subset already match, and it keeps absent exports actionable as planned export work. It suppresses unexport actions only when the export is already absent.
+
+Published unexport targets remain actionable with a warning.
+
+Legacy export `create` and `destroy` map to the same commands.
+
+NFS client mount command plans use:
+
+- `mount -t <nfs|nfs4> -o <options> <source> <mountpoint>` for reviewed mounts
+- `mount -o remount,<options> <mountpoint>` for option updates
+- read-only `findmnt`, `nfsstat -m`, and graph inspection for rescans
+- `umount <mountpoint>` for reviewed unmounts
+
+Legacy NFS mount `create` and `destroy` map to the same mount/unmount command plans. Missing sources or concrete mountpoint paths keep the command plan non-ready. Logical NFS mount names can declare the local mount path through `mountpoint`. With current-topology comparison, absent NFS mountpoints remain actionable as mount-required work.
+
+Disk and partition `operation = "rescan"` actions are online refreshes that render `partprobe <disk>` plus `blockdev --rereadpt <disk>` and verify with `parted -lm <disk>`. They do not edit partition geometry; use `grow` or `create` when the table itself must change. Partition `create` actions reconcile existing matched partition targets before command rendering.
+
+Existing partitions suppress create when any declared desired size matches; different or unknown sizes and matched non-partition nodes stay actionable with warnings and data-preservation guidance.
+
+Partition `grow` actions reconcile parseable byte-sized `end` values against the probed partition size when current-topology comparison is enabled. Already satisfied numeric growth is suppressed before command rendering, while percentage geometry such as `100%` remains actionable because it depends on the current table layout and free-space review.
+
+Filesystem `operation = "remount"` actions are online, non-destructive updates that render `mount -o remount,<options> <mountpoint>`. Missing concrete mountpoints remain non-ready, and long-lived options should be kept in the matching NixOS `fileSystems` entry. Filesystem `operation = "rescan"` actions are online, read-only refreshes that render `findmnt --json <mountpoint>` and `disk-nix inspect <mountpoint>`.
+
+They refresh modeled mount and graph state without mounting, remounting, unmounting, formatting, or checking filesystem metadata. Missing concrete mountpoints remain non-ready. Filesystem `operation = "mount"` and `operation = "unmount"` actions render reviewable `mount [-t <fsType>] [-o <options>] <device> <mountpoint>` and `umount <mountpoint>` command plans from the same `fileSystems`-compatible declarations.
+
+Mounts are online namespace changes; unmounts are offline-gated, non-destructive operations because they can interrupt services, sessions, bind mounts, and automount units. Missing devices or concrete mountpoint paths keep the command plan non-ready. With current-topology comparison, absent mountpoints for mount actions remain actionable as mount-required work.
+
+LVM logical volume command plans use `lvcreate --size <size> --name <lv> <vg>` for `volume` create operations and `lvremove --yes <vg>/<lv>` only after destructive policy gates allow removal.
+
+LV grow and remove commands require canonical `vg/lv` targets from the declaration key, `target`, or `path`. Current-topology comparison suppresses create actions only when the matched LVM logical volume already exists and any declared desired size exactly matches;
+
+existing LVs with different or unknown size stay planned with warnings that point to grow or shrink lifecycle instead of recreate.
+
+LVM thin-pool command plans require canonical `vg/pool` targets for grow and remove operations, supplied by the declaration key, `target`, or `path`.
+
+Current-topology comparison applies the same create reconciliation to thin-pools, but only when the matched node is an LVM thin pool.
+
+LVM logical volume and thin-pool rename reconciliation suppresses already-renamed objects when the old `vg/lv` or `vg/pool` source is absent and the new target exists; short rename targets are resolved within the original volume group. LVM volume group grow and add-device command plans use `vgextend <vg> <pv>` when a physical volume device is declared.
+
+Replacement plans render `vgextend <vg> <new-pv>`, `pvmove <old-pv> <new-pv>`, and `vgreduce <vg> <old-pv>` when both PVs are explicit. Device topology operations remain unresolved until the device to add, the source device, the replacement device, or the device to remove is declared explicitly.
+
+Volume group `operation = "rescan"` refreshes LVM metadata with `pvscan --cache`, `vgscan`, and `vgchange --refresh <vg>` without recreating the VG.
+
+Volume-group rename reconciliation suppresses already-renamed groups when the old VG name is absent and the new VG exists. LVM physical volume command plans use `pvcreate`, `pvresize`, `pvscan --cache`, and `pvremove` for `physicalVolumes` lifecycle declarations. Create, grow, and remove plans require a concrete path-shaped declaration key, `target`, `path`, or `device`;
+
+rescan can refresh all visible PV metadata when no path-shaped target is declared. Current-topology comparison suppresses `operation = "create"` only when the matched target already has LVM PV metadata; matched non-PV devices, duplicate PVs, and missing PVs remain planned with warnings so destructive `pvcreate` is reviewed explicitly.
+
+PV removal advice recommends `pvmove` plus `vgreduce` before `pvremove`. LVM logical volume and thin-pool command plans require canonical `vg/lv` or `vg/pool` targets. Logical declaration names can provide those targets through `target` or `path` so command planning stays executable without encoding the native LVM name in the Nix attribute key.
+
+LVM volume group create comparison suppresses `operation = "create"` when the VG already exists without exported, partial, or missing-PV metadata;
+
+existing exported, partial, or missing-PV VGs stay planned with warnings instead of silently treating a destructive `vgcreate` as safe. Import/export comparison uses `lvm.vg-exported`:
+
+already visible volume groups without an exported marker suppress import actions, already-exported volume groups suppress export actions, and opposite-state volume groups remain planned with a warning.
+
+LUKS keyslot and token command plans use explicit `add-key`, `remove-key`, `import-token`, and `remove-token` lifecycle declarations for `cryptsetup luksAddKey`, `luksKillSlot`, `cryptsetup token import`, and `cryptsetup token remove`. Legacy preserved `create` and `destroy` map to the same access-material command plans. `luksChangeKey` is used for key-file property updates, and keyslot `priority` updates render `cryptsetup config <device> --key-slot <slot> --priority <prefer|normal|ignore>`.
+
+Executable keyslot add/change plans require a LUKS backing device and replacement key file; keyslot priority updates require a LUKS backing device, slot number, and one of `prefer`, `normal`, or `ignore`; token imports require a token JSON file. Removal requires both the device and keyslot number or token id, and remains blocked by the potential-data-loss policy.
+
+Logical keyslot and token names can declare concrete slot/token ids with `keySlot`, `key-slot`, `slot`, `tokenId`, `token-id`, or `token`. With current-topology probing, already-absent keyslots/tokens are suppressed only after the backing container is matched and the specific id is missing from probed LUKS header metadata; still-present entries stay actionable.
+
+Keyslot priority property actions are suppressed when the probed keyslot already has the requested priority. LVM cache command plans use `lvconvert --type cache`, `lvconvert --uncache`, and `lvchange --cachemode` or `--cachepolicy` for `lvmCaches` lifecycle declarations. Executable attach plans require an origin `vg/lv` target and a cache-pool LV through `device` or `addDevices`.
+
+With current-topology probing, detach actions are suppressed only after the origin LV is matched and no cache/writecache metadata remains; still-cached origins remain planned. NVMe namespace command plans use `nvme create-ns`, `nvme attach-ns`, explicit `operation = "rescan"` plans through `nvme ns-rescan`, `nvme detach-ns`, and `nvme delete-ns`.
+
+Create and delete are destructive controller namespace-management operations. Standalone attach is online; standalone detach is offline-required and preserves the namespace. Rescan is online and refreshes host namespace inventory plus subsystem path state through `nvme list-subsys --output-format=json`. Grow is offline-required and means host namespace and subsystem path rescan after controller-side resize or replacement.
+
+Executable create plans require a `/dev/nvme*` controller path from the declaration key, `target`, `path`, or `device`, plus `desiredSize`; attach, detach, and delete flows require `namespaceId` plus `controllers` when attachment state is changed. Use `target` or `path` for the controller and `device` for the host-visible namespace path when the same declaration should also reconcile topology visibility.
+
+Swap grow, format, label, UUID, priority, and rescan command plans require a path-shaped swap target from the declaration key, `target`, `path`, or `device`. Label and UUID updates render `swaplabel --label` and `swaplabel --uuid`; priority updates render `swapoff` followed by `swapon --priority`; `operation = "rescan"` renders read-only `swapon --show`, `blkid`, and graph inspection before any later grow or identity change.
+
+Current-topology comparison maps declared swap label, UUID, and priority properties onto probed identity, signature, and active swap metadata before suppressing already-satisfied property updates. It warns when a swap format target already has swap metadata or matches another node kind, while keeping the destructive `mkswap` action reviewable.
+
+MD RAID assemble, stop, create, grow, member add, replacement, and removal command plans require an explicit array path such as `/dev/md/root`; assemble also requires explicit reviewed member devices. MD create reconciliation suppresses only already clean active arrays and keeps degraded, inactive, or wrong-kind matches actionable with warnings.
+
+MD stop reconciliation suppresses absent or inactive arrays and keeps active, unknown-state, or wrong-kind matches actionable with warnings. MD membership reconciliation suppresses already-attached adds, already-absent removals, and completed replacements where the old member is gone and the new member is attached. MD RAID rescan plans render read-only `mdadm --detail --scan`, `mdadm --examine --scan`, and `/proc/mdstat` inventory checks without assembling arrays.
+
+Current-topology comparison suppresses assemble actions only when the probed array has `md.state` indicating an active or clean array and both `md.degraded-devices` and `md.failed-devices` are zero; degraded or failed arrays stay planned and emit a warning. Loop-device refresh, rescan, and detach command plans require `/dev/loop*` targets.
+
+Rescan reads `losetup --json --list` and graph state without changing capacity; grow uses `losetup -c` after backing size changes. Multipath map growth and path replacement preflight require a concrete map target such as `mpatha` or `/dev/mapper/mpatha`, either as the declaration name or through explicit `target`/`device` fields.
+
+Growth and rescan plans capture host-visible SCSI path transport and size with `lsscsi -t -s` before map reload or resize. Replacement renders separate path add and delete steps so each command can be reviewed independently. ZFS pool device removal renders reviewed `zpool remove <pool> <device>` steps when the pool layout supports evacuation.
+
+LVM volume group device removal renders reviewed `pvmove <pv>` then `vgreduce <vg> <pv>` steps so allocated extents are evacuated before the physical volume is reduced. These remain potential-data-loss intents unless a safer explicit workflow is selected. Btrfs filesystem device topology plans support add, replace, and remove operations.
+
+Removal stays potential-data-loss, while rebalance plans render `btrfs balance start` with optional declared data, metadata, and system filters from lifecycle properties. Btrfs subvolume rename plans render reviewed `mv -- <old> <new>` commands and stay offline-required so mounts, qgroups, snapshots, and send/receive jobs can move together without deleting the original subvolume.
+
+Current-topology comparison suppresses Btrfs subvolume deletion only for concrete absolute paths that are already absent. Present subvolumes stay actionable with subvolume id, generation, parent, top-level, and UUID metadata when available. bcachefs filesystem topology plans support add, replace, remove, grow, rebalance, and scrub operations. Device growth uses `bcachefs device resize` against a declared member device and desired size.
+
+Device add/remove uses `bcachefs device add` and `bcachefs device remove` against the mounted filesystem. Replacement is rendered as add replacement capacity, `bcachefs data rereplicate`, then remove the old member, keeping each data-preserving step visible for review. Rebalance-style plans use `bcachefs data rereplicate`, and scrub plans use `bcachefs scrub`.
+
+Btrfs filesystem label property updates render `btrfs filesystem label <path> <label>`. Ext filesystem label updates render `e2label <device> <label>` when the filesystem declaration includes a backing device. FAT/vfat label updates render `fatlabel <device> <label>`. NTFS label updates render `ntfslabel <device> <label>`. exFAT label updates render `exfatlabel <device> <label>`.
+
+F2FS label updates render `f2fslabel <device> <label>`.
+
+XFS filesystem label updates render `xfs_admin -L <label> <device>`.
+
+Filesystem identity updates are offline-required because they mutate identities
+used by mounts and boot paths.
+
+Rendered tools include `btrfstune -U`, `tune2fs -U`, `fatlabel -i`,
+`ntfslabel --new-serial`, `exfatlabel -i`, and `xfs_admin -U`.
+
+FAT volume IDs and exFAT volume serials must be 8 hex digits, and NTFS volume serials must be 16 hex digits; all allow optional dash grouping. Current-topology comparison maps declared label, UUID, FAT volume-ID, NTFS serial, and exFAT serial aliases onto probed node identity and filesystem metadata, normalizing hex identity spellings before suppressing already-satisfied property updates.
+
+Missing devices stay marked `needs-domain-implementation`, while unsupported filesystem property keys are classified as unsupported before execution. Failed filesystem apply reports can carry rollback metadata for proven-safe automatic replay. `rollbackOptions`/`previousOptions` on a filesystem remount declaration records the pre-apply mount options that a proven-safe rollback recipe may replay with `mount -o remount,<options> <mountpoint>`.
+
+`rollbackValue`/`previousValue` on a filesystem property declaration records the pre-apply label, UUID, volume ID, or serial that a proven-safe rollback recipe may replay with the filesystem-specific property tool. Filesystem grow, scrub, repair, and failed-check boundaries are emitted as refused/operator-only rollback recipes because they cannot be generically reversed without risking data-preserving state.
+
+Block-stack property declarations use the same `rollbackValue`/`previousValue` metadata for supported identity metadata. Swap label/UUID changes and LUKS label/subsystem/UUID changes can use that pre-apply value for proven-safe rollback replay. Device-mapper rename and LUKS open failures only become automatic when the mutation succeeded and verification failed, so the inverse is bounded to the new mapper name or opened mapper.
+
+Partition, LVM, MD RAID, loop, backing-file, swap deactivation, and zram generated-state mutation boundaries stay refused/operator-only unless a future domain recipe can prove a data-preserving inverse from stronger topology evidence.
+
+Advanced-storage declarations also use `rollbackValue`/`previousValue` for property rollback metadata. ZFS dataset, zvol, and pool property changes, VDO write-policy changes, bcache property changes, and Btrfs subvolume read-only property changes can use the pre-apply value for proven-safe rollback replay.
+
+ZFS and Btrfs rename failures only become automatic when the rename mutation succeeded and verification failed, so the inverse is bounded to the new object name or path. ZFS snapshot rollback/clone, VDO growth, bcache replacement, LVM cache mutation, Btrfs qgroup mutation, pool topology, and dataset/zvol lifecycle boundaries stay refused/operator-only without stronger topology evidence.
+
+Network-storage declarations also use `rollbackValue`/`previousValue` for option and property rollback metadata. NFS remount/export option changes and target-side LUN property changes can use the pre-apply value for proven-safe rollback replay. NFS mount and iSCSI login failures only become automatic when the mutation succeeded and verification failed, so the inverse is bounded to the mounted path or logged-in target/portal.
+
+NFS unmount/unexport, iSCSI logout, host or target LUN growth, target LUN attach/detach, remote export lifecycle, and LUN topology boundaries stay refused/operator-only without stronger initiator, target, active-consumer, and backing-store proof. Btrfs subvolume property updates only treat read-only aliases (`readOnly`, `readonly`, `ro`, `btrfs.readonly`, and `btrfs.ro`) as safe planned property changes.
+
+Other Btrfs subvolume property keys are classified as unsupported so apply policy blocks them before command execution. Ext filesystem grow and shrink actions also carry the declared filesystem `device` or `disk` into `resize2fs` and `e2fsck` command plans. Mountpoint-only ext declarations keep source-device mutations marked unresolved until the block device is explicitly selected.
+
+F2FS grow actions render `resize.f2fs <device>` or `resize.f2fs -t <sectors> <device>` when a target sector count is declared, and keep mountpoint-only plans unresolved until a source device is selected. Filesystem check and repair actions carry the declared `device` or `disk` into read-only and mutating maintenance command plans.
+
+Ext uses `e2fsck`, XFS uses `xfs_repair`, Btrfs uses `btrfs check`, FAT/vfat uses `fsck.fat`, exFAT uses `fsck.exfat`, F2FS uses `fsck.f2fs`, bcachefs uses `bcachefs fsck`, and NTFS uses `ntfsfix`; repair variants remain offline-required and should be reviewed after a read-only check. NTFS repair is limited Linux-side remediation and not a replacement for Windows `chkdsk`.
+
+Btrfs scrub actions use the mounted path and render `btrfs scrub start -B`; bcachefs scrub actions render `bcachefs scrub`; ZFS pool scrub actions render `zpool scrub`.
+
+Filesystem trim actions render `fstrim -v` against the mounted target and remain online maintenance operations. `disk-nix apply --script-out <path>` writes those allowed command and verification plans as a reviewable bash script after policy validation passes and graph dependency conflict checks are clean.
+
+Commands with unresolved inputs remain commented as not ready. `disk-nix apply --report-out <path>` writes the JSON report before returning a blocked-policy, not-ready, or failed-execution error, preserving the decision record for automation and review. `disk-nix apply --receipt-out <path>` writes an audit receipt that wraps the same report with receipt version, command name, spec path, probe-current flag, execute flag, and generation timestamp.
+
+This is the preferred artifact for apply journals and recovery handoff because it preserves how the report was produced. `disk-nix validate --spec <path>` emits the same dry-run report but treats blocked policy as a successful command result, making it the better fit for CI, preflight checks, and NixOS validation paths that need to inspect blocked details.
+
+`validate --report-out <path>` writes the same report to disk, while `validate --receipt-out <path>` writes a receipt with `command = "validate"` and `executeRequested = false`.
 
 Policy fields currently supported:
 
@@ -1210,21 +932,8 @@ Policy fields currently supported:
 - `confirmation`
 - `requireConfirmationFile`
 
-The default policy allows online grow and property-change intents, but blocks
-offline-required, destructive, irreversible, format, shrink, and
-potential-data-loss actions. `allowPotentialDataLoss=true` is the explicit
-policy override for reviewed rollback, shrink, device removal, and similar
-actions.
-Unsupported actions are always blocked, even if permissive destructive or
-shrink policy flags are enabled.
-`allowDeviceReplacement=false` blocks device add, replacement, and removal
-actions. `allowRebalance=false` blocks rebalance actions. `requireBackup=true`
-requires `backupVerified=true` for destructive or potential-data-loss actions.
-`requireConfirmation=true` requires `confirmation=true` for high-risk or
-offline actions. `requireConfirmationFile` points at an operator-controlled
-file; the CLI treats it as confirmed only when the file contains a standalone
-line equal to `disk-nix confirm`, and otherwise leaves the action blocked.
-`--execute` requires policy validation and a fully ready command plan. It runs
-planned commands sequentially, stops on the first command failure, records
-stdout, stderr, and exit status, and only runs verification commands after the
-planned command phase succeeds.
+The default policy allows online grow and property-change intents, but blocks offline-required, destructive, irreversible, format, shrink, and potential-data-loss actions. `allowPotentialDataLoss=true` is the explicit policy override for reviewed rollback, shrink, device removal, and similar actions. Unsupported actions are always blocked, even if permissive destructive or shrink policy flags are enabled.
+
+`allowDeviceReplacement=false` blocks device add, replacement, and removal actions. `allowRebalance=false` blocks rebalance actions. `requireBackup=true` requires `backupVerified=true` for destructive or potential-data-loss actions. `requireConfirmation=true` requires `confirmation=true` for high-risk or offline actions. `requireConfirmationFile` points at an operator-controlled file; the CLI treats it as confirmed only when the file contains a standalone line equal to `disk-nix confirm`, and otherwise leaves the action blocked.
+
+`--execute` requires policy validation and a fully ready command plan. It runs planned commands sequentially, stops on the first command failure, records stdout, stderr, and exit status, and only runs verification commands after the planned command phase succeeds.

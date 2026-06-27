@@ -68,14 +68,9 @@ Every adapter reports one of:
 - `partial`
 - `failed`
 
-Adapter status is visible in `disk-nix topology` and machine-readable through
-`disk-nix probe-status --json`, so callers can distinguish a complete topology
-from one that is degraded by missing tools or insufficient privileges. Probe
-reports also include a structured category such as `missing-tool`,
-`permission-denied`, `command-failed`, `parse-failed`, or `inaccessible-data`
-plus adapter-specific remediation hints for tools/packages, privilege surfaces,
-kernel/service data, and fixture capture, so automation can choose a remediation
-path without scraping free-form messages.
+Adapter status is visible in `disk-nix topology` and machine-readable through `disk-nix probe-status --json`, so callers can distinguish a complete topology from one that is degraded by missing tools or insufficient privileges.
+
+Probe reports also include a structured category such as `missing-tool`, `permission-denied`, `command-failed`, `parse-failed`, or `inaccessible-data` plus adapter-specific remediation hints for tools/packages, privilege surfaces, kernel/service data, and fixture capture, so automation can choose a remediation path without scraping free-form messages.
 
 ## Safety model
 

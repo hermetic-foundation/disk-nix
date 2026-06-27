@@ -1,11 +1,8 @@
 # Feature status
 
-`disk-nix` is no longer just a design sketch. The repository contains a working
-Rust CLI, storage graph model, probe layer, lifecycle planner, guarded apply
-renderer/executor, and NixOS module integration. It is still not feature
-complete as a full disko replacement because the remaining work is mostly about
-hardening real mutation paths, expanding integration coverage, and proving
-behavior across real storage stacks.
+`disk-nix` is no longer just a design sketch. The repository contains a working Rust CLI, storage graph model, probe layer, lifecycle planner, guarded apply renderer/executor, and NixOS module integration.
+
+It is still not feature complete as a full disko replacement because the remaining work is mostly about hardening real mutation paths, expanding integration coverage, and proving behavior across real storage stacks.
 
 ## Implemented foundation
 
@@ -265,109 +262,76 @@ behavior across real storage stacks.
 
 Probe adapters normalize storage data from `lsblk`, `blkid`, `udevadm`,
 `findmnt`, `parted`, `smartctl`, filesystem-specific metadata tools, Btrfs,
-bcachefs, ZFS, LVM, VDO, device-mapper, LUKS, loop, zram, SCSI, iSCSI, NFS, MD
-RAID, multipath, and NVMe tooling. Probe fixture coverage includes isolated
-adapter fixtures and a cross-adapter shared-storage regression fixture that
-combines iSCSI session/node data, host-visible SCSI LUNs, and multipath path
-state in one normalized graph. The iSCSI fixture coverage also includes
-bracketed IPv6 portals, concise open-iscsi node records, attached LUN disks,
-CHAP secret redaction checks, and iSER/RDMA session transport over bracketed
-IPv6 portals with InfiniBand netdev metadata, plus multi-portal sessions,
-mutual CHAP, discovery authentication redaction, replacement LUN identity
-changes, and logout/login churn states. Fixture coverage also includes a
-merged degraded-MD-with-LUKS stack covering recovering array state, failed member
-metadata, active encrypted mapper status, backing edges, and LUKS header
-metadata, plus a clustered LVM over NVMe-oF fixture covering shared/clustered
-VG metadata, sanlock lock hints, remote LV activity, NVMe fabrics controller
-paths, ANA state, and namespace-to-controller edges, plus a clustered LVM
-DLM/lvmlockd failure fixture covering shared VG lock failure, missing PV state,
-remote LV activity, split-brain protection refusal, and lock-manager reason
-metadata, plus a Fibre Channel
-multipath fixture covering FC transport WWPN pairs, SCSI unit names, ALUA path
-groups, active/standby path state, failed path metadata, multipath backing edges,
-additional adapters, zoning-style fabric/WWPN layouts, optimized and
-non-optimized ALUA paths, and blocked failed path evidence, plus an NVMe/TCP multipath
-fixture covering native NVMe namespace paths,
-live and reconnecting fabrics controllers, ANA optimized/inaccessible states,
-failed path metadata, and multipath backing edges, plus a mixed NVMe-oF fixture
-covering RoCE/RDMA and Fibre Channel transport, shared namespace UUID/NGUID
-identity, ANA transition state, controller loss/reconnect evidence, and native
-multipath backing edges, plus an NFS server/client fixture
-covering merged `findmnt`, `nfsstat`, and `exportfs` state, negotiated Kerberos
-mount options, NFS export client policy, IPv6 export selectors, mount usage,
-source-to-mount edges, NFSv4 referrals, pNFS/flexfiles layout hints, export
-reload drift, client remount drift, and Kerberos policy variants, plus a SAS
-enclosure fixture
-covering non-block SES enclosure records,
-enclosure identifiers, SAS addresses, attached disk LUN backing edges, SES
-failure attributes, vendor LUN metadata, and array-backed multipath identity
-drift, plus
-an LVM-backed VDO fixture that correlates native VDO status, vdostats usage,
-verbose VDO block counters, LVM VDO LV metadata, VDO segment policy, and
-backing-pool dependency edges, plus a stressed VDO fixture covering
-physical-space pressure, index rebuild state, dedupe/compression policy drift,
-and start/stop failure metadata. See
-[storage-scope.md](storage-scope.md) for the
-detailed field-level coverage.
+bcachefs, ZFS, LVM, VDO, device-mapper, LUKS, loop, zram, SCSI, iSCSI, NFS,
+MD RAID, multipath, and NVMe tooling.
+
+Probe fixture coverage includes:
+
+- isolated adapter fixtures
+- a cross-adapter shared-storage regression fixture combining iSCSI session/node
+  data, host-visible SCSI LUNs, and multipath path state
+- bracketed IPv6 iSCSI portals, concise open-iscsi node records, attached LUN
+  disks, CHAP secret redaction, iSER/RDMA session transport, multi-portal
+  sessions, mutual CHAP, discovery authentication redaction, replacement LUN
+  identity changes, and logout/login churn
+- a degraded MD-with-LUKS stack covering recovering arrays, failed members,
+  active encrypted mapper status, backing edges, and LUKS header metadata
+- clustered LVM over NVMe-oF, including shared VG metadata, sanlock hints,
+  remote LV activity, NVMe fabrics controller paths, ANA state, and namespace
+  edges
+- a DLM/lvmlockd failure fixture, including lock failure, missing PVs, remote LV
+  activity, split-brain refusal, and lock-manager reason metadata
+- Fibre Channel multipath state, including WWPN pairs, SCSI unit names, ALUA
+  path groups, active/standby paths, failed paths, backing edges,
+  zoning-style fabric/WWPN layouts, and blocked failed path evidence
+- NVMe/TCP and mixed NVMe-oF fixtures covering native NVMe namespace paths,
+  reconnecting controllers, RoCE/RDMA, Fibre Channel, shared namespace
+  UUID/NGUID identity, ANA transition state, controller loss, and native
+  multipath backing edges
+- an NFS server/client fixture covering merged `findmnt`, `nfsstat`, and
+  `exportfs` output, Kerberos options, client policy, IPv6 selectors, usage,
+  source edges, NFSv4 referrals, pNFS/flexfiles hints, reload drift, and
+  client remount drift
+- SAS enclosure state covering non-block SES enclosure records, enclosure
+  identifiers, SAS addresses, attached disk LUN backing edges, SES failures,
+  vendor LUN metadata, and array-backed multipath identity drift
+- an LVM-backed VDO fixture and stressed VDO fixture covering native VDO status,
+  vdostats, verbose block counters, LVM segment metadata, physical-space
+  pressure, index rebuild state, policy drift, and start/stop failure metadata
+
+See [storage-scope.md](storage-scope.md) for detailed field-level coverage.
+
 See [feature-checklist.md](feature-checklist.md) for a checklist view of
 finished, partial, and desired features.
+
 See [operator-runbooks.md](operator-runbooks.md) for high-risk replacement,
 rollback, recovery, degraded-array, and shared-storage workflows.
 
 ## Implemented lifecycle coverage
 
-Lifecycle planning and command rendering cover creation, growth, shrink where
-the storage domain supports it, checks, repair, scrub, trim, remount, mount,
-unmount, import, export, login, logout, attach, detach, open, close, start,
-stop, assemble, activate, deactivate, add/remove/replace device, add/remove
-LUKS keys and tokens, property changes, rename, clone, promote, rollback, and
-destroy across the supported domains where those operations make sense.
-File-backed storage origins include guarded backing-file creation that refuses
-to overwrite an existing path before rendering sparse-file growth.
+Lifecycle planning and command rendering cover creation, growth, shrink where the storage domain supports it, checks, repair, scrub, trim, remount, mount, unmount, import, export, login, logout, attach, detach, open, close, start, stop, assemble, activate, deactivate, add/remove/replace device, add/remove LUKS keys and tokens, property changes, rename, clone, promote, rollback, and destroy across the supported domains where those operations make sense.
 
-Unsupported or unsafe requests are kept explicit. Examples include XFS shrink,
-unsupported filesystem or Btrfs subvolume properties, unsupported VDO property
-values, target-side LUN providers without concrete adapters, and actions whose
-concrete identity or required input is not declared. These produce
-machine-readable blocked actions, manual-review guidance, or non-ready command
-plans instead of guessing. Target-side LUN provisioning is modeled through
-`targetLuns`;
-`provider = "lio"` now renders concrete Linux LIO `targetcli` inventory,
-backstore, target, LUN mapping, ACL, target removal, reviewed backstore removal,
-and persistence commands; grow updates validate the reviewed backing object with
-`blockdev --getsize64`, refresh target/LUN inventory, persist target state, and
-verify host-visible SCSI, multipath, and modeled graph state. When a reviewed
-LIO grow declaration sets `backstoreType = "fileio"`, disk-nix emits a
-provider-specific `truncate --size <desiredSize> <source>` resize step before
-target refresh, inspects `/backstores/fileio/...`, and validates the grown file
-with `stat --format=%s`. Property updates include native target/backstore
-inventory and concrete reviewed attribute updates. `provider = "tgt"` or
-`"tgtadm"` renders concrete Linux tgt `tgtadm` inventory, target
-creation/removal, logical-unit creation/removal, and initiator-address
-bind/unbind commands when the reviewed `targetId`/`tid`, `lun`, backing object,
-and ACL values are declared; grow/property updates include native target
-inventory, and grow updates validate backing capacity, refresh the exported
-logical unit with `tgtadm --mode logicalunit --op update --params online=1`,
-capture persistent-config state with `tgt-admin --dump`, and verify
-host-visible SCSI, multipath, and modeled graph state. `provider = "scst"` or `"scstadmin"` renders
-concrete SCST `scstadmin` inventory, backing-device open/close, target,
-initiator group, initiator, LUN map/unmap, target enable/removal, `resync_dev`,
-LUN attribute, and persistence commands when the reviewed target IQN, backing
-object, LUN, optional group, and initiators are declared. Other providers still
-use provider-labeled handoff commands and verification placeholders until
-concrete adapters are added, but those handoffs now carry a
-`providerCapabilities` contract naming the required create, grow, map, unmap,
-remove, rescan, property, persistence, verification, and refusal behavior that
-an external adapter must implement. Array-backed provider handoffs also carry
-declared `vendor`, `arrayId`, `storagePool`, `volumeId`, `snapshotId`,
-`cloneSource`, and `maskingGroup`/`hostGroup`/`igroup` model fields for vendor
-or site-specific LUN identity, capacity placement, mapping, masking, and
-snapshot or clone handoff data. Generic target LUN verification plans also
-include executable `lsscsi -t -s`, `multipath -ll`, and
-`disk-nix inspect <target> --json` probes so provider-specific placeholders are
-paired with host-visible path, multipath, and modeled-consumer checks.
+File-backed storage origins include guarded backing-file creation that refuses to overwrite an existing path before rendering sparse-file growth.
 
-## Remaining for feature complete
+Unsupported or unsafe requests are kept explicit. Examples include XFS shrink, unsupported filesystem or Btrfs subvolume properties, unsupported VDO property values, target-side LUN providers without concrete adapters, and actions whose concrete identity or required input is not declared. These produce machine-readable blocked actions, manual-review guidance, or non-ready command plans instead of guessing.
+
+Target-side LUN provisioning is modeled through `targetLuns`; `provider = "lio"` now renders concrete Linux LIO `targetcli` inventory, backstore, target, LUN mapping, ACL, target removal, reviewed backstore removal, and persistence commands; grow updates validate the reviewed backing object with `blockdev --getsize64`, refresh target/LUN inventory, persist target state, and verify host-visible SCSI, multipath, and modeled graph state.
+
+When a reviewed LIO grow declaration sets `backstoreType = "fileio"`, disk-nix emits a provider-specific `truncate --size <desiredSize> <source>` resize step before target refresh, inspects `/backstores/fileio/...`, and validates the grown file with `stat --format=%s`.
+
+Property updates include native target/backstore inventory and concrete reviewed attribute updates. `provider = "tgt"` or `"tgtadm"` renders concrete Linux tgt `tgtadm` inventory, target creation/removal, logical-unit creation/removal, and initiator-address bind/unbind commands when the reviewed `targetId`/`tid`, `lun`, backing object, and ACL values are declared;
+
+grow/property updates include native target inventory, and grow updates validate backing capacity, refresh the exported logical unit with `tgtadm --mode logicalunit --op update --params online=1`, capture persistent-config state with `tgt-admin --dump`, and verify host-visible SCSI, multipath, and modeled graph state.
+
+`provider = "scst"` or `"scstadmin"` renders concrete SCST `scstadmin` inventory, backing-device open/close, target, initiator group, initiator, LUN map/unmap, target enable/removal, `resync_dev`, LUN attribute, and persistence commands when the reviewed target IQN, backing object, LUN, optional group, and initiators are declared.
+
+Other providers still use provider-labeled handoff commands and verification placeholders until concrete adapters are added, but those handoffs now carry a `providerCapabilities` contract naming the required create, grow, map, unmap, remove, rescan, property, persistence, verification, and refusal behavior that an external adapter must implement.
+
+Array-backed provider handoffs also carry declared `vendor`, `arrayId`, `storagePool`, `volumeId`, `snapshotId`, `cloneSource`, and `maskingGroup`/`hostGroup`/`igroup` model fields for vendor or site-specific LUN identity, capacity placement, mapping, masking, and snapshot or clone handoff data.
+
+Generic target LUN verification plans also include executable `lsscsi -t -s`, `multipath -ll`, and `disk-nix inspect <target> --json` probes so provider-specific placeholders are paired with host-visible path, multipath, and modeled-consumer checks.
+
+## Hardening beyond the checklist
 
 - Broader destructive and failure-path integration tests beyond the smoke
   suite, including additional device replacement domains, broader degraded-array

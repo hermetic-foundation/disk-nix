@@ -71,22 +71,27 @@ device-removal behavior. If a migration changes mutation semantics, the migrated
 plan must require normal policy gates and should prefer a blocked or non-ready
 report with advice over guessing.
 
-`disk-nix migrate --spec <file>` is the supported migration entry point. For
-the version `1` contract it emits a report plus a normalized spec with explicit
-version metadata. For unversioned legacy documents it also maps documented
-pre-version field names into the current contract: `fileSystems` to
-`filesystems`, `swapDevices` to `swaps`, `luksDevices` to `luks.devices`,
-`nfsMounts` to `nfs.mounts`, and `iscsiSessions` to `iscsi.sessions`.
-The migration report includes a machine-readable `legacyMappings` matrix for
-both direct specs and wrapper `spec.*` documents, plus `appliedMappings` for the
-aliases actually rewritten in that run. It also includes a machine-readable
-`versionMigrations` contract. Today that contract has two supported entries:
-unversioned pre-version documents to version `1`, including the documented
-legacy field mappings, and explicit version `1` documents to version `1`, which
-is metadata validation with no field rewrites. Explicit version `1` documents
-are not silently rewritten through those legacy aliases. Future or conflicting
-versions remain hard errors until their field mappings, examples, tests, and
-safety notes are implemented in `versionMigrations`.
+`disk-nix migrate --spec <file>` is the supported migration entry point. For the version `1` contract it emits a report plus a normalized spec with explicit version metadata.
+
+For unversioned legacy documents it also maps documented pre-version field names into the current contract: `fileSystems` to `filesystems`, `swapDevices` to `swaps`, `luksDevices` to `luks.devices`, `nfsMounts` to `nfs.mounts`, and `iscsiSessions` to `iscsi.sessions`.
+
+The migration report includes a machine-readable `legacyMappings` matrix for both direct specs and wrapper `spec.*` documents.
+
+It also reports `appliedMappings` for aliases actually rewritten in that run and
+a machine-readable `versionMigrations` contract.
+
+Today that contract has two supported entries:
+
+- unversioned pre-version documents to version `1`, including the documented
+  legacy field mappings
+- explicit version `1` documents to version `1`, which is metadata validation
+  with no field rewrites
+
+Explicit version `1` documents are not silently rewritten through those legacy
+aliases.
+
+Future or conflicting versions remain hard errors until their field mappings,
+examples, tests, and safety notes are implemented in `versionMigrations`.
 
 ## JSON output contracts
 

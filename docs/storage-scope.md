@@ -270,20 +270,21 @@ The current probe layer normalizes:
   vendor LUN metadata, attached disk LUN backing edges, and array-backed
   multipath identity drift.
 
-Probe-status remediation is adapter-aware. Missing-tool reports include the
-likely tool names and Nix packages, including PATH and `ENOENT` command launch
-failures; permission and inaccessible-data reports call out concrete surfaces
-such as device-mapper/LVM metadata, ZFS imports, iSCSI state, NVMe
-sysfs/controller access, multipathd state, MD RAID metadata, VDO management
-state, and mounted Btrfs/NFS surfaces. LVM probing may report `partial` when
-the process lacks permission to talk to device-mapper. That should not prevent
-the rest of discovery from succeeding.
-`probe-status --preflight --json` also includes
-`preflightChecks.adapterRemediation`, a built-in matrix covering canonical
-adapters and sub-adapters such as NVMe identify/smart-log probes, MD RAID scan
-and examine probes, VDO stats probes, NFS exports, iSCSI nodes, and zramctl.
-Each entry lists the adapter, canonical adapter, tools, Nix packages, privilege
-hint, data hint, parse hint, and command hint for machine-readable remediation.
+Probe-status remediation is adapter-aware.
+
+Missing-tool reports include likely tool names and Nix packages, including PATH
+and `ENOENT` command launch failures.
+
+Permission and inaccessible-data reports call out concrete surfaces such as
+device-mapper/LVM metadata, ZFS imports, iSCSI state, NVMe sysfs/controller
+access, multipathd state, MD RAID metadata, VDO management state, and mounted
+Btrfs/NFS surfaces.
+
+LVM probing may report `partial` when the process lacks permission to talk to device-mapper. That should not prevent the rest of discovery from succeeding.
+
+`probe-status --preflight --json` also includes `preflightChecks.adapterRemediation`, a built-in matrix covering canonical adapters and sub-adapters such as NVMe identify/smart-log probes, MD RAID scan and examine probes, VDO stats probes, NFS exports, iSCSI nodes, and zramctl.
+
+Each entry lists the adapter, canonical adapter, tools, Nix packages, privilege hint, data hint, parse hint, and command hint for machine-readable remediation.
 
 ## Advice examples
 

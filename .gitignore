@@ -1,5 +1,6 @@
 /target/
 /result
 /result-*
+/build/
 /.direnv/
 /.jj/repo/store/git_target

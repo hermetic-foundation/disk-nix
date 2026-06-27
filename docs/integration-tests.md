@@ -1071,17 +1071,13 @@ When enabled, it:
   checks `exportfs -v` lists the temporary export
 - unmounts the temporary client mount during cleanup
 
-This test does not provision an NFS server or export. It requires a disposable
-export provided by the operator because server behavior, export policy, network
-reachability, NFS version, and authentication vary by lab. The default
-filesystem type is `nfs4`, the default mount options are `vers=4.2`, and the
-default remount options reuse the mount options. Override them with
-`DISK_NIX_NFS_FSTYPE`, `DISK_NIX_NFS_MOUNT_OPTIONS`, and
-`DISK_NIX_NFS_REMOUNT_OPTIONS`. For server-side export option testing, set
-`DISK_NIX_NFS_EXPORT_PROPERTY=1`; the harness exports a temporary directory to
-`DISK_NIX_NFS_EXPORT_CLIENT` with `DISK_NIX_NFS_EXPORT_OPTIONS`, then unexports
-it during cleanup. The defaults are `127.0.0.1` and
-`ro,sync,no_subtree_check`.
+This test does not provision an NFS server or export. It requires a disposable export provided by the operator because server behavior, export policy, network reachability, NFS version, and authentication vary by lab.
+
+The default filesystem type is `nfs4`, the default mount options are `vers=4.2`, and the default remount options reuse the mount options.
+
+Override them with `DISK_NIX_NFS_FSTYPE`, `DISK_NIX_NFS_MOUNT_OPTIONS`, and `DISK_NIX_NFS_REMOUNT_OPTIONS`. For server-side export option testing, set `DISK_NIX_NFS_EXPORT_PROPERTY=1`; the harness exports a temporary directory to `DISK_NIX_NFS_EXPORT_CLIENT` with `DISK_NIX_NFS_EXPORT_OPTIONS`, then unexports it during cleanup.
+
+The defaults are `127.0.0.1` and `ro,sync,no_subtree_check`.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 
@@ -1119,12 +1115,11 @@ When enabled, it:
   succeeded
 - verifies the generated JSON report was written
 
-This test does not create, grow, start, stop, or remove a VDO volume. It still
-requires destructive opt-in because it reads real VDO management state and
-changes the selected volume's write policy. It is intended for disposable lab
-hosts where the named volume can be safely probed and mutated. The default
-write policy is `sync`; override it with `DISK_NIX_VDO_WRITE_POLICY=auto`,
-`sync`, or `async`.
+This test does not create, grow, start, stop, or remove a VDO volume. It still requires destructive opt-in because it reads real VDO management state and changes the selected volume's write policy.
+
+It is intended for disposable lab hosts where the named volume can be safely probed and mutated. The default write policy is `sync`;
+
+override it with `DISK_NIX_VDO_WRITE_POLICY=auto`, `sync`, or `async`.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 
@@ -1168,11 +1163,11 @@ When enabled, it:
   sentinel remains readable after the resumed operation
 - verifies the generated JSON report was written
 
-This test does not discover, log in to, log out from, grow, attach, detach, or
-remove an iSCSI target or LUN. It still requires destructive opt-in because it
-performs a real session rescan and, when `DISK_NIX_LUN_PATH` is set, a real
-host-side LUN rescan. It is intended for disposable lab hosts where the named
-session and optional LUN path can be safely refreshed.
+This test does not discover, log in to, log out from, grow, attach, detach, or remove an iSCSI target or LUN.
+
+It still requires destructive opt-in because it performs a real session rescan and, when `DISK_NIX_LUN_PATH` is set, a real host-side LUN rescan.
+
+It is intended for disposable lab hosts where the named session and optional LUN path can be safely refreshed.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 
@@ -1305,13 +1300,11 @@ When enabled, it:
   reconnected controller, and reruns the namespace rescan apply
 - verifies the generated JSON report was written
 
-By default this test does not create, grow, attach, detach, or delete NVMe
-namespaces. The create/delete and attach/detach modes are deliberately opt-in
-and require a disposable namespace that can safely end deleted or detached from
-the selected controller. The harness still requires destructive opt-in because
-`nvme ns-rescan` refreshes live controller namespace state and namespace
-lifecycle changes visibility or allocation. Use a controller path such as
-`/dev/nvme0`, not a namespace path such as `/dev/nvme0n1`.
+By default this test does not create, grow, attach, detach, or delete NVMe namespaces. The create/delete and attach/detach modes are deliberately opt-in and require a disposable namespace that can safely end deleted or detached from the selected controller.
+
+The harness still requires destructive opt-in because `nvme ns-rescan` refreshes live controller namespace state and namespace lifecycle changes visibility or allocation.
+
+Use a controller path such as `/dev/nvme0`, not a namespace path such as `/dev/nvme0n1`.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 
@@ -1421,64 +1414,43 @@ When enabled, it:
   the LV, verifies the sentinel survived, and inspects the reopened layered
   topology
 
-The harness removes the mount, VG, mapper, loop device, backing file, and key
-material during cleanup. It is included in the default VM smoke suite alongside
-the loop, Btrfs, and synthetic failure-recovery harnesses, but it is not run by
-`nix flake check` because it mutates real kernel block-device state. The LUKS,
-LVM, MD RAID, bcachefs, ZFS, NFS, VDO, iSCSI, multipath, and NVMe harnesses
-remain packaged and VM-callable through `DISK_NIX_VM_HARNESSES`; bcachefs is
-not part of the default VM list because some NixOS test kernels do not expose
-the `bcachefs` filesystem module even when `bcachefs-tools` is available.
+The harness removes the mount, VG, mapper, loop device, backing file, and key material during cleanup. It is included in the default VM smoke suite alongside the loop, Btrfs, and synthetic failure-recovery harnesses, but it is not run by `nix flake check` because it mutates real kernel block-device state.
+
+The LUKS, LVM, MD RAID, bcachefs, ZFS, NFS, VDO, iSCSI, multipath, and NVMe harnesses remain packaged and VM-callable through `DISK_NIX_VM_HARNESSES`;
+
+bcachefs is not part of the default VM list because some NixOS test kernels do not expose the `bcachefs` filesystem module even when `bcachefs-tools` is available.
 
 ## Flake coverage
 
-`nix flake check` does not run destructive integration tests. It does validate
-that the loop smoke harnesses parse, remain opt-in, and still contain the
-expected loop, filesystem setup, resize, mount, Btrfs scrub, bcachefs format,
-bcachefs scrub, LUKS format, LUKS open, LUKS close, LVM create, LVM rescan, MD
-RAID create, MD RAID rescan, ZFS pool create, ZFS scrub, NFS mount, NFS rescan,
-NFS remount, NFS export, NFS unexport, VDO status, VDO stats, VDO rescan, VM
-orchestration guard steps, iSCSI session rescan, multipath map rescan, NVMe
-namespace rescan, layered loop/LUKS/LVM/ext4 VM grow assertions, and the synthetic failed-apply
-`partialExecutionRecovery` assertions. This keeps the harnesses available and
-packaged while preserving safe default checks.
+`nix flake check` does not run destructive integration tests.
 
-## Remaining integration coverage
+It does validate that smoke harnesses parse, remain opt-in, and still contain
+expected coverage markers.
 
-The VM smoke suite and targeted loop tests are only the first host-backed
-integration paths. Feature completion still needs disposable VM or lab-host
-tests for broader LUKS format/grow/keyslot/token behavior, broader LVM
-LV/thin/cache/device-topology behavior, additional device replacement domains,
-broader bcachefs multi-device and member-topology behavior, broader ZFS
-vdev/dataset/zvol/snapshot behavior, broader MD RAID grow/member-topology and
-degraded-array variant behavior, broader multipath path
-add/remove/flush/grow/failure behavior,
-broader iSCSI LUN failure behavior, broader NFS server/client variant failure
-behavior, broader VDO create/rescan/logical-grow/physical-grow/start/stop/property/remove behavior,
-additional NVMe namespace variant failure behavior, additional cache variant
-failure behavior, property mutation across more supported domains, recovery
-behavior beyond the synthetic LVM-plus-filesystem, LVM grow, LVM thin-pool create, LVM thin-pool grow, XFS grow, Btrfs
-scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement,
-filesystem trim, filesystem check, filesystem repair, filesystem property,
-swap label, zram rescan, zram property inventory, loop rescan, backing-file rescan, backing-file grow, backing-file create, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
-ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement,
-ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe
-namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN
-LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
-target-side LUN LIO destroy, target-side LUN LIO native grow with backing
-capacity and host verification, target-side LUN LIO property, target-side LUN LIO rescan,
-target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
-detach, target-side LUN tgt destroy, target-side LUN tgt native grow with
-backing capacity and host verification, target-side LUN tgt property, target-side LUN tgt
-rescan, target-side LUN SCST create, target-side LUN SCST attach,
-target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST
-grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath
-resize, multipath add, multipath remove, multipath flush, multipath replace, MD RAID create, MD RAID assemble, MD RAID stop, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS close, LUKS
-format, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove,
-LUKS token remove, LUKS property, partition grow, NFS
-remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login,
-iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO
-create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop,
-VDO remove, VDO property, bcache replacement, bcache property, bcache rescan,
-filesystem property, and LVM cache property failed-command
-paths, and broader destructive apply behavior.
+Those markers cover loop setup, filesystem resize/mount, Btrfs scrub, bcachefs
+format/scrub, LUKS format/open/close, LVM create/rescan, MD RAID create/rescan,
+ZFS pool create/scrub, NFS mount/rescan/remount/export/unexport, VDO
+status/stats/rescan, iSCSI session rescan, multipath map rescan, NVMe namespace
+rescan, VM orchestration guards, layered VM grow assertions, and synthetic
+failed-apply `partialExecutionRecovery` assertions.
+
+This keeps the harnesses available and packaged while preserving safe default checks.
+
+## Further integration hardening
+
+The VM smoke suite and targeted loop tests are the first host-backed integration
+paths. Additional disposable VM or lab-host hardening should cover broader:
+
+- LUKS format, grow, keyslot, token, open, close, and property behavior
+- LVM LV, thin, cache, volume-group, PV, replacement, and device-topology
+  behavior
+- bcache, bcachefs, ZFS, MD RAID, multipath, iSCSI, NFS, VDO, NVMe namespace,
+  cache, filesystem, swap, zram, loop, backing-file, partition, and
+  device-mapper update behavior
+- target-side LUN LIO, tgt, and SCST create, attach, detach, destroy, grow,
+  property, and rescan behavior
+- host-side LUN rescan and multipath resize, add, remove, flush, and replace
+  behavior
+- property mutation across more supported domains
+- recovery behavior beyond the synthetic LVM-plus-filesystem cases
+- broader failed-command and destructive-apply behavior
