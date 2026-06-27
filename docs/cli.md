@@ -844,7 +844,10 @@ rollback points, stale identity data, or unbound rollback targets. Idempotency
 metadata for already rolled-back, partially rolled-back, externally modified,
 already applied, partially applied, or diverged rollback topology states is also
 refused before any command runs. Detailed topology diagnostics are also treated
-as replay safety gates: live-use blockers such as mounts, NFS exports, iSCSI
+as replay safety gates: already satisfied, matched, available rollback point,
+and available clone-source diagnostics are refused as topology-derived rollback
+idempotency blockers before command metadata is trusted. Live-use blockers such
+as mounts, NFS exports, iSCSI
 sessions, LUN/NVMe attachment, LUKS mappings, device-mapper maps, multipath,
 LVM activation, swap, loop, MD RAID, and VDO state are refused before command
 metadata is trusted. Topology-derived stale identity or ambiguous rollback point

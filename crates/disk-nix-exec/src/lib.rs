@@ -1260,6 +1260,7 @@ fn rollback_topology_comparison_refusal_reasons(failed_report: &ExecutionReport)
 fn rollback_topology_diagnostic_refusal_reasons(comparison: &TopologyComparison) -> Vec<String> {
     let mut live_use = BTreeSet::new();
     let mut stale_identity = BTreeSet::new();
+    let mut idempotency = BTreeSet::new();
     let mut data_loss = BTreeSet::new();
 
     for diagnostic in &comparison.diagnostics {
@@ -1271,6 +1272,12 @@ fn rollback_topology_diagnostic_refusal_reasons(comparison: &TopologyComparison)
         }
         if rollback_topology_diagnostic_is_stale_identity_blocker(diagnostic.kind) {
             stale_identity.insert(rollback_topology_diagnostic_label(
+                &diagnostic.action_id,
+                diagnostic.kind,
+            ));
+        }
+        if rollback_topology_diagnostic_is_idempotency_blocker(diagnostic.kind) {
+            idempotency.insert(rollback_topology_diagnostic_label(
                 &diagnostic.action_id,
                 diagnostic.kind,
             ));
@@ -1294,6 +1301,12 @@ fn rollback_topology_diagnostic_refusal_reasons(comparison: &TopologyComparison)
         reasons.push(format!(
             "topology diagnostic stale identity or ambiguous rollback point(s): {}",
             stale_identity.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if !idempotency.is_empty() {
+        reasons.push(format!(
+            "topology diagnostic rollback idempotency blocker(s): {}",
+            idempotency.into_iter().collect::<Vec<_>>().join(", ")
         ));
     }
     if !data_loss.is_empty() {
@@ -1355,6 +1368,75 @@ fn rollback_topology_diagnostic_is_stale_identity_blocker(kind: TopologyDiagnost
             | TopologyDiagnosticKind::SnapshotCloneSourceMissing
             | TopologyDiagnosticKind::SnapshotRenameSourceMissing
             | TopologyDiagnosticKind::SnapshotRollbackPointMissing
+    )
+}
+
+fn rollback_topology_diagnostic_is_idempotency_blocker(kind: TopologyDiagnosticKind) -> bool {
+    matches!(
+        kind,
+        TopologyDiagnosticKind::Matched
+            | TopologyDiagnosticKind::SizeAlreadySatisfied
+            | TopologyDiagnosticKind::FilesystemFormatAlreadySatisfied
+            | TopologyDiagnosticKind::DiskCreateAlreadySatisfied
+            | TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
+            | TopologyDiagnosticKind::BtrfsSubvolumeDestroyAlreadySatisfied
+            | TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
+            | TopologyDiagnosticKind::BtrfsQgroupDestroyAlreadySatisfied
+            | TopologyDiagnosticKind::BcacheDetachAlreadySatisfied
+            | TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
+            | TopologyDiagnosticKind::PartitionCreateAlreadySatisfied
+            | TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
+            | TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
+            | TopologyDiagnosticKind::LvmVgCreateAlreadySatisfied
+            | TopologyDiagnosticKind::IscsiLoginAlreadySatisfied
+            | TopologyDiagnosticKind::IscsiLogoutAlreadySatisfied
+            | TopologyDiagnosticKind::LunAttachAlreadySatisfied
+            | TopologyDiagnosticKind::LunDetachAlreadySatisfied
+            | TopologyDiagnosticKind::DmMapDestroyAlreadySatisfied
+            | TopologyDiagnosticKind::DmMapRenameAlreadySatisfied
+            | TopologyDiagnosticKind::NvmeNamespaceAttachAlreadySatisfied
+            | TopologyDiagnosticKind::NvmeNamespaceDetachAlreadySatisfied
+            | TopologyDiagnosticKind::LvmActivateAlreadySatisfied
+            | TopologyDiagnosticKind::LvmDeactivateAlreadySatisfied
+            | TopologyDiagnosticKind::LvmVgExportAlreadySatisfied
+            | TopologyDiagnosticKind::LvmVgImportAlreadySatisfied
+            | TopologyDiagnosticKind::LvmRenameAlreadySatisfied
+            | TopologyDiagnosticKind::LvmCacheDetachAlreadySatisfied
+            | TopologyDiagnosticKind::LuksCloseAlreadySatisfied
+            | TopologyDiagnosticKind::LuksOpenAlreadySatisfied
+            | TopologyDiagnosticKind::LuksKeyslotRemoveAlreadySatisfied
+            | TopologyDiagnosticKind::LuksTokenRemoveAlreadySatisfied
+            | TopologyDiagnosticKind::MultipathDestroyAlreadySatisfied
+            | TopologyDiagnosticKind::MultipathPathAddAlreadySatisfied
+            | TopologyDiagnosticKind::MultipathPathRemoveAlreadySatisfied
+            | TopologyDiagnosticKind::SwapDeactivateAlreadySatisfied
+            | TopologyDiagnosticKind::SwapDestroyAlreadySatisfied
+            | TopologyDiagnosticKind::LoopCreateAlreadySatisfied
+            | TopologyDiagnosticKind::LoopDetachAlreadySatisfied
+            | TopologyDiagnosticKind::MdCreateAlreadySatisfied
+            | TopologyDiagnosticKind::MdAssembleAlreadySatisfied
+            | TopologyDiagnosticKind::MdStopAlreadySatisfied
+            | TopologyDiagnosticKind::MdMemberAddAlreadySatisfied
+            | TopologyDiagnosticKind::MdMemberRemoveAlreadySatisfied
+            | TopologyDiagnosticKind::MdMemberReplaceAlreadySatisfied
+            | TopologyDiagnosticKind::MountAlreadySatisfied
+            | TopologyDiagnosticKind::MountOptionsAlreadySatisfied
+            | TopologyDiagnosticKind::UnmountAlreadySatisfied
+            | TopologyDiagnosticKind::NfsExportAlreadySatisfied
+            | TopologyDiagnosticKind::NfsUnexportAlreadySatisfied
+            | TopologyDiagnosticKind::PropertyAlreadySatisfied
+            | TopologyDiagnosticKind::SnapshotCloneSourceAvailable
+            | TopologyDiagnosticKind::SnapshotDestroyAlreadySatisfied
+            | TopologyDiagnosticKind::SnapshotRollbackPointAvailable
+            | TopologyDiagnosticKind::VdoDestroyAlreadySatisfied
+            | TopologyDiagnosticKind::VdoStartAlreadySatisfied
+            | TopologyDiagnosticKind::VdoStopAlreadySatisfied
+            | TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
+            | TopologyDiagnosticKind::ZfsObjectDestroyAlreadySatisfied
+            | TopologyDiagnosticKind::ZfsObjectPromoteAlreadySatisfied
+            | TopologyDiagnosticKind::ZfsObjectRenameAlreadySatisfied
+            | TopologyDiagnosticKind::ZfsPoolCreateAlreadySatisfied
+            | TopologyDiagnosticKind::ZfsPoolImportAlreadySatisfied
     )
 }
 
@@ -29329,6 +29411,11 @@ mod tests {
                 "topology-stale-rollback-point",
                 disk_nix_plan::TopologyDiagnosticKind::SnapshotRollbackPointMissing,
                 "topology diagnostic stale identity or ambiguous rollback point",
+            ),
+            (
+                "topology-already-rolled-back",
+                disk_nix_plan::TopologyDiagnosticKind::SnapshotRollbackPointAvailable,
+                "topology diagnostic rollback idempotency blocker",
             ),
             (
                 "topology-data-loss-destroy",
