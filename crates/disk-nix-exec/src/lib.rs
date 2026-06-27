@@ -692,7 +692,8 @@ pub fn replay_proven_safe_rollback_recipe(
     fresh_topology_probe_id: impl Into<String>,
 ) -> RollbackExecutionReport {
     let fresh_topology_probe_id = fresh_topology_probe_id.into();
-    let topology_evidence = current_topology_evidence(&fresh_topology_probe_id);
+    let topology_evidence =
+        materialize_rollback_topology_evidence(failed_report, &fresh_topology_probe_id);
     replay_proven_safe_rollback_recipe_with_topology_evidence(
         failed_report,
         recipe_index,
@@ -700,6 +701,45 @@ pub fn replay_proven_safe_rollback_recipe(
         fresh_topology_probe_id,
         topology_evidence,
     )
+}
+
+#[must_use]
+pub fn materialize_rollback_topology_evidence(
+    failed_report: &ExecutionReport,
+    fresh_topology_probe_id: &str,
+) -> BTreeMap<String, String> {
+    let mut topology_evidence = BTreeMap::from([
+        (
+            "expected".to_string(),
+            topology_evidence_id("expected", &failed_report.apply),
+        ),
+        (
+            "preApply".to_string(),
+            topology_evidence_id(
+                "pre-apply",
+                &(
+                    &failed_report.topology_comparison,
+                    &failed_report.command_plan,
+                    &failed_report.verification_plan,
+                ),
+            ),
+        ),
+        (
+            "failedApply".to_string(),
+            topology_evidence_id(
+                "failed-apply",
+                &(
+                    failed_report.status,
+                    &failed_report.partial_execution_recovery,
+                    &failed_report.execution_results,
+                ),
+            ),
+        ),
+    ]);
+    if !fresh_topology_probe_id.trim().is_empty() {
+        topology_evidence.insert("current".to_string(), fresh_topology_probe_id.to_string());
+    }
+    topology_evidence
 }
 
 #[must_use]
@@ -1013,12 +1053,27 @@ fn rollback_command_data_loss_risk_reason(command: &ExecutionCommand) -> Option<
     None
 }
 
+#[cfg(test)]
 fn current_topology_evidence(fresh_topology_probe_id: &str) -> BTreeMap<String, String> {
     let mut topology_evidence = BTreeMap::new();
     if !fresh_topology_probe_id.trim().is_empty() {
         topology_evidence.insert("current".to_string(), fresh_topology_probe_id.to_string());
     }
     topology_evidence
+}
+
+fn topology_evidence_id(label: &str, value: &impl Serialize) -> String {
+    let bytes = serde_json::to_vec(value).unwrap_or_else(|_| label.as_bytes().to_vec());
+    format!("topology:{label}:{:016x}", fnv1a64(&bytes))
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
 }
 
 fn missing_required_topology_evidence(
@@ -28720,6 +28775,39 @@ mod tests {
         assert_eq!(
             value["receiptBinding"]["topologyEvidence"]["failedApply"],
             "topology:failed-apply-123"
+        );
+    }
+
+    #[test]
+    fn rollback_topology_evidence_materializes_from_failed_report_and_fresh_probe() {
+        let mut report = failed_report_for_rollback_replay();
+        let topology_evidence =
+            materialize_rollback_topology_evidence(&report, "topology:fresh-456");
+
+        assert_eq!(
+            topology_evidence.get("current").map(String::as_str),
+            Some("topology:fresh-456")
+        );
+        for label in ["expected", "preApply", "failedApply"] {
+            let evidence_id = topology_evidence
+                .get(label)
+                .unwrap_or_else(|| panic!("{label} evidence should exist"));
+            assert!(
+                evidence_id.starts_with("topology:"),
+                "{label} evidence should be a topology evidence id: {evidence_id}"
+            );
+        }
+
+        let original_failed_apply = topology_evidence
+            .get("failedApply")
+            .expect("failed apply evidence exists")
+            .clone();
+        report.execution_results[0].stderr = "different failure".to_string();
+        let changed_evidence =
+            materialize_rollback_topology_evidence(&report, "topology:fresh-456");
+        assert_ne!(
+            changed_evidence.get("failedApply"),
+            Some(&original_failed_apply)
         );
     }
 

@@ -396,10 +396,12 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   mutation, destructive mutation, and operator-only handoff sections, plus
   receipt-binding, fresh-topology-probe, and required topology evidence
   bindings for expected, pre-apply, failed-apply, and current topology
-  identities. The execution crate can
-  now replay proven-safe reversible rollback recipe steps through
-  `replay_proven_safe_rollback_recipe`, binding the replay report to the
-  original receipt, a fresh topology probe, and supplied topology evidence
+  identities. The execution crate now materializes deterministic topology
+  evidence IDs from the failed execution report and fresh probe ID, can replay
+  proven-safe reversible rollback recipe steps through
+  `replay_proven_safe_rollback_recipe`, and still accepts explicit evidence via
+  `replay_proven_safe_rollback_recipe_with_topology_evidence`. Replay binds the
+  report to the original receipt, a fresh topology probe, and topology evidence
   IDs while refusing review-only, destructive, operator-only, not-ready,
   unbound, missing-tool, missing-topology-evidence, or plausible-data-loss
   command recipes before any command runs. Reports also

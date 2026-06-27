@@ -821,9 +821,12 @@ requires binding to the original apply receipt and a fresh topology probe, and
 keeps mutation sections empty until future domain-specific safety gates prove an
 automatic rollback step safe. Recipes can declare `requiredTopologyEvidence`
 labels such as `expected`, `preApply`, `failedApply`, and `current`; replay
-receipts include the supplied `topologyEvidence` IDs and refuse execution when
-required evidence bindings are missing. The execution library exposes
-`replay_proven_safe_rollback_recipe` for already-proven recipes; it runs
+receipts include `topologyEvidence` IDs and refuse execution when required
+evidence bindings are missing. The execution library materializes deterministic
+evidence IDs from the failed execution report and fresh probe ID unless callers
+provide explicit evidence through
+`replay_proven_safe_rollback_recipe_with_topology_evidence`.
+`replay_proven_safe_rollback_recipe` handles already-proven recipes; it runs
 read-only validation first, replays only proven-safe reversible mutation steps,
 binds the replay report to the original receipt and fresh topology probe, and
 refuses review-only, destructive, operator-only, not-ready, unbound, or

@@ -201,10 +201,12 @@ Update rules:
 - [x] **Finished:** Automatic rollback replay refuses proven-safe recipes
   before command execution when required topology evidence bindings are missing
   or empty.
-- [ ] **Desired:** Automatic rollback needs post-failure topology probe
-  capture that materializes expected, pre-apply, failed-apply, and current
-  topology identities for replay instead of accepting caller-supplied evidence
-  IDs alone.
+- [x] **Finished:** Automatic rollback replay can materialize deterministic
+  topology evidence IDs for expected, pre-apply, failed-apply, and current
+  replay bindings from the failed execution report plus a fresh probe ID.
+- [ ] **Desired:** Automatic rollback needs live post-failure topology probe
+  capture that records full expected, pre-apply, failed-apply, and current
+  topology payloads for replay instead of evidence IDs alone.
 - [ ] **Desired:** Automatic rollback needs post-failure topology comparison
   that refuses rollback mutations when identity, size, holder, mount, export,
   session, or mapping state diverges from the proven recipe.
