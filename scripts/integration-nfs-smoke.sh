@@ -8,7 +8,9 @@ Refusing to run NFS client integration smoke test.
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test mounts,
 remounts, unmounts, and inspects a real NFS client mount against the export
 provided through DISK_NIX_NFS_SOURCE. When DISK_NIX_NFS_EXPORT_PROPERTY=1 is
-set, it also changes a temporary server-side export entry with exportfs.
+set, it also changes a temporary server-side export entry with exportfs. When
+DISK_NIX_NFS_DATA_SURVIVAL=1 is set, it writes a sentinel file to the mounted
+export and verifies the sentinel survives a failed-and-resumed remount apply.
 MSG
   exit 2
 fi
@@ -34,10 +36,11 @@ fs_type="${DISK_NIX_NFS_FSTYPE:-nfs4}"
 mount_options="${DISK_NIX_NFS_MOUNT_OPTIONS:-vers=4.2}"
 remount_options="${DISK_NIX_NFS_REMOUNT_OPTIONS:-$mount_options}"
 export_property="${DISK_NIX_NFS_EXPORT_PROPERTY:-0}"
+data_survival="${DISK_NIX_NFS_DATA_SURVIVAL:-0}"
 export_client="${DISK_NIX_NFS_EXPORT_CLIENT:-127.0.0.1}"
 export_options="${DISK_NIX_NFS_EXPORT_OPTIONS:-ro,sync,no_subtree_check}"
 
-for tool in "$disk_nix_bin" findmnt grep jq mount mountpoint nfsstat umount; do
+for tool in "$disk_nix_bin" cmp findmnt grep install jq mount mountpoint nfsstat umount; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -66,9 +69,11 @@ mountpoint_path="$tmpdir/mnt"
 rescan_spec="$tmpdir/rescan-spec.json"
 remount_spec="$tmpdir/remount-spec.json"
 export_property_spec="$tmpdir/export-property-spec.json"
+failed_remount_report="$tmpdir/failed-remount-report.json"
 rescan_report="$tmpdir/rescan-report.json"
 remount_report="$tmpdir/remount-report.json"
 export_property_report="$tmpdir/export-property-report.json"
+sentinel_expected="$tmpdir/nfs-sentinel.expected"
 
 mkdir -p "$mountpoint_path"
 if [[ -n "$mount_options" ]]; then
@@ -157,6 +162,66 @@ jq -e --arg mountpoint_path "$mountpoint_path" --arg remount_options "$remount_o
     | any(.argv == ["mount", "-o", ("remount," + $remount_options), $mountpoint_path] and .success == true))
 ' "$tmpdir/remount-apply.json" >/dev/null
 cmp "$tmpdir/remount-apply.json" "$remount_report" >/dev/null
+
+if [[ "$data_survival" == "1" ]]; then
+  printf 'disk-nix NFS sentinel %s\n' "$source" > "$sentinel_expected"
+  install -m 0600 "$sentinel_expected" "$mountpoint_path/disk-nix-nfs-sentinel.txt"
+  cmp "$sentinel_expected" "$mountpoint_path/disk-nix-nfs-sentinel.txt" >/dev/null
+
+  fail_tools="$tmpdir/fake-nfs-failed-remount-tools"
+  mkdir -p "$fail_tools"
+  real_mount="$(command -v mount)"
+  cat > "$fail_tools/mount" <<EOF
+#!/usr/bin/env bash
+if [[ "\$*" == "-o remount,$remount_options $mountpoint_path" ]]; then
+  echo "synthetic NFS remount failure for disk-nix data-survival coverage" >&2
+  exit 77
+fi
+exec "$real_mount" "\$@"
+EOF
+  chmod +x "$fail_tools/mount"
+
+  if PATH="$fail_tools:$PATH" "$disk_nix_bin" apply \
+    --spec "$remount_spec" \
+    --execute \
+    --report-out "$failed_remount_report" \
+    --json > "$tmpdir/failed-remount-apply.json"; then
+    echo "expected injected NFS remount failure to fail apply" >&2
+    exit 1
+  fi
+
+  jq -e --arg mountpoint_path "$mountpoint_path" --arg remount_options "$remount_options" '
+    .status == "failed"
+    and (.executionResults
+      | any(
+          .argv == ["mount", "-o", ("remount," + $remount_options), $mountpoint_path]
+          and .success == false
+          and .statusCode == 77
+          and (.stderr | contains("synthetic NFS remount failure"))
+        ))
+    and .partialExecutionRecovery.failedActionId == ("nfs.mounts:" + $mountpoint_path + ":remount")
+    and (.partialExecutionRecovery.retryReviewActionIds | index("nfs.mounts:" + $mountpoint_path + ":remount") != null)
+    and (.recoveryActions | any(.kind == "resume-after-fix"))
+  ' "$tmpdir/failed-remount-apply.json" >/dev/null
+
+  cmp "$tmpdir/failed-remount-apply.json" "$failed_remount_report" >/dev/null
+  cmp "$sentinel_expected" "$mountpoint_path/disk-nix-nfs-sentinel.txt" >/dev/null
+
+  "$disk_nix_bin" apply \
+    --spec "$remount_spec" \
+    --execute \
+    --report-out "$tmpdir/resumed-remount-report.json" \
+    --json > "$tmpdir/resumed-remount-apply.json"
+
+  jq -e --arg mountpoint_path "$mountpoint_path" --arg remount_options "$remount_options" '
+    .status == "succeeded"
+    and (.executionResults
+      | any(.argv == ["mount", "-o", ("remount," + $remount_options), $mountpoint_path] and .success == true))
+  ' "$tmpdir/resumed-remount-apply.json" >/dev/null
+
+  cmp "$tmpdir/resumed-remount-apply.json" "$tmpdir/resumed-remount-report.json" >/dev/null
+  cmp "$sentinel_expected" "$mountpoint_path/disk-nix-nfs-sentinel.txt" >/dev/null
+fi
 
 if [[ "$export_property" == "1" ]]; then
   mkdir -p "$tmpdir/export"

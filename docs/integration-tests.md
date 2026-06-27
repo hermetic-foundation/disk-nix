@@ -1007,6 +1007,12 @@ When enabled, it:
 - executes an `nfs.mounts.<mountpoint>.operation = "remount"` apply plan
 - verifies the rendered `mount -o remount,<options> <mountpoint>` command
   succeeded
+- when `DISK_NIX_NFS_DATA_SURVIVAL=1` is set, writes
+  `disk-nix-nfs-sentinel.txt` to the mounted export, injects a failed remount
+  apply, verifies the partial-execution recovery report includes
+  `resume-after-fix`, verifies the sentinel remains readable, reruns a clean
+  remount apply, and verifies the sentinel remains readable after the resumed
+  apply
 - when `DISK_NIX_NFS_EXPORT_PROPERTY=1` is set, creates a temporary local
   export path, applies `exports.<path>.properties.options`, verifies the
   rendered `exportfs -i -o <options> <client>:<path>` command succeeded, and

@@ -1952,10 +1952,15 @@
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-nfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NFS_SOURCE ${./scripts/integration-nfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NFS_EXPORT_PROPERTY ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_NFS_DATA_SURVIVAL ${./scripts/integration-nfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mount -t "$fs_type"' ${./scripts/integration-nfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'findmnt", "--json"' ${./scripts/integration-nfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nfsstat", "-m"' ${./scripts/integration-nfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mount", "-o", ("remount,"' ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix NFS sentinel' ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'synthetic NFS remount failure for disk-nix data-survival coverage' ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'failed-remount-apply.json' ${./scripts/integration-nfs-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'resumed-remount-apply.json' ${./scripts/integration-nfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'exports:" + $export_path + ":set-property:options' ${./scripts/integration-nfs-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'exportfs", "-i", "-o"' ${./scripts/integration-nfs-smoke.sh}
             touch "$out"
@@ -2401,6 +2406,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real bcache read-only' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'rescan coverage: the loop-backed bcache harness' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'network-storage scenarios' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'NFS failed-and-resumed remount data-survival' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem' "$checklist"
@@ -2451,6 +2457,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'multipath flush with `multipath -f`' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'NFS failed-and-resumed remount data-survival' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real MD RAID member replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'MD RAID stale-superblock evidence' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'missing-member MD RAID rescan' ${./docs/status.md}
@@ -2485,6 +2492,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_VM_HARNESSES=target-lun' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes.<name>.properties.writePolicy' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'exports.<path>.properties.options' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NFS_DATA_SURVIVAL=1' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-nfs-sentinel.txt' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'mdRaids.<name>.replaceDevices' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm <array> --replace <old-loop> --with <new-loop>' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm --examine <removed-loop>' ${./docs/integration-tests.md}

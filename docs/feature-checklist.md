@@ -676,6 +676,13 @@ Update rules:
   survives mutation, detach, reattach, and rescan plans.
 - [ ] **Partial:** Deeper destructive VM tests still need data-survival
   assertions across failed and resumed apply runs for network-storage scenarios.
+- [x] **Finished:** Deeper destructive tests include NFS failed-and-resumed remount data-survival
+  coverage: when `DISK_NIX_NFS_DATA_SURVIVAL=1` is set,
+  the NFS lab harness writes a sentinel file to the mounted export, injects a
+  failed remount apply, verifies `partialExecutionRecovery` and
+  `resume-after-fix` guidance, verifies the sentinel remains readable, reruns a
+  clean remount apply, and verifies the sentinel remains readable after the
+  resumed network-storage operation.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,
   structured OS, kernel, effective UID, tool-version context, and preflight
   checks for root privilege plus missing, failing, stderr-only, and empty-output
