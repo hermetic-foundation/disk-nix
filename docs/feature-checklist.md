@@ -606,6 +606,12 @@ Update rules:
   `multipathMaps.paths.removeDevices` for the explicit paths and verifies
   `multipathd add path <path>` and `multipathd del path <path>` succeed.
 - [x] **Finished:** Destructive integration tests include lab-backed multipath
+  path replacement coverage: when `DISK_NIX_MULTIPATH_REPLACE_OLD_PATH` and
+  `DISK_NIX_MULTIPATH_REPLACE_NEW_PATH` are set, the multipath harness applies
+  `multipathMaps.paths.replaceDevices` for the explicit path pair and verifies
+  `multipathd add path <new-path>` succeeds before
+  `multipathd del path <old-path>` succeeds.
+- [x] **Finished:** Destructive integration tests include lab-backed multipath
   resize coverage: when `DISK_NIX_MULTIPATH_RESIZE=1` is set, the multipath
   harness applies `multipathMaps.resize.operation = "grow"` for the selected
   map and verifies `multipath -ll`, `lsscsi -t -s`,

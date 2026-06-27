@@ -217,7 +217,8 @@ behavior across real storage stacks.
   exercise non-destructive refresh or remount paths, include lab-backed NVMe namespace create/delete,
   include lab-backed NVMe namespace grow
   through reviewed `nvme ns-rescan`, and include lab-backed NVMe namespace attach/detach
-  for disposable namespaces. The failure-recovery
+  for disposable namespaces, while multipath also covers explicit path
+  add/remove, replacement, resize, and flush operations. The failure-recovery
   harness uses fake storage tools to prove `partialExecutionRecovery`,
   failed-command receipts, roll-forward review, rollback review,
   snapshot-preservation, and domain-recovery reporting for a layered

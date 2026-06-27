@@ -1174,6 +1174,8 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   DISK_NIX_MULTIPATH_RESIZE=1 \
   DISK_NIX_MULTIPATH_ADD_PATH=/dev/sdb \
   DISK_NIX_MULTIPATH_REMOVE_PATH=/dev/sdc \
+  DISK_NIX_MULTIPATH_REPLACE_OLD_PATH=/dev/sde \
+  DISK_NIX_MULTIPATH_REPLACE_NEW_PATH=/dev/sdf \
   DISK_NIX_MULTIPATH_FLUSH=1 \
   nix run .#integration-multipath-smoke
 ```
@@ -1196,19 +1198,23 @@ When enabled, it:
   `multipathMaps.paths.removeDevices` for the explicitly named paths
 - verifies the rendered `multipathd add path <path>` and
   `multipathd del path <path>` commands succeeded for those selected paths
+- when `DISK_NIX_MULTIPATH_REPLACE_OLD_PATH` and
+  `DISK_NIX_MULTIPATH_REPLACE_NEW_PATH` are set, executes
+  `multipathMaps.paths.replaceDevices` for the explicit path pair
+- verifies the rendered `multipathd add path <new-path>` command succeeds
+  before `multipathd del path <old-path>` succeeds
 - when `DISK_NIX_MULTIPATH_FLUSH=1` is set, executes
   `multipathMaps.flush.destroy = true` with `allowDestructive = true` and
   `backupVerified = true`
 - verifies the rendered `multipath -f <map>` command succeeded
 - verifies the generated JSON report was written
 
-This test does not replace multipath paths. It still requires
-destructive opt-in because `multipath -r` reloads live maps,
+This test requires destructive opt-in because `multipath -r` reloads live maps,
 `DISK_NIX_MULTIPATH_RESIZE=1` asks multipathd to resize the selected map, and
-the add/remove/flush variables mutate explicitly selected paths or maps. It is
-intended for disposable lab hosts where the named map and paths can be safely
-refreshed or removed. Use an `mpath*` name such as `mpatha` or a
-`/dev/mapper/*` path.
+the add/remove/replace/flush variables mutate explicitly selected paths or
+maps. It is intended for disposable lab hosts where the named map and paths can
+be safely refreshed, replaced, or removed. Use an `mpath*` name such as
+`mpatha` or a `/dev/mapper/*` path.
 
 To test a development build without `nix run`, set `DISK_NIX_BIN`:
 

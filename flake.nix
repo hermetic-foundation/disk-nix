@@ -2034,12 +2034,16 @@
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_MULTIPATH_RESIZE ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_MULTIPATH_ADD_PATH ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_MULTIPATH_REMOVE_PATH ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_MULTIPATH_REPLACE_OLD_PATH ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_MULTIPATH_REPLACE_NEW_PATH ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_MULTIPATH_FLUSH ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipath -ll' ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lsscsi -t -s' ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipathd", "resize", "map"' ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipathd", "add", "path"' ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipathd", "del", "path"' ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'replaceDevices' ${./scripts/integration-multipath-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps:paths:replace-device:' ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipath", "-f"' ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipath", "-ll"' ${./scripts/integration-multipath-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'multipath", "-r"' ${./scripts/integration-multipath-smoke.sh}
@@ -2467,6 +2471,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace create/delete' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace grow' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace attach/detach' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'lab-backed multipath' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'path replacement coverage' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem' "$checklist"
@@ -2522,6 +2528,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'host-side LUN rescan' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed multipath resize' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'lab-backed multipath path add/remove' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'replacement, resize, and flush operations' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'multipath flush with `multipath -f`' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
@@ -2566,6 +2573,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_RESIZE=1' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_ADD_PATH' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_REMOVE_PATH' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_REPLACE_OLD_PATH' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.paths.replaceDevices' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_FLUSH=1' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_CREATE_DELETE=1' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_GROW=1' ${./docs/integration-tests.md}

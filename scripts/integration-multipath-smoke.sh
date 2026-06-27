@@ -10,8 +10,11 @@ real multipath maps for the map provided through DISK_NIX_MULTIPATH_MAP.
 When DISK_NIX_MULTIPATH_RESIZE=1 is set, it also asks multipathd to resize the
 selected map. When DISK_NIX_MULTIPATH_ADD_PATH or
 DISK_NIX_MULTIPATH_REMOVE_PATH is set, it mutates those explicitly named paths.
+When DISK_NIX_MULTIPATH_REPLACE_OLD_PATH and
+DISK_NIX_MULTIPATH_REPLACE_NEW_PATH are both set, it replaces that explicit
+old path with the explicit new path.
 When DISK_NIX_MULTIPATH_FLUSH=1 is set, it flushes the selected map. The
-harness does not replace paths.
+harness never chooses paths automatically.
 MSG
   exit 2
 fi
@@ -25,6 +28,8 @@ map="${DISK_NIX_MULTIPATH_MAP:-}"
 resize_map="${DISK_NIX_MULTIPATH_RESIZE:-0}"
 add_path="${DISK_NIX_MULTIPATH_ADD_PATH:-}"
 remove_path="${DISK_NIX_MULTIPATH_REMOVE_PATH:-}"
+replace_old_path="${DISK_NIX_MULTIPATH_REPLACE_OLD_PATH:-}"
+replace_new_path="${DISK_NIX_MULTIPATH_REPLACE_NEW_PATH:-}"
 flush_map="${DISK_NIX_MULTIPATH_FLUSH:-0}"
 if [[ -z "$map" ]]; then
   cat >&2 <<'MSG'
@@ -65,6 +70,8 @@ resize_spec="$tmpdir/resize-spec.json"
 resize_report="$tmpdir/resize-apply-report.json"
 paths_spec="$tmpdir/paths-spec.json"
 paths_report="$tmpdir/paths-apply-report.json"
+replace_spec="$tmpdir/replace-spec.json"
+replace_report="$tmpdir/replace-apply-report.json"
 flush_spec="$tmpdir/flush-spec.json"
 flush_report="$tmpdir/flush-apply-report.json"
 
@@ -217,6 +224,63 @@ if [[ -n "$add_path" || -n "$remove_path" ]]; then
   multipath -ll "$map" > "$tmpdir/multipath-paths-mutated.txt"
 
   echo "multipath integration smoke test mutated selected paths for $map"
+fi
+
+if [[ -n "$replace_old_path" || -n "$replace_new_path" ]]; then
+  if [[ -z "$replace_old_path" || -z "$replace_new_path" ]]; then
+    echo "both DISK_NIX_MULTIPATH_REPLACE_OLD_PATH and DISK_NIX_MULTIPATH_REPLACE_NEW_PATH are required for replacement" >&2
+    exit 2
+  fi
+  if [[ ! -e "$replace_old_path" ]]; then
+    echo "multipath replace old path does not exist: $replace_old_path" >&2
+    exit 2
+  fi
+  if [[ ! -e "$replace_new_path" ]]; then
+    echo "multipath replace new path does not exist: $replace_new_path" >&2
+    exit 2
+  fi
+
+  jq -n \
+    --arg map "$map" \
+    --arg old_path "$replace_old_path" \
+    --arg new_path "$replace_new_path" \
+    '{
+      version: 1,
+      multipathMaps: {
+        paths: {
+          target: $map,
+          replaceDevices: {
+            ($old_path): $new_path
+          }
+        }
+      },
+      apply: {
+        allowOffline: true,
+        allowDeviceReplacement: true
+      }
+    }' > "$replace_spec"
+
+  "$disk_nix_bin" apply \
+    --spec "$replace_spec" \
+    --execute \
+    --report-out "$replace_report" \
+    --json > "$tmpdir/replace-apply.json"
+
+  jq -e --arg old_path "$replace_old_path" --arg new_path "$replace_new_path" '
+    .status == "succeeded"
+    and (.commandPlan[] | select(.actionId == ("multipathMaps:paths:replace-device:" + $old_path))
+      | .commands
+      | any(.argv == ["multipathd", "add", "path", $new_path])
+      and any(.argv == ["multipathd", "del", "path", $old_path]))
+    and (.executionResults
+      | any(.argv == ["multipathd", "add", "path", $new_path] and .success == true)
+      and any(.argv == ["multipathd", "del", "path", $old_path] and .success == true))
+  ' "$tmpdir/replace-apply.json" >/dev/null
+
+  cmp "$tmpdir/replace-apply.json" "$replace_report" >/dev/null
+  multipath -ll "$map" > "$tmpdir/multipath-paths-replaced.txt"
+
+  echo "multipath integration smoke test replaced $replace_old_path with $replace_new_path for $map"
 fi
 
 if [[ "$flush_map" == "1" ]]; then
