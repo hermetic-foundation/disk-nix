@@ -542,6 +542,12 @@ Update rules:
   the real `mdadm` detach command fails, and checks the apply report contains
   partial-execution metadata, retry review, domain recovery, and roll-forward
   review.
+- [x] **Finished:** Destructive integration tests include MD RAID failed-reattach
+  coverage: after the loop-backed MD harness is degraded, it applies
+  `mdRaids.*.addDevices` for a missing member path, verifies the real
+  `mdadm <array> --add <missing-path>` command fails, and checks the apply
+  report contains partial-execution metadata, retry review, domain recovery,
+  and roll-forward review.
 - [x] **Finished:** Destructive integration tests include MD RAID degraded
   missing-member coverage: the loop-backed MD harness creates a temporary RAID1
   array, fails and removes one member, verifies `disk-nix inspect` still sees

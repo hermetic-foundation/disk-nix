@@ -61,6 +61,8 @@ replace_report="$tmpdir/replace-apply-report.json"
 degraded_report="$tmpdir/degraded-apply-report.json"
 failed_detach_spec="$tmpdir/failed-detach-spec.json"
 failed_detach_report="$tmpdir/failed-detach-report.json"
+failed_reattach_spec="$tmpdir/failed-reattach-spec.json"
+failed_reattach_report="$tmpdir/failed-reattach-report.json"
 
 truncate --size 64M "$backing_a" "$backing_b" "$backing_c"
 loop_a="$(losetup --find --show "$backing_a")"
@@ -223,4 +225,39 @@ jq -e --arg array "$array" --arg removed "$loop_c" '
 
 cmp "$tmpdir/failed-detach-apply.json" "$failed_detach_report" >/dev/null
 
-echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, replaced $loop_b with $loop_c, then verified stale-superblock, degraded missing-member rescan, and failed-detach recovery"
+missing_member="$tmpdir/missing-md-reattach-member"
+jq -n --arg array "$array" --arg missing "$missing_member" '{
+  version: 1,
+  apply: {
+    allowOffline: true
+  },
+  mdRaids: {
+    failedReattach: {
+      target: $array,
+      addDevices: [$missing]
+    }
+  }
+}' > "$failed_reattach_spec"
+
+if "$disk_nix_bin" apply \
+  --spec "$failed_reattach_spec" \
+  --execute \
+  --report-out "$failed_reattach_report" \
+  --json > "$tmpdir/failed-reattach-apply.json"; then
+  echo "expected failed reattach of missing MD member to fail apply" >&2
+  exit 1
+fi
+
+jq -e --arg array "$array" --arg missing "$missing_member" '
+  .status == "failed"
+  and (.executionResults
+    | any(.argv == ["mdadm", $array, "--add", $missing] and .success == false))
+  and .partialExecutionRecovery.failedActionId == ("mdRaids:failedReattach:add-device:" + $missing)
+  and (.partialExecutionRecovery.retryReviewActionIds | index("mdRaids:failedReattach:add-device:" + $missing) != null)
+  and (.recoveryActions | any(.kind == "domain-recovery"))
+  and (.recoveryActions | any(.kind == "roll-forward-review"))
+' "$tmpdir/failed-reattach-apply.json" >/dev/null
+
+cmp "$tmpdir/failed-reattach-apply.json" "$failed_reattach_report" >/dev/null
+
+echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, replaced $loop_b with $loop_c, then verified stale-superblock, degraded missing-member rescan, failed-detach recovery, and failed-reattach recovery"

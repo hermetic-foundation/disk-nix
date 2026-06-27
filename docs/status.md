@@ -191,7 +191,8 @@ behavior across real storage stacks.
   with a mounted LUN sentinel, verify real MD RAID member replacement
   with `mdadm --replace` and `mdadm --wait`, verify MD RAID stale-superblock evidence
   with `mdadm --examine`, verify MD RAID failed-detach recovery after an
-  already-removed member, and verify
+  already-removed member, verify MD RAID failed-reattach recovery for a missing
+  add-device path, and verify
   degraded missing-member MD RAID rescan after failing and removing one
   temporary RAID1 member, then clean up temporary devices. A layered VM
   harness creates partitioned loop, LUKS, LVM, and mounted ext4 layers on a

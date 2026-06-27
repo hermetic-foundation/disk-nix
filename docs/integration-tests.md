@@ -964,6 +964,10 @@ When enabled, it:
   member, verifies the real `mdadm` command fails, and checks the failed-detach recovery
   report includes partial-execution metadata, retry review, domain recovery,
   and roll-forward review
+- applies an `mdRaids.<name>.addDevices` plan for a missing member path,
+  verifies the real `mdadm <array> --add <missing-path>` command fails, and
+  checks the failed-reattach recovery report includes partial-execution
+  metadata, retry review, domain recovery, and roll-forward review
 - stops the array, wipes member superblocks, detaches the loop devices, and
   removes backing files during cleanup
 
