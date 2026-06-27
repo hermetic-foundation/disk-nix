@@ -19,7 +19,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" cat jq losetup mdadm truncate; do
+for tool in "$disk_nix_bin" cat cmp grep jq losetup mdadm truncate; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -53,6 +53,7 @@ backing_a="$tmpdir/disk-nix-md-a.img"
 backing_b="$tmpdir/disk-nix-md-b.img"
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
+degraded_report="$tmpdir/degraded-apply-report.json"
 
 truncate --size 64M "$backing_a" "$backing_b"
 loop_a="$(losetup --find --show "$backing_a")"
@@ -102,4 +103,41 @@ jq -e --arg array "$array" '
 cmp "$tmpdir/apply.json" "$report" >/dev/null
 mdadm --detail "$array" >/dev/null
 
-echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b"
+mdadm "$array" --fail "$loop_b"
+mdadm "$array" --remove "$loop_b"
+mdadm --detail "$array" > "$tmpdir/degraded-detail.txt"
+grep -Eq 'State : .*degraded|Active Devices : 1' "$tmpdir/degraded-detail.txt"
+
+"$disk_nix_bin" inspect "$array" --json > "$tmpdir/degraded-inspect.json"
+jq -e --arg array "$array" '
+  (.matchedNodes // .nodes // []) as $nodes
+  | ($nodes | any(
+      .path == $array
+      or .id == ("md:" + $array)
+      or (.properties // [] | any(.key == "md.path" and .value == $array))
+    ))
+  and ($nodes | any(
+      (.properties // [] | any(.key == "md.degraded-devices" and (.value | tostring) != "0"))
+      or (.properties // [] | any(.key == "md.state" and (.value | test("degraded"; "i"))))
+    ))
+' "$tmpdir/degraded-inspect.json" >/dev/null
+
+"$disk_nix_bin" apply \
+  --spec "$spec" \
+  --execute \
+  --report-out "$degraded_report" \
+  --json > "$tmpdir/degraded-apply.json"
+
+jq -e --arg array "$array" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == "mdraids:inventory:rescan")
+    | .commands
+    | any(.argv == ["mdadm", "--detail", $array])
+    and any(.argv == ["cat", "/proc/mdstat"]))
+  and (.executionResults
+    | any(.argv == ["mdadm", "--detail", $array] and .success == true))
+' "$tmpdir/degraded-apply.json" >/dev/null
+
+cmp "$tmpdir/degraded-apply.json" "$degraded_report" >/dev/null
+
+echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, then verified degraded missing-member rescan"

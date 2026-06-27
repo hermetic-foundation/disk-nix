@@ -916,6 +916,9 @@ When enabled, it:
 - verifies the generated JSON report was written and the rendered
   `mdadm --detail`, `mdadm --detail --scan`, `mdadm --examine --scan`, and
   `/proc/mdstat` inventory commands succeeded
+- fails and removes one RAID1 member from the temporary array
+- verifies `disk-nix inspect <array> --json` still sees the degraded array and
+  the degraded rescan apply succeeds
 - stops the array, wipes member superblocks, detaches the loop devices, and
   removes backing files during cleanup
 

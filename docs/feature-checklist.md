@@ -506,6 +506,10 @@ Update rules:
 - [ ] **Partial:** Destructive integration tests need broader degraded-array
   variants covering missing members, stale superblocks, replacement races,
   partial rebuilds, failed detach, and failed reattach behavior.
+- [x] **Finished:** Destructive integration tests include MD RAID degraded
+  missing-member coverage: the loop-backed MD harness creates a temporary RAID1
+  array, fails and removes one member, verifies `disk-nix inspect` still sees
+  degraded array metadata, and reruns the read-only MD rescan apply.
 - [ ] **Partial:** Destructive integration tests need VM-backed cache mutation
   coverage for LVM cache attach/detach/replacement, bcache replacement, and
   cache-device failure states.
