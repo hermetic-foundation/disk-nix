@@ -216,9 +216,14 @@ Update rules:
   mount, export, session, or mapping state diverges from the proven recipe.
 - [ ] **Desired:** Automatic rollback needs refusal behavior for ambiguous
   rollback points and stale identity data.
-- [ ] **Desired:** Automatic rollback needs refusal behavior for active
-  consumers, mounted filesystems, exported LUNs, open encrypted mappings, and
-  other live-use blockers.
+- [x] **Finished:** Automatic rollback replay refuses reversible mutation
+  commands whose metadata advertises active consumers, mounted filesystems,
+  exported LUNs, open encrypted mappings, active sessions, holders, or live
+  mappings.
+- [ ] **Desired:** Automatic rollback needs topology-derived refusal behavior
+  for active consumers, mounted filesystems, exported LUNs, open encrypted
+  mappings, and other live-use blockers that are not already present in
+  rollback command metadata.
 - [x] **Finished:** Automatic rollback replay refuses missing required tools
   before running read-only validation or reversible mutation commands.
 - [x] **Finished:** Automatic rollback replay refuses reversible mutation

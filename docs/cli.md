@@ -836,7 +836,9 @@ diagnostics, type conflicts, graph dependency conflicts, or partially
 suppressed reconciliation groups. It also refuses reversible rollback commands
 whose argv or metadata advertises destructive,
 potential-data-loss, format, shrink, wipe, rollback, remove, delete, detach,
-flush, or discard semantics.
+flush, or discard semantics, and refuses command metadata that advertises active
+consumers, mounted filesystems, exported LUNs, open encrypted mappings, active
+sessions, holders, or live mappings.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

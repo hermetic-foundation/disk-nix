@@ -993,6 +993,9 @@ fn proven_safe_rollback_refusal_reasons(
         if let Some(reason) = rollback_command_data_loss_risk_reason(command) {
             reasons.push(reason);
         }
+        if let Some(reason) = rollback_command_live_use_blocker_reason(command) {
+            reasons.push(reason);
+        }
     }
 
     reasons
@@ -1047,6 +1050,44 @@ fn rollback_command_data_loss_risk_reason(command: &ExecutionCommand) -> Option<
     }) {
         return Some(format!(
             "automatic rollback replay refuses plausible data-loss command metadata: {}",
+            command.argv.join(" ")
+        ));
+    }
+
+    None
+}
+
+fn rollback_command_live_use_blocker_reason(command: &ExecutionCommand) -> Option<String> {
+    let blocker_phrases = [
+        "active consumer",
+        "active consumers",
+        "active session",
+        "active sessions",
+        "exported lun",
+        "exported luns",
+        "holder",
+        "holders",
+        "live mapping",
+        "live mappings",
+        "mounted filesystem",
+        "mounted filesystems",
+        "mounted",
+        "open encrypted mapping",
+        "open encrypted mappings",
+        "open mapping",
+        "open mappings",
+    ];
+    let mut metadata_fields = command
+        .provider_capabilities
+        .iter()
+        .chain(command.unresolved_inputs.iter())
+        .chain(std::iter::once(&command.note));
+    if metadata_fields.any(|field| {
+        let field = field.to_ascii_lowercase();
+        blocker_phrases.iter().any(|phrase| field.contains(phrase))
+    }) {
+        return Some(format!(
+            "automatic rollback replay refuses live-use blocker metadata: {}",
             command.argv.join(" ")
         ));
     }
@@ -29195,6 +29236,20 @@ mod tests {
                     recipe
                 },
                 "plausible data-loss command metadata",
+            ),
+            (
+                "live-use-blocker-metadata",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.reversible_mutations.commands[0]
+                        .provider_capabilities
+                        .push("rollback.blocker.active-consumers".to_string());
+                    recipe.reversible_mutations.commands[0]
+                        .unresolved_inputs
+                        .push("mounted filesystem state".to_string());
+                    recipe
+                },
+                "live-use blocker metadata",
             ),
         ];
 
