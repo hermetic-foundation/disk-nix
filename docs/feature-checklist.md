@@ -115,10 +115,9 @@ Update rules:
 - [x] **Finished:** Real-world physical Fibre Channel fixture coverage includes
   additional adapters, switch zoning-style fabric/WWPN layouts, ALUA states,
   and failed-path conditions.
-- [ ] **Partial:** Real-world fixture coverage still needs additional NVMe-oF
-  samples beyond the current NVMe/TCP multipath fixture, including RoCE,
-  Fibre Channel transport, namespace sharing, ANA transitions, and controller
-  loss/reconnect cases.
+- [x] **Finished:** Real-world NVMe-oF fixture coverage includes samples beyond
+  the current NVMe/TCP multipath fixture for RoCE/RDMA, Fibre Channel transport,
+  namespace sharing, ANA transitions, and controller loss/reconnect cases.
 - [x] **Finished:** Real-world iSCSI fixture coverage includes multi-portal
   sessions, mutual CHAP, discovery authentication, replacement LUN identity
   changes, and logout/login churn.

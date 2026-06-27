@@ -227,7 +227,10 @@ additional adapters, zoning-style fabric/WWPN layouts, optimized and
 non-optimized ALUA paths, and blocked failed path evidence, plus an NVMe/TCP multipath
 fixture covering native NVMe namespace paths,
 live and reconnecting fabrics controllers, ANA optimized/inaccessible states,
-failed path metadata, and multipath backing edges, plus an NFS server/client fixture
+failed path metadata, and multipath backing edges, plus a mixed NVMe-oF fixture
+covering RoCE/RDMA and Fibre Channel transport, shared namespace UUID/NGUID
+identity, ANA transition state, controller loss/reconnect evidence, and native
+multipath backing edges, plus an NFS server/client fixture
 covering merged `findmnt`, `nfsstat`, and `exportfs` state, negotiated Kerberos
 mount options, NFS export client policy, IPv6 export selectors, mount usage,
 source-to-mount edges, NFSv4 referrals, pNFS/flexfiles layout hints, export

@@ -2972,6 +2972,147 @@ size=800G features='1 queue_if_no_path' hwhandler='0' wp=rw
   `- nvme5n1 259:13 failed faulty offline inaccessible
 "#;
 
+    const NVME_OF_MIXED_LIST: &[u8] = br#"{
+      "Devices": [
+        {
+          "Name": "/dev/nvme6n1",
+          "GenericDevice": "/dev/ng6n1",
+          "ModelNumber": "NVMe-oF Shared Namespace",
+          "SerialNumber": "NVMEOF-SHARED",
+          "Firmware": "7.1",
+          "Index": 6,
+          "Namespace": 1,
+          "NSID": 1,
+          "NamespaceUUID": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+          "NGUID": "bbbbbbbb11111111cccccccc22222222",
+          "SubSystem": "nqn.2014-08.org.nvmexpress:uuid:mixed-fabric-array",
+          "Controller": "nvme6",
+          "Transport": "rdma",
+          "Address": "traddr=203.0.113.10,trsvcid=4420,host_traddr=203.0.113.20",
+          "ControllerID": 61,
+          "NamespaceSize": 1200000000000,
+          "NamespaceUsage": 900000000000,
+          "NamespaceCapacity": 1200000000000,
+          "LBAFormat": "0: 4096B + 0B",
+          "MaximumLBA": 292968750,
+          "SectorSize": 4096,
+          "ANAState": "optimized"
+        },
+        {
+          "Name": "/dev/nvme7n1",
+          "GenericDevice": "/dev/ng7n1",
+          "ModelNumber": "NVMe-oF Shared Namespace",
+          "SerialNumber": "NVMEOF-SHARED",
+          "Firmware": "7.1",
+          "Index": 7,
+          "Namespace": 1,
+          "NSID": 1,
+          "NamespaceUUID": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+          "NGUID": "bbbbbbbb11111111cccccccc22222222",
+          "SubSystem": "nqn.2014-08.org.nvmexpress:uuid:mixed-fabric-array",
+          "Controller": "nvme7",
+          "Transport": "fc",
+          "Address": "nn-0x200100109babcdef:pn-0x210100109babcdef",
+          "ControllerID": 62,
+          "NamespaceSize": 1200000000000,
+          "NamespaceUsage": 900000000000,
+          "NamespaceCapacity": 1200000000000,
+          "LBAFormat": "0: 4096B + 0B",
+          "MaximumLBA": 292968750,
+          "SectorSize": 4096,
+          "ANAState": "non-optimized"
+        }
+      ]
+    }"#;
+
+    const NVME_OF_MIXED_SUBSYSTEMS: &[u8] = br#"{
+      "Subsystems": [
+        {
+          "Name": "nvme-subsys-mixed",
+          "NQN": "nqn.2014-08.org.nvmexpress:uuid:mixed-fabric-array",
+          "HostNQN": "nqn.2014-08.org.nvmexpress:host:mixed-node",
+          "Paths": [
+            {
+              "Name": "nvme6",
+              "Transport": "rdma",
+              "Address": "traddr=203.0.113.10,trsvcid=4420",
+              "TRADDR": "203.0.113.10",
+              "TRSVCID": "4420",
+              "HostTRADDR": "203.0.113.20",
+              "HostIface": "roce0",
+              "State": "live",
+              "ANAState": "optimized",
+              "Namespaces": [
+                {
+                  "Name": "/dev/nvme6n1",
+                  "NSID": 1
+                }
+              ]
+            },
+            {
+              "Name": "nvme7",
+              "Transport": "fc",
+              "Address": "nn-0x200100109babcdef:pn-0x210100109babcdef",
+              "TRADDR": "nn-0x200100109babcdef:pn-0x210100109babcdef",
+              "HostIface": "fc0",
+              "State": "reconnecting",
+              "ANAState": "non-optimized",
+              "Namespaces": [
+                {
+                  "Name": "/dev/nvme7n1",
+                  "NSID": 1
+                }
+              ]
+            },
+            {
+              "Name": "nvme8",
+              "Transport": "rdma",
+              "Address": "traddr=203.0.113.11,trsvcid=4420",
+              "TRADDR": "203.0.113.11",
+              "TRSVCID": "4420",
+              "HostTRADDR": "203.0.113.21",
+              "HostIface": "roce1",
+              "State": "connecting",
+              "ANAState": "change",
+              "Namespaces": [
+                {
+                  "Name": "/dev/nvme8n1",
+                  "NSID": 1
+                }
+              ]
+            },
+            {
+              "Name": "nvme9",
+              "Transport": "fc",
+              "Address": "nn-0x200100109babcd00:pn-0x210100109babcd00",
+              "TRADDR": "nn-0x200100109babcd00:pn-0x210100109babcd00",
+              "HostIface": "fc1",
+              "State": "lost",
+              "ANAState": "inaccessible",
+              "Namespaces": [
+                {
+                  "Name": "/dev/nvme9n1",
+                  "NSID": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }"#;
+
+    const NVME_OF_MIXED_MULTIPATH: &[u8] = br#"
+mpathnvmemixed (uuid.bbbbbbbb-cccc-dddd-eeee-ffffffffffff) dm-12 NVME,Array
+size=1.2T features='1 queue_if_no_path' hwhandler='0' wp=rw
+|-+- policy='service-time 0' prio=50 status=active
+| `- nvme6n1 259:16 active ready running optimized
+|-+- policy='service-time 0' prio=20 status=enabled
+| `- nvme7n1 259:17 active ready running nonoptimized
+`-+- policy='service-time 0' prio=1 status=enabled
+  |- nvme8n1 259:18 active ready running change
+  `- nvme9n1 259:19 failed faulty offline inaccessible
+"#;
+
     const CLUSTERED_LVM_PVS: &[u8] = br#"{
       "report": [{
         "pv": [{
@@ -3874,6 +4015,143 @@ nas01.example:/exports/projects mounted on /mnt/projects:
                 })
                 .count(),
             2
+        );
+    }
+
+    #[test]
+    fn nvme_of_mixed_fabric_fixture_preserves_sharing_and_path_churn() {
+        let mut graph = StorageGraph::empty();
+        merge_graph(
+            &mut graph,
+            nvme::normalize_nvme_list_json(NVME_OF_MIXED_LIST)
+                .expect("mixed NVMe-oF list fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            nvme::normalize_nvme_subsystems_json(NVME_OF_MIXED_SUBSYSTEMS)
+                .expect("mixed NVMe-oF subsystem fixture should parse"),
+        );
+        merge_graph(
+            &mut graph,
+            multipath::normalize_multipath_output(NVME_OF_MIXED_MULTIPATH)
+                .expect("mixed NVMe-oF multipath fixture should parse"),
+        );
+
+        let rdma_namespace = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/nvme6n1")
+            .expect("RDMA shared namespace path should exist");
+        assert_eq!(rdma_namespace.kind, NodeKind::NvmeNamespace);
+        assert_eq!(rdma_namespace.size_bytes, Some(1_200_000_000_000));
+        assert_eq!(
+            rdma_namespace.identity.uuid.as_deref(),
+            Some("bbbbbbbb-cccc-dddd-eeee-ffffffffffff")
+        );
+        assert_eq!(
+            rdma_namespace.identity.wwn.as_deref(),
+            Some("bbbbbbbb11111111cccccccc22222222")
+        );
+        assert_has_property(rdma_namespace, "nvme.transport", "rdma");
+        assert_has_property(rdma_namespace, "nvme.ana-state", "optimized");
+        assert_has_property(rdma_namespace, "multipath.path-flags", "optimized");
+
+        let fc_namespace = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/nvme7n1")
+            .expect("FC shared namespace path should exist");
+        assert_eq!(
+            fc_namespace.identity.uuid.as_deref(),
+            Some("bbbbbbbb-cccc-dddd-eeee-ffffffffffff")
+        );
+        assert_eq!(
+            fc_namespace.identity.wwn.as_deref(),
+            Some("bbbbbbbb11111111cccccccc22222222")
+        );
+        assert_has_property(fc_namespace, "nvme.transport", "fc");
+        assert_has_property(fc_namespace, "nvme.ana-state", "non-optimized");
+        assert_has_property(fc_namespace, "multipath.path-flags", "nonoptimized");
+
+        let rdma_controller = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nvme-controller:nvme6")
+            .expect("RDMA/RoCE controller should exist");
+        assert_has_property(rdma_controller, "nvme.transport", "rdma");
+        assert_has_property(rdma_controller, "nvme.host-iface", "roce0");
+        assert_has_property(rdma_controller, "nvme.path-state", "live");
+        assert_has_property(rdma_controller, "nvme.ana-state", "optimized");
+
+        let fc_controller = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nvme-controller:nvme7")
+            .expect("NVMe/FC controller should exist");
+        assert_has_property(fc_controller, "nvme.transport", "fc");
+        assert_has_property(fc_controller, "nvme.host-iface", "fc0");
+        assert_has_property(fc_controller, "nvme.path-state", "reconnecting");
+        assert_has_property(fc_controller, "nvme.ana-state", "non-optimized");
+
+        let transitioning_controller = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nvme-controller:nvme8")
+            .expect("ANA transition controller should exist");
+        assert_has_property(transitioning_controller, "nvme.host-iface", "roce1");
+        assert_has_property(transitioning_controller, "nvme.path-state", "connecting");
+        assert_has_property(transitioning_controller, "nvme.ana-state", "change");
+
+        let lost_controller = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "nvme-controller:nvme9")
+            .expect("lost NVMe/FC controller should exist");
+        assert_has_property(lost_controller, "nvme.host-iface", "fc1");
+        assert_has_property(lost_controller, "nvme.path-state", "lost");
+        assert_has_property(lost_controller, "nvme.ana-state", "inaccessible");
+
+        let inaccessible_namespace = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "block:/dev/nvme9n1")
+            .expect("lost namespace path should exist");
+        assert_has_property(inaccessible_namespace, "multipath.dm-state", "failed");
+        assert_has_property(inaccessible_namespace, "multipath.checker-state", "faulty");
+        assert_has_property(inaccessible_namespace, "multipath.online-state", "offline");
+        assert_has_property(
+            inaccessible_namespace,
+            "multipath.path-flags",
+            "inaccessible",
+        );
+
+        let map = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "multipath:mpathnvmemixed")
+            .expect("mixed NVMe-oF multipath map should exist");
+        assert_eq!(map.kind, NodeKind::MultipathDevice);
+        assert_has_property(
+            map,
+            "multipath.wwid",
+            "uuid.bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+        );
+
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "nvme-subsystem:nvme-subsys-mixed"
+                && edge.to.0 == "nvme-controller:nvme8"
+                && edge.relationship == Relationship::Contains
+        }));
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to.0 == "multipath:mpathnvmemixed"
+                        && edge.relationship == Relationship::Backs
+                })
+                .count(),
+            4
         );
     }
 

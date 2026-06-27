@@ -2183,6 +2183,12 @@
             ${pkgs.gnugrep}/bin/grep -q 'native NVMe namespace paths' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'nvme_tcp_multipath_fixture_preserves_native_path_state' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'uuid.aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'Real-world NVMe-oF fixture coverage' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'mixed NVMe-oF fixture' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'shared namespace UUID/NGUID identity' ${./docs/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme_of_mixed_fabric_fixture_preserves_sharing_and_path_churn' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff' ${./crates/disk-nix-probe/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'node.identity.uuid' ${./crates/disk-nix-probe/src/nvme.rs}
             ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'Real-world server/client NFS fixture coverage' "$checklist"

@@ -172,9 +172,19 @@ pub fn normalize_nvme_id_ns_json(path: &str, bytes: &[u8]) -> Result<StorageGrap
     }
 
     if let Some(nguid) = field_string(&value, "nguid") {
+        node = node.with_identity(Identity {
+            wwn: Some(nguid.clone()),
+            ..Identity::default()
+        });
         node = node.with_property("nvme.nguid", nguid);
     }
     if let Some(eui64) = field_string(&value, "eui64") {
+        if node.identity.wwn.is_none() {
+            node = node.with_identity(Identity {
+                wwn: Some(eui64.clone()),
+                ..Identity::default()
+            });
+        }
         node = node.with_property("nvme.eui64", eui64);
     }
     if let Some(index) = formatted_lba {
@@ -448,6 +458,8 @@ fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
     let controller = device.controller.clone();
     let controller_id = device.controller_id;
     let serial = device.serial_number.clone();
+    let namespace_uuid = device.namespace_uuid.clone();
+    let namespace_wwn = device.nguid.clone().or_else(|| device.eui64.clone());
     let model = device.model_number.clone();
     let product = device.product_name.clone();
     let firmware = device.firmware.clone();
@@ -455,9 +467,11 @@ fn add_device(graph: &mut StorageGraph, device: NvmeDevice) {
     let address = device.address.clone();
     let transport = device.transport.clone();
 
-    if let Some(serial) = device.serial_number {
+    if serial.is_some() || namespace_uuid.is_some() || namespace_wwn.is_some() {
         node = node.with_identity(Identity {
-            serial: Some(serial),
+            uuid: namespace_uuid.clone(),
+            serial: serial.clone(),
+            wwn: namespace_wwn,
             ..Identity::default()
         });
     }
@@ -913,6 +927,14 @@ mod tests {
 
         assert_eq!(node.path.as_deref(), Some("/dev/nvme0n1"));
         assert_eq!(node.identity.serial.as_deref(), Some("SERIAL123"));
+        assert_eq!(
+            node.identity.uuid.as_deref(),
+            Some("12345678-1234-1234-1234-123456789abc")
+        );
+        assert_eq!(
+            node.identity.wwn.as_deref(),
+            Some("00112233445566778899aabbccddeeff")
+        );
         assert!(
             node.properties
                 .iter()
