@@ -899,8 +899,15 @@ When enabled, it:
 - applies `lvmCaches.<vg/lv>.addDevices = [ "<vg/cachepool>" ]`, verifies
   `lvconvert --type cache --cachepool <vg/cachepool> <vg/lv>` succeeds, and
   checks the cache mode is restored to `writethrough`
+- creates a replacement cache pool, applies
+  `lvmCaches.<vg/lv>.replaceDevices = { "<vg/cachepool>" = "<vg/cachepool_replacement>"; }`,
+  verifies the rendered `disk-nix-lvm-cache-replace` wrapper runs
+  `lvconvert --uncache <vg/lv>` before attaching the replacement cache pool
+  with `lvconvert --type cache --cachepool`, and checks the sentinel again
+  after replacement
 - verifies the cached-origin ext4 cache sentinel survives the cache-mode
-  mutation, cache detach, cache reattach, and LVM rescan plans
+  mutation, cache detach, cache reattach, cache replacement, and LVM rescan
+  plans
 - executes `volumeGroups.<name>.operation = "rescan"`,
   `volumes.<vg/lv>.operation = "rescan"`,
   `thinPools.<vg/pool>.operation = "rescan"`, and

@@ -168,7 +168,7 @@ behavior across real storage stacks.
   real LVM cache property mutation with `lvchange --cachemode`, real LVM cache detach and reattach
   with `lvconvert --uncache` and
   `lvconvert --type cache --cachepool`, while a cached-origin ext4 sentinel
-  remains readable, verify
+  remains readable, real LVM cache replacement with `disk-nix-lvm-cache-replace`, verify
   real bcache cache-mode mutation, real bcache cache detach/reattach with
   `disk-nix-bcache-detach` and `disk-nix-bcache-attach`, real bcache cache replacement
   with `disk-nix-bcache-replace`, verify

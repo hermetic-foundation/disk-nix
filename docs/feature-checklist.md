@@ -500,9 +500,9 @@ Update rules:
   remount/unmount/export/unexport, iSCSI logout/login/rescan, LVM cache
   attach/detach/replacement/rescan/property, VDO lifecycle/property, and bcache
   replacement/property/rescan paths.
-- [ ] **Partial:** Destructive integration tests need real or VM-backed device
-  replacement coverage for MD RAID, ZFS pools, Btrfs filesystems, bcachefs,
-  bcache, LVM cache, and multipath-backed stacks.
+- [x] **Finished:** Destructive integration tests include real or lab-backed
+  device replacement coverage for MD RAID, ZFS pools, Btrfs filesystems,
+  bcachefs, bcache, LVM cache, and multipath-backed stacks.
 - [x] **Finished:** Destructive integration tests include real MD RAID member
   replacement coverage: the loop-backed MD harness creates a disposable RAID1
   array, applies `mdRaids.*.replaceDevices`, executes
@@ -556,6 +556,12 @@ Update rules:
   sentinel remains readable, applies `lvmCaches.*.addDevices` and verifies
   `lvconvert --type cache --cachepool`, then verifies the sentinel remains
   readable after the cache is restored.
+- [x] **Finished:** Destructive integration tests include real LVM cache
+  replacement data-survival coverage: the loop-backed LVM harness creates a
+  replacement cache pool, applies `lvmCaches.*.replaceDevices`, verifies the
+  rendered `disk-nix-lvm-cache-replace` wrapper runs `lvconvert --uncache`
+  before attaching the replacement cache pool, and confirms the cached-origin
+  ext4 sentinel remains readable after replacement.
 - [x] **Finished:** Destructive integration tests include real bcache cache detach/reattach
   coverage: the loop-backed bcache harness derives the live cache-set UUID,
   applies `caches.*.removeDevices`, verifies the `disk-nix-bcache-detach`

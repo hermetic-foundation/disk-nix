@@ -1935,6 +1935,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'lvconvert", "--uncache", $origin' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches:" + $origin + ":add-device:" + $cachepool' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lvconvert", "--type", "cache", "--cachepool", $cachepool, $origin' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'cachepool_replacement' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'replaceDevices' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'lvmCaches:" + $origin + ":replace-device:" + $old_cachepool' ${./scripts/integration-lvm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-lvm-cache-replace' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'vgchange", "--refresh"' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'thinpools:" + $thinpool + ":rescan' ${./scripts/integration-lvm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'lvmsnapshots:" + $snapshot + ":rescan' ${./scripts/integration-lvm-smoke.sh}
@@ -2462,6 +2466,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'missing-member coverage: the loop-backed MD harness' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'layered block/filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'LVM cache data-survival' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'LVM cache, and multipath-backed stacks' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'replacement data-survival coverage' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real bcache read-only' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache detach/reattach' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'rescan coverage: the loop-backed bcache harness' "$checklist"
@@ -2514,6 +2520,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool device replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LVM cache detach and reattach' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real LVM cache replacement' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'cached-origin ext4 sentinel' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation, real bcache cache detach/reattach' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real bcache cache detach/reattach' ${./docs/status.md}
@@ -2551,6 +2558,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.properties.lvm.cache-mode' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.removeDevices' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.addDevices' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.replaceDevices' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-lvm-cache-replace' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'cache sentinel survives' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.properties."bcache.cache-mode"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheReplacement.replaceDevices' ${./docs/integration-tests.md}
