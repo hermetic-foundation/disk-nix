@@ -417,9 +417,15 @@ Update rules:
   growth, bcache replacement, LVM cache mutation, Btrfs qgroup mutation, pool
   topology, and dataset/zvol lifecycle boundaries emit refused/operator-only
   recipes without stronger topology proof.
-- [ ] **Desired:** Proven automatic rollback recipes need network-storage
-  recipes and fixtures for NFS, iSCSI, multipath, NVMe-oF, host-side LUNs, and
-  target-side LUN providers.
+- [x] **Finished:** Proven automatic rollback recipes have network-storage
+  recipes and fixtures for NFS, iSCSI, host-side LUNs, and target-side LUN
+  providers. NFS remount and export option failures can replay declared
+  `rollbackValue`; NFS mount and iSCSI login verification failures can replay
+  bounded inverse unmount/logout commands; target-side LUN property failures can
+  replay provider-specific declared `rollbackValue`; and NFS unmount/unexport,
+  iSCSI logout, host LUN growth, target LUN growth, remote export lifecycle, and
+  LUN topology boundaries emit refused/operator-only recipes without stronger
+  initiator, target, and backing-store proof.
 - [x] **Finished:** Automatic rollback recipes have crate-level integration
   proof that a failed apply report can bind fresh topology evidence and
   payloads, choose a proven rollback recipe, run read-only validation and

@@ -840,6 +840,15 @@ ZFS/Btrfs rename verification failures can replay a bounded inverse rename.
 ZFS snapshot rollback/clone, VDO growth, bcache replacement, LVM cache
 mutation, Btrfs qgroup mutation, pool topology, and dataset/zvol lifecycle
 boundaries remain refused/operator-only without stronger topology proof.
+Network-storage failures can also produce proven-safe recipes when old state is
+explicit or the failure is verification-bound: NFS remount and export option
+failures can replay declared `rollbackValue`, NFS mount verification failures can
+replay `umount <mountpoint>`, iSCSI login verification failures can replay the
+matching `iscsiadm ... --logout`, and target-side LUN property failures can
+replay provider-specific declared `rollbackValue`. NFS unmount/unexport, iSCSI
+logout, host or target LUN growth, target LUN attach/detach, remote export
+lifecycle, and LUN topology boundaries remain refused/operator-only without
+stronger initiator, target, active-consumer, and backing-store proof.
 Recipes can declare `requiredTopologyEvidence` labels such as `expected`,
 `preApply`, `failedApply`, and `current`; replay receipts include
 `topologyEvidence` IDs and refuse execution when required evidence bindings are

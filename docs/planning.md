@@ -1142,6 +1142,15 @@ name or path. ZFS snapshot rollback/clone, VDO growth, bcache replacement, LVM
 cache mutation, Btrfs qgroup mutation, pool topology, and dataset/zvol
 lifecycle boundaries stay refused/operator-only without stronger topology
 evidence.
+Network-storage declarations also use `rollbackValue`/`previousValue` for
+option and property rollback metadata. NFS remount/export option changes and
+target-side LUN property changes can use the pre-apply value for proven-safe
+rollback replay. NFS mount and iSCSI login failures only become automatic when
+the mutation succeeded and verification failed, so the inverse is bounded to the
+mounted path or logged-in target/portal. NFS unmount/unexport, iSCSI logout,
+host or target LUN growth, target LUN attach/detach, remote export lifecycle,
+and LUN topology boundaries stay refused/operator-only without stronger
+initiator, target, active-consumer, and backing-store proof.
 Btrfs subvolume property updates only treat read-only aliases (`readOnly`,
 `readonly`, `ro`, `btrfs.readonly`, and `btrfs.ro`) as safe planned property
 changes. Other Btrfs subvolume property keys are classified as unsupported so

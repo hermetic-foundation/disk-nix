@@ -2159,7 +2159,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'Update rules:' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '\*\*Finished:\*\*' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '\*\*Partial:\*\*' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q '\*\*Desired:\*\*' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q '`Desired`: not implemented yet' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Operator runbooks for high-risk workflows' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' ${./docs/planning.md}
@@ -2300,12 +2300,16 @@
             ${pkgs.gnugrep}/bin/grep -q 'block_stack_zram_boundary_emits_refused_rollback_recipe' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'advanced_storage_property_failures_emit_proven_safe_rollback_recipes' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'advanced_storage_refused_boundaries_emit_operator_only_rollback_recipes' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'network_storage_failures_emit_proven_safe_rollback_recipes' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'network_storage_refused_boundaries_emit_operator_only_rollback_recipes' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollbackOptions' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'rollbackValue' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'device-mapper rename verification failures' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'Block-stack property declarations use the same' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'Advanced-storage declarations also use' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'ZFS snapshot rollback/clone' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Network-storage declarations also use' ${./docs/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Network-storage failures can also produce proven-safe recipes' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses proven-safe recipes when' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises ambiguous rollback points' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises active consumers' ${./docs/feature-checklist.md}

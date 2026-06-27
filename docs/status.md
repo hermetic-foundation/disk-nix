@@ -438,6 +438,14 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   replacement, LVM cache mutation, Btrfs qgroup mutation, pool topology, and
   dataset/zvol lifecycle boundaries remain refused/operator-only without
   stronger topology proof.
+  Network-storage failed-apply reports specialize rollback recipes as well:
+  NFS remount/export option failures can replay declared `rollbackValue`, NFS
+  mount and iSCSI login verification failures can use bounded inverse
+  unmount/logout commands, and target-side LUN property failures can replay
+  provider-specific declared `rollbackValue`. NFS unmount/unexport, iSCSI
+  logout, host or target LUN growth, target LUN attach/detach, remote export
+  lifecycle, and LUN topology boundaries remain refused/operator-only without
+  stronger initiator, target, active-consumer, and backing-store proof.
   The exec crate also has an integration test proving a failed apply report can
   bind fresh topology evidence and payloads, select a proven-safe rollback
   recipe, run read-only validation plus reversible mutation steps, and emit a

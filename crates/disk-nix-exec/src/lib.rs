@@ -650,6 +650,11 @@ fn rollback_recipes_for_report(report: &ExecutionReport) -> Vec<RollbackRecipe> 
         {
             return vec![recipe];
         }
+        if let Some(recipe) =
+            network_storage_rollback_recipe_for_step(partial, rollback_review, step)
+        {
+            return vec![recipe];
+        }
     }
 
     vec![review_only_rollback_recipe(
@@ -1581,6 +1586,335 @@ fn step_note_value<'a>(step: &'a ExecutionStep, key: &str) -> Option<&'a str> {
             .map(str::trim)
             .filter(|value| !value.is_empty())
     })
+}
+
+fn network_storage_rollback_recipe_for_step(
+    partial: &PartialExecutionRecovery,
+    rollback_review: &RecoveryAction,
+    step: &ExecutionStep,
+) -> Option<RollbackRecipe> {
+    if !network_storage_collection(command_step_collection(step)?) {
+        return None;
+    }
+
+    let validation_commands = rollback_review.commands.clone();
+    let mut recipe = review_only_rollback_recipe(
+        partial,
+        rollback_review,
+        network_storage_rollback_refusal_reasons(step),
+        network_storage_rollback_notes(step),
+    );
+
+    if let Some(command) = network_storage_proven_rollback_command(partial, step) {
+        recipe.status = RollbackRecipeStatus::ProvenSafe;
+        recipe.read_only_validation.notes.push(
+            "network-storage rollback validation must prove export, mount, session, LUN, and target-side identity still match the failed apply receipt".to_string(),
+        );
+        recipe.reversible_mutations = RollbackRecipeSection {
+            commands: vec![command],
+            notes: vec![
+                "network-storage rollback mutation is limited to declared old option/property values or verification-bound mount/login inverses".to_string(),
+                "remote export lifecycle, unmount/logout, growth, attach/detach, and target LUN topology boundaries remain refused without stronger initiator, target, and backing-store proof".to_string(),
+            ],
+        };
+        recipe.operator_only_handoff = RollbackRecipeSection {
+            commands: Vec::new(),
+            notes: Vec::new(),
+        };
+        recipe.refusal_reasons = Vec::new();
+        recipe.notes.push(
+            "network-storage recipe is proven-safe only because the rollback command is derived from explicit pre-apply metadata or a failed verification boundary".to_string(),
+        );
+    } else if network_storage_refused_operation(step) {
+        recipe.status = RollbackRecipeStatus::Refused;
+        recipe.operator_only_handoff = RollbackRecipeSection {
+            commands: validation_commands,
+            notes: vec![
+                "network-storage rollback requires operator review of clients, exports, mounts, iSCSI sessions, LUN mappings, target-side state, and active consumers before mutation".to_string(),
+                "prefer roll-forward validation, fresh initiator and target inventory, restored export configuration, remount/login repair, or target-side recovery workflows instead of automated mutation".to_string(),
+            ],
+        };
+    }
+
+    Some(recipe)
+}
+
+fn network_storage_collection(collection: &str) -> bool {
+    matches!(
+        collection,
+        "exports" | "nfs.mounts" | "iscsiSessions" | "luns" | "targetLuns"
+    )
+}
+
+fn network_storage_refused_operation(step: &ExecutionStep) -> bool {
+    matches!(
+        step.operation,
+        Operation::Attach
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Detach
+            | Operation::Export
+            | Operation::Grow
+            | Operation::Login
+            | Operation::Logout
+            | Operation::Mount
+            | Operation::Remount
+            | Operation::Rescan
+            | Operation::SetProperty
+            | Operation::Unmount
+            | Operation::Unexport
+    )
+}
+
+fn network_storage_rollback_refusal_reasons(step: &ExecutionStep) -> Vec<String> {
+    let collection = command_step_collection(step).unwrap_or("network-storage");
+    match (collection, step.operation) {
+        ("nfs.mounts", Operation::Remount) => vec![
+            "NFS remount rollback metadata is missing or insufficient for proven-safe replay"
+                .to_string(),
+        ],
+        ("nfs.mounts", Operation::Mount) => vec![
+            "NFS mount rollback is only automatic when mount succeeded and verification failed"
+                .to_string(),
+        ],
+        ("exports", Operation::SetProperty) => vec![
+            "NFS export option rollback metadata is missing or insufficient for proven-safe replay"
+                .to_string(),
+        ],
+        ("iscsiSessions", Operation::Login) => vec![
+            "iSCSI login rollback is only automatic when login succeeded and verification failed"
+                .to_string(),
+        ],
+        ("targetLuns", Operation::SetProperty) => vec![
+            "target LUN property rollback metadata is missing or insufficient for proven-safe replay"
+                .to_string(),
+        ],
+        ("nfs.mounts", Operation::Unmount)
+        | ("exports", Operation::Create | Operation::Destroy | Operation::Export | Operation::Unexport)
+        | ("iscsiSessions", Operation::Logout | Operation::Create | Operation::Destroy)
+        | ("luns", Operation::Attach | Operation::Detach | Operation::Grow | Operation::Rescan)
+        | ("targetLuns", Operation::Attach | Operation::Create | Operation::Destroy | Operation::Detach | Operation::Grow | Operation::Rescan) => vec![
+            "network-storage rollback is refused because client visibility, remote server state, target mapping, and active consumers require operator review".to_string(),
+        ],
+        _ => vec!["network-storage rollback for this operation remains review-only".to_string()],
+    }
+}
+
+fn network_storage_rollback_notes(step: &ExecutionStep) -> Vec<String> {
+    let collection = command_step_collection(step).unwrap_or("network-storage");
+    let boundary = match collection {
+        "exports" => "NFS export",
+        "nfs.mounts" => "NFS mount",
+        "iscsiSessions" => "iSCSI session",
+        "luns" => "host LUN",
+        "targetLuns" => "target LUN",
+        _ => "network-storage",
+    };
+    vec![
+        format!("network-storage rollback recipe covers the {boundary} boundary"),
+        "read-only validation must be bound to expected, pre-apply, failed-apply, and current topology evidence".to_string(),
+    ]
+}
+
+fn network_storage_proven_rollback_command(
+    partial: &PartialExecutionRecovery,
+    step: &ExecutionStep,
+) -> Option<ExecutionCommand> {
+    let collection = command_step_collection(step)?;
+    match (collection, step.operation) {
+        ("nfs.mounts", Operation::Remount) => nfs_mount_remount_rollback_command(step),
+        ("nfs.mounts", Operation::Mount)
+            if partial.failed_phase == ExecutionPhase::Verification =>
+        {
+            nfs_mount_verification_rollback_command(step)
+        }
+        ("exports", Operation::SetProperty) => nfs_export_property_rollback_command(step),
+        ("iscsiSessions", Operation::Login)
+            if partial.failed_phase == ExecutionPhase::Verification =>
+        {
+            iscsi_login_verification_rollback_command(step)
+        }
+        ("targetLuns", Operation::SetProperty) => target_lun_property_rollback_command(step),
+        _ => None,
+    }
+}
+
+fn nfs_mount_remount_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let target = nfs_mount_target_from_step(step)?;
+    let rollback_options = step_note_value(step, "rollback-value")
+        .or_else(|| step_note_value(step, "rollback-options"))?;
+    Some(command_vec(
+        vec![
+            "mount".to_string(),
+            "-o".to_string(),
+            format!("remount,{rollback_options}"),
+            target.to_string(),
+        ],
+        true,
+        "restore declared pre-apply NFS mount options",
+    ))
+}
+
+fn nfs_mount_verification_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let target = nfs_mount_target_from_step(step)?;
+    Some(command_vec(
+        vec!["umount".to_string(), target.to_string()],
+        true,
+        "undo NFS mount created by the failed apply after read-only validation",
+    ))
+}
+
+fn nfs_export_property_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_value = step_note_value(step, "rollback-value")?;
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    let [tool, flag, option_flag, _, selector] = rollback_command.argv.as_slice() else {
+        return None;
+    };
+    if tool != "exportfs" || flag != "-i" || option_flag != "-o" {
+        return None;
+    }
+    Some(command_vec(
+        vec![
+            "exportfs".to_string(),
+            "-i".to_string(),
+            "-o".to_string(),
+            rollback_value.to_string(),
+            selector.clone(),
+        ],
+        true,
+        "restore declared pre-apply NFS export options",
+    ))
+}
+
+fn iscsi_login_verification_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_command = step
+        .commands
+        .iter()
+        .find(|command| command.mutates && command.argv.iter().any(|arg| arg == "--login"))?;
+    let target = iscsi_target_from_command(rollback_command)?;
+    let portal = iscsi_portal_from_command(rollback_command);
+    let mut argv = vec![
+        "iscsiadm".to_string(),
+        "--mode".to_string(),
+        "node".to_string(),
+        "--targetname".to_string(),
+        target.to_string(),
+    ];
+    if let Some(portal) = portal {
+        argv.extend(["--portal".to_string(), portal.to_string()]);
+    }
+    argv.push("--logout".to_string());
+    Some(command_vec(
+        argv,
+        true,
+        "logout iSCSI session created by the failed apply after read-only validation",
+    ))
+}
+
+fn iscsi_target_from_command(command: &ExecutionCommand) -> Option<&str> {
+    command
+        .argv
+        .windows(2)
+        .find(|window| window[0] == "--targetname")
+        .map(|window| window[1].as_str())
+        .filter(|target| !target.starts_with('<'))
+}
+
+fn iscsi_portal_from_command(command: &ExecutionCommand) -> Option<&str> {
+    command
+        .argv
+        .iter()
+        .position(|arg| arg == "--portal")
+        .and_then(|index| command.argv.get(index + 1))
+        .map(String::as_str)
+        .filter(|portal| !portal.starts_with('<'))
+}
+
+fn target_lun_property_rollback_command(step: &ExecutionStep) -> Option<ExecutionCommand> {
+    let rollback_value = step_note_value(step, "rollback-value")?;
+    let rollback_command = step.commands.iter().find(|command| command.mutates)?;
+    match rollback_command.argv.first().map(String::as_str) {
+        Some("targetcli") => {
+            target_lun_lio_property_rollback_command(rollback_command, rollback_value)
+        }
+        Some("tgtadm") => {
+            target_lun_tgt_property_rollback_command(rollback_command, rollback_value)
+        }
+        Some("scstadmin") => {
+            target_lun_scst_property_rollback_command(rollback_command, rollback_value)
+        }
+        _ => None,
+    }
+}
+
+fn target_lun_lio_property_rollback_command(
+    rollback_command: &ExecutionCommand,
+    rollback_value: &str,
+) -> Option<ExecutionCommand> {
+    let [tool, backstore_path, subcommand, scope, assignment] = rollback_command.argv.as_slice()
+    else {
+        return None;
+    };
+    if tool != "targetcli" || subcommand != "set" || scope != "attribute" {
+        return None;
+    }
+    let property = assignment.split_once('=')?.0;
+    Some(command_vec(
+        vec![
+            "targetcli".to_string(),
+            backstore_path.clone(),
+            "set".to_string(),
+            "attribute".to_string(),
+            format!("{property}={rollback_value}"),
+        ],
+        true,
+        "restore declared pre-apply LIO target LUN attribute",
+    ))
+}
+
+fn target_lun_tgt_property_rollback_command(
+    rollback_command: &ExecutionCommand,
+    rollback_value: &str,
+) -> Option<ExecutionCommand> {
+    let property_index = rollback_command
+        .argv
+        .iter()
+        .position(|arg| arg == "--name")?
+        + 1;
+    let value_index = rollback_command
+        .argv
+        .iter()
+        .position(|arg| arg == "--value")?
+        + 1;
+    rollback_command.argv.get(property_index)?;
+    rollback_command.argv.get(value_index)?;
+    let mut argv = rollback_command.argv.clone();
+    argv[value_index] = rollback_value.to_string();
+    Some(command_vec(
+        argv,
+        true,
+        "restore declared pre-apply Linux tgt logical-unit property",
+    ))
+}
+
+fn target_lun_scst_property_rollback_command(
+    rollback_command: &ExecutionCommand,
+    rollback_value: &str,
+) -> Option<ExecutionCommand> {
+    let attributes_index = rollback_command
+        .argv
+        .iter()
+        .position(|arg| arg == "-attributes")?
+        + 1;
+    let assignment = rollback_command.argv.get(attributes_index)?;
+    let property = assignment.split_once('=')?.0;
+    let mut argv = rollback_command.argv.clone();
+    argv[attributes_index] = format!("{property}={rollback_value}");
+    Some(command_vec(
+        argv,
+        true,
+        "restore declared pre-apply SCST target LUN attribute",
+    ))
 }
 
 fn rollback_recipe_safety_gates() -> Vec<String> {
@@ -2853,6 +3187,15 @@ fn requires_domain_recovery(step: &ExecutionStep) -> bool {
                     | Operation::Destroy
                     | Operation::Detach
                     | Operation::Grow
+                    | Operation::Rescan,
+                Some("luns")
+            )
+            | (
+                Operation::Attach
+                    | Operation::Create
+                    | Operation::Destroy
+                    | Operation::Detach
+                    | Operation::Grow
                     | Operation::SetProperty
                     | Operation::Rescan,
                 Some("targetLuns")
@@ -3579,20 +3922,31 @@ fn domain_rollback_inspection_commands(step: &ExecutionStep) -> Vec<ExecutionCom
             Some(target),
             "confirm target-side LUN provider and host-visible path state before rollback decisions",
         ),
-        (Operation::Destroy | Operation::RemoveDevice | Operation::Detach, Some("luns"), _) => {
-            vec![
-                command_vec(
-                    ["disk-nix", "luns", "--json"],
-                    false,
-                    "confirm which LUN paths remain visible before reversing host-side detach",
-                ),
-                command_vec(
-                    ["multipath", "-ll"],
-                    false,
-                    "confirm path grouping before restoring or removing multipath maps",
-                ),
-            ]
-        }
+        (
+            Operation::Attach
+            | Operation::Create
+            | Operation::Destroy
+            | Operation::Detach
+            | Operation::Grow
+            | Operation::RemoveDevice
+            | Operation::Rescan,
+            Some("luns"),
+            _,
+        ) => vec![
+            command_vec(
+                ["disk-nix", "luns", "--json"],
+                false,
+                "confirm host-side LUN paths before rollback decisions",
+            ),
+            lsscsi_lun_inventory_command(
+                "confirm host-visible LUN transport and size before rollback decisions",
+            ),
+            command_vec(
+                ["multipath", "-ll"],
+                false,
+                "confirm path grouping before restoring or removing multipath maps",
+            ),
+        ],
         (
             Operation::Create | Operation::Destroy | Operation::Login | Operation::Logout,
             Some("iscsiSessions"),
@@ -33861,6 +34215,393 @@ mod tests {
                     success: argv != failed_command.as_slice(),
                     status_code: Some(if argv == failed_command.as_slice() {
                         23
+                    } else {
+                        0
+                    }),
+                    stdout: String::new(),
+                    stderr: if argv == failed_command.as_slice() {
+                        format!("{boundary} failed")
+                    } else {
+                        String::new()
+                    },
+                },
+                |_| true,
+            );
+
+            assert_eq!(report.status, ExecutionStatus::Failed, "{boundary}");
+            let recipe = report
+                .rollback_recipes
+                .first()
+                .unwrap_or_else(|| panic!("{boundary} rollback recipe should be reported"));
+            assert_eq!(recipe.status, RollbackRecipeStatus::Refused, "{boundary}");
+            assert!(
+                recipe.reversible_mutations.commands.is_empty(),
+                "{boundary} should not emit automatic rollback mutation"
+            );
+            assert!(
+                recipe
+                    .operator_only_handoff
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("operator review")),
+                "{boundary} should hand off to operator review"
+            );
+            assert!(
+                recipe
+                    .refusal_reasons
+                    .iter()
+                    .any(|reason| reason.contains(reason_fragment)),
+                "{boundary} should explain refusal"
+            );
+        }
+    }
+
+    #[test]
+    fn network_storage_failures_emit_proven_safe_rollback_recipes() {
+        for (case, spec, failed_command, expected_rollback) in [
+            (
+                "NFS remount",
+                br#"{
+                  "spec": {
+                    "nfs": {
+                      "mounts": {
+                        "/srv/tuned": {
+                          "operation": "remount",
+                          "source": "nas.example.com:/srv/tuned",
+                          "options": ["_netdev", "rw", "vers=4.2"],
+                          "rollbackValue": "_netdev,ro,vers=4.2"
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "mount".to_string(),
+                    "-o".to_string(),
+                    "remount,_netdev,rw,vers=4.2".to_string(),
+                    "/srv/tuned".to_string(),
+                ],
+                vec![
+                    "mount".to_string(),
+                    "-o".to_string(),
+                    "remount,_netdev,ro,vers=4.2".to_string(),
+                    "/srv/tuned".to_string(),
+                ],
+            ),
+            (
+                "NFS mount verification",
+                br#"{
+                  "spec": {
+                    "nfs": {
+                      "mounts": {
+                        "/srv/shared": {
+                          "operation": "mount",
+                          "source": "nas.example.com:/srv/shared",
+                          "fsType": "nfs4",
+                          "options": ["_netdev", "ro", "vers=4.2"]
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "findmnt".to_string(),
+                    "--json".to_string(),
+                    "/srv/shared".to_string(),
+                ],
+                vec!["umount".to_string(), "/srv/shared".to_string()],
+            ),
+            (
+                "NFS export options",
+                br#"{
+                  "spec": {
+                    "exports": {
+                      "/srv/share": {
+                        "client": "192.0.2.0/24",
+                        "properties": {
+                          "options": "rw,sync,no_subtree_check"
+                        },
+                        "rollbackValue": "ro,sync,no_subtree_check"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowPropertyChanges": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "exportfs".to_string(),
+                    "-i".to_string(),
+                    "-o".to_string(),
+                    "rw,sync,no_subtree_check".to_string(),
+                    "192.0.2.0/24:/srv/share".to_string(),
+                ],
+                vec![
+                    "exportfs".to_string(),
+                    "-i".to_string(),
+                    "-o".to_string(),
+                    "ro,sync,no_subtree_check".to_string(),
+                    "192.0.2.0/24:/srv/share".to_string(),
+                ],
+            ),
+            (
+                "iSCSI login verification",
+                br#"{
+                  "spec": {
+                    "iscsiSessions": {
+                      "iqn.2026-06.example:storage.root": {
+                        "operation": "login",
+                        "portal": "192.0.2.10:3260"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "disk-nix".to_string(),
+                    "inspect".to_string(),
+                    "iqn.2026-06.example:storage.root".to_string(),
+                    "--json".to_string(),
+                ],
+                vec![
+                    "iscsiadm".to_string(),
+                    "--mode".to_string(),
+                    "node".to_string(),
+                    "--targetname".to_string(),
+                    "iqn.2026-06.example:storage.root".to_string(),
+                    "--portal".to_string(),
+                    "192.0.2.10:3260".to_string(),
+                    "--logout".to_string(),
+                ],
+            ),
+            (
+                "LIO target LUN property",
+                br#"{
+                  "spec": {
+                    "targetLuns": {
+                      "iqn.2026-06.example:storage.root": {
+                        "provider": "lio",
+                        "source": "/dev/zvol/tank/root",
+                        "lun": 7,
+                        "properties": {
+                          "lio.writeCache": "off"
+                        },
+                        "rollbackValue": "1"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowPropertyChanges": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "targetcli".to_string(),
+                    "/backstores/block/_dev_zvol_tank_root".to_string(),
+                    "set".to_string(),
+                    "attribute".to_string(),
+                    "emulate_write_cache=0".to_string(),
+                ],
+                vec![
+                    "targetcli".to_string(),
+                    "/backstores/block/_dev_zvol_tank_root".to_string(),
+                    "set".to_string(),
+                    "attribute".to_string(),
+                    "emulate_write_cache=1".to_string(),
+                ],
+            ),
+        ] {
+            let (plan, policy) = plan_and_policy_from_json_bytes(spec).expect("document parses");
+            let report = prepare_execution_with_runner_and_tool_checker(
+                &plan,
+                policy,
+                ExecutionMode::Execute,
+                |argv| CommandRunResult {
+                    success: argv != failed_command.as_slice(),
+                    status_code: Some(if argv == failed_command.as_slice() {
+                        24
+                    } else {
+                        0
+                    }),
+                    stdout: String::new(),
+                    stderr: if argv == failed_command.as_slice() {
+                        format!("{case} failed")
+                    } else {
+                        String::new()
+                    },
+                },
+                |_| true,
+            );
+
+            assert_eq!(report.status, ExecutionStatus::Failed, "{case}");
+            let recipe = report
+                .rollback_recipes
+                .first()
+                .unwrap_or_else(|| panic!("{case} rollback recipe is reported"));
+            assert_eq!(recipe.status, RollbackRecipeStatus::ProvenSafe, "{case}");
+            assert!(recipe.refusal_reasons.is_empty(), "{case}");
+            assert_eq!(
+                recipe.reversible_mutations.commands[0].argv, expected_rollback,
+                "{case}"
+            );
+
+            let replay = replay_proven_safe_rollback_recipe_with_runner(
+                &report,
+                0,
+                "receipt:network".to_string(),
+                "topology:network".to_string(),
+                &mut |_| CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                },
+            );
+            assert_eq!(
+                replay.status,
+                RollbackExecutionStatus::Succeeded,
+                "{case}: {:?}",
+                replay.refusal_reasons
+            );
+        }
+    }
+
+    #[test]
+    fn network_storage_refused_boundaries_emit_operator_only_rollback_recipes() {
+        for (boundary, spec, failed_command, reason_fragment) in [
+            (
+                "NFS unmount",
+                br#"{
+                  "spec": {
+                    "nfs": {
+                      "mounts": {
+                        "/srv/old": {
+                          "operation": "unmount",
+                          "source": "nas.example.com:/srv/old"
+                        }
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec!["umount".to_string(), "/srv/old".to_string()],
+                "network-storage rollback is refused",
+            ),
+            (
+                "NFS unexport",
+                br#"{
+                  "spec": {
+                    "exports": {
+                      "/srv/share": {
+                        "operation": "unexport",
+                        "client": "192.0.2.0/24"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "exportfs".to_string(),
+                    "-u".to_string(),
+                    "192.0.2.0/24:/srv/share".to_string(),
+                ],
+                "network-storage rollback is refused",
+            ),
+            (
+                "iSCSI logout",
+                br#"{
+                  "spec": {
+                    "iscsiSessions": {
+                      "iqn.2026-06.example:storage.old": {
+                        "operation": "logout",
+                        "portal": "192.0.2.10:3260"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "iscsiadm".to_string(),
+                    "--mode".to_string(),
+                    "node".to_string(),
+                    "--targetname".to_string(),
+                    "iqn.2026-06.example:storage.old".to_string(),
+                    "--portal".to_string(),
+                    "192.0.2.10:3260".to_string(),
+                    "--logout".to_string(),
+                ],
+                "network-storage rollback is refused",
+            ),
+            (
+                "host LUN grow",
+                br#"{
+                  "spec": {
+                    "luns": {
+                      "iqn.2026-06.example:storage/root:0": {
+                        "operation": "grow",
+                        "device": "/dev/disk/by-path/ip-192.0.2.10:3260-iscsi-iqn.2026-06.example:storage-lun-0",
+                        "desiredSize": "2TiB"
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowGrow": true,
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec![
+                    "iscsiadm".to_string(),
+                    "--mode".to_string(),
+                    "session".to_string(),
+                    "--rescan".to_string(),
+                ],
+                "network-storage rollback is refused",
+            ),
+            (
+                "target LUN grow",
+                br#"{
+                  "spec": {
+                    "targetLuns": {
+                      "iqn.2026-06.example:storage.root": {
+                        "operation": "grow",
+                        "provider": "lio",
+                        "source": "/dev/zvol/tank/root",
+                        "desiredSize": "4TiB",
+                        "lun": 7
+                      }
+                    }
+                  },
+                  "apply": {
+                    "allowGrow": true,
+                    "allowOffline": true
+                  }
+                }"# as &[u8],
+                vec!["targetcli".to_string(), "saveconfig".to_string()],
+                "network-storage rollback is refused",
+            ),
+        ] {
+            let (plan, policy) = plan_and_policy_from_json_bytes(spec).expect("document parses");
+            let report = prepare_execution_with_runner_and_tool_checker(
+                &plan,
+                policy,
+                ExecutionMode::Execute,
+                |argv| CommandRunResult {
+                    success: argv != failed_command.as_slice(),
+                    status_code: Some(if argv == failed_command.as_slice() {
+                        25
                     } else {
                         0
                     }),
