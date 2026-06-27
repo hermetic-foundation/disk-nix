@@ -8,6 +8,7 @@ Refusing to run target-side LUN integration smoke test.
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates
 a temporary loop-backed LIO block backstore and iSCSI target/LUN mapping,
 mutates a target-side LUN property, maps and unmaps a second target-side LUN,
+proves destructive target-side removal is refused without destructive policy,
 then removes the temporary target state and backing files during cleanup.
 MSG
   exit 2
@@ -72,6 +73,7 @@ attach_spec="$tmpdir/attach-spec.json"
 attach_report="$tmpdir/attach-report.json"
 detach_spec="$tmpdir/detach-spec.json"
 detach_report="$tmpdir/detach-report.json"
+destroy_refusal_spec="$tmpdir/destroy-refusal-spec.json"
 
 truncate --size 64M "$backing"
 truncate --size 64M "$attach_backing"
@@ -237,4 +239,46 @@ if targetcli "/iscsi/$target_iqn/tpg1/luns" ls | grep -E "lun[[:space:]]*$attach
   exit 1
 fi
 
-echo "target-side LUN integration smoke test updated lio.writeCache for $target_iqn LUN $lun_id and mapped/unmapped LUN $attach_lun_id"
+jq -n \
+  --arg target_iqn "$target_iqn" \
+  --arg attach_loopdev "$attach_loopdev" \
+  --arg initiator_iqn "$initiator_iqn" \
+  --argjson attach_lun_id "$attach_lun_id" \
+  '{
+    version: 1,
+    targetLuns: {
+      ($target_iqn): {
+        destroy: true,
+        provider: "lio",
+        source: $attach_loopdev,
+        lun: $attach_lun_id,
+        client: $initiator_iqn
+      }
+    },
+    apply: {
+      allowOffline: true
+    }
+  }' > "$destroy_refusal_spec"
+
+if "$disk_nix_bin" apply \
+  --spec "$destroy_refusal_spec" \
+  --json > "$tmpdir/destroy-refusal.json" 2> "$tmpdir/destroy-refusal.stderr"; then
+  echo "target-side LUN destroy unexpectedly passed without allowDestructive" >&2
+  cat "$tmpdir/destroy-refusal.json" >&2 || true
+  exit 1
+fi
+
+jq -e \
+  --arg target_iqn "$target_iqn" \
+  '
+  .status == "blocked"
+  and .apply.blockedCount == 1
+  and .apply.blockedSummary.destructiveCount == 1
+  and (.apply.blocked[] | select(.id == ("targetluns:" + $target_iqn + ":destroy") and .operation == "destroy" and .risk == "destructive" and (.reason | contains("allowDestructive=true"))))
+  and (.commandPlan | length == 0)
+  and (.recoveryActions[] | select(.kind == "review-policy" and (.notes[] | contains("prefer non-destructive alternatives"))))
+' "$tmpdir/destroy-refusal.json" >/dev/null
+
+grep -F 'apply policy blocked 1 action(s)' "$tmpdir/destroy-refusal.stderr" >/dev/null
+
+echo "target-side LUN integration smoke test updated lio.writeCache for $target_iqn LUN $lun_id, mapped/unmapped LUN $attach_lun_id, and verified destructive destroy refusal"

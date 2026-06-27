@@ -522,14 +522,19 @@ Update rules:
   coverage for create, grow, attach, detach, delete, controller reconnect, and
   namespace identity drift.
 - [ ] **Partial:** Destructive integration tests need VM-backed LUN flow
-  coverage for host-side rescan, multipath resize, multipath add/remove/flush,
-  and target-side destroy refusal paths.
+  coverage for host-side rescan, multipath resize, and multipath
+  add/remove/flush paths.
 - [x] **Finished:** Destructive integration tests include LIO target-side
   map/unmap coverage: the loop-backed target LUN harness creates a second
   temporary backstore, applies `targetLuns.<iqn>.operation = "attach"` with a
   reviewed initiator ACL, verifies the LUN and ACL are present, applies
   `targetLuns.<iqn>.operation = "detach"`, and verifies the LUN is unmapped
   without deleting the backstore.
+- [x] **Finished:** Destructive integration tests include target-side LUN
+  destroy refusal coverage: the loop-backed LIO harness submits
+  `targetLuns.<iqn>.destroy = true` without `allowDestructive = true`, verifies
+  the plan is blocked as destructive before any command is rendered, and checks
+  the review-policy recovery guidance prefers non-destructive alternatives.
 - [x] **Finished:** Destructive integration tests include real filesystem
   property mutation coverage: the loop-backed ext4 harness applies a disk-nix
   `filesystems.*.properties.label` declaration, executes `e2label`, and verifies

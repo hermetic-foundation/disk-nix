@@ -1198,6 +1198,9 @@ When enabled, it:
   reviewed initiator ACL
 - applies `targetLuns.<iqn>.operation = "detach"` to remove that initiator ACL
   and unmap the second LUN without deleting the backstore
+- verifies `targetLuns.<iqn>.destroy = true` is refused without
+  `allowDestructive = true`, leaves the command plan empty, and reports
+  non-destructive review-policy guidance
 - removes the temporary target, backstores, loop devices, and backing files
   during cleanup
 
