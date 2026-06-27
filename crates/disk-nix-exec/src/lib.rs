@@ -658,14 +658,7 @@ fn rollback_recipes_for_report(report: &ExecutionReport) -> Vec<RollbackRecipe> 
             commands: Vec::new(),
             notes: rollback_review.notes.clone(),
         },
-        safety_gates: vec![
-            "original apply receipt must match this failed apply report".to_string(),
-            "fresh topology probe must be captured after the failure".to_string(),
-            "expected, pre-apply, failed-apply, and current topology evidence must be bound before automated rollback".to_string(),
-            "rollback point identity must still match the failed action target".to_string(),
-            "active consumers, mounts, exports, sessions, or open mappings must be reviewed before any mutation".to_string(),
-            "missing tools, stale identity data, and ambiguous rollback targets keep the recipe review-only".to_string(),
-        ],
+        safety_gates: rollback_recipe_safety_gates(),
         required_topology_evidence: vec![
             "expected".to_string(),
             "preApply".to_string(),
@@ -682,6 +675,21 @@ fn rollback_recipes_for_report(report: &ExecutionReport) -> Vec<RollbackRecipe> 
             "review-only recipes are evidence carriers for operators and future automation; they are not executable rollback approval".to_string(),
         ],
     }]
+}
+
+fn rollback_recipe_safety_gates() -> Vec<String> {
+    vec![
+        "original apply receipt must match this failed apply report".to_string(),
+        "fresh topology probe must be captured after the failure".to_string(),
+        "expected, pre-apply, failed-apply, and current topology evidence must be bound before automated rollback".to_string(),
+        "rollback point identity must still match the failed action target".to_string(),
+        "active consumers, mounts, exports, sessions, or open mappings must be reviewed before any mutation".to_string(),
+        "missing tools, stale identity data, and ambiguous rollback targets keep the recipe review-only".to_string(),
+        "filesystem rollback gates require verified ext, XFS, FAT, exFAT, NTFS, f2fs, mount/remount, trim, scrub, repair, grow, and shrink state before mutation".to_string(),
+        "block-stack rollback gates require verified disk label, partition, LUKS, LVM, MD RAID, device-mapper, loop, backing-file, swap, and zram topology before mutation".to_string(),
+        "advanced-storage rollback gates require verified ZFS, Btrfs, bcachefs, bcache, LVM cache, VDO, snapshot, clone, and pool-membership topology before mutation".to_string(),
+        "network-storage rollback gates require verified NFS, iSCSI, multipath, NVMe-oF, host-side LUN, and target-side LUN provider topology before mutation".to_string(),
+    ]
 }
 
 #[must_use]
@@ -28863,6 +28871,20 @@ mod tests {
                 .iter()
                 .any(|gate| gate.contains("original apply receipt"))
         );
+        for expected_gate in [
+            "filesystem rollback gates",
+            "block-stack rollback gates",
+            "advanced-storage rollback gates",
+            "network-storage rollback gates",
+        ] {
+            assert!(
+                recipe
+                    .safety_gates
+                    .iter()
+                    .any(|gate| gate.contains(expected_gate)),
+                "{expected_gate} should be emitted in rollback recipe safety gates"
+            );
+        }
         assert!(
             recipe
                 .refusal_reasons

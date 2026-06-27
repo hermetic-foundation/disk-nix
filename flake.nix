@@ -2237,6 +2237,11 @@
             ${pkgs.gnugrep}/bin/grep -q 'RollbackExecutionReport' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_refuses_unsafe_sections_and_not_ready_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_refuses_missing_tools_before_running_commands' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_recipe_safety_gates' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystem rollback gates' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'block-stack rollback gates' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'advanced-storage rollback gates' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'network-storage rollback gates' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'required_topology_evidence' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'materialize_rollback_topology_evidence' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_evidence_materializes_from_failed_report_and_fresh_probe' ${./crates/disk-nix-exec/src/lib.rs}
@@ -2258,6 +2263,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'idempotency-externally-modified-metadata' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'plausible data-loss command metadata' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses missing required tools' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit filesystem safety gates' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit block-stack safety gates' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit advanced-storage safety' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit network-storage safety gates' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'metadata advertises already rolled-back' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'detailed post-failure topology diagnostics report divergent' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'ambiguous rollback points and stale identity data' ${./docs/feature-checklist.md}

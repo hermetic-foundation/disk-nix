@@ -177,17 +177,17 @@ Update rules:
 - [x] **Finished:** Automatic rollback replay refuses review-only,
   destructive, operator-only, not-ready, or unbound recipes before executing
   any command.
-- [ ] **Desired:** Automatic rollback needs filesystem safety gates for ext,
-  XFS, FAT, exFAT, NTFS, f2fs, mount/remount, trim, scrub, repair, grow, and
-  shrink boundaries.
-- [ ] **Desired:** Automatic rollback needs block-stack safety gates for disk
-  labels, partitions, LUKS, LVM, MD RAID, device-mapper, loop devices,
+- [x] **Finished:** Automatic rollback recipes emit filesystem safety gates for
+  ext, XFS, FAT, exFAT, NTFS, f2fs, mount/remount, trim, scrub, repair, grow,
+  and shrink boundaries.
+- [x] **Finished:** Automatic rollback recipes emit block-stack safety gates
+  for disk labels, partitions, LUKS, LVM, MD RAID, device-mapper, loop devices,
   backing files, swap, and zram.
-- [ ] **Desired:** Automatic rollback needs advanced-storage safety gates for
-  ZFS, Btrfs, bcachefs, bcache, LVM cache, VDO, snapshots, clones, and pool
-  membership changes.
-- [ ] **Desired:** Automatic rollback needs network-storage safety gates for
-  NFS, iSCSI, multipath, NVMe-oF, host-side LUNs, and target-side LUN
+- [x] **Finished:** Automatic rollback recipes emit advanced-storage safety
+  gates for ZFS, Btrfs, bcachefs, bcache, LVM cache, VDO, snapshots, clones,
+  and pool membership changes.
+- [x] **Finished:** Automatic rollback recipes emit network-storage safety gates
+  for NFS, iSCSI, multipath, NVMe-oF, host-side LUNs, and target-side LUN
   providers.
 - [x] **Finished:** Automatic rollback replay refuses reversible mutation
   commands whose metadata advertises already rolled-back, partially rolled-back,
