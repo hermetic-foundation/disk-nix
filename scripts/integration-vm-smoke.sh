@@ -84,6 +84,9 @@ run_harness() {
     nvme)
       disk-nix-integration-nvme-smoke
       ;;
+    target-lun)
+      disk-nix-integration-target-lun-smoke
+      ;;
     failure-recovery)
       disk-nix-integration-failure-recovery-smoke
       ;;

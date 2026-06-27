@@ -245,6 +245,18 @@
           ];
           text = builtins.readFile ./scripts/integration-nvme-smoke.sh;
         };
+        integrationTargetLunSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-target-lun-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.kmod
+            pkgs.targetcli-fb
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-target-lun-smoke.sh;
+        };
         integrationFailureRecoverySmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-failure-recovery-smoke";
           runtimeInputs = [
@@ -289,6 +301,7 @@
             integrationIscsiSmoke
             integrationMultipathSmoke
             integrationNvmeSmoke
+            integrationTargetLunSmoke
             integrationFailureRecoverySmoke
             integrationLayeredVmSmoke
             pkgs.systemd
@@ -1620,6 +1633,7 @@
           integration-iscsi-smoke = integrationIscsiSmoke;
           integration-multipath-smoke = integrationMultipathSmoke;
           integration-nvme-smoke = integrationNvmeSmoke;
+          integration-target-lun-smoke = integrationTargetLunSmoke;
           integration-failure-recovery-smoke = integrationFailureRecoverySmoke;
           integration-layered-vm-smoke = integrationLayeredVmSmoke;
           integration-vm-smoke = integrationVmSmoke;
@@ -1736,6 +1750,13 @@
             program = "${integrationNvmeSmoke}/bin/disk-nix-integration-nvme-smoke";
             meta = {
               description = "Root-only NVMe namespace disk-nix smoke integration harness";
+            };
+          };
+          integration-target-lun-smoke = {
+            type = "app";
+            program = "${integrationTargetLunSmoke}/bin/disk-nix-integration-target-lun-smoke";
+            meta = {
+              description = "Root-only LIO target-side LUN property integration harness";
             };
           };
           integration-failure-recovery-smoke = {
@@ -1959,6 +1980,17 @@
             ${pkgs.gnugrep}/bin/grep -q 'nvme list-subsys' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "list-ns"' ${./scripts/integration-nvme-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'nvme", "ns-rescan"' ${./scripts/integration-nvme-smoke.sh}
+            touch "$out"
+          '';
+          integrationTargetLunSmoke = pkgs.runCommand "disk-nix-integration-target-lun-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'targetcli /backstores/block create' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'targetcli /iscsi create' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'targetLuns' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'lio.writeCache' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' ${./scripts/integration-target-lun-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'target-side LUN integration smoke test' ${./scripts/integration-target-lun-smoke.sh}
             touch "$out"
           '';
           integrationFailureRecoverySmoke =
@@ -2298,6 +2330,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-iscsi-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-multipath-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-nvme-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-target-lun-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-failure-recovery-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-layered-vm-smoke' ${./scripts/integration-vm-smoke.sh}
             touch "$out"
@@ -2331,6 +2364,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real zram property' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real target-side LUN' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real VDO volume' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
@@ -2343,6 +2377,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'blockdev --setro' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'chmod 0600' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'zramctl --bytes --raw --noheadings --output-all' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'vdo changeWritePolicy' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'exportfs -i' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
@@ -2355,6 +2390,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'real backing-file mode mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real loop-device read-only mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real zram property reconciliation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real target-side LUN property mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
@@ -2368,6 +2404,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'loopDevices.<loop>.properties."loop.read-only"' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'zram.properties.algorithm' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'services.disk-nix.zram' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.properties."lio.writeCache"' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_VM_HARNESSES=target-lun' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes.<name>.properties.writePolicy' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'exports.<path>.properties.options' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}

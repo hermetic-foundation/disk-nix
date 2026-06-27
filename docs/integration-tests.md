@@ -1162,6 +1162,42 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   ./scripts/integration-nvme-smoke.sh
 ```
 
+## Target-side LUN property smoke test
+
+The repository also includes a root-only LIO target-side LUN property harness:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-target-lun-smoke
+```
+
+When enabled, it:
+
+- creates a temporary 64 MiB backing file and attaches it to a disposable
+  `/dev/loop*`
+- creates a temporary LIO block backstore with
+  `targetcli /backstores/block create`
+- creates a temporary iSCSI target and maps the backstore as a LUN
+- applies `targetLuns.<iqn>.properties."lio.writeCache" = "off"`
+- verifies the rendered
+  `targetcli /backstores/block/<name> set attribute emulate_write_cache=0`
+  command succeeded
+- removes the temporary target, backstore, loop device, and backing file during
+  cleanup
+
+This test intentionally mutates only the temporary LIO target state and
+loop-backed block device it creates. It is VM-callable with
+`DISK_NIX_VM_HARNESSES=target-lun`, but it is not part of the default VM suite
+because LIO kernel target support varies by runner.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-target-lun-smoke.sh
+```
+
 ## Layered VM smoke test
 
 The repository includes a root-only layered harness intended for disposable VMs:

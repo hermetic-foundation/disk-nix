@@ -575,8 +575,12 @@ Update rules:
   `zramctl --bytes --raw --noheadings --output-all`, `swapon --show`, and
   `disk-nix zram` inventory commands, and confirms the plan points operators to
   NixOS `zramSwap` reconciliation.
-- [ ] **Partial:** Destructive integration tests still need property mutation
-  coverage across target LUNs.
+- [x] **Finished:** Destructive integration tests include real target-side LUN
+  property mutation coverage: the LIO harness creates a temporary loop-backed
+  block backstore and target LUN, applies
+  `targetLuns.*.properties."lio.writeCache"`, executes
+  `targetcli ... set attribute emulate_write_cache=0`, and removes the
+  temporary target state during cleanup.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`
