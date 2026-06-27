@@ -2167,6 +2167,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'bracketed IPv6 portals' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'CHAP secret redaction' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'iSER/RDMA session transport' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Real-world iSCSI fixture coverage' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'discovery authentication redaction' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'normalizes_multi_portal_discovery_auth_and_lun_churn_fixture' ${./crates/disk-nix-probe/src/iscsi.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'discovery.sendtargets.auth.authmethod' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q 'iser-rdma0' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q '2001:db8:40::10' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q 'FC transport WWPN pairs' "$checklist"

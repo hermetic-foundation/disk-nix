@@ -38,6 +38,11 @@ struct IscsiNodeRecord {
     username_in: Option<String>,
     password_configured: bool,
     password_in_configured: bool,
+    discovery_auth_method: Option<String>,
+    discovery_username: Option<String>,
+    discovery_username_in: Option<String>,
+    discovery_password_configured: bool,
+    discovery_password_in_configured: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -243,6 +248,11 @@ fn parse_node_records(bytes: &[u8]) -> Result<Vec<IscsiNodeRecord>, ProbeError> 
                 username_in: None,
                 password_configured: false,
                 password_in_configured: false,
+                discovery_auth_method: None,
+                discovery_username: None,
+                discovery_username_in: None,
+                discovery_password_configured: false,
+                discovery_password_in_configured: false,
             });
         } else if lower.starts_with("portal:") {
             if let Some(record) = &mut current {
@@ -299,6 +309,28 @@ fn parse_node_records(bytes: &[u8]) -> Result<Vec<IscsiNodeRecord>, ProbeError> 
             if let Some(record) = &mut current {
                 record.password_in_configured = secret_is_configured(value_after_colon(trimmed));
             }
+        } else if lower.starts_with("discovery.sendtargets.auth.authmethod:") {
+            if let Some(record) = &mut current {
+                record.discovery_auth_method = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("discovery.sendtargets.auth.username:") {
+            if let Some(record) = &mut current {
+                record.discovery_username = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("discovery.sendtargets.auth.username_in:") {
+            if let Some(record) = &mut current {
+                record.discovery_username_in = value_after_colon(trimmed);
+            }
+        } else if lower.starts_with("discovery.sendtargets.auth.password:") {
+            if let Some(record) = &mut current {
+                record.discovery_password_configured =
+                    secret_is_configured(value_after_colon(trimmed));
+            }
+        } else if lower.starts_with("discovery.sendtargets.auth.password_in:") {
+            if let Some(record) = &mut current {
+                record.discovery_password_in_configured =
+                    secret_is_configured(value_after_colon(trimmed));
+            }
         } else if let Some(record) = parse_concise_node_record(trimmed) {
             flush_node_record(&mut records, &mut current);
             records.push(record);
@@ -327,6 +359,11 @@ fn parse_concise_node_record(value: &str) -> Option<IscsiNodeRecord> {
         username_in: None,
         password_configured: false,
         password_in_configured: false,
+        discovery_auth_method: None,
+        discovery_username: None,
+        discovery_username_in: None,
+        discovery_password_configured: false,
+        discovery_password_in_configured: false,
     })
 }
 
@@ -377,6 +414,23 @@ fn add_node_record(graph: &mut StorageGraph, record: IscsiNodeRecord) {
     }
     if record.password_in_configured {
         target_node = target_node.with_property("iscsi.node-auth-password-in-configured", "true");
+    }
+    if let Some(auth_method) = &record.discovery_auth_method {
+        target_node = target_node.with_property("iscsi.discovery-auth-method", auth_method.clone());
+    }
+    if let Some(username) = &record.discovery_username {
+        target_node = target_node.with_property("iscsi.discovery-auth-username", username.clone());
+    }
+    if let Some(username) = &record.discovery_username_in {
+        target_node =
+            target_node.with_property("iscsi.discovery-auth-username-in", username.clone());
+    }
+    if record.discovery_password_configured {
+        target_node = target_node.with_property("iscsi.discovery-auth-password-configured", "true");
+    }
+    if record.discovery_password_in_configured {
+        target_node =
+            target_node.with_property("iscsi.discovery-auth-password-in-configured", "true");
     }
     if record.username.is_some() || record.password_configured {
         target_node = target_node.with_property("iscsi.node-auth-direction-out", "true");
@@ -1074,6 +1128,212 @@ Target: iqn.2026-06.example:storage.chap
                 .iter()
                 .any(|property| property.value == "inbound-secret")
         );
+    }
+
+    #[test]
+    fn normalizes_multi_portal_discovery_auth_and_lun_churn_fixture() {
+        let mut graph = StorageGraph::empty();
+        merge_test_graph(
+            &mut graph,
+            normalize_iscsi_session_output(
+                br#"
+Target: iqn.2026-06.example:storage.churn
+    Current Portal: 10.30.0.10:3260,1
+    Persistent Portal: 10.30.0.10:3260,1
+    Target Portal Group Tag: 1
+    Iface Name: vlan10
+    Iface Transport: tcp
+    SID: 71
+    iSCSI Connection State: LOGGED IN
+    iSCSI Session State: LOGGED_IN
+    Internal iscsid Session State: NO CHANGE
+    CID: 0
+    Connection State: LOGGED IN
+    Local Address: 10.30.0.21
+    Peer Address: 10.30.0.10
+    Host Number: 21  State: running
+    scsi21 Channel 00 Id 0 Lun: 5
+        Attached scsi disk sdh          State: running
+Target: iqn.2026-06.example:storage.churn
+    Current Portal: 10.30.0.11:3260,2
+    Persistent Portal: 10.30.0.11:3260,2
+    Target Portal Group Tag: 2
+    Iface Name: vlan11
+    Iface Transport: tcp
+    SID: 72
+    iSCSI Connection State: FREE
+    iSCSI Session State: FAILED
+    Internal iscsid Session State: REOPEN
+    CID: 0
+    Connection State: FREE
+    Local Address: 10.30.0.22
+    Peer Address: 10.30.0.11
+    Host Number: 22  State: blocked
+    scsi22 Channel 00 Id 0 Lun: 5
+        Attached scsi disk sdg          State: transport-offline
+Target: iqn.2026-06.example:storage.replacement
+    Current Portal: 10.30.0.12:3260,3
+    Persistent Portal: 10.30.0.12:3260,3
+    Target Portal Group Tag: 3
+    SID: 73
+    iSCSI Connection State: LOGGED IN
+    iSCSI Session State: LOGGED_IN
+    Internal iscsid Session State: NO CHANGE
+    Host Number: 23  State: running
+    scsi23 Channel 00 Id 0 Lun: 8
+        Attached scsi disk sdi          State: running
+"#,
+            )
+            .expect("multi-portal iSCSI session fixture should parse"),
+        );
+        merge_test_graph(
+            &mut graph,
+            normalize_iscsi_node_output(
+                br#"
+Target: iqn.2026-06.example:storage.churn
+    Portal: 10.30.0.10:3260,1
+    Persistent Portal: 10.30.0.11:3260,2
+    TPGT: 1
+    Iface Name: vlan10
+    Startup: automatic
+    Leading Login: Yes
+    AuthMethod: CHAP
+    Username: outbound-user
+    Password: outbound-secret
+    Username_in: inbound-user
+    Password_in: inbound-secret
+    discovery.sendtargets.auth.authmethod: CHAP
+    discovery.sendtargets.auth.username: discovery-user
+    discovery.sendtargets.auth.password: discovery-secret
+    discovery.sendtargets.auth.username_in: discovery-target
+    discovery.sendtargets.auth.password_in: discovery-in-secret
+Target: iqn.2026-06.example:storage.replacement
+    Portal: 10.30.0.12:3260,3
+    Startup: manual
+    AuthMethod: None
+"#,
+            )
+            .expect("multi-portal iSCSI node fixture should parse"),
+        );
+
+        let primary = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "iscsi-session:71")
+            .expect("primary portal session should exist");
+        assert!(primary.properties.iter().any(|property| {
+            property.key == "iscsi.portal" && property.value == "10.30.0.10:3260,1"
+        }));
+        assert!(primary.properties.iter().any(|property| {
+            property.key == "iscsi.session-state" && property.value == "LOGGED_IN"
+        }));
+
+        let stale = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "iscsi-session:72")
+            .expect("stale portal session should exist");
+        assert!(stale.properties.iter().any(|property| {
+            property.key == "iscsi.portal" && property.value == "10.30.0.11:3260,2"
+        }));
+        assert!(stale.properties.iter().any(|property| {
+            property.key == "iscsi.session-state" && property.value == "FAILED"
+        }));
+        assert!(stale.properties.iter().any(|property| {
+            property.key == "iscsi.internal-session-state" && property.value == "REOPEN"
+        }));
+        assert!(
+            stale.properties.iter().any(|property| {
+                property.key == "iscsi.host-state" && property.value == "blocked"
+            })
+        );
+
+        let target = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "iscsi-target:iqn.2026-06.example:storage.churn")
+            .expect("configured churn target should exist");
+        assert!(target.properties.iter().any(|property| {
+            property.key == "iscsi.node-auth-method" && property.value == "CHAP"
+        }));
+        assert!(target.properties.iter().any(|property| {
+            property.key == "iscsi.node-auth-password-configured" && property.value == "true"
+        }));
+        assert!(target.properties.iter().any(|property| {
+            property.key == "iscsi.node-auth-password-in-configured" && property.value == "true"
+        }));
+        assert!(target.properties.iter().any(|property| {
+            property.key == "iscsi.discovery-auth-method" && property.value == "CHAP"
+        }));
+        assert!(target.properties.iter().any(|property| {
+            property.key == "iscsi.discovery-auth-username" && property.value == "discovery-user"
+        }));
+        assert!(target.properties.iter().any(|property| {
+            property.key == "iscsi.discovery-auth-password-configured" && property.value == "true"
+        }));
+        assert!(target.properties.iter().any(|property| {
+            property.key == "iscsi.discovery-auth-password-in-configured"
+                && property.value == "true"
+        }));
+        assert!(!target.properties.iter().any(|property| {
+            matches!(
+                property.value.as_str(),
+                "outbound-secret" | "inbound-secret" | "discovery-secret" | "discovery-in-secret"
+            )
+        }));
+
+        assert!(graph.nodes.iter().any(|node| {
+            node.id.0 == "iscsi-lun:iqn.2026-06.example:storage.churn:5"
+                && node.path.as_deref() == Some("/dev/sdh")
+                && node.properties.iter().any(|property| {
+                    property.key == "iscsi.attached-disk-state" && property.value == "running"
+                })
+        }));
+        let churn_lun = graph
+            .nodes
+            .iter()
+            .find(|node| node.id.0 == "iscsi-lun:iqn.2026-06.example:storage.churn:5")
+            .expect("merged churn LUN identity should exist");
+        assert!(
+            churn_lun.properties.iter().any(|property| {
+                property.key == "iscsi.attached-disk" && property.value == "sdh"
+            })
+        );
+        assert!(
+            churn_lun.properties.iter().any(|property| {
+                property.key == "iscsi.attached-disk" && property.value == "sdg"
+            })
+        );
+        assert!(churn_lun.properties.iter().any(|property| {
+            property.key == "iscsi.attached-disk-state" && property.value == "running"
+        }));
+        assert!(churn_lun.properties.iter().any(|property| {
+            property.key == "iscsi.attached-disk-state" && property.value == "transport-offline"
+        }));
+        assert!(graph.nodes.iter().any(|node| {
+            node.id.0 == "iscsi-lun:iqn.2026-06.example:storage.replacement:8"
+                && node.path.as_deref() == Some("/dev/sdi")
+        }));
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to.0 == "iscsi-target:iqn.2026-06.example:storage.churn"
+                        && edge.relationship == Relationship::ImportedFrom
+                })
+                .count(),
+            2
+        );
+    }
+
+    fn merge_test_graph(graph: &mut StorageGraph, other: StorageGraph) {
+        for node in other.nodes {
+            graph.add_node(node);
+        }
+        for edge in other.edges {
+            graph.add_edge(edge);
+        }
     }
 
     #[test]

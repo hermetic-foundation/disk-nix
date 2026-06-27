@@ -119,9 +119,9 @@ Update rules:
   samples beyond the current NVMe/TCP multipath fixture, including RoCE,
   Fibre Channel transport, namespace sharing, ANA transitions, and controller
   loss/reconnect cases.
-- [ ] **Partial:** Real-world fixture coverage still needs additional iSCSI
-  samples for multi-portal sessions, mutual CHAP, discovery authentication,
-  replacement LUN identity changes, and logout/login churn.
+- [x] **Finished:** Real-world iSCSI fixture coverage includes multi-portal
+  sessions, mutual CHAP, discovery authentication, replacement LUN identity
+  changes, and logout/login churn.
 - [ ] **Partial:** Real-world fixture coverage still needs additional
   server/client NFS samples for NFSv4 referrals, pNFS, export reload behavior,
   client remount drift, and Kerberos policy variants.

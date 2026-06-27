@@ -207,9 +207,12 @@ The current probe layer normalizes:
   state, LUN SCSI coordinates, attached disk path/state, and first-class path
   identity for attached LUN block devices. Configured CHAP and reverse-CHAP
   node records expose authentication method, usernames, direction flags, and
-  redacted password-presence flags without serializing secret material. iSCSI
-  LUNs are enriched with `lsscsi` LUN identity and queue metadata when
-  available
+  redacted password-presence flags without serializing secret material.
+  Discovery authentication records expose method, usernames, and redacted secret
+  presence flags. Multi-portal session fixtures preserve live and failed
+  session state, stale/reopening internals, blocked hosts, replacement LUN
+  identity drift, and login/logout churn evidence. iSCSI LUNs are enriched with
+  `lsscsi` LUN identity and queue metadata when available
 - NFS server exports through `exportfs -v` and mount metadata through
   `nfsstat -m` for exported paths, clients, exportfs option state, server,
   export, bracketed IPv6 NFS sources, alternate `target from source` records,
@@ -248,10 +251,11 @@ The current probe layer normalizes:
   path groups, active/standby state, failed path metadata, and multipath backing
   edges, plus native NVMe/TCP multipath paths with live and reconnecting fabrics
   controllers, optimized and inaccessible ANA states, failed path metadata, and
-  multipath backing edges. iSCSI parser fixtures also cover bracketed IPv6 portals, concise
-  open-iscsi node records, attached LUN disks, iSER/RDMA session transport over
-  InfiniBand netdevs, and CHAP password-presence redaction without serializing
-  secret material.
+  multipath backing edges. iSCSI parser fixtures also cover bracketed IPv6
+  portals, concise open-iscsi node records, attached LUN disks, iSER/RDMA
+  session transport over InfiniBand netdevs, multi-portal login/logout churn,
+  discovery CHAP, mutual CHAP, replacement LUN identity drift, and password
+  presence redaction without serializing secret material.
 
 Probe-status remediation is adapter-aware. Missing-tool reports include the
 likely tool names and Nix packages, including PATH and `ENOENT` command launch

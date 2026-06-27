@@ -213,7 +213,9 @@ combines iSCSI session/node data, host-visible SCSI LUNs, and multipath path
 state in one normalized graph. The iSCSI fixture coverage also includes
 bracketed IPv6 portals, concise open-iscsi node records, attached LUN disks,
 CHAP secret redaction checks, and iSER/RDMA session transport over bracketed
-IPv6 portals with InfiniBand netdev metadata. Fixture coverage also includes a
+IPv6 portals with InfiniBand netdev metadata, plus multi-portal sessions,
+mutual CHAP, discovery authentication redaction, replacement LUN identity
+changes, and logout/login churn states. Fixture coverage also includes a
 merged degraded-MD-with-LUKS stack covering recovering array state, failed member
 metadata, active encrypted mapper status, backing edges, and LUKS header
 metadata, plus a clustered LVM over NVMe-oF fixture covering shared/clustered
