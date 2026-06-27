@@ -513,6 +513,13 @@ Update rules:
 - [ ] **Partial:** Destructive integration tests need VM-backed cache mutation
   coverage for LVM cache attach/detach/replacement, bcache replacement, and
   cache-device failure states.
+- [x] **Finished:** Destructive integration tests include real LVM cache
+  detach and reattach data-survival coverage: the loop-backed LVM harness
+  writes an ext4 sentinel to a cached origin LV, applies
+  `lvmCaches.*.removeDevices` and verifies `lvconvert --uncache`, verifies the
+  sentinel remains readable, applies `lvmCaches.*.addDevices` and verifies
+  `lvconvert --type cache --cachepool`, then verifies the sentinel remains
+  readable after the cache is restored.
 - [x] **Finished:** Destructive integration tests include real bcache read-only
   rescan coverage: the loop-backed bcache harness applies
   `caches.bcacheSmoke.operation = "rescan"` against the generated bcache
@@ -652,8 +659,10 @@ Update rules:
   sentinel again.
 - [x] **Finished:** Deeper destructive VM tests include LVM cache data-survival
   assertions: the loop-backed LVM harness formats the cached origin as ext4,
-  writes a sentinel file, mutates cache mode with `lvchange --cachemode`, and
-  verifies the cache sentinel survives mutation and rescan plans.
+  writes a sentinel file, mutates cache mode with `lvchange --cachemode`,
+  detaches the cache with `lvconvert --uncache`, reattaches the cache with
+  `lvconvert --type cache --cachepool`, and verifies the cache sentinel
+  survives mutation, detach, reattach, and rescan plans.
 - [ ] **Partial:** Deeper destructive VM tests still need data-survival
   assertions across failed and resumed apply runs for network-storage scenarios.
 - [x] **Finished:** Probe-status diagnostics include adapter remediation,

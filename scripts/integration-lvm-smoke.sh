@@ -7,7 +7,8 @@ Refusing to run LVM loop-backed integration smoke test.
 
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates,
 rescans, removes, and wipes a temporary loop-backed LVM physical volume, volume
-group, logical volume, thin pool, thin volume, and snapshot. The backing file is
+group, logical volume, thin pool, thin volume, snapshot, and cache pool. It
+also detaches and reattaches the temporary cache layer. The backing file is
 created in a temporary directory and removed during cleanup.
 MSG
   exit 2
@@ -55,6 +56,10 @@ spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 property_spec="$tmpdir/property-spec.json"
 property_report="$tmpdir/property-report.json"
+detach_spec="$tmpdir/cache-detach-spec.json"
+detach_report="$tmpdir/cache-detach-report.json"
+attach_spec="$tmpdir/cache-attach-spec.json"
+attach_report="$tmpdir/cache-attach-report.json"
 sentinel_expected="$tmpdir/sentinel.expected"
 
 truncate --size 512M "$backing"
@@ -121,6 +126,82 @@ if [[ "$(lvs --noheadings -o cache_mode "$vg/origin" | tr -d '[:space:]')" != "w
 fi
 cmp "$sentinel_expected" "$mountpoint/sentinel.txt" >/dev/null
 findmnt --target "$mountpoint" >/dev/null
+
+jq -n --arg origin "$vg/origin" --arg cachepool "$vg/cachepool" '{
+  version: 1,
+  apply: {
+    allowOffline: true,
+    allowPotentialDataLoss: true
+  },
+  lvmCaches: {
+    ($origin): {
+      removeDevices: [$cachepool]
+    }
+  }
+}' > "$detach_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$detach_spec" \
+  --execute \
+  --report-out "$detach_report" \
+  --json > "$tmpdir/cache-detach-apply.json"
+
+jq -e --arg origin "$vg/origin" --arg cachepool "$vg/cachepool" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("lvmCaches:" + $origin + ":remove-device:" + $cachepool))
+    | .commands | any(.argv == ["lvconvert", "--uncache", $origin]))
+  and (.executionResults
+    | any(.argv == ["lvconvert", "--uncache", $origin] and .success == true))
+' "$tmpdir/cache-detach-apply.json" >/dev/null
+
+cmp "$tmpdir/cache-detach-apply.json" "$detach_report" >/dev/null
+if [[ -n "$(lvs --noheadings -o cache_mode "$vg/origin" | tr -d '[:space:]')" ]]; then
+  echo "LVM cache mode remained set after disk-nix cache detach" >&2
+  exit 1
+fi
+cmp "$sentinel_expected" "$mountpoint/sentinel.txt" >/dev/null
+if ! lvs "$vg/cachepool" >/dev/null 2>&1; then
+  lvcreate --yes --type cache-pool --size 64M --name cachepool "$vg"
+fi
+
+jq -n --arg origin "$vg/origin" --arg cachepool "$vg/cachepool" '{
+  version: 1,
+  apply: {
+    allowOffline: true
+  },
+  lvmCaches: {
+    ($origin): {
+      addDevices: [$cachepool],
+      properties: {
+        "lvm.cache-mode": "writethrough"
+      }
+    }
+  }
+}' > "$attach_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$attach_spec" \
+  --execute \
+  --report-out "$attach_report" \
+  --json > "$tmpdir/cache-attach-apply.json"
+
+jq -e --arg origin "$vg/origin" --arg cachepool "$vg/cachepool" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("lvmCaches:" + $origin + ":add-device:" + $cachepool))
+    | .commands | any(.argv == ["lvconvert", "--type", "cache", "--cachepool", $cachepool, $origin]))
+  and (.commandPlan[] | select(.actionId == ("lvmCaches:" + $origin + ":set-property:lvm.cache-mode"))
+    | .commands | any(.argv == ["lvchange", "--cachemode", "writethrough", $origin]))
+  and (.executionResults
+    | any(.argv == ["lvconvert", "--type", "cache", "--cachepool", $cachepool, $origin] and .success == true)
+    and any(.argv == ["lvchange", "--cachemode", "writethrough", $origin] and .success == true))
+' "$tmpdir/cache-attach-apply.json" >/dev/null
+
+cmp "$tmpdir/cache-attach-apply.json" "$attach_report" >/dev/null
+if [[ "$(lvs --noheadings -o cache_mode "$vg/origin" | tr -d '[:space:]')" != "writethrough" ]]; then
+  echo "LVM cache mode did not match after disk-nix cache reattach" >&2
+  exit 1
+fi
+cmp "$sentinel_expected" "$mountpoint/sentinel.txt" >/dev/null
 
 jq -n \
   --arg vg "$vg" \
@@ -196,4 +277,4 @@ lvs --reportformat json "$vg/thinvol" >/dev/null
 lvs --reportformat json "$vg/origin_snap" >/dev/null
 cmp "$sentinel_expected" "$mountpoint/sentinel.txt" >/dev/null
 
-echo "LVM loop-backed integration smoke test refreshed $vg with cached origin, thin pool, thin volume, snapshot, and cache sentinel on $loopdev"
+echo "LVM loop-backed integration smoke test refreshed $vg with cached origin, cache detach/reattach, thin pool, thin volume, snapshot, and cache sentinel on $loopdev"

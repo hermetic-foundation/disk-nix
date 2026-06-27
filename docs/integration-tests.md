@@ -872,8 +872,14 @@ When enabled, it:
 - verifies the generated JSON report was written, the rendered
   `lvchange --cachemode writethrough <vg/lv>` command succeeded, and
   `lvs -o cache_mode <vg/lv>` reports `writethrough`
+- applies `lvmCaches.<vg/lv>.removeDevices = [ "<vg/cachepool>" ]`, verifies
+  `lvconvert --uncache <vg/lv>` succeeds, and checks the origin is no longer
+  cached
+- applies `lvmCaches.<vg/lv>.addDevices = [ "<vg/cachepool>" ]`, verifies
+  `lvconvert --type cache --cachepool <vg/cachepool> <vg/lv>` succeeds, and
+  checks the cache mode is restored to `writethrough`
 - verifies the cached-origin ext4 cache sentinel survives the cache-mode
-  mutation and remains readable after LVM rescan plans
+  mutation, cache detach, cache reattach, and LVM rescan plans
 - executes `volumeGroups.<name>.operation = "rescan"`,
   `volumes.<vg/lv>.operation = "rescan"`,
   `thinPools.<vg/pool>.operation = "rescan"`, and
