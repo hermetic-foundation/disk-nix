@@ -722,6 +722,12 @@ When enabled, it:
 - applies `caches.bcacheSmoke.properties."bcache.cache-mode" = "writethrough"`
 - verifies the rendered `disk-nix-bcache-property` sysfs write succeeded
 - checks `/sys/block/<bcache>/bcache/cache_mode` reports `writethrough`
+- derives the live cache-set UUID from `/sys/block/<bcache>/bcache/cache`
+- applies `caches.bcacheSmoke.removeDevices = [ "<cache-set-uuid>" ]` and
+  verifies the rendered `disk-nix-bcache-detach` sysfs write succeeded
+- applies `caches.bcacheSmoke.addDevices = [ "<cache-set-uuid>" ]`, verifies
+  the rendered `disk-nix-bcache-attach` sysfs write succeeded, reapplies
+  `bcache.cache-mode = "writethrough"`, and checks the cache mode again
 - executes `caches.bcacheSmoke.operation = "rescan"` against the same generated
   bcache device
 - verifies the read-only rescan ran `disk-nix inspect <bcache>` and

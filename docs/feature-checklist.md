@@ -531,6 +531,12 @@ Update rules:
   sentinel remains readable, applies `lvmCaches.*.addDevices` and verifies
   `lvconvert --type cache --cachepool`, then verifies the sentinel remains
   readable after the cache is restored.
+- [x] **Finished:** Destructive integration tests include real bcache cache detach/reattach
+  coverage: the loop-backed bcache harness derives the live cache-set UUID,
+  applies `caches.*.removeDevices`, verifies the `disk-nix-bcache-detach`
+  sysfs write, applies `caches.*.addDevices`, verifies the
+  `disk-nix-bcache-attach` sysfs write, reapplies cache mode, and confirms the
+  generated bcache device remains readable.
 - [x] **Finished:** Destructive integration tests include real bcache read-only
   rescan coverage: the loop-backed bcache harness applies
   `caches.bcacheSmoke.operation = "rescan"` against the generated bcache

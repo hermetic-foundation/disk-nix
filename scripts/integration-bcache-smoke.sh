@@ -7,8 +7,8 @@ Refusing to run bcache integration smoke test.
 
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates
 temporary loop-backed bcache backing and cache devices, mutates a real bcache
-sysfs property, stops the generated bcache device, and removes the temporary
-backing files during cleanup.
+sysfs property, detaches and reattaches the real cache set, stops the generated
+bcache device, and removes the temporary backing files during cleanup.
 MSG
   exit 2
 fi
@@ -20,7 +20,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" blockdev cat cmp jq losetup make-bcache modprobe truncate; do
+for tool in "$disk_nix_bin" blockdev cat cmp jq losetup make-bcache modprobe readlink truncate; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -65,6 +65,10 @@ backing="$tmpdir/disk-nix-bcache-backing.img"
 cache="$tmpdir/disk-nix-bcache-cache.img"
 spec="$tmpdir/property-spec.json"
 report="$tmpdir/property-report.json"
+detach_spec="$tmpdir/detach-spec.json"
+detach_report="$tmpdir/detach-report.json"
+attach_spec="$tmpdir/attach-spec.json"
+attach_report="$tmpdir/attach-report.json"
 rescan_spec="$tmpdir/rescan-spec.json"
 rescan_report="$tmpdir/rescan-report.json"
 
@@ -136,6 +140,84 @@ if [[ "$cache_mode_value" != "writethrough" ]] && [[ "$cache_mode_value" != *"[w
   exit 1
 fi
 
+cache_set_uuid="$(basename "$(readlink -f "/sys/block/${bcachedev#/dev/}/bcache/cache")")"
+if [[ -z "$cache_set_uuid" ]] || [[ "$cache_set_uuid" == "cache" ]]; then
+  echo "could not determine bcache cache-set UUID for $bcachedev" >&2
+  exit 1
+fi
+
+jq -n --arg bcachedev "$bcachedev" --arg cache_set_uuid "$cache_set_uuid" '{
+  version: 1,
+  caches: {
+    bcacheSmoke: {
+      target: $bcachedev,
+      removeDevices: [$cache_set_uuid]
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowPotentialDataLoss: true
+  }
+}' > "$detach_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$detach_spec" \
+  --execute \
+  --report-out "$detach_report" \
+  --json > "$tmpdir/detach-apply.json"
+
+jq -e --arg bcachedev "$bcachedev" --arg cache_set_uuid "$cache_set_uuid" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("caches:bcacheSmoke:remove-device:" + $cache_set_uuid))
+    | .commands | any(.argv == ["sh", "-c", "printf '\''1\\n'\'' > \"/sys/block/${1#/dev/}/bcache/detach\"", "disk-nix-bcache-detach", $bcachedev]))
+  and (.executionResults
+    | any(.argv == ["sh", "-c", "printf '\''1\\n'\'' > \"/sys/block/${1#/dev/}/bcache/detach\"", "disk-nix-bcache-detach", $bcachedev] and .success == true))
+' "$tmpdir/detach-apply.json" >/dev/null
+
+cmp "$tmpdir/detach-apply.json" "$detach_report" >/dev/null
+cat "/sys/block/${bcachedev#/dev/}/bcache/state" >/dev/null
+
+jq -n --arg bcachedev "$bcachedev" --arg cache_set_uuid "$cache_set_uuid" '{
+  version: 1,
+  caches: {
+    bcacheSmoke: {
+      target: $bcachedev,
+      addDevices: [$cache_set_uuid],
+      properties: {
+        "bcache.cache-mode": "writethrough"
+      }
+    }
+  },
+  apply: {
+    allowOffline: true,
+    allowPropertyChanges: true
+  }
+}' > "$attach_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$attach_spec" \
+  --execute \
+  --report-out "$attach_report" \
+  --json > "$tmpdir/attach-apply.json"
+
+jq -e --arg bcachedev "$bcachedev" --arg cache_set_uuid "$cache_set_uuid" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("caches:bcacheSmoke:add-device:" + $cache_set_uuid))
+    | .commands | any(.argv == ["sh", "-c", "printf '\''%s\\n'\'' \"$2\" > \"/sys/block/${1#/dev/}/bcache/attach\"", "disk-nix-bcache-attach", $bcachedev, $cache_set_uuid]))
+  and (.commandPlan[] | select(.actionId == "caches:bcacheSmoke:set-property:bcache.cache-mode")
+    | .commands | any(.argv == ["sh", "-c", "printf '\''%s\\n'\'' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"", "disk-nix-bcache-property", $bcachedev, "writethrough", "cache_mode"]))
+  and (.executionResults
+    | any(.argv == ["sh", "-c", "printf '\''%s\\n'\'' \"$2\" > \"/sys/block/${1#/dev/}/bcache/attach\"", "disk-nix-bcache-attach", $bcachedev, $cache_set_uuid] and .success == true)
+    and any(.argv == ["sh", "-c", "printf '\''%s\\n'\'' \"$2\" > \"/sys/block/${1#/dev/}/bcache/$3\"", "disk-nix-bcache-property", $bcachedev, "writethrough", "cache_mode"] and .success == true))
+' "$tmpdir/attach-apply.json" >/dev/null
+
+cmp "$tmpdir/attach-apply.json" "$attach_report" >/dev/null
+cache_mode_value="$(cat "/sys/block/${bcachedev#/dev/}/bcache/cache_mode")"
+if [[ "$cache_mode_value" != "writethrough" ]] && [[ "$cache_mode_value" != *"[writethrough]"* ]]; then
+  echo "bcache cache_mode did not match after disk-nix cache reattach" >&2
+  exit 1
+fi
+
 jq -n --arg bcachedev "$bcachedev" '{
   version: 1,
   caches: {
@@ -173,4 +255,4 @@ jq -e --arg bcachedev "$bcachedev" '
 
 cmp "$tmpdir/rescan-apply.json" "$rescan_report" >/dev/null
 
-echo "bcache integration smoke test passed for $bcachedev, including cache_mode property mutation and read-only rescan"
+echo "bcache integration smoke test passed for $bcachedev, including cache_mode property mutation, cache detach/reattach, and read-only rescan"

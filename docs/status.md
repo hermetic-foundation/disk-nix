@@ -167,8 +167,9 @@ behavior across real storage stacks.
   with `lvconvert --uncache` and
   `lvconvert --type cache --cachepool`, while a cached-origin ext4 sentinel
   remains readable, verify
-  real bcache cache-mode mutation and read-only rescan with
-  `disk-nix-bcache-property` and `disk-nix-bcache-read` sysfs operations,
+  real bcache cache-mode mutation, real bcache cache detach/reattach with
+  `disk-nix-bcache-detach` and `disk-nix-bcache-attach`, and read-only rescan
+  with `disk-nix-bcache-property` and `disk-nix-bcache-read` sysfs operations,
   verify real backing-file mode mutation with `chmod`, verify
   real loop-device read-only mutation with `blockdev --setro` and `blockdev --setrw`, verify
   real zram property reconciliation with `zramctl`, `swapon`, and `disk-nix zram`, then verify
