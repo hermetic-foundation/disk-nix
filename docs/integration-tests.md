@@ -1202,6 +1202,10 @@ When enabled, it:
 - executes an `nvmeNamespaces.<controller>.operation = "rescan"` apply plan
 - verifies the rendered `nvme list-ns`, `nvme list-subsys`, and
   `nvme ns-rescan <controller>` commands succeeded
+- when `DISK_NIX_NVME_GROW=1` is set, applies an
+  `nvmeNamespaces.<controller>.operation = "grow"` plan and verifies the
+  rendered `nvme list-subsys` and `nvme ns-rescan <controller>` commands
+  succeeded under the reviewed grow policy
 - when `DISK_NIX_NVME_ATTACH_DETACH=1` is set with
   `DISK_NIX_NVME_NAMESPACE_ID` and `DISK_NIX_NVME_CONTROLLERS`, applies an
   `nvmeNamespaces.<controller>.operation = "attach"` plan, verifies

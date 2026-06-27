@@ -206,7 +206,8 @@ behavior across real storage stacks.
   sequence, and repeats the sentinel check after the LUKS close/reopen cycle.
   Lab-hardware harnesses for NFS, VDO, iSCSI,
   multipath, and NVMe require explicit environment-selected existing targets,
-  exercise non-destructive refresh or remount paths, and include lab-backed NVMe namespace attach/detach
+  exercise non-destructive refresh or remount paths, include lab-backed NVMe namespace grow
+  through reviewed `nvme ns-rescan`, and include lab-backed NVMe namespace attach/detach
   for disposable namespaces. The failure-recovery
   harness uses fake storage tools to prove `partialExecutionRecovery`,
   failed-command receipts, roll-forward review, rollback review,

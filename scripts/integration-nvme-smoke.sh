@@ -7,8 +7,9 @@ Refusing to run NVMe integration smoke test.
 
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test rescans
 real NVMe namespace inventory for the controller provided through
-DISK_NIX_NVME_CONTROLLER. When DISK_NIX_NVME_ATTACH_DETACH=1 is set, it also
-attaches and detaches the disposable namespace selected by
+DISK_NIX_NVME_CONTROLLER. When DISK_NIX_NVME_GROW=1 is set, it also executes a
+reviewed namespace grow/rescan plan. When DISK_NIX_NVME_ATTACH_DETACH=1 is set,
+it also attaches and detaches the disposable namespace selected by
 DISK_NIX_NVME_NAMESPACE_ID and DISK_NIX_NVME_CONTROLLERS. The harness does not
 create or delete namespaces.
 MSG
@@ -21,6 +22,7 @@ if [[ "$(id -u)" != "0" ]]; then
 fi
 
 controller="${DISK_NIX_NVME_CONTROLLER:-}"
+grow_namespace="${DISK_NIX_NVME_GROW:-0}"
 attach_detach="${DISK_NIX_NVME_ATTACH_DETACH:-0}"
 namespace_id="${DISK_NIX_NVME_NAMESPACE_ID:-}"
 namespace_controllers="${DISK_NIX_NVME_CONTROLLERS:-}"
@@ -73,6 +75,8 @@ trap cleanup EXIT
 
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
+grow_spec="$tmpdir/grow-spec.json"
+grow_report="$tmpdir/grow-report.json"
 attach_spec="$tmpdir/attach-spec.json"
 attach_report="$tmpdir/attach-report.json"
 detach_spec="$tmpdir/detach-spec.json"
@@ -123,6 +127,41 @@ jq -e --arg controller "$controller" '
 
 cmp "$tmpdir/apply.json" "$report" >/dev/null
 nvme list-ns "$controller" --all --output-format=json > "$tmpdir/list-ns-after.json"
+
+if [[ "$grow_namespace" == "1" ]]; then
+  jq -n --arg controller "$controller" '{
+    version: 1,
+    nvmeNamespaces: {
+      ($controller): {
+        operation: "grow"
+      }
+    },
+    apply: {
+      allowGrow: true,
+      allowOffline: true
+    }
+  }' > "$grow_spec"
+
+  "$disk_nix_bin" apply \
+    --spec "$grow_spec" \
+    --execute \
+    --report-out "$grow_report" \
+    --json > "$tmpdir/grow-apply.json"
+
+  jq -e --arg controller "$controller" '
+    .status == "succeeded"
+    and (.commandPlan[] | select(.actionId == ("nvmenamespaces:" + $controller + ":grow"))
+      | .commands
+      | any(.argv == ["nvme", "list-subsys", "--output-format=json"])
+      and any(.argv == ["nvme", "ns-rescan", $controller]))
+    and (.executionResults
+      | any(.argv == ["nvme", "list-subsys", "--output-format=json"] and .success == true)
+      and any(.argv == ["nvme", "ns-rescan", $controller] and .success == true))
+  ' "$tmpdir/grow-apply.json" >/dev/null
+
+  cmp "$tmpdir/grow-apply.json" "$grow_report" >/dev/null
+  nvme list-ns "$controller" --all --output-format=json > "$tmpdir/list-ns-grown.json"
+fi
 
 if [[ "$attach_detach" == "1" ]]; then
   jq -n \
