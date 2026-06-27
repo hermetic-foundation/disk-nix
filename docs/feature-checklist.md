@@ -403,13 +403,13 @@ Update rules:
 - [ ] **Desired:** Automatic rollback recipes need integration proof that a
   failed apply can re-probe topology, choose a proven rollback recipe, run it,
   verify data-preserving state, and emit a rollback receipt.
-- [ ] **Desired:** Automatic rollback recipes need negative tests proving
+- [x] **Finished:** Automatic rollback recipes have negative tests proving
   refusal when rollback points are missing, stale, or not bound to the failed
   apply receipt.
-- [ ] **Desired:** Automatic rollback recipes need negative tests proving
+- [x] **Finished:** Automatic rollback recipes have negative tests proving
   refusal when current topology differs from both expected and failed-apply
   topology in ways the recipe cannot prove safe.
-- [ ] **Desired:** Automatic rollback recipes need negative tests proving
+- [x] **Finished:** Automatic rollback recipes have negative tests proving
   refusal when active consumers, mounted filesystems, open encrypted mappings,
   exported LUNs, or data-loss-prone operations make rollback unsafe.
 

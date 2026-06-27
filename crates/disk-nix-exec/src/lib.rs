@@ -29192,6 +29192,40 @@ mod tests {
     }
 
     #[test]
+    fn rollback_replay_requires_original_receipt_binding_before_running_commands() {
+        let mut report = failed_report_for_rollback_replay();
+        report.rollback_recipes = vec![proven_safe_rollback_recipe()];
+        let mut calls = Vec::new();
+
+        let replay = replay_proven_safe_rollback_recipe_with_runner(
+            &report,
+            0,
+            String::new(),
+            "topology:fresh-456".to_string(),
+            &mut |argv| {
+                calls.push(argv.to_vec());
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+        );
+
+        assert_eq!(replay.status, RollbackExecutionStatus::Refused);
+        assert!(calls.is_empty());
+        assert!(replay.validation_results.is_empty());
+        assert!(replay.rollback_results.is_empty());
+        assert!(
+            replay
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("original apply receipt binding"))
+        );
+    }
+
+    #[test]
     fn rollback_replay_allows_clean_topology_comparison() {
         let mut report = failed_report_for_rollback_replay();
         report.rollback_recipes = vec![proven_safe_rollback_recipe()];

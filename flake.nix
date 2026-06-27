@@ -2248,6 +2248,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_refuses_divergent_topology_comparison_before_running_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_refuses_risky_topology_diagnostics_before_running_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_refuses_missing_required_topology_evidence_before_running_commands' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_requires_original_receipt_binding_before_running_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_command_data_loss_risk_reason' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_command_live_use_blocker_reason' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_command_identity_blocker_reason' ${./crates/disk-nix-exec/src/lib.rs}
@@ -2263,6 +2264,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'behavior for mounted filesystems' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'topology-aware refusal' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes declare required topology' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'negative tests proving' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'not bound to the failed' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'current topology differs' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'data-loss-prone operations make rollback unsafe' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay can materialize deterministic' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses proven-safe recipes when' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises ambiguous rollback points' ${./docs/feature-checklist.md}
