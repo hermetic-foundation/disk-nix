@@ -181,8 +181,8 @@ behavior across real storage stacks.
   replacement failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
   delete failures, target-side LUN LIO create, attach, detach, destroy, native
   grow, property, and rescan paths,
-  Linux tgt create, attach, detach, and destroy failures, Linux tgt grow
-  not-ready, property, and rescan failures, SCST create, attach, detach,
+  Linux tgt create, attach, detach, destroy, native grow, property, and rescan
+  paths, SCST create, attach, detach,
   destroy, grow, property, and rescan failures, multipath
   add, remove, flush, resize, and replacement failures, host-side LUN rescan failure, LVM VG
   replacement failure, ZFS pool replacement failure, MD RAID create failure,
@@ -284,7 +284,10 @@ attribute updates. `provider = "tgt"` or
 creation/removal, logical-unit creation/removal, and initiator-address
 bind/unbind commands when the reviewed `targetId`/`tid`, `lun`, backing object,
 and ACL values are declared; grow/property updates include native target
-inventory around the handoff. `provider = "scst"` or `"scstadmin"` renders
+inventory, and grow updates validate backing capacity, refresh the exported
+logical unit with `tgtadm --mode logicalunit --op update --params online=1`,
+capture persistent-config state with `tgt-admin --dump`, and verify
+host-visible SCSI, multipath, and modeled graph state. `provider = "scst"` or `"scstadmin"` renders
 concrete SCST `scstadmin` inventory, backing-device open/close, target,
 initiator group, initiator, LUN map/unmap, target enable/removal, `resync_dev`,
 LUN attribute, and persistence commands when the reviewed target IQN, backing
@@ -322,8 +325,8 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   target-side LUN LIO destroy, target-side LUN LIO native grow with backing
   capacity and host-visibility verification, target-side LUN LIO property, target-side LUN LIO rescan,
   target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
-  detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
-  concrete property rendering, target-side LUN tgt property, target-side LUN tgt
+  detach, target-side LUN tgt destroy, target-side LUN tgt native grow with
+  backing capacity and host-visibility verification, target-side LUN tgt property, target-side LUN tgt
   rescan, target-side LUN SCST create, target-side LUN SCST attach,
   target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN
   SCST grow, target-side LUN SCST property, target-side LUN SCST rescan,

@@ -451,8 +451,11 @@ Examples:
   `lun`, backing object, and initiator-address or `ALL` ACL values are declared.
   tgt property updates render concrete
   `tgtadm --mode logicalunit --op update --name ... --value ...` commands when
-  `targetId`/`tid`, `lun`, property, and value are declared. tgt grow still
-  renders native target inventory around the non-ready provider handoff.
+  `targetId`/`tid`, `lun`, property, and value are declared. tgt grow validates
+  backing capacity with `blockdev --getsize64`, refreshes the exported logical
+  unit with `tgtadm --mode logicalunit --op update --params online=1`, captures
+  runtime configuration with `tgt-admin --dump`, and verifies host-visible
+  SCSI, multipath, and modeled graph state.
   Missing tgt-specific inputs keep the affected commands non-ready with
   explicit unresolved-input notes. `provider = "scst"` or `"scstadmin"`
   renders concrete SCST `scstadmin` inventory, `open_dev`, target, initiator

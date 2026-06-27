@@ -1966,7 +1966,7 @@
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt attach bind failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt detach logicalunit failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt destroy target failure' ${./scripts/integration-failure-recovery-smoke.sh}
-                ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt grow handoff should stay not-ready' ${./scripts/integration-failure-recovery-smoke.sh}
+                ${pkgs.gnugrep}/bin/grep -q 'target-side LUN tgt native grow with backing capacity and host verification' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt property failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'synthetic target-side LUN tgt rescan inventory failure' ${./scripts/integration-failure-recovery-smoke.sh}
                 ${pkgs.gnugrep}/bin/grep -q 'fake-target-lun-scst-tools' ${./scripts/integration-failure-recovery-smoke.sh}
@@ -2225,6 +2225,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'target-lun.capacity.expand' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_lio_backing_size_command' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'LIO target-side LUN grow has a native reviewed block' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'target_lun_tgt_logical_unit_refresh_command' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'tgt target-side LUN grow has a native reviewed refresh path' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Generic target LUN verification plans' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_generic_host_verification_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'arrayId' ${./docs/planning.md}

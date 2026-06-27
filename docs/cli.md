@@ -1156,9 +1156,12 @@ bind/unbind when `targetId` or `tid`, `lun`, backing object, and
 initiator-address or `ALL` ACL values are declared. tgt property updates render
 concrete `tgtadm --mode logicalunit --op update --name ... --value ...`
 commands when `targetId`/`tid`, `lun`, property, and value are declared, while
-tgt grow still adds native target inventory around the non-ready provider
-handoff. Missing tgt-specific values leave only the affected commands non-ready
-with unresolved-input notes. `provider = "scst"` or `"scstadmin"` renders
+tgt grow validates backing capacity with `blockdev --getsize64`, refreshes the
+exported logical unit with
+`tgtadm --mode logicalunit --op update --params online=1`, captures runtime
+configuration with `tgt-admin --dump`, and verifies host-visible SCSI,
+multipath, and modeled graph state. Missing tgt-specific values leave only the
+affected commands non-ready with unresolved-input notes. `provider = "scst"` or `"scstadmin"` renders
 concrete SCST `scstadmin` command plans for target inventory, backing-device
 open/close, target creation/removal, optional initiator group creation/removal,
 initiator add/remove, LUN map/unmap, target enablement, `resync_dev`, LUN

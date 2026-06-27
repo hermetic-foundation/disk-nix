@@ -276,10 +276,11 @@ Update rules:
 - [ ] **Desired:** LIO target-side LUN grow needs provider-specific forced
   backstore resize primitives if future LIO backstore types require more than
   backing-device capacity validation and initiator refresh.
-- [ ] **Partial:** tgt target-side LUN grow needs a fully native implementation
-  that validates the backing object, refreshes exported logical-unit capacity
-  where supported, persists target state, and verifies initiator-visible
-  capacity.
+- [x] **Finished:** tgt target-side LUN grow has a native reviewed refresh path
+  that validates backing capacity, refreshes the exported logical unit with
+  `tgtadm --mode logicalunit --op update --params online=1`, captures
+  persistent-config state with `tgt-admin --dump`, and verifies
+  initiator-visible capacity.
 - [x] **Finished:** Other target provider adapters have a provider capability
   contract for create, grow, map, unmap, remove, rescan, property mutation,
   persistence, verification, and refusal behavior.

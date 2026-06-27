@@ -209,9 +209,10 @@ fake storage tools ahead of `PATH` for eighty-seven failed apply paths:
   inventory, initiator unbind, and logical-unit delete succeed and fake
   `tgtadm --lld iscsi --mode target --op delete --tid 42` fails
 - a target-side LUN grow plus property update through the Linux tgt provider
-  where execute mode refuses the non-ready grow handoff after rendering
-  concrete `tgtadm` target inventory and a ready
-  `tgtadm --mode logicalunit --op update` property command for review
+  where fake `tgtadm`, `blockdev`, `tgt-admin`, `lsscsi`, `multipath`, and
+  `disk-nix` probes prove the native grow path validates backing capacity,
+  refreshes the logical unit, captures persistent-config state, and verifies
+  host-visible capacity
 - a target-side LUN property update through the Linux tgt provider where fake
   target inventory succeeds and fake
   `tgtadm --lld iscsi --mode logicalunit --op update --tid 42 --lun 8 --name tgt.writeCache --value off`
@@ -432,9 +433,8 @@ The test verifies that the failed report and receipt preserve:
   `targetluns:iqn.2026-06.example:tgt.root:detach`
 - the failed Linux tgt `tgtadm --lld iscsi --mode logicalunit --op delete --tid 42 --lun 8`
   command and non-zero status after inventory and initiator unbind
-- a Linux tgt target-side grow/property `not-ready` report with zero execution
-  results, concrete target inventory commands, and provider handoff commands
-  marked `needs-domain-implementation`
+- a Linux tgt target-side grow/property success report with concrete target
+  inventory, backing-capacity validation, logical-unit refresh, `tgt-admin --dump`, and host-visible verification results
 - `partialExecutionRecovery.failedActionId` as
   `targetluns:iqn.2026-06.example:scst.root:create`
 - the failed SCST `scstadmin -add_lun 9 ...` command and non-zero status after
@@ -1087,8 +1087,8 @@ LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
 target-side LUN LIO destroy, target-side LUN LIO native grow with backing
 capacity and host verification, target-side LUN LIO property, target-side LUN LIO rescan,
 target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
-detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with
-concrete property rendering, target-side LUN tgt property, target-side LUN tgt
+detach, target-side LUN tgt destroy, target-side LUN tgt native grow with
+backing capacity and host verification, target-side LUN tgt property, target-side LUN tgt
 rescan, target-side LUN SCST create, target-side LUN SCST attach,
 target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST
 grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath

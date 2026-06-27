@@ -11361,10 +11361,14 @@ fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec
         return commands;
     }
     if target_lun_tgt_provider(action) {
-        return vec![target_lun_tgt_inventory_command(
+        let mut commands = vec![target_lun_tgt_inventory_command(
             action,
             "verify Linux tgt target-side LUN inventory after tgtadm action",
         )];
+        if action.operation == Operation::Grow {
+            commands.extend(target_lun_generic_host_verification_commands(target));
+        }
+        return commands;
     }
     if target_lun_scst_provider(action) {
         return vec![target_lun_scst_target_inventory_command(
@@ -11997,11 +12001,18 @@ fn target_lun_tgt_commands(action: &PlannedAction, target: &str) -> Vec<Executio
         }
         Operation::Rescan => {}
         Operation::Grow => {
-            commands.push(target_lun_provider_command(
+            commands.push(target_lun_tgt_backing_size_command(
                 action,
-                target,
-                "grow",
-                action.context.desired_size.as_deref(),
+                "validate the reviewed Linux tgt backing object exposes the grown capacity",
+            ));
+            commands.push(target_lun_tgt_logical_unit_refresh_command(
+                action,
+                "refresh the reviewed Linux tgt logical unit after backing capacity growth",
+            ));
+            commands.push(target_lun_tgt_persistence_snapshot_command());
+            commands.push(target_lun_tgt_inventory_command(
+                action,
+                "inspect Linux tgt target-side inventory after capacity refresh",
             ));
         }
         Operation::SetProperty => {
@@ -12111,6 +12122,73 @@ fn target_lun_tgt_lun_command(action: &PlannedAction, op: &str, note: &str) -> E
         },
         unresolved_inputs,
         note,
+    )
+}
+
+fn target_lun_tgt_backing_size_command(action: &PlannedAction, note: &str) -> ExecutionCommand {
+    match action.context.device.as_deref() {
+        Some(device) => command_vec(
+            vec![
+                "blockdev".to_string(),
+                "--getsize64".to_string(),
+                device.to_string(),
+            ],
+            false,
+            note,
+        ),
+        None => command_vec_with_readiness(
+            vec![
+                "blockdev".to_string(),
+                "--getsize64".to_string(),
+                "<backing-block-device-or-file>".to_string(),
+            ],
+            false,
+            CommandReadiness::NeedsDomainImplementation,
+            ["Linux tgt backing store path for capacity validation"],
+            note,
+        ),
+    }
+}
+
+fn target_lun_tgt_logical_unit_refresh_command(
+    action: &PlannedAction,
+    note: &str,
+) -> ExecutionCommand {
+    let (target_id, mut unresolved_inputs) = target_lun_tgt_target_id(action);
+    let (lun, lun_unresolved) = target_lun_tgt_lun(action);
+    unresolved_inputs.extend(lun_unresolved);
+    command_vec_with_readiness(
+        vec![
+            "tgtadm".to_string(),
+            "--lld".to_string(),
+            "iscsi".to_string(),
+            "--mode".to_string(),
+            "logicalunit".to_string(),
+            "--op".to_string(),
+            "update".to_string(),
+            "--tid".to_string(),
+            target_id,
+            "--lun".to_string(),
+            lun,
+            "--params".to_string(),
+            "online=1".to_string(),
+        ],
+        true,
+        if unresolved_inputs.is_empty() {
+            CommandReadiness::Ready
+        } else {
+            CommandReadiness::NeedsDomainImplementation
+        },
+        unresolved_inputs,
+        note,
+    )
+}
+
+fn target_lun_tgt_persistence_snapshot_command() -> ExecutionCommand {
+    command_vec(
+        vec!["tgt-admin".to_string(), "--dump".to_string()],
+        false,
+        "capture Linux tgt runtime configuration for persistent target state review",
     )
 }
 
@@ -31917,7 +31995,7 @@ mod tests {
     }
 
     #[test]
-    fn target_lun_tgt_grow_and_property_use_native_inventory_with_handoff() {
+    fn target_lun_tgt_grow_and_property_use_native_refresh_and_capacity_validation() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{
               "spec": {
@@ -31945,8 +32023,8 @@ mod tests {
         let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
 
         assert_eq!(report.status, ExecutionStatus::DryRun);
-        assert_eq!(report.command_summary.needs_domain_implementation_count, 1);
-        assert!(!report.command_summary.all_commands_ready());
+        assert_eq!(report.command_summary.needs_domain_implementation_count, 0);
+        assert!(report.command_summary.all_commands_ready());
 
         let grow = report
             .command_plan
@@ -31962,25 +32040,68 @@ mod tests {
                 && command.readiness == CommandReadiness::Ready
         }));
         assert!(grow.commands.iter().any(|command| {
+            command.argv == ["blockdev", "--getsize64", "/dev/zvol/tank/root"]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(grow.commands.iter().any(|command| {
             command.argv
                 == [
-                    "<target-lun-provider:tgt>",
-                    "grow-lun",
-                    "--target",
-                    "iqn.2026-06.example:tgt.root",
-                    "--provider",
-                    "tgt",
-                    "--size",
-                    "4TiB",
-                    "--backing",
-                    "/dev/zvol/tank/root",
-                    "--target-id",
+                    "tgtadm",
+                    "--lld",
+                    "iscsi",
+                    "--mode",
+                    "logicalunit",
+                    "--op",
+                    "update",
+                    "--tid",
                     "42",
                     "--lun",
                     "8",
+                    "--params",
+                    "online=1",
                 ]
                 && command.mutates
-                && command.readiness == CommandReadiness::NeedsDomainImplementation
+                && command.readiness == CommandReadiness::Ready
+        }));
+        assert!(grow.commands.iter().any(|command| {
+            command.argv == ["tgt-admin", "--dump"]
+                && !command.mutates
+                && command.readiness == CommandReadiness::Ready
+        }));
+        let grow_verification = report
+            .verification_plan
+            .iter()
+            .find(|step| step.action_id == "targetluns:iqn.2026-06.example:tgt.root:grow")
+            .expect("Linux tgt target-side LUN grow verification plan exists");
+        assert!(grow_verification.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42",
+                ]
+                && !command.mutates
+        }));
+        assert!(
+            grow_verification
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
+        assert!(
+            grow_verification
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
+        );
+        assert!(grow_verification.commands.iter().any(|command| {
+            command.argv
+                == [
+                    "disk-nix",
+                    "inspect",
+                    "iqn.2026-06.example:tgt.root",
+                    "--json",
+                ]
+                && !command.mutates
         }));
 
         let property = report

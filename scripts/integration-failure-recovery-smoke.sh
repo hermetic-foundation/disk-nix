@@ -4557,13 +4557,54 @@ printf '{}\n'
 exit 0
 EOF
 
-cat > "$target_lun_tgt_grow_tools/<target-lun-provider:tgt>" <<'EOF'
+cat > "$target_lun_tgt_grow_tools/blockdev" <<'EOF'
 #!/usr/bin/env bash
-echo "synthetic target-side LUN tgt grow handoff should stay not-ready" >&2
+if [[ "$*" == "--getsize64 /dev/zvol/tank/root" ]]; then
+  printf '4398046511104\n'
+  exit 0
+fi
+echo "unexpected blockdev invocation: $*" >&2
 exit 87
 EOF
 
-chmod +x "$target_lun_tgt_grow_tools/tgtadm" "$target_lun_tgt_grow_tools/<target-lun-provider:tgt>"
+cat > "$target_lun_tgt_grow_tools/tgt-admin" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "--dump" ]]; then
+  printf '<target iqn.2026-06.example:tgt.root>\n  backing-store /dev/zvol/tank/root\n</target>\n'
+  exit 0
+fi
+echo "unexpected tgt-admin invocation: $*" >&2
+exit 88
+EOF
+
+cat > "$target_lun_tgt_grow_tools/lsscsi" <<'EOF'
+#!/usr/bin/env bash
+printf '[0:0:0:8] disk TGT ROOT 4TiB /dev/sdy\n'
+exit 0
+EOF
+
+cat > "$target_lun_tgt_grow_tools/multipath" <<'EOF'
+#!/usr/bin/env bash
+printf 'mpathtgt (36001405tgt) dm-8 TGT,ROOT\n'
+exit 0
+EOF
+
+cat > "$target_lun_tgt_grow_tools/disk-nix" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "inspect" ]]; then
+  printf '{"object":"%s","verified":true}\n' "$2"
+  exit 0
+fi
+echo "unexpected disk-nix invocation: $*" >&2
+exit 89
+EOF
+
+chmod +x "$target_lun_tgt_grow_tools/tgtadm" \
+  "$target_lun_tgt_grow_tools/blockdev" \
+  "$target_lun_tgt_grow_tools/tgt-admin" \
+  "$target_lun_tgt_grow_tools/lsscsi" \
+  "$target_lun_tgt_grow_tools/multipath" \
+  "$target_lun_tgt_grow_tools/disk-nix"
 
 target_lun_tgt_grow_spec="$tmpdir/target-lun-tgt-grow-spec.json"
 target_lun_tgt_grow_json="$tmpdir/target-lun-tgt-grow-apply.json"
@@ -4591,32 +4632,33 @@ jq -n '{
   }
 }' > "$target_lun_tgt_grow_spec"
 
-if PATH="$target_lun_tgt_grow_tools:$PATH" "$disk_nix_bin" apply \
+PATH="$target_lun_tgt_grow_tools:$PATH" "$disk_nix_bin" apply \
   --spec "$target_lun_tgt_grow_spec" \
   --execute \
   --report-out "$target_lun_tgt_grow_report" \
   --receipt-out "$target_lun_tgt_grow_receipt" \
-  --json > "$target_lun_tgt_grow_json"; then
-  echo "expected synthetic target-side LUN tgt grow handoff to stay not-ready with concrete property rendering" >&2
-  exit 1
-fi
+  --json > "$target_lun_tgt_grow_json"
 
 jq -e '
-  .status == "not-ready"
+  .status == "succeeded"
   and .apply.blockedCount == 0
   and .commandSummary.stepCount == 2
-  and .commandSummary.commandCount == 6
-  and .commandSummary.needsDomainImplementationCount == 1
-  and (.executionResults | length) == 0
-  and (.messages | any(contains("execute refused")))
+  and .commandSummary.commandCount == 9
+  and .commandSummary.needsDomainImplementationCount == 0
+  and (.executionResults | length) == 14
   and (.commandPlan | any(
     .actionId == "targetluns:iqn.2026-06.example:tgt.root:grow"
     and (.commands | any(.argv == ["tgtadm", "--lld", "iscsi", "--mode", "target", "--op", "show", "--tid", "42"] and .mutates == false))
+    and (.commands | any(.argv == ["blockdev", "--getsize64", "/dev/zvol/tank/root"] and .mutates == false and .readiness == "ready"))
     and (.commands | any(
-      .argv == ["<target-lun-provider:tgt>", "grow-lun", "--target", "iqn.2026-06.example:tgt.root", "--provider", "tgt", "--size", "4TiB", "--backing", "/dev/zvol/tank/root", "--target-id", "42", "--lun", "8"]
+      .argv == ["tgtadm", "--lld", "iscsi", "--mode", "logicalunit", "--op", "update", "--tid", "42", "--lun", "8", "--params", "online=1"]
       and .mutates == true
-      and .readiness == "needs-domain-implementation"
-      and (.unresolvedInputs | index("tgt target LUN provider implementation"))
+      and .readiness == "ready"
+    ))
+    and (.commands | any(
+      .argv == ["tgt-admin", "--dump"]
+      and .mutates == false
+      and .readiness == "ready"
     ))
   ))
   and (.commandPlan | any(
@@ -4628,13 +4670,11 @@ jq -e '
       and .readiness == "ready"
     ))
   ))
-  and (.recoveryActions | any(
-    .kind == "resolve-inputs"
-    and (.notes | any(contains("need domain command implementation")))
-  ))
-  and (.recoveryActions | any(
-    .kind == "inspect-current-state"
-    and (.notes | any(contains("non-ready command plans do not mutate storage")))
+  and (.verificationPlan | any(
+    .actionId == "targetluns:iqn.2026-06.example:tgt.root:grow"
+    and (.commands | any(.argv == ["lsscsi", "-t", "-s"] and .mutates == false))
+    and (.commands | any(.argv == ["multipath", "-ll"] and .mutates == false))
+    and (.commands | any(.argv == ["disk-nix", "inspect", "iqn.2026-06.example:tgt.root", "--json"] and .mutates == false))
   ))
 ' "$target_lun_tgt_grow_json" >/dev/null
 
@@ -4643,9 +4683,9 @@ jq -e '
   .receiptVersion == 1
   and .command == "apply"
   and .executeRequested == true
-  and .report.status == "not-ready"
-  and .report.commandSummary.needsDomainImplementationCount == 1
-  and (.report.executionResults | length) == 0
+  and .report.status == "succeeded"
+  and .report.commandSummary.needsDomainImplementationCount == 0
+  and (.report.executionResults | length) == 14
 ' "$target_lun_tgt_grow_receipt" >/dev/null
 
 target_lun_tgt_property_tools="$tmpdir/fake-target-lun-tgt-property-tools"
@@ -9703,4 +9743,4 @@ jq -e '
   and .report.partialExecutionRecovery.completedMutatingCommandCount == 0
 ' "$lvm_cache_receipt" >/dev/null
 
-echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, LVM thin-pool create, LVM thin-pool grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, filesystem property, swap label, zram rescan, zram property inventory, loop rescan, backing-file rescan, backing-file grow, backing-file create, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO native grow with backing capacity and host verification, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt grow not-ready with concrete property rendering, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID create, MD RAID assemble, MD RAID stop, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
+echo "failure-recovery integration smoke test verified partialExecutionRecovery after synthetic resize, LVM grow, LVM thin-pool create, LVM thin-pool grow, XFS grow, Btrfs scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement, filesystem trim, filesystem check, filesystem repair, filesystem property, swap label, zram rescan, zram property inventory, loop rescan, backing-file rescan, backing-file grow, backing-file create, device-mapper rename, ZFS dataset rename, Btrfs snapshot clone, ZFS snapshot clone, LVM VG rename, LVM VG replacement, ZFS pool replacement, ZFS rollback, NVMe namespace create, NVMe namespace grow, NVMe namespace attach, NVMe namespace detach, NVMe namespace delete, target-side LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach, target-side LUN LIO destroy, target-side LUN LIO native grow with backing capacity and host verification, target-side LUN LIO property, target-side LUN LIO rescan, target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt detach, target-side LUN tgt destroy, target-side LUN tgt native grow with backing capacity and host verification, target-side LUN tgt property, target-side LUN tgt rescan, target-side LUN SCST create, target-side LUN SCST attach, target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN SCST grow, target-side LUN SCST property, target-side LUN SCST rescan, host-side LUN rescan, multipath add, multipath remove, multipath flush, multipath resize, multipath replace, MD RAID create, MD RAID assemble, MD RAID stop, MD RAID grow, MD RAID add-member, MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS grow, LUKS keyslot add, LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property, partition grow, NFS remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login, iSCSI rescan, LVM cache attach, LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property, bcache replacement, bcache property, bcache rescan, and LVM cache property failures"
