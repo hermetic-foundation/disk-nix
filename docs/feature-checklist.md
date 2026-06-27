@@ -538,9 +538,14 @@ Update rules:
   property mutation coverage: the loop-backed ZFS harness applies a disk-nix
   `pools.*.properties.autotrim` declaration, executes `zpool set`, and verifies
   the resulting property with `zpool get` on the disposable loop-backed pool.
+- [x] **Finished:** Destructive integration tests include real LVM cache
+  property mutation coverage: the loop-backed LVM harness creates a disposable
+  cached origin LV, applies a disk-nix `lvmCaches.*.properties.lvm.cache-mode`
+  declaration, executes `lvchange --cachemode`, and verifies the resulting mode
+  with `lvs`.
 - [ ] **Partial:** Destructive integration tests still need property mutation
-  coverage across LVM, VDO, bcache, NFS, target LUNs, loop devices, backing
-  files, and zram.
+  coverage across VDO, bcache, NFS, target LUNs, loop devices, backing files,
+  and zram.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`

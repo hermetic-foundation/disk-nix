@@ -786,8 +786,13 @@ When enabled, it:
 - creates a temporary 512 MiB backing file
 - attaches it to the next available `/dev/loop*`
 - creates a temporary LVM physical volume, volume group, logical volume, thin
-  pool, thin volume, and snapshot
+  pool, thin volume, snapshot, cache pool, and cached origin volume
 - verifies `disk-nix inspect <vg> --json` sees the volume group
+- applies `lvmCaches.<vg/lv>.properties.lvm.cache-mode = "writethrough"`
+  against the real cached origin logical volume
+- verifies the generated JSON report was written, the rendered
+  `lvchange --cachemode writethrough <vg/lv>` command succeeded, and
+  `lvs -o cache_mode <vg/lv>` reports `writethrough`
 - executes `volumeGroups.<name>.operation = "rescan"`,
   `volumes.<vg/lv>.operation = "rescan"`,
   `thinPools.<vg/pool>.operation = "rescan"`, and

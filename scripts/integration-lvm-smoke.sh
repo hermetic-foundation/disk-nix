@@ -20,7 +20,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" jq losetup lvcreate lvs pvcreate pvremove pvscan pvs truncate vgchange vgcreate vgremove vgscan vgs; do
+for tool in "$disk_nix_bin" jq losetup lvchange lvconvert lvcreate lvs pvcreate pvremove pvscan pvs tr truncate vgchange vgcreate vgremove vgscan vgs; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -49,6 +49,8 @@ trap cleanup EXIT
 backing="$tmpdir/disk-nix-lvm-smoke.img"
 spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
+property_spec="$tmpdir/property-spec.json"
+property_report="$tmpdir/property-report.json"
 
 truncate --size 512M "$backing"
 loopdev="$(losetup --find --show "$backing")"
@@ -58,6 +60,8 @@ lvcreate --yes --size 64M --name origin "$vg"
 lvcreate --yes --type thin-pool --size 128M --name thinpool "$vg"
 lvcreate --yes --virtualsize 64M --thinpool "$vg/thinpool" --name thinvol "$vg"
 lvcreate --yes --snapshot --size 32M --name origin_snap "$vg/origin"
+lvcreate --yes --type cache-pool --size 64M --name cachepool "$vg"
+lvconvert --yes --type cache --cachepool "$vg/cachepool" "$vg/origin"
 
 "$disk_nix_bin" inspect "$vg" --json > "$tmpdir/inspect.json"
 jq -e --arg vg "$vg" '
@@ -68,6 +72,40 @@ jq -e --arg vg "$vg" '
       or (.properties // [] | any(.key == "lvm.vg-name" and .value == $vg))
     )
 ' "$tmpdir/inspect.json" >/dev/null
+
+jq -n --arg origin "$vg/origin" '{
+  version: 1,
+  apply: {
+    allowOffline: true
+  },
+  lvmCaches: {
+    ($origin): {
+      properties: {
+        "lvm.cache-mode": "writethrough"
+      }
+    }
+  }
+}' > "$property_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$property_spec" \
+  --execute \
+  --report-out "$property_report" \
+  --json > "$tmpdir/property-apply.json"
+
+jq -e --arg origin "$vg/origin" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("lvmCaches:" + $origin + ":set-property:lvm.cache-mode"))
+    | .commands | any(.argv == ["lvchange", "--cachemode", "writethrough", $origin]))
+  and (.executionResults
+    | any(.argv == ["lvchange", "--cachemode", "writethrough", $origin] and .success == true))
+' "$tmpdir/property-apply.json" >/dev/null
+
+cmp "$tmpdir/property-apply.json" "$property_report" >/dev/null
+if [[ "$(lvs --noheadings -o cache_mode "$vg/origin" | tr -d '[:space:]')" != "writethrough" ]]; then
+  echo "LVM cache mode did not match after disk-nix property mutation" >&2
+  exit 1
+fi
 
 jq -n \
   --arg vg "$vg" \
@@ -142,4 +180,4 @@ lvs --reportformat json "$vg/thinpool" >/dev/null
 lvs --reportformat json "$vg/thinvol" >/dev/null
 lvs --reportformat json "$vg/origin_snap" >/dev/null
 
-echo "LVM loop-backed integration smoke test refreshed $vg with origin, thin pool, thin volume, and snapshot on $loopdev"
+echo "LVM loop-backed integration smoke test refreshed $vg with cached origin, thin pool, thin volume, and snapshot on $loopdev"

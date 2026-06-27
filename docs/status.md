@@ -163,6 +163,7 @@ behavior across real storage stacks.
   with `cryptsetup config`, verify real Btrfs filesystem label mutation with
   `btrfs filesystem label`, verify real loop-backed swap label mutation with
   `swaplabel`, verify real ZFS pool property mutation with `zpool set`, and
+  verify real LVM cache property mutation with `lvchange --cachemode`, then
   clean up temporary devices. A layered VM
   harness creates partitioned loop, LUKS, LVM, and mounted ext4 layers on a
   disposable disk, enlarges the backing file, and executes one disk-nix apply
