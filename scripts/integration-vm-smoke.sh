@@ -34,7 +34,7 @@ MSG
   fi
 fi
 
-default_harnesses="loop btrfs layered-vm failure-recovery"
+default_harnesses="loop btrfs swap layered-vm failure-recovery"
 harnesses="${DISK_NIX_VM_HARNESSES:-$default_harnesses}"
 
 run_harness() {
@@ -50,6 +50,9 @@ run_harness() {
       ;;
     luks)
       disk-nix-integration-luks-smoke
+      ;;
+    swap)
+      disk-nix-integration-swap-smoke
       ;;
     lvm)
       disk-nix-integration-lvm-smoke

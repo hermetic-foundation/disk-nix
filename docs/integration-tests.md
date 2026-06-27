@@ -35,7 +35,7 @@ The VM suite refuses to run unless:
 For controlled lab automation where VM detection is unavailable but isolation
 is provided externally, set `DISK_NIX_INTEGRATION_ASSUME_VM=1`.
 
-By default the suite runs the loop, Btrfs, bcachefs, LUKS, LVM, MD RAID, and
+By default the suite runs the loop, Btrfs, swap, layered-VM, and
 failure-recovery smoke harnesses. To run a subset:
 
 ```sh
@@ -736,6 +736,40 @@ To test a development build without `nix run`, set `DISK_NIX_BIN`:
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
   DISK_NIX_BIN=target/debug/disk-nix \
   ./scripts/integration-luks-smoke.sh
+```
+
+## Swap loop-backed smoke test
+
+The repository also includes a root-only swap loop-backed harness:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  nix run .#integration-swap-smoke
+```
+
+When enabled, it:
+
+- creates a temporary 64 MiB backing file
+- attaches the file to the next available `/dev/loop*`
+- formats the temporary loop device with a swap signature and initial label
+- verifies `disk-nix inspect <loop> --json` sees the swap metadata
+- applies `swaps.swapSmokeLabel.properties.label = "disknix-swap"` against
+  the real loop-backed swap signature
+- verifies the generated JSON report was written, the rendered
+  `swaplabel --label disknix-swap <loop>` command succeeded, and
+  `blkid -s LABEL -o value <loop>` reports the new label
+- detaches the loop device and removes the backing file during cleanup
+
+This test intentionally formats only the temporary backing file it creates. It
+still requires destructive opt-in because it uses real loop and swap-signature
+tooling.
+
+To test a development build without `nix run`, set `DISK_NIX_BIN`:
+
+```sh
+sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
+  DISK_NIX_BIN=target/debug/disk-nix \
+  ./scripts/integration-swap-smoke.sh
 ```
 
 ## LVM loop-backed smoke test

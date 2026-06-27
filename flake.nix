@@ -126,6 +126,16 @@
           ];
           text = builtins.readFile ./scripts/integration-luks-smoke.sh;
         };
+        integrationSwapSmoke = pkgs.writeShellApplication {
+          name = "disk-nix-integration-swap-smoke";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.util-linux
+          ];
+          text = builtins.readFile ./scripts/integration-swap-smoke.sh;
+        };
         integrationLvmSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-lvm-smoke";
           runtimeInputs = [
@@ -246,6 +256,7 @@
             integrationBtrfsSmoke
             integrationBcachefsSmoke
             integrationLuksSmoke
+            integrationSwapSmoke
             integrationLvmSmoke
             integrationMdraidSmoke
             integrationZfsSmoke
@@ -1573,6 +1584,7 @@
           integration-bcachefs-smoke = integrationBcachefsSmoke;
           integration-btrfs-smoke = integrationBtrfsSmoke;
           integration-luks-smoke = integrationLuksSmoke;
+          integration-swap-smoke = integrationSwapSmoke;
           integration-lvm-smoke = integrationLvmSmoke;
           integration-mdraid-smoke = integrationMdraidSmoke;
           integration-zfs-smoke = integrationZfsSmoke;
@@ -1620,6 +1632,13 @@
             program = "${integrationLuksSmoke}/bin/disk-nix-integration-luks-smoke";
             meta = {
               description = "Root-only LUKS loop-backed disk-nix smoke integration harness";
+            };
+          };
+          integration-swap-smoke = {
+            type = "app";
+            program = "${integrationSwapSmoke}/bin/disk-nix-integration-swap-smoke";
+            meta = {
+              description = "Root-only swap loop-backed disk-nix smoke integration harness";
             };
           };
           integration-lvm-smoke = {
@@ -1767,6 +1786,17 @@
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup", "config"' ${./scripts/integration-luks-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disknix-luks' ${./scripts/integration-luks-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup", "close"' ${./scripts/integration-luks-smoke.sh}
+            touch "$out"
+          '';
+          integrationSwapSmoke = pkgs.runCommand "disk-nix-integration-swap-smoke-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-swap-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-swap-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'losetup --find --show' ${./scripts/integration-swap-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'mkswap --label' ${./scripts/integration-swap-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'swapSmokeLabel' ${./scripts/integration-swap-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'swaps:swapSmokeLabel:set-property:label' ${./scripts/integration-swap-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'swaplabel", "--label"' ${./scripts/integration-swap-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disknix-swap' ${./scripts/integration-swap-smoke.sh}
             touch "$out"
           '';
           integrationLvmSmoke = pkgs.runCommand "disk-nix-integration-lvm-smoke-check" { } ''
@@ -2174,7 +2204,9 @@
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_DESTRUCTIVE ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q DISK_NIX_INTEGRATION_ASSUME_VM ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'systemd-detect-virt --quiet --vm' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'default_harnesses="loop btrfs swap layered-vm failure-recovery"' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-loop-smoke' ${./scripts/integration-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-swap-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-bcachefs-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-mdraid-smoke' ${./scripts/integration-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-zfs-smoke' ${./scripts/integration-vm-smoke.sh}
@@ -2209,15 +2241,19 @@
             ${pkgs.gnugrep}/bin/grep -q 'real filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real swap signature' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'e2label' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup config' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'btrfs filesystem label' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'swaplabel' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real LUKS header label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem label mutation' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real loop-backed swap label mutation' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'btrfsSmokeLabel.properties.label' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'swaps.swapSmokeLabel.properties.label' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'rollback review safety' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'failed-and-resumed' ${./docs/status.md}

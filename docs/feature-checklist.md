@@ -529,9 +529,14 @@ Update rules:
   `filesystems.*.properties.label` declaration, executes
   `btrfs filesystem label`, and verifies the resulting label on the mounted
   disposable Btrfs filesystem.
+- [x] **Finished:** Destructive integration tests include real swap signature
+  property mutation coverage: the loop-backed swap harness applies a disk-nix
+  `swaps.*.properties.label` declaration, executes `swaplabel`, and verifies
+  the resulting label with `blkid` on the disposable loop-backed swap
+  signature.
 - [ ] **Partial:** Destructive integration tests still need property mutation
   coverage across LVM, ZFS, VDO, bcache, NFS, target LUNs, loop devices, backing
-  files, swap, and zram.
+  files, and zram.
 - [x] **Finished:** Destructive integration tests include VM-backed failure
   injection for a partially completed apply run: the layered VM harness performs
   a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`
