@@ -237,6 +237,8 @@ pub struct RollbackReceiptBinding {
     pub fresh_topology_probe_id: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub topology_evidence: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub topology_payloads: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -258,6 +260,14 @@ struct CommandRunResult {
     status_code: Option<i32>,
     stdout: String,
     stderr: String,
+}
+
+#[derive(Debug, Clone)]
+struct RollbackReplayBindings {
+    original_receipt_id: String,
+    fresh_topology_probe_id: String,
+    topology_evidence: BTreeMap<String, String>,
+    topology_payloads: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -751,6 +761,38 @@ pub fn materialize_rollback_topology_evidence(
 }
 
 #[must_use]
+pub fn materialize_rollback_topology_payloads(
+    failed_report: &ExecutionReport,
+    current_topology_payload: serde_json::Value,
+) -> BTreeMap<String, serde_json::Value> {
+    BTreeMap::from([
+        (
+            "expected".to_string(),
+            serde_json::to_value(&failed_report.apply).unwrap_or(serde_json::Value::Null),
+        ),
+        (
+            "preApply".to_string(),
+            serde_json::to_value((
+                &failed_report.topology_comparison,
+                &failed_report.command_plan,
+                &failed_report.verification_plan,
+            ))
+            .unwrap_or(serde_json::Value::Null),
+        ),
+        (
+            "failedApply".to_string(),
+            serde_json::to_value((
+                failed_report.status,
+                &failed_report.partial_execution_recovery,
+                &failed_report.execution_results,
+            ))
+            .unwrap_or(serde_json::Value::Null),
+        ),
+        ("current".to_string(), current_topology_payload),
+    ])
+}
+
+#[must_use]
 pub fn replay_proven_safe_rollback_recipe_with_topology_evidence(
     failed_report: &ExecutionReport,
     recipe_index: usize,
@@ -762,9 +804,36 @@ pub fn replay_proven_safe_rollback_recipe_with_topology_evidence(
     replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
         failed_report,
         recipe_index,
-        original_receipt_id.into(),
-        fresh_topology_probe_id.into(),
-        topology_evidence,
+        RollbackReplayBindings {
+            original_receipt_id: original_receipt_id.into(),
+            fresh_topology_probe_id: fresh_topology_probe_id.into(),
+            topology_evidence,
+            topology_payloads: BTreeMap::new(),
+        },
+        &mut runner,
+        command_exists,
+    )
+}
+
+#[must_use]
+pub fn replay_proven_safe_rollback_recipe_with_topology_payloads(
+    failed_report: &ExecutionReport,
+    recipe_index: usize,
+    original_receipt_id: impl Into<String>,
+    fresh_topology_probe_id: impl Into<String>,
+    topology_evidence: BTreeMap<String, String>,
+    topology_payloads: BTreeMap<String, serde_json::Value>,
+) -> RollbackExecutionReport {
+    let mut runner = run_command;
+    replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
+        failed_report,
+        recipe_index,
+        RollbackReplayBindings {
+            original_receipt_id: original_receipt_id.into(),
+            fresh_topology_probe_id: fresh_topology_probe_id.into(),
+            topology_evidence,
+            topology_payloads,
+        },
         &mut runner,
         command_exists,
     )
@@ -790,9 +859,12 @@ fn replay_proven_safe_rollback_recipe_with_runner(
     replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
         failed_report,
         recipe_index,
-        original_receipt_id,
-        fresh_topology_probe_id,
-        topology_evidence,
+        RollbackReplayBindings {
+            original_receipt_id,
+            fresh_topology_probe_id,
+            topology_evidence,
+            topology_payloads: BTreeMap::new(),
+        },
         runner,
         |_| true,
     )
@@ -801,9 +873,7 @@ fn replay_proven_safe_rollback_recipe_with_runner(
 fn replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
     failed_report: &ExecutionReport,
     recipe_index: usize,
-    original_receipt_id: String,
-    fresh_topology_probe_id: String,
-    topology_evidence: BTreeMap<String, String>,
+    bindings: RollbackReplayBindings,
     runner: &mut impl FnMut(&[String]) -> CommandRunResult,
     tool_exists: impl Fn(&str) -> bool,
 ) -> RollbackExecutionReport {
@@ -812,9 +882,7 @@ fn replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
             0,
             "",
             &[],
-            original_receipt_id,
-            fresh_topology_probe_id,
-            topology_evidence,
+            bindings,
             vec!["rollback recipe index does not exist".to_string()],
         );
     };
@@ -822,9 +890,9 @@ fn replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
     let mut refusal_reasons = proven_safe_rollback_refusal_reasons(
         failed_report,
         recipe,
-        &original_receipt_id,
-        &fresh_topology_probe_id,
-        &topology_evidence,
+        &bindings.original_receipt_id,
+        &bindings.fresh_topology_probe_id,
+        &bindings.topology_evidence,
         tool_exists,
     );
     if !refusal_reasons.is_empty() {
@@ -833,9 +901,7 @@ fn replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
             recipe.recipe_version,
             &recipe.source_action_id,
             &recipe.failed_command,
-            original_receipt_id,
-            fresh_topology_probe_id,
-            topology_evidence,
+            bindings,
             refusal_reasons,
         );
     }
@@ -855,12 +921,7 @@ fn replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
                 status: RollbackExecutionStatus::Failed,
                 recipe_version: recipe.recipe_version,
                 source_action_id: recipe.source_action_id.clone(),
-                receipt_binding: rollback_receipt_binding(
-                    recipe,
-                    original_receipt_id,
-                    fresh_topology_probe_id,
-                    topology_evidence,
-                ),
+                receipt_binding: rollback_receipt_binding(recipe, bindings.clone()),
                 validation_results,
                 rollback_results: Vec::new(),
                 messages: vec![
@@ -889,9 +950,7 @@ fn replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
                 source_action_id: recipe.source_action_id.clone(),
                 receipt_binding: rollback_receipt_binding(
                     recipe,
-                    original_receipt_id,
-                    fresh_topology_probe_id,
-                    topology_evidence,
+                    bindings.clone(),
                 ),
                 validation_results,
                 rollback_results,
@@ -907,12 +966,7 @@ fn replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
         status: RollbackExecutionStatus::Succeeded,
         recipe_version: recipe.recipe_version,
         source_action_id: recipe.source_action_id.clone(),
-        receipt_binding: rollback_receipt_binding(
-            recipe,
-            original_receipt_id,
-            fresh_topology_probe_id,
-            topology_evidence,
-        ),
+        receipt_binding: rollback_receipt_binding(recipe, bindings),
         validation_results,
         rollback_results,
         messages: vec![
@@ -1484,9 +1538,7 @@ fn refused_rollback_report(
     recipe_version: u64,
     source_action_id: &str,
     failed_command: &[String],
-    original_receipt_id: String,
-    fresh_topology_probe_id: String,
-    topology_evidence: BTreeMap<String, String>,
+    bindings: RollbackReplayBindings,
     refusal_reasons: Vec<String>,
 ) -> RollbackExecutionReport {
     RollbackExecutionReport {
@@ -1494,11 +1546,12 @@ fn refused_rollback_report(
         recipe_version,
         source_action_id: source_action_id.to_string(),
         receipt_binding: RollbackReceiptBinding {
-            original_receipt_id,
+            original_receipt_id: bindings.original_receipt_id,
             source_action_id: source_action_id.to_string(),
             failed_command: failed_command.to_vec(),
-            fresh_topology_probe_id,
-            topology_evidence,
+            fresh_topology_probe_id: bindings.fresh_topology_probe_id,
+            topology_evidence: bindings.topology_evidence,
+            topology_payloads: bindings.topology_payloads,
         },
         validation_results: Vec::new(),
         rollback_results: Vec::new(),
@@ -1509,16 +1562,15 @@ fn refused_rollback_report(
 
 fn rollback_receipt_binding(
     recipe: &RollbackRecipe,
-    original_receipt_id: String,
-    fresh_topology_probe_id: String,
-    topology_evidence: BTreeMap<String, String>,
+    bindings: RollbackReplayBindings,
 ) -> RollbackReceiptBinding {
     RollbackReceiptBinding {
-        original_receipt_id,
+        original_receipt_id: bindings.original_receipt_id,
         source_action_id: recipe.source_action_id.clone(),
         failed_command: recipe.failed_command.clone(),
-        fresh_topology_probe_id,
-        topology_evidence,
+        fresh_topology_probe_id: bindings.fresh_topology_probe_id,
+        topology_evidence: bindings.topology_evidence,
+        topology_payloads: bindings.topology_payloads,
     }
 }
 
@@ -29231,6 +29283,67 @@ mod tests {
     }
 
     #[test]
+    fn rollback_replay_binds_full_topology_payloads_to_receipt() {
+        let mut report = failed_report_for_rollback_replay();
+        report.rollback_recipes = vec![proven_safe_rollback_recipe()];
+        let current_payload = serde_json::json!({
+            "nodes": [
+                {
+                    "id": "node:current",
+                    "kind": "disk",
+                    "name": "current",
+                    "identity": {},
+                    "properties": []
+                }
+            ],
+            "edges": []
+        });
+        let topology_payloads =
+            materialize_rollback_topology_payloads(&report, current_payload.clone());
+        let mut calls = Vec::new();
+
+        let replay = replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
+            &report,
+            0,
+            RollbackReplayBindings {
+                original_receipt_id: "receipt:apply-123".to_string(),
+                fresh_topology_probe_id: "topology:fresh-456".to_string(),
+                topology_evidence: complete_rollback_topology_evidence(),
+                topology_payloads,
+            },
+            &mut |argv| {
+                calls.push(argv.to_vec());
+                CommandRunResult {
+                    success: true,
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            },
+            |_| true,
+        );
+
+        assert_eq!(replay.status, RollbackExecutionStatus::Succeeded);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(
+            replay.receipt_binding.topology_payloads.get("current"),
+            Some(&current_payload)
+        );
+        for label in ["expected", "preApply", "failedApply", "current"] {
+            assert!(
+                replay.receipt_binding.topology_payloads.contains_key(label),
+                "{label} topology payload should be bound to rollback receipt"
+            );
+        }
+
+        let value = serde_json::to_value(&replay).expect("rollback replay report serializes");
+        assert_eq!(
+            value["receiptBinding"]["topologyPayloads"]["current"]["nodes"][0]["id"],
+            "node:current"
+        );
+    }
+
+    #[test]
     fn rollback_replay_refuses_review_only_recipes_without_running_commands() {
         let report = failed_report_for_rollback_replay();
         let mut calls = Vec::new();
@@ -29473,9 +29586,12 @@ mod tests {
         let replay = replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
             &report,
             0,
-            "receipt:apply-123".to_string(),
-            "topology:fresh-456".to_string(),
-            topology_evidence,
+            RollbackReplayBindings {
+                original_receipt_id: "receipt:apply-123".to_string(),
+                fresh_topology_probe_id: "topology:fresh-456".to_string(),
+                topology_evidence,
+                topology_payloads: BTreeMap::new(),
+            },
             &mut |argv| {
                 calls.push(argv.to_vec());
                 CommandRunResult {
@@ -29509,9 +29625,12 @@ mod tests {
         let replay = replay_proven_safe_rollback_recipe_with_runner_and_tool_checker(
             &report,
             0,
-            "receipt:apply-123".to_string(),
-            "topology:fresh-456".to_string(),
-            complete_rollback_topology_evidence(),
+            RollbackReplayBindings {
+                original_receipt_id: "receipt:apply-123".to_string(),
+                fresh_topology_probe_id: "topology:fresh-456".to_string(),
+                topology_evidence: complete_rollback_topology_evidence(),
+                topology_payloads: BTreeMap::new(),
+            },
             &mut |argv| {
                 calls.push(argv.to_vec());
                 CommandRunResult {

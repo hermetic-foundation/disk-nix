@@ -401,8 +401,10 @@ paired with host-visible path, multipath, and modeled-consumer checks.
   proven-safe reversible rollback recipe steps through
   `replay_proven_safe_rollback_recipe`, and still accepts explicit evidence via
   `replay_proven_safe_rollback_recipe_with_topology_evidence`. Replay binds the
-  report to the original receipt, a fresh topology probe, and topology evidence
-  IDs while refusing review-only, destructive, operator-only, not-ready,
+  report to the original receipt, a fresh topology probe, topology evidence
+  IDs, and optional full topology payloads through
+  `replay_proven_safe_rollback_recipe_with_topology_payloads` while refusing
+  review-only, destructive, operator-only, not-ready,
   unbound, missing-tool, missing-topology-evidence, divergent topology
   comparison summaries, detailed topology diagnostic live-use blockers,
   topology-derived rollback idempotency blockers, topology-derived stale

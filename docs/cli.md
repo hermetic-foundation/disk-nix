@@ -858,6 +858,12 @@ for plausible data-loss paths such as Btrfs subvolume/qgroup destroy,
 bcache/LVM-cache detach, LUKS keyslot/token removal, multipath destroy/path
 removal, swap destroy, MD member removal, snapshot destroy, VDO destroy, and
 ZFS object destroy are also refused before any command runs.
+Callers that have retained full topology captures can use
+`replay_proven_safe_rollback_recipe_with_topology_payloads` and
+`materialize_rollback_topology_payloads` to bind `expected`, `preApply`,
+`failedApply`, and `current` payloads into
+`receiptBinding.topologyPayloads`, while older ID-only replay remains available
+through `receiptBinding.topologyEvidence`.
 `commandSummary` reports total steps, total commands, mutating commands,
 manual-review steps, and readiness counts so callers can gate automation before
 iterating detailed commands.

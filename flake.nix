@@ -2244,7 +2244,11 @@
             ${pkgs.gnugrep}/bin/grep -q 'network-storage rollback gates' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'required_topology_evidence' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'materialize_rollback_topology_evidence' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'materialize_rollback_topology_payloads' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'replay_proven_safe_rollback_recipe_with_topology_payloads' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'topology_payloads' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_evidence_materializes_from_failed_report_and_fresh_probe' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_binds_full_topology_payloads_to_receipt' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_comparison_refusal_reasons' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_diagnostic_refusal_reasons' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_topology_diagnostic_is_live_use_blocker' ${./crates/disk-nix-exec/src/lib.rs}
@@ -2281,6 +2285,7 @@
             ${pkgs.gnugrep}/bin/grep -q 'current topology differs' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'data-loss-prone operations make rollback unsafe' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay can materialize deterministic' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'receiptBinding.topologyPayloads' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses proven-safe recipes when' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises ambiguous rollback points' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises active consumers' ${./docs/feature-checklist.md}

@@ -206,9 +206,10 @@ Update rules:
 - [x] **Finished:** Automatic rollback replay can materialize deterministic
   topology evidence IDs for expected, pre-apply, failed-apply, and current
   replay bindings from the failed execution report plus a fresh probe ID.
-- [ ] **Desired:** Automatic rollback needs live post-failure topology probe
-  capture that records full expected, pre-apply, failed-apply, and current
-  topology payloads for replay instead of evidence IDs alone.
+- [x] **Finished:** Automatic rollback replay can bind full expected,
+  pre-apply, failed-apply, and current topology payloads into
+  `receiptBinding.topologyPayloads` through an explicit replay API instead of
+  evidence IDs alone.
 - [x] **Finished:** Automatic rollback replay refuses proven-safe recipes when
   the failed report's topology comparison summary already reports missing
   targets, size diagnostics, type conflicts, graph dependency conflicts, or
