@@ -10,7 +10,8 @@ real multipath maps for the map provided through DISK_NIX_MULTIPATH_MAP.
 When DISK_NIX_MULTIPATH_RESIZE=1 is set, it also asks multipathd to resize the
 selected map. When DISK_NIX_MULTIPATH_ADD_PATH or
 DISK_NIX_MULTIPATH_REMOVE_PATH is set, it mutates those explicitly named paths.
-The harness does not replace or flush paths.
+When DISK_NIX_MULTIPATH_FLUSH=1 is set, it flushes the selected map. The
+harness does not replace paths.
 MSG
   exit 2
 fi
@@ -24,6 +25,7 @@ map="${DISK_NIX_MULTIPATH_MAP:-}"
 resize_map="${DISK_NIX_MULTIPATH_RESIZE:-0}"
 add_path="${DISK_NIX_MULTIPATH_ADD_PATH:-}"
 remove_path="${DISK_NIX_MULTIPATH_REMOVE_PATH:-}"
+flush_map="${DISK_NIX_MULTIPATH_FLUSH:-0}"
 if [[ -z "$map" ]]; then
   cat >&2 <<'MSG'
 DISK_NIX_MULTIPATH_MAP is required.
@@ -63,6 +65,8 @@ resize_spec="$tmpdir/resize-spec.json"
 resize_report="$tmpdir/resize-apply-report.json"
 paths_spec="$tmpdir/paths-spec.json"
 paths_report="$tmpdir/paths-apply-report.json"
+flush_spec="$tmpdir/flush-spec.json"
+flush_report="$tmpdir/flush-apply-report.json"
 
 multipath -ll "$map" > "$tmpdir/multipath-before.txt"
 lsscsi -t -s > "$tmpdir/lsscsi.txt"
@@ -213,4 +217,41 @@ if [[ -n "$add_path" || -n "$remove_path" ]]; then
   multipath -ll "$map" > "$tmpdir/multipath-paths-mutated.txt"
 
   echo "multipath integration smoke test mutated selected paths for $map"
+fi
+
+if [[ "$flush_map" == "1" ]]; then
+  jq -n --arg map "$map" '{
+    version: 1,
+    multipathMaps: {
+      flush: {
+        target: $map,
+        destroy: true
+      }
+    },
+    apply: {
+      allowOffline: true,
+      allowDestructive: true,
+      backupVerified: true
+    }
+  }' > "$flush_spec"
+
+  "$disk_nix_bin" apply \
+    --spec "$flush_spec" \
+    --execute \
+    --report-out "$flush_report" \
+    --json > "$tmpdir/flush-apply.json"
+
+  jq -e --arg map "$map" '
+    .status == "succeeded"
+    and (.commandPlan[] | select(.actionId == "multipathmaps:flush:destroy")
+      | .commands
+      | any(.argv == ["multipath", "-ll", $map])
+      and any(.argv == ["multipath", "-f", $map]))
+    and (.executionResults
+      | any(.argv == ["multipath", "-f", $map] and .success == true))
+  ' "$tmpdir/flush-apply.json" >/dev/null
+
+  cmp "$tmpdir/flush-apply.json" "$flush_report" >/dev/null
+
+  echo "multipath integration smoke test flushed $map"
 fi

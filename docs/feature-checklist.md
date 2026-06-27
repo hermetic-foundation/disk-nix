@@ -521,8 +521,11 @@ Update rules:
 - [ ] **Partial:** Destructive integration tests need VM-backed NVMe namespace
   coverage for create, grow, attach, detach, delete, controller reconnect, and
   namespace identity drift.
-- [ ] **Partial:** Destructive integration tests need VM-backed LUN flow
-  coverage for multipath flush paths.
+- [x] **Finished:** Destructive integration tests include lab-backed multipath
+  flush coverage: when `DISK_NIX_MULTIPATH_FLUSH=1` is set, the multipath
+  harness applies `multipathMaps.flush.destroy = true` with
+  `allowDestructive = true` and `backupVerified = true`, then verifies
+  `multipath -ll <map>` and `multipath -f <map>` succeed.
 - [x] **Finished:** Destructive integration tests include lab-backed multipath
   path add/remove coverage: when `DISK_NIX_MULTIPATH_ADD_PATH` or
   `DISK_NIX_MULTIPATH_REMOVE_PATH` is set, the multipath harness applies
