@@ -1967,6 +1967,10 @@
             ${pkgs.gnugrep}/bin/grep -q 'expected failed reattach of missing MD member' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mdRaids:failedReattach:add-device:' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm", $array, "--add", $missing' ${./scripts/integration-mdraid-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'partialRebuild' ${./scripts/integration-mdraid-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'sync_max' ${./scripts/integration-mdraid-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'partial-rebuild-sync-completed' ${./scripts/integration-mdraid-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'bounded partial rebuild' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'md.degraded-devices' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm", "--detail", "--scan"' ${./scripts/integration-mdraid-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'mdadm", "--examine", "--scan"' ${./scripts/integration-mdraid-smoke.sh}
@@ -2481,6 +2485,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'MD RAID stale-superblock' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'MD RAID failed-detach' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'MD RAID failed-reattach' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'MD RAID partial-rebuild' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'replacement-race coverage' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'missing-member coverage: the loop-backed MD harness' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'layered block/filesystem' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'LVM cache data-survival' "$checklist"

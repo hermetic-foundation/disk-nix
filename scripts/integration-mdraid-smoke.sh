@@ -6,9 +6,9 @@ if [[ "${DISK_NIX_INTEGRATION_DESTRUCTIVE:-}" != "1" ]]; then
 Refusing to run MD RAID loop-backed integration smoke test.
 
 Set DISK_NIX_INTEGRATION_DESTRUCTIVE=1 to acknowledge that this test creates,
-rescans, replaces a member, degrades, stops, and wipes a temporary loop-backed
-MD RAID array. Backing files are created in a temporary directory and removed
-during cleanup.
+rescans, replaces a member, degrades, bounds and resumes a partial rebuild,
+stops, and wipes a temporary loop-backed MD RAID array. Backing files are
+created in a temporary directory and removed during cleanup.
 MSG
   exit 2
 fi
@@ -20,7 +20,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" cat cmp grep jq losetup mdadm truncate; do
+for tool in "$disk_nix_bin" cat cmp grep jq losetup mdadm readlink truncate; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -32,8 +32,13 @@ loop_a=""
 loop_b=""
 loop_c=""
 array="/dev/md/disk-nix-md-smoke-$$"
+array_md_sysfs=""
+sync_max_original=""
 
 cleanup() {
+  if [[ -n "$sync_max_original" ]] && [[ -w "$array_md_sysfs/sync_max" ]]; then
+    printf '%s\n' "$sync_max_original" > "$array_md_sysfs/sync_max" || true
+  fi
   if [[ -e "$array" ]]; then
     mdadm --stop "$array" >/dev/null 2>&1 || true
   fi
@@ -63,12 +68,16 @@ failed_detach_spec="$tmpdir/failed-detach-spec.json"
 failed_detach_report="$tmpdir/failed-detach-report.json"
 failed_reattach_spec="$tmpdir/failed-reattach-spec.json"
 failed_reattach_report="$tmpdir/failed-reattach-report.json"
+partial_rebuild_spec="$tmpdir/partial-rebuild-spec.json"
+partial_rebuild_report="$tmpdir/partial-rebuild-report.json"
 
 truncate --size 64M "$backing_a" "$backing_b" "$backing_c"
 loop_a="$(losetup --find --show "$backing_a")"
 loop_b="$(losetup --find --show "$backing_b")"
 loop_c="$(losetup --find --show "$backing_c")"
 mdadm --create "$array" --run --metadata=1.2 --level=1 --raid-devices=2 "$loop_a" "$loop_b"
+array_block="$(basename "$(readlink -f "$array")")"
+array_md_sysfs="/sys/class/block/$array_block/md"
 
 "$disk_nix_bin" inspect "$array" --json > "$tmpdir/inspect.json"
 jq -e --arg array "$array" '
@@ -260,4 +269,52 @@ jq -e --arg array "$array" --arg missing "$missing_member" '
 
 cmp "$tmpdir/failed-reattach-apply.json" "$failed_reattach_report" >/dev/null
 
-echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, replaced $loop_b with $loop_c, then verified stale-superblock, degraded missing-member rescan, failed-detach recovery, and failed-reattach recovery"
+if [[ ! -w "$array_md_sysfs/sync_max" ]] || [[ ! -r "$array_md_sysfs/sync_completed" ]]; then
+  echo "MD RAID sysfs sync controls are required for partial rebuild coverage: $array_md_sysfs" >&2
+  exit 2
+fi
+
+sync_max_original="$(cat "$array_md_sysfs/sync_max")"
+printf '%s\n' 4096 > "$array_md_sysfs/sync_max"
+
+jq -n --arg array "$array" --arg stale "$loop_c" '{
+  version: 1,
+  apply: {
+    allowOffline: true
+  },
+  mdRaids: {
+    partialRebuild: {
+      target: $array,
+      addDevices: [$stale]
+    }
+  }
+}' > "$partial_rebuild_spec"
+
+"$disk_nix_bin" apply \
+  --spec "$partial_rebuild_spec" \
+  --execute \
+  --report-out "$partial_rebuild_report" \
+  --json > "$tmpdir/partial-rebuild-apply.json"
+
+jq -e --arg array "$array" --arg stale "$loop_c" '
+  .status == "succeeded"
+  and (.commandPlan[] | select(.actionId == ("mdRaids:partialRebuild:add-device:" + $stale))
+    | .commands | any(.argv == ["mdadm", $array, "--add", $stale]))
+  and (.executionResults
+    | any(.argv == ["mdadm", $array, "--add", $stale] and .success == true))
+' "$tmpdir/partial-rebuild-apply.json" >/dev/null
+
+cmp "$tmpdir/partial-rebuild-apply.json" "$partial_rebuild_report" >/dev/null
+mdadm --detail "$array" > "$tmpdir/partial-rebuild-detail.txt"
+cat "$array_md_sysfs/sync_completed" > "$tmpdir/partial-rebuild-sync-completed.txt"
+grep -Eq 'recover|rebuild|spare|degraded' "$tmpdir/partial-rebuild-detail.txt"
+grep -Eq '^[0-9]+ / [0-9]+$' "$tmpdir/partial-rebuild-sync-completed.txt"
+
+printf '%s\n' "$sync_max_original" > "$array_md_sysfs/sync_max"
+sync_max_original=""
+mdadm --wait "$array"
+mdadm --detail "$array" > "$tmpdir/rebuild-complete-detail.txt"
+grep -q "$loop_c" "$tmpdir/rebuild-complete-detail.txt"
+grep -Eq 'State : .*clean|Active Devices : 2' "$tmpdir/rebuild-complete-detail.txt"
+
+echo "MD RAID loop-backed integration smoke test rescanned $array from $loop_a and $loop_b, replaced $loop_b with $loop_c, then verified stale-superblock, degraded missing-member rescan, failed-detach recovery, failed-reattach recovery, bounded partial rebuild, and resumed rebuild completion"

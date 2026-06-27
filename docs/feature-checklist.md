@@ -528,9 +528,10 @@ Update rules:
   `bcachefs data rereplicate`, and `bcachefs device remove`, verifies
   replacement-device superblock metadata with `bcachefs show-super`, and
   confirms the sentinel remains readable from the mounted filesystem.
-- [ ] **Partial:** Destructive integration tests need broader degraded-array
-  variants covering missing members, stale superblocks, replacement races,
-  partial rebuilds, failed detach, and failed reattach behavior.
+- [x] **Finished:** Destructive integration tests include broader
+  degraded-array variants covering missing members, stale superblocks,
+  replacement races, partial rebuilds, failed detach, and failed reattach
+  behavior.
 - [x] **Finished:** Destructive integration tests include MD RAID stale-superblock
   coverage: after the loop-backed MD harness replaces a member
   and then fails/removes the replacement member, it runs
@@ -548,6 +549,14 @@ Update rules:
   `mdadm <array> --add <missing-path>` command fails, and checks the apply
   report contains partial-execution metadata, retry review, domain recovery,
   and roll-forward review.
+- [x] **Finished:** Destructive integration tests include MD RAID partial-rebuild
+  and replacement-race coverage: after stale-superblock and failed-reattach
+  checks, the loop-backed MD harness bounds the array rebuild window through
+  MD sysfs `sync_max`, applies `mdRaids.*.addDevices` for the stale removed
+  member, verifies a real `mdadm <array> --add <stale-loop>` succeeds while
+  rebuild progress is only partial, restores the rebuild limit, waits for
+  completion with `mdadm --wait`, and verifies the member returns to the
+  array.
 - [x] **Finished:** Destructive integration tests include MD RAID degraded
   missing-member coverage: the loop-backed MD harness creates a temporary RAID1
   array, fails and removes one member, verifies `disk-nix inspect` still sees

@@ -973,6 +973,11 @@ When enabled, it:
   verifies the real `mdadm <array> --add <missing-path>` command fails, and
   checks the failed-reattach recovery report includes partial-execution
   metadata, retry review, domain recovery, and roll-forward review
+- bounds MD rebuild progress through sysfs `sync_max`, applies an
+  `mdRaids.<name>.addDevices` plan for the stale removed member, verifies the
+  real `mdadm <array> --add <stale-loop>` command succeeds while rebuild
+  progress is partial, restores the rebuild limit, waits with
+  `mdadm --wait <array>`, and verifies the member returns to the array
 - stops the array, wipes member superblocks, detaches the loop devices, and
   removes backing files during cleanup
 
