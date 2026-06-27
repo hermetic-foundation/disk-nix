@@ -2231,10 +2231,12 @@
             ${pkgs.gnugrep}/bin/grep -q 'read_only_validation' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'replay_proven_safe_rollback_recipe' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'RollbackExecutionReport' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback_replay_refuses_unsafe_sections_and_not_ready_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollbackRecipes' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'operatorOnlyHandoff' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'proven-safe reversible rollback' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback has an execution engine' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses' ${./docs/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'scstadmin' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'initiatorGroup' ${./docs/planning.md}
             runbooks=${./docs/operator-runbooks.md}

@@ -28482,6 +28482,93 @@ mod tests {
     }
 
     #[test]
+    fn rollback_replay_refuses_unsafe_sections_and_not_ready_commands() {
+        let cases = [
+            (
+                "destructive",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.destructive_mutations.commands = vec![rollback_replay_command(
+                        &["disk-nix-test-destroy", "rollback-point"],
+                        true,
+                    )];
+                    recipe
+                },
+                "destructive mutation steps",
+            ),
+            (
+                "operator-only",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.operator_only_handoff.commands = vec![rollback_replay_command(
+                        &["disk-nix-test-operator", "handoff"],
+                        false,
+                    )];
+                    recipe
+                },
+                "operator-only handoff steps",
+            ),
+            (
+                "validation-not-ready",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.read_only_validation.commands[0].readiness =
+                        CommandReadiness::ManualOnly;
+                    recipe
+                },
+                "read-only validation command is not ready",
+            ),
+            (
+                "rollback-not-ready",
+                {
+                    let mut recipe = proven_safe_rollback_recipe();
+                    recipe.reversible_mutations.commands[0].readiness =
+                        CommandReadiness::NeedsDomainImplementation;
+                    recipe
+                },
+                "reversible rollback command is not ready",
+            ),
+        ];
+
+        for (case_name, recipe, expected_reason) in cases {
+            let mut report = failed_report_for_rollback_replay();
+            report.rollback_recipes = vec![recipe];
+            let mut calls = Vec::new();
+
+            let replay = replay_proven_safe_rollback_recipe_with_runner(
+                &report,
+                0,
+                "receipt:apply-123".to_string(),
+                "topology:fresh-456".to_string(),
+                &mut |argv| {
+                    calls.push(argv.to_vec());
+                    CommandRunResult {
+                        success: true,
+                        status_code: Some(0),
+                        stdout: String::new(),
+                        stderr: String::new(),
+                    }
+                },
+            );
+
+            assert_eq!(
+                replay.status,
+                RollbackExecutionStatus::Refused,
+                "{case_name} should be refused"
+            );
+            assert!(calls.is_empty(), "{case_name} should not run commands");
+            assert!(
+                replay
+                    .refusal_reasons
+                    .iter()
+                    .any(|reason| reason.contains(expected_reason)),
+                "{case_name} should report {expected_reason}: {:?}",
+                replay.refusal_reasons
+            );
+        }
+    }
+
+    #[test]
     fn failed_zfs_snapshot_clone_reports_domain_recovery_guidance() {
         let (plan, policy) = plan_and_policy_from_json_bytes(
             br#"{

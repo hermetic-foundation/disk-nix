@@ -174,18 +174,39 @@ Update rules:
 - [x] **Finished:** Automatic rollback has an execution engine that replays
   only proven-safe reversible rollback steps after a failed apply and binds the
   result to the original receipt plus a fresh topology probe.
-- [ ] **Desired:** Automatic rollback needs per-domain safety gates for
-  filesystems, LUKS, LVM, MD RAID, ZFS, Btrfs, bcachefs, NFS, iSCSI,
-  multipath, NVMe, target LUNs, VDO, bcache, loop devices, backing files, swap,
-  and zram.
+- [x] **Finished:** Automatic rollback replay refuses review-only,
+  destructive, operator-only, not-ready, or unbound recipes before executing
+  any command.
+- [ ] **Desired:** Automatic rollback needs filesystem safety gates for ext,
+  XFS, FAT, exFAT, NTFS, f2fs, mount/remount, trim, scrub, repair, grow, and
+  shrink boundaries.
+- [ ] **Desired:** Automatic rollback needs block-stack safety gates for disk
+  labels, partitions, LUKS, LVM, MD RAID, device-mapper, loop devices,
+  backing files, swap, and zram.
+- [ ] **Desired:** Automatic rollback needs advanced-storage safety gates for
+  ZFS, Btrfs, bcachefs, bcache, LVM cache, VDO, snapshots, clones, and pool
+  membership changes.
+- [ ] **Desired:** Automatic rollback needs network-storage safety gates for
+  NFS, iSCSI, multipath, NVMe-oF, host-side LUNs, and target-side LUN
+  providers.
 - [ ] **Desired:** Automatic rollback needs idempotency checks for already
-  rolled-back, partially rolled-back, and externally modified topology states.
+  rolled-back topology states.
+- [ ] **Desired:** Automatic rollback needs idempotency checks for partially
+  rolled-back topology states.
+- [ ] **Desired:** Automatic rollback needs idempotency checks for externally
+  modified topology states.
 - [ ] **Desired:** Automatic rollback needs post-failure topology probes that
-  compare expected, pre-apply, failed-apply, and current topology before any
-  rollback mutation runs.
+  capture expected, pre-apply, failed-apply, and current topology identities.
+- [ ] **Desired:** Automatic rollback needs post-failure topology comparison
+  that refuses rollback mutations when identity, size, holder, mount, export,
+  session, or mapping state diverges from the proven recipe.
 - [ ] **Desired:** Automatic rollback needs refusal behavior for ambiguous
-  rollback points, active consumers, stale identity data, missing tools, and
-  any path with plausible data-loss risk.
+  rollback points and stale identity data.
+- [ ] **Desired:** Automatic rollback needs refusal behavior for active
+  consumers, mounted filesystems, exported LUNs, open encrypted mappings, and
+  other live-use blockers.
+- [ ] **Desired:** Automatic rollback needs refusal behavior for missing tools
+  and any path with plausible data-loss risk.
 
 ## Lifecycle operations
 
