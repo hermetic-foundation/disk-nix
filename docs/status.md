@@ -164,7 +164,12 @@ behavior across real storage stacks.
   run that grows the partition, resizes the LUKS mapper, grows the LV, grows the
   filesystem, and remounts it with reviewed options; it then unmounts and
   deactivates the stack, executes a disk-nix LUKS close plan, reopens the mapper,
-  reactivates the VG, remounts the LV, and verifies sentinel data survived.
+  reactivates the VG, remounts the LV, and verifies sentinel data survived. The
+  same layered VM harness also injects a real partial failure: a second apply
+  successfully extends the LV with `lvextend --resizefs`, then fails a real
+  `xfs_growfs` command against the ext4 mount and asserts completed, failed, and
+  remaining action ids, completed mutating command count, recovery actions, and
+  fresh-topology guidance while sentinel data remains readable.
   Lab-hardware harnesses for NFS, VDO, iSCSI,
   multipath, and NVMe require explicit environment-selected existing targets
   and exercise non-destructive refresh or remount paths. The failure-recovery

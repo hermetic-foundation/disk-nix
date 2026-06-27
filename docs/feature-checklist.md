@@ -518,9 +518,11 @@ Update rules:
 - [ ] **Partial:** Destructive integration tests need property mutation
   coverage across filesystems, LUKS, LVM, ZFS, Btrfs, VDO, bcache, NFS,
   target LUNs, loop devices, backing files, swap, and zram.
-- [ ] **Partial:** Destructive integration tests need failure injection for
-  partially completed apply runs using real or VM-backed commands, not only
-  fake-tool synthetic command failures.
+- [x] **Finished:** Destructive integration tests include VM-backed failure
+  injection for a partially completed apply run: the layered VM harness performs
+  a real `lvextend --resizefs`, then intentionally fails a real `xfs_growfs`
+  against the ext4 mount instead of relying only on fake-tool synthetic command
+  failures.
 - [x] **Finished:** Default VM suite includes the synthetic failure-recovery
   harness.
 - [x] **Finished:** Disposable partitioned loop/LUKS/LVM/ext4 layered VM grow
@@ -533,9 +535,10 @@ Update rules:
 - [x] **Finished:** Deeper destructive VM tests include a multi-domain mutation
   scenario that combines partition growth, LUKS growth, LVM changes, filesystem
   growth, and mount/remount verification in one apply run.
-- [ ] **Partial:** Deeper destructive VM tests need injected command failures
-  after one or more successful mutating commands, with assertions for recovery
-  reports, remaining action ids, and fresh-topology review.
+- [x] **Finished:** Deeper destructive VM tests inject a command failure after a
+  successful real mutating command and assert the recovery report includes
+  completed action ids, failed action id, failed command, remaining action ids,
+  completed mutating command count, recovery actions, and fresh-topology review.
 - [ ] **Partial:** Deeper destructive VM tests need rollback-review assertions
   that verify rollback precondition commands, recovery-point preservation
   guidance, and refusal to automate unsafe rollback.

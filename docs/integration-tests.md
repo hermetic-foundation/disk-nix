@@ -1038,6 +1038,15 @@ When enabled, it:
   succeeded and the JSON report was written
 - verifies the LV grew, the remount option is active, the sentinel survived, and
   the mounted filesystem remains inspectable after the grow
+- executes a VM-backed failure-injection apply where real
+  `lvextend --resizefs --size 256M <lv>` succeeds and real
+  `xfs_growfs <mountpoint>` fails against the ext4 mount
+- verifies the failed report records `partialExecutionRecovery` with the
+  completed LV grow action, failed filesystem action, failed command, remaining
+  remount action, completed mutating command count, fresh-topology review notes,
+  and domain, roll-forward, rollback, and recovery-point preservation actions
+- verifies the failed apply report was written, the LV growth before the failure
+  is visible, and sentinel data still survives after the failed apply
 - unmounts the filesystem, deactivates the VG, executes a
   `luks.devices.layeredMapper` close apply plan, and verifies the rendered
   `cryptsetup close <mapper>` command succeeded

@@ -233,6 +233,7 @@
             pkgs.lvm2
             pkgs.parted
             pkgs.util-linux
+            pkgs.xfsprogs
           ];
           text = builtins.readFile ./scripts/integration-layered-vm-smoke.sh;
         };
@@ -2140,6 +2141,11 @@
             ${pkgs.gnugrep}/bin/grep -q 'luks.devices:layeredMapper:close' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'cryptsetup", "close"' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix layered vm persistence check' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'layeredFailureGrow' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'xfs_growfs' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'partialExecutionRecovery.completedActionIds' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'partialExecutionRecovery.remainingActionIds' ${./scripts/integration-layered-vm-smoke.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'fresh topology' ${./scripts/integration-layered-vm-smoke.sh}
             touch "$out"
           '';
           integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''
@@ -2173,6 +2179,10 @@
             ${pkgs.gnugrep}/bin/grep -q '`Desired`: not implemented yet' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Operator runbooks for high-risk workflows' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'multi-domain mutation' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'VM-backed failure' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'fresh-topology review' "$checklist"
+            ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'VM-backed failure-injection apply' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'partition, LUKS, LVM, filesystem grow, and remount' ${./docs/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'multi-domain apply plan for' ${./docs/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' "$checklist"

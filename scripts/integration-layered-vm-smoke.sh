@@ -19,7 +19,7 @@ fi
 
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 
-for tool in "$disk_nix_bin" blockdev cmp cryptsetup findmnt grep growpart jq losetup lsblk lvcreate lvextend lvs mkfs.ext4 mount mountpoint parted partprobe pvcreate pvremove resize2fs truncate umount vgchange vgcreate vgremove vgs; do
+for tool in "$disk_nix_bin" blockdev cmp cryptsetup findmnt grep growpart jq losetup lsblk lvcreate lvextend lvs mkfs.ext4 mount mountpoint parted partprobe pvcreate pvremove resize2fs truncate umount vgchange vgcreate vgremove vgs xfs_growfs; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "required tool is missing: $tool" >&2
     exit 2
@@ -57,6 +57,8 @@ spec="$tmpdir/spec.json"
 report="$tmpdir/apply-report.json"
 close_spec="$tmpdir/close-spec.json"
 close_report="$tmpdir/close-report.json"
+failure_spec="$tmpdir/failure-spec.json"
+failure_report="$tmpdir/failure-report.json"
 lv_path="/dev/$vg/root"
 sentinel="$mountpoint/disk-nix-layered-sentinel"
 
@@ -212,6 +214,82 @@ jq -e --arg mountpoint "$mountpoint" --arg lv_path "$lv_path" '
       or (.properties // [] | any(.key == "lvm.lv-name" and .value == "root"))
     )
 ' "$tmpdir/inspect-after.json" >/dev/null
+
+jq -n \
+  --arg lv_path "$lv_path" \
+  --arg mountpoint "$mountpoint" '{
+  version: 1,
+  volumes: {
+    layeredFailureGrow: {
+      operation: "grow",
+      target: $lv_path,
+      desiredSize: "256M"
+    }
+  },
+  filesystems: {
+    layeredFailureFilesystem: {
+      operation: "grow",
+      device: $lv_path,
+      fsType: "xfs",
+      mountpoint: $mountpoint,
+      resizePolicy: "grow-only"
+    },
+    layeredFailureRemount: {
+      fsType: "ext4",
+      mountpoint: $mountpoint,
+      operation: "remount",
+      options: ["rw", "relatime"]
+    }
+  },
+  apply: {
+    allowGrow: true
+  }
+}' > "$failure_spec"
+
+if "$disk_nix_bin" apply \
+  --spec "$failure_spec" \
+  --execute \
+  --report-out "$failure_report" \
+  --json > "$tmpdir/failure-apply.json"; then
+  echo "expected layered VM failure injection to fail apply" >&2
+  cat "$tmpdir/failure-apply.json" >&2 || true
+  exit 1
+fi
+
+jq -e \
+  --arg lv_path "$lv_path" \
+  --arg mountpoint "$mountpoint" '
+  .status == "failed"
+  and .apply.blockedCount == 0
+  and (.commandPlan[] | select(.actionId == "volumes:layeredFailureGrow:grow")
+    | .commands | any(.argv == ["lvextend", "--resizefs", "--size", "256M", $lv_path]))
+  and (.commandPlan[] | select(.actionId == "filesystem:layeredFailureFilesystem:grow")
+    | .commands | any(.argv == ["xfs_growfs", $mountpoint]))
+  and (.commandPlan[] | select(.actionId == "filesystems:layeredFailureRemount:remount")
+    | .commands | any(.argv == ["mount", "-o", "remount,rw,relatime", $mountpoint]))
+  and (.executionResults | any(.argv == ["lvextend", "--resizefs", "--size", "256M", $lv_path] and .success == true))
+  and (.executionResults | any(.argv == ["xfs_growfs", $mountpoint] and .success == false and (.statusCode // 0) != 0))
+  and .partialExecutionRecovery.completedActionIds == ["volumes:layeredFailureGrow:grow"]
+  and .partialExecutionRecovery.failedActionId == "filesystem:layeredFailureFilesystem:grow"
+  and .partialExecutionRecovery.failedPhase == "command"
+  and .partialExecutionRecovery.failedCommand == ["xfs_growfs", $mountpoint]
+  and .partialExecutionRecovery.retryReviewActionIds == ["filesystem:layeredFailureFilesystem:grow"]
+  and (.partialExecutionRecovery.remainingActionIds | index("filesystems:layeredFailureRemount:remount") != null)
+  and .partialExecutionRecovery.completedMutatingCommandCount >= 1
+  and (.partialExecutionRecovery.notes | any(contains("fresh topology")))
+  and (.recoveryActions | any(.kind == "domain-recovery"))
+  and (.recoveryActions | any(.kind == "roll-forward-review"))
+  and (.recoveryActions | any(.kind == "rollback-review"))
+  and (.recoveryActions | any(.kind == "preserve-recovery-points"))
+' "$tmpdir/failure-apply.json" >/dev/null
+
+cmp "$tmpdir/failure-apply.json" "$failure_report" >/dev/null
+after_failure_size="$(blockdev --getsize64 "$lv_path")"
+if (( after_failure_size <= after_size )); then
+  echo "layered LV did not report growth before injected VM apply failure" >&2
+  exit 1
+fi
+printf 'disk-nix layered vm persistence check\n' | cmp - "$sentinel" >/dev/null
 
 umount "$mountpoint"
 vgchange --activate n "$vg"
