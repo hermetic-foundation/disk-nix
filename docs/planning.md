@@ -836,9 +836,12 @@ If `--probe-current` is set, the report also includes the same
 `topologyComparison` emitted by `plan`, including any safe no-op actions
 suppressed before command rendering. It also includes a
 `verificationSummary` plus a `verificationPlan` with read-only post-apply
-commands and checks for the relevant storage domain. Executed reports also
-include `executionResults` with command phase, argv, success, exit status,
-stdout, and stderr for each command that ran.
+commands and checks for the relevant storage domain. Generic target-side LUN
+provider verification combines the provider-specific inventory placeholder with
+executable host probes for SCSI path visibility, multipath grouping, and
+modeled consumer state. Executed reports also include `executionResults` with
+command phase, argv, success, exit status, stdout, and stderr for each command
+that ran.
 Blocked, non-ready, and failed execution reports include structured
 `recoveryActions`. Failed risky actions keep the generic current-state capture
 and preserve-recovery-point advice, then add domain-specific recovery,

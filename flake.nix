@@ -2190,6 +2190,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'providerCapabilities' ${./docs/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'provider capability contracts' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'target-lun.capacity.expand' ${./crates/disk-nix-exec/src/lib.rs}
+            ${pkgs.gnugrep}/bin/grep -q 'Generic target LUN verification plans' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'target_lun_generic_host_verification_commands' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'scstadmin' ${./docs/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'initiatorGroup' ${./docs/planning.md}
             runbooks=${./docs/operator-runbooks.md}

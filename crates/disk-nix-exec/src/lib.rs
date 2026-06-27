@@ -11019,7 +11019,26 @@ fn target_lun_verification_commands(action: &PlannedAction, target: &str) -> Vec
         command.provider_capabilities = target_lun_provider_capabilities(action);
         commands.push(command);
     }
+    commands.extend(target_lun_generic_host_verification_commands(target));
     commands
+}
+
+fn target_lun_generic_host_verification_commands(target: &str) -> Vec<ExecutionCommand> {
+    vec![
+        lsscsi_lun_inventory_command(
+            "verify host-visible SCSI LUN paths after target-side provider action",
+        ),
+        command(
+            ["multipath", "-ll"],
+            false,
+            "verify host multipath path grouping after target-side provider action",
+        ),
+        command_vec(
+            ["disk-nix", "inspect", target, "--json"],
+            false,
+            "verify modeled target-side LUN graph state and consumers after provider action",
+        ),
+    ]
 }
 
 fn target_lun_lio_provider(action: &PlannedAction) -> bool {
@@ -30225,6 +30244,21 @@ mod tests {
                         && command
                             .provider_capabilities
                             .contains(&"target-lun.portal.declared".to_string())
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["lsscsi", "-t", "-s"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["multipath", "-ll"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
+                })
+                && step.commands.iter().any(|command| {
+                    command.argv == ["disk-nix", "inspect", "array-a/root", "--json"]
+                        && !command.mutates
+                        && command.readiness == CommandReadiness::Ready
                 })
         }));
 

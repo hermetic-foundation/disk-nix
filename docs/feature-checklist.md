@@ -265,7 +265,7 @@ Update rules:
 - [ ] **Partial:** Array-backed target providers need concrete adapter models
   for vendor or site-specific LUN identity, capacity, mapping, masking, and
   snapshot or clone handoff data.
-- [ ] **Partial:** Target provider verification placeholders need executable
+- [x] **Finished:** Target provider verification placeholders include executable
   probes for post-change target state, initiator visibility, multipath refresh,
   and consumer safety checks.
 - [x] **Finished:** Multi-layer lifecycle groups such as LUN refresh,

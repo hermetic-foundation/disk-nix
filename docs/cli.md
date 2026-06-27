@@ -833,7 +833,11 @@ behavior required for the placeholder command. The contract covers target LUN
 identity, inventory, persistence, verification, refusal behavior, and the
 operation-specific capability such as create, grow, map, unmap, remove, rescan,
 or property mutation. Generated shell scripts render the same capability list
-as review comments before the non-ready provider command.
+as review comments before the non-ready provider command. Generic target LUN
+verification plans keep the provider-specific inventory placeholder, then add
+executable read-only probes with `lsscsi -t -s`, `multipath -ll`, and
+`disk-nix inspect <target> --json` so operators can verify host-visible paths,
+multipath grouping, and modeled consumer state after the provider action.
 When an action context includes `desiredSize`, supported resize commands use
 that concrete target and no longer report `needs-desired-size`.
 Cache-layer command plans include bcache sysfs operations for attaching or
