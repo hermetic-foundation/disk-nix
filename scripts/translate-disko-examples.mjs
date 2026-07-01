@@ -384,15 +384,20 @@ function translatePartitionTable(spec, manifest, source, device, content) {
         partition,
       ])
     : objectEntries(content.partitions);
-  for (const [name, partition] of partitions) {
+  for (const [index, [name, partition]] of partitions.entries()) {
     const number = state.number + 1;
     const partDevice = partitionPath(device, number);
     const start = partition.start || formatMiB(state.cursorMiB);
     let end = partition.end;
     if (!end && partition.size === "100%") {
-      end = manifest.coalescedPhysicalDisks?.includes(device)
+      const nextPartitionWithStart = partitions
+        .slice(index + 1)
+        .map(([, nextPartition]) => nextPartition.start)
+        .find((nextStart) => typeof nextStart === "string");
+      end = nextPartitionWithStart
+        || (index + 1 < partitions.length || manifest.coalescedPhysicalDisks?.includes(device)
         ? formatMiB(state.cursorMiB + coalescedDiskSizeMiB)
-        : "100%";
+        : "100%");
     } else if (!end && partition.size) {
       const sizeMiB = sizeToMiB(partition.size);
       if (sizeMiB !== null) {

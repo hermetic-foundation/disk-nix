@@ -89,6 +89,11 @@ The destructive mode refuses to run unless all five requested disks exist, the
 confirmation string matches exactly, and no selected disk or child reports a
 mountpoint.
 
+On hosts without ZFS or bcachefs kernel support, destructive execution skips the
+affected generated specs after their normal dry-run and preflight coverage have
+proved that every command is ready. On a host with those kernel filesystems
+available, those specs execute through the same guarded path.
+
 In destructive mode, filesystem mountpoints and Btrfs subvolume targets are
 rewritten under `/mnt/disk-nix-disko-e2e/<example>/` before execution. The
 harness also performs best-effort teardown of that mount tree, swaps, ZFS

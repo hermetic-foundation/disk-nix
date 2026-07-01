@@ -260,6 +260,15 @@ nix run .#integration-disko-examples
 Its destructive mode is separately guarded and expects disposable
 `/dev/sdb` through `/dev/sdf`.
 
+```sh
+sudo env DISK_NIX_DISKO_E2E_EXECUTE=1 \
+  DISK_NIX_DISKO_E2E_CONFIRM=wipe-/dev/sdb-/dev/sdc-/dev/sdd-/dev/sde-/dev/sdf \
+  nix run .#integration-disko-examples
+```
+
+On hosts without ZFS or bcachefs kernel support, the destructive suite still
+plans and preflights those examples but skips their execution.
+
 Run the synthetic failure-recovery harness without root:
 
 ```sh

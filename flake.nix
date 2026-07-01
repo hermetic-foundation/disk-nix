@@ -293,10 +293,23 @@
         integrationDiskoExamples = pkgs.writeShellApplication {
           name = "disk-nix-integration-disko-examples";
           runtimeInputs = [
+            pkgs.bcachefs-tools
+            pkgs.btrfs-progs
+            pkgs.cryptsetup
             diskNix
             pkgs.coreutils
+            pkgs.dosfstools
+            pkgs.e2fsprogs
+            pkgs.f2fs-tools
+            pkgs.gnugrep
             pkgs.jq
+            pkgs.kmod
+            pkgs.lvm2
+            pkgs.mdadm
+            pkgs.parted
             pkgs.util-linux
+            pkgs.xfsprogs
+            pkgs.zfs
           ];
           text = ''
             export DISK_NIX_DISKO_EXAMPLES_DIR="''${DISK_NIX_DISKO_EXAMPLES_DIR:-${./examples/disko}}"

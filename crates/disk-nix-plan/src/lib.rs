@@ -1060,15 +1060,103 @@ fn order_plan_actions(actions: &mut [PlannedAction]) {
     actions.sort_by_key(action_order_key);
 }
 
-fn action_order_key(action: &PlannedAction) -> (u16, u16) {
-    let rank = collection_dependency_rank(action.context.collection.as_deref());
+fn action_order_key(action: &PlannedAction) -> (u16, u16, u16) {
+    let rank = action_dependency_rank(action);
     let layer = if operation_runs_upper_layers_first(action.operation) {
         u16::MAX - rank
     } else {
         rank
     };
 
-    (operation_dependency_phase(action.operation), layer)
+    (
+        layer,
+        action_dependency_subrank(action),
+        operation_dependency_phase(action.operation),
+    )
+}
+
+fn action_dependency_rank(action: &PlannedAction) -> u16 {
+    if action.context.collection.as_deref() == Some("partitions")
+        && action
+            .context
+            .device
+            .as_deref()
+            .is_some_and(|device| device.starts_with("/dev/md/"))
+    {
+        return collection_dependency_rank(Some("volumes")) + 3;
+    }
+
+    if action.context.collection.as_deref() == Some("mdRaids")
+        && action
+            .context
+            .devices
+            .iter()
+            .any(|device| looks_like_lvm_logical_volume_path(device))
+    {
+        return collection_dependency_rank(Some("volumes")) + 2;
+    }
+
+    if action.context.collection.as_deref() == Some("filesystems")
+        && action
+            .context
+            .device
+            .as_deref()
+            .is_some_and(looks_like_whole_md_array_path)
+    {
+        return collection_dependency_rank(Some("mdRaids")) + 1;
+    }
+
+    collection_dependency_rank(action.context.collection.as_deref())
+}
+
+fn looks_like_whole_md_array_path(device: &str) -> bool {
+    let Some(name) = device.strip_prefix("/dev/md/") else {
+        return false;
+    };
+
+    !name.is_empty()
+        && !name.rsplit_once('p').is_some_and(|(_, suffix)| {
+            !suffix.is_empty() && suffix.chars().all(|character| character.is_ascii_digit())
+        })
+}
+
+fn action_dependency_subrank(action: &PlannedAction) -> u16 {
+    if action.context.collection.as_deref() == Some("partitions")
+        && action.operation == Operation::Create
+        && action.context.end.as_deref() == Some("100%")
+    {
+        return 2;
+    }
+
+    if action.context.collection.as_deref() == Some("volumes")
+        && action.operation == Operation::Create
+        && action
+            .context
+            .desired_size
+            .as_deref()
+            .is_some_and(|size| size.contains('%'))
+    {
+        return 1;
+    }
+
+    0
+}
+
+fn looks_like_lvm_logical_volume_path(device: &str) -> bool {
+    let Some(rest) = device.strip_prefix("/dev/") else {
+        return false;
+    };
+    let mut parts = rest.split('/');
+    let Some(first) = parts.next() else {
+        return false;
+    };
+    let Some(second) = parts.next() else {
+        return false;
+    };
+    !first.is_empty()
+        && !second.is_empty()
+        && parts.next().is_none()
+        && !matches!(first, "disk" | "mapper" | "md" | "zvol")
 }
 
 fn dependency_order_for_actions(actions: &[PlannedAction]) -> Vec<ActionDependencyOrder> {
@@ -1985,8 +2073,9 @@ fn collection_dependency_rank(collection: Option<&str>) -> u16 {
         Some("vdoVolumes") | Some("caches") => 70,
         Some("pools") => 75,
         Some("datasets") | Some("zvols") => 80,
-        Some("btrfsSubvolumes") | Some("btrfsQgroups") => 85,
+        Some("btrfsQgroups") => 85,
         Some("filesystems") | Some("swaps") | Some("zram") | Some("nfs.mounts") => 90,
+        Some("btrfsSubvolumes") => 92,
         Some("snapshots") | Some("exports") => 95,
         Some(_) | None => 100,
     }
@@ -7917,7 +8006,11 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
             object,
             &["lun", "lunId", "lun-id", "lunNumber", "lun-number"],
         ),
-        options: lifecycle_options(object),
+        options: lifecycle_options(object).or_else(|| {
+            (collection == "mdRaids")
+                .then(|| metadata_string_field(object, &["metadata"]))
+                .flatten()
+        }),
         rollback_options: metadata_string_field(
             object,
             &[

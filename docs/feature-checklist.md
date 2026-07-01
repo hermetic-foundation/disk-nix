@@ -480,6 +480,12 @@ Update rules:
   and integration harness syntax.
 - [x] **Finished:** Root-only opt-in smoke harnesses for loop-backed and
   selected lab-backed storage domains.
+- [x] **Finished:** Translated upstream disko example suite covers all 40
+  generated specs with dry-run and destructive-shape preflight gates requiring
+  zero blocked, unresolved, manual-only, or non-ready commands; guarded
+  destructive execution runs the non-ZFS/non-bcachefs specs on disposable
+  `/dev/sdb` through `/dev/sdf` and capability-skips ZFS/bcachefs only when the
+  host kernel lacks those filesystems.
 - [x] **Finished:** Smoke harness coverage for loop devices, Btrfs, bcachefs,
   LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, NVMe, and synthetic
   failed-apply recovery.

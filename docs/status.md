@@ -2,7 +2,14 @@
 
 `disk-nix` is no longer just a design sketch. The repository contains a working Rust CLI, storage graph model, probe layer, lifecycle planner, guarded apply renderer/executor, and NixOS module integration.
 
-It is still not feature complete as a full disko replacement because the remaining work is mostly about hardening real mutation paths, expanding integration coverage, and proving behavior across real storage stacks.
+It is still not feature complete as a full disko replacement because the
+remaining work is mostly about hardening real mutation paths, expanding
+integration coverage, and proving behavior across real storage stacks.
+
+The translated upstream disko example suite now dry-runs and preflights with
+all commands ready. Its guarded destructive mode executes the
+non-ZFS/non-bcachefs examples on disposable `/dev/sdb` through `/dev/sdf` while
+capability-skipping kernel-unsupported ZFS and bcachefs examples.
 
 ## Implemented foundation
 

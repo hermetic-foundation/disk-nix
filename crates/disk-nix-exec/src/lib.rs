@@ -6512,6 +6512,7 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
         "smartctl" => Some("smartmontools"),
         "targetcli" => Some("targetcli-fb"),
         "tgtadm" => Some("tgt"),
+        "udevadm" => Some("systemd"),
         "vdo" | "vdostats" => Some("vdo"),
         "mkfs.xfs" | "xfs_admin" | "xfs_growfs" | "xfs_info" | "xfs_repair" => Some("xfsprogs"),
         "zfs" | "zpool" => Some("zfs"),
@@ -7886,17 +7887,33 @@ fn verification_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Ve
         Operation::Create if collection == Some("pools") => (
             vec![
                 command(
-                    ["zpool", "status", "-P", target],
+                    [
+                        "zpool",
+                        "status",
+                        "-P",
+                        action.context.name.as_deref().unwrap_or(target),
+                    ],
                     false,
                     "verify ZFS pool health and vdev topology after creation",
                 ),
                 command(
-                    ["zpool", "list", "-H", "-p", target],
+                    [
+                        "zpool",
+                        "list",
+                        "-H",
+                        "-p",
+                        action.context.name.as_deref().unwrap_or(target),
+                    ],
                     false,
                     "verify ZFS pool size, allocation, and free capacity after creation",
                 ),
                 command(
-                    ["disk-nix", "inspect", target, "--json"],
+                    [
+                        "disk-nix",
+                        "inspect",
+                        action.context.name.as_deref().unwrap_or(target),
+                        "--json",
+                    ],
                     false,
                     "verify modeled pool graph relationships after creation",
                 ),
@@ -9311,16 +9328,34 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                 .as_deref()
                 .unwrap_or("<filesystem-type>");
             let device = action.context.device.as_deref();
-            (
-                vec![
-                    disk_nix_inspect_command(
+            let mut commands = vec![
+                disk_nix_inspect_command(
+                    device,
+                    "<filesystem-device>",
+                    "filesystem source device",
+                    "inspect target device before creating a filesystem signature",
+                ),
+            ];
+            if device.is_some_and(|device| device.starts_with("/dev/md/")) {
+                commands.push(command(
+                    ["udevadm", "settle"],
+                    false,
+                    "wait for md device events to settle before formatting",
+                ));
+            }
+            commands.push(filesystem_format_command(fs_type, device));
+            if matches!(fs_type, "btrfs" | "bcachefs") {
+                if let Some(mountpoint) = filesystem_mountpoint(action) {
+                    commands.push(filesystem_mount_command(
                         device,
-                        "<filesystem-device>",
-                        "filesystem source device",
-                        "inspect target device before creating a filesystem signature",
-                    ),
-                    filesystem_format_command(fs_type, device),
-                ],
+                        Some(mountpoint),
+                        Some(fs_type),
+                        action.context.options.as_deref(),
+                    ));
+                }
+            }
+            (
+                commands,
                 vec![
                     format!("formatting {target} as {fs_type} destroys existing data on the selected device"),
                     "prefer preserving or migrating data before replacing a filesystem signature"
@@ -11395,7 +11430,12 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             )
         }
         Operation::Create if collection == Some("pools") => {
-            let target = target.unwrap_or("<zfs-pool>");
+            let target = action
+                .context
+                .name
+                .as_deref()
+                .or(target)
+                .unwrap_or("<zfs-pool>");
             let device = action.context.device.as_deref();
             let devices = pool_create_devices(device, &action.context.devices);
             let mut commands = zfs_pool_preflight_commands(&devices);
@@ -11427,6 +11467,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                     md_raid_create_command(
                         target,
                         action.context.level.as_deref(),
+                        action.context.options.as_deref(),
                         &action.context.devices,
                     ),
                 ],
@@ -11831,24 +11872,30 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
             let start = action.context.start.as_deref();
             let end = action.context.end.as_deref();
             let partition_type = action.context.partition_type.as_deref();
+            let mut commands = vec![disk_nix_inspect_command(
+                disk,
+                "<disk>",
+                "disk path",
+                "inspect disk identity and existing partition table before creation",
+            )];
+            if disk.is_some_and(|disk| disk.starts_with("/dev/md/"))
+                && action.context.partition_number.as_deref() == Some("1")
+            {
+                commands.push(disk_create_label_command(disk, "gpt"));
+            }
+            commands.extend([
+                partition_create_command(disk, partition_type, start, end),
+                partition_probe_command(disk),
+                partition_table_reread_command(disk),
+                disk_nix_inspect_command(
+                    partition_target,
+                    "<partition>",
+                    "partition path",
+                    "verify the new partition node before creating higher layers",
+                ),
+            ]);
             (
-                vec![
-                    disk_nix_inspect_command(
-                        disk,
-                        "<disk>",
-                        "disk path",
-                        "inspect disk identity and existing partition table before creation",
-                    ),
-                    partition_create_command(disk, partition_type, start, end),
-                    partition_probe_command(disk),
-                    partition_table_reread_command(disk),
-                    disk_nix_inspect_command(
-                        partition_target,
-                        "<partition>",
-                        "partition path",
-                        "verify the new partition node before creating higher layers",
-                    ),
-                ],
+                commands,
                 vec![
                     "verify the selected disk path is stable and matches the intended hardware"
                         .to_string(),
@@ -11869,8 +11916,7 @@ fn commands_for_action(action: &PlannedAction) -> (Vec<ExecutionCommand>, Vec<St
                         "swap target path",
                         "inspect target before creating a swap signature",
                     ),
-                    swap_command(
-                        "swapoff",
+                    swapoff_best_effort_command(
                         target,
                         "disable active swap before replacing its signature",
                     ),
@@ -15463,7 +15509,7 @@ fn filesystem_format_command(fs_type: &str, device: Option<&str>) -> ExecutionCo
             "create an F2FS filesystem",
         ),
         "exfat" => command(["mkfs.exfat", device], true, "create an exFAT filesystem"),
-        "fat" | "vfat" => command(["mkfs.vfat", device], true, "create a FAT filesystem"),
+        "fat" | "vfat" => command(["mkfs.vfat", "-I", device], true, "create a FAT filesystem"),
         "ntfs" => command(
             ["mkfs.ntfs", "-F", device],
             true,
@@ -16977,7 +17023,7 @@ fn swap_property_command(
                     "sh".to_string(),
                     "-c".to_string(),
                     format!(
-                        "swapoff {} && swapon --priority {} {}",
+                        "swapoff {} 2>/dev/null || true; swapon --priority {} {}",
                         shell_quote(target),
                         shell_quote(value),
                         shell_quote(target)
@@ -19137,6 +19183,27 @@ fn swap_command(
     }
 }
 
+fn swapoff_best_effort_command(target: Option<&str>, note: &'static str) -> ExecutionCommand {
+    match target {
+        Some(target) => command_vec(
+            vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                format!("swapoff {} 2>/dev/null || true", shell_quote(target)),
+            ],
+            true,
+            note,
+        ),
+        None => command_with_readiness(
+            ["swapoff", "<swap>"],
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            ["swap target path"],
+            note,
+        ),
+    }
+}
+
 fn swap_blkid_command(target: Option<&str>, note: &'static str) -> ExecutionCommand {
     match target {
         Some(target) => command(["blkid", target], false, note),
@@ -20160,11 +20227,18 @@ fn lvm_snapshot_create_command(
 
 fn lvm_logical_volume_create_command(target: &str, desired_size: Option<&str>) -> ExecutionCommand {
     let Some((volume_group, logical_volume)) = target.split_once('/') else {
+        let size_flag = desired_size.map(lvm_size_flag).unwrap_or("--size");
+        let size_value = desired_size
+            .map(lvm_size_value)
+            .unwrap_or_else(|| "<size>".to_string());
         return command_vec_with_readiness(
             vec![
                 "lvcreate".to_string(),
-                "--size".to_string(),
-                desired_size.unwrap_or("<size>").to_string(),
+                "--yes".to_string(),
+                "--wipesignatures".to_string(),
+                "y".to_string(),
+                size_flag.to_string(),
+                size_value,
                 "--name".to_string(),
                 "<logical-volume>".to_string(),
                 "<volume-group>".to_string(),
@@ -20181,9 +20255,27 @@ fn lvm_logical_volume_create_command(target: &str, desired_size: Option<&str>) -
     };
 
     match desired_size {
+        Some(size) if size.contains('%') => command_vec(
+            vec![
+                "lvcreate".to_string(),
+                "--yes".to_string(),
+                "--wipesignatures".to_string(),
+                "y".to_string(),
+                "--extents".to_string(),
+                lvm_size_value(size),
+                "--name".to_string(),
+                logical_volume.to_string(),
+                volume_group.to_string(),
+            ],
+            true,
+            "create an LVM logical volume with the desired extent allocation",
+        ),
         Some(size) => command_vec(
             vec![
                 "lvcreate".to_string(),
+                "--yes".to_string(),
+                "--wipesignatures".to_string(),
+                "y".to_string(),
                 "--size".to_string(),
                 size.to_string(),
                 "--name".to_string(),
@@ -20196,6 +20288,9 @@ fn lvm_logical_volume_create_command(target: &str, desired_size: Option<&str>) -
         None => command_vec_with_readiness(
             vec![
                 "lvcreate".to_string(),
+                "--yes".to_string(),
+                "--wipesignatures".to_string(),
+                "y".to_string(),
                 "--size".to_string(),
                 "<size>".to_string(),
                 "--name".to_string(),
@@ -20207,6 +20302,22 @@ fn lvm_logical_volume_create_command(target: &str, desired_size: Option<&str>) -
             ["desired logical volume size"],
             "create an LVM logical volume after selecting the desired size",
         ),
+    }
+}
+
+fn lvm_size_flag(size: &str) -> &'static str {
+    if size.contains('%') {
+        "--extents"
+    } else {
+        "--size"
+    }
+}
+
+fn lvm_size_value(size: &str) -> String {
+    if size.ends_with('%') {
+        format!("{size}FREE")
+    } else {
+        size.to_string()
     }
 }
 
@@ -21179,6 +21290,7 @@ fn missing_nvme_namespace_inputs(
 fn md_raid_create_command(
     target: Option<&str>,
     level: Option<&str>,
+    metadata: Option<&str>,
     devices: &[String],
 ) -> ExecutionCommand {
     let missing_target = target.is_none();
@@ -21199,7 +21311,18 @@ fn md_raid_create_command(
         level.to_string(),
         "--raid-devices".to_string(),
         raid_devices,
+        "--bitmap".to_string(),
+        "none".to_string(),
     ];
+    if let Some(name) = target
+        .strip_prefix("/dev/md/")
+        .filter(|name| !name.is_empty())
+    {
+        argv.extend(["--name".to_string(), name.to_string()]);
+    }
+    if let Some(metadata) = metadata {
+        argv.extend(["--metadata".to_string(), metadata.to_string()]);
+    }
     if missing_devices {
         argv.push("<member-device>".to_string());
     } else {
@@ -25715,7 +25838,7 @@ mod tests {
                         == [
                             "sh",
                             "-c",
-                            "swapoff /dev/disk/by-label/swap-old && swapon --priority 10 /dev/disk/by-label/swap-old",
+                            "swapoff /dev/disk/by-label/swap-old 2>/dev/null || true; swapon --priority 10 /dev/disk/by-label/swap-old",
                         ]
                         && command.readiness == CommandReadiness::Ready
                 })
@@ -27529,6 +27652,10 @@ mod tests {
                         "1",
                         "--raid-devices",
                         "2",
+                        "--bitmap",
+                        "none",
+                        "--name",
+                        "newroot",
                         "/dev/disk/by-id/nvme-a",
                         "/dev/disk/by-id/nvme-b",
                     ]
@@ -27548,6 +27675,10 @@ mod tests {
                             "<level>",
                             "--raid-devices",
                             "2",
+                            "--bitmap",
+                            "none",
+                            "--name",
+                            "missing-level",
                             "/dev/disk/by-id/nvme-c",
                             "/dev/disk/by-id/nvme-d",
                         ]
@@ -27567,6 +27698,10 @@ mod tests {
                             "10",
                             "--raid-devices",
                             "<member-count>",
+                            "--bitmap",
+                            "none",
+                            "--name",
+                            "missing-members",
                             "<member-device>",
                         ]
                         && command.readiness == CommandReadiness::NeedsDomainImplementation
@@ -27637,6 +27772,8 @@ mod tests {
                             "1",
                             "--raid-devices",
                             "2",
+                            "--bitmap",
+                            "none",
                             "/dev/disk/by-id/nvme-a",
                             "/dev/disk/by-id/nvme-b",
                         ]
@@ -28264,7 +28401,18 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::Blocked);
         assert!(report.command_plan.iter().any(|step| {
             step.commands.iter().any(|command| {
-                command.argv == ["lvcreate", "--size", "10GiB", "--name", "scratch", "vg0"]
+                command.argv
+                    == [
+                        "lvcreate",
+                        "--yes",
+                        "--wipesignatures",
+                        "y",
+                        "--size",
+                        "10GiB",
+                        "--name",
+                        "scratch",
+                        "vg0",
+                    ]
             })
         }));
         assert!(report.command_plan.iter().any(|step| {
@@ -28273,6 +28421,9 @@ mod tests {
                     command.argv
                         == [
                             "lvcreate",
+                            "--yes",
+                            "--wipesignatures",
+                            "y",
                             "--size",
                             "<size>",
                             "--name",

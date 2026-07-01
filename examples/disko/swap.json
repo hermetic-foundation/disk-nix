@@ -86,7 +86,7 @@
     },
     "main:plainSwap": {
       "device": "/dev/sdb",
-      "end": "100%",
+      "end": "16895MiB",
       "metadata": {
         "diskoSource": "main"
       },
