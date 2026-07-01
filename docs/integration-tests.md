@@ -50,7 +50,8 @@ but they should still be treated as destructive host operations.
 ## Disko example suite
 
 The repository includes generated disk-nix equivalents for every upstream
-`nix-community/disko` file under `example/`.
+`nix-community/disko` file under `example/`, including the nested
+stand-alone NixOS configuration example.
 
 The generated specs live in `examples/disko/`, with source mapping and known
 translation notes in `examples/disko/manifest.json`.
@@ -77,6 +78,11 @@ sudo env DISK_NIX_DISKO_E2E_EXECUTE=1 \
 The destructive mode refuses to run unless all five requested disks exist, the
 confirmation string matches exactly, and no selected disk or child reports a
 mountpoint.
+
+In destructive mode, filesystem mountpoints and Btrfs subvolume targets are
+rewritten under `/mnt/disk-nix-disko-e2e/<example>/` before execution. The
+harness also performs best-effort teardown of that mount tree, swaps, ZFS
+pools, LVM volume groups, MD arrays, and LUKS mappings between examples.
 
 The ZFS harness is packaged with the VM suite and can be selected explicitly
 with `DISK_NIX_VM_HARNESSES=zfs` in a disposable guest that has working ZFS

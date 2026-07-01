@@ -10,8 +10,66 @@ const testDisks = ["/dev/sdb", "/dev/sdc", "/dev/sdd", "/dev/sde", "/dev/sdf"];
 function stableName(value) {
   return value
     .replace(/\.nix$/, "")
-    .replace(/[^A-Za-z0-9._/-]+/g, "-")
+    .replace(/[/-]+/g, "-")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+async function findNixFiles(dir, prefix = "") {
+  const entries = await readdir(path.join(dir, prefix), { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const relative = path.join(prefix, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await findNixFiles(dir, relative)));
+    } else if (entry.isFile() && entry.name.endsWith(".nix")) {
+      files.push(relative);
+    }
+  }
+  return files.sort();
+}
+
+function extractBalancedValue(source, marker) {
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) {
+    return null;
+  }
+  const equalsIndex = source.indexOf("=", markerIndex + marker.length);
+  if (equalsIndex < 0) {
+    return null;
+  }
+  const start = source.indexOf("{", equalsIndex);
+  if (start < 0) {
+    return null;
+  }
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (inString) {
+      escaped = char === "\\" && !escaped;
+      if (char === '"' && !escaped) {
+        inString = false;
+      } else if (char !== "\\") {
+        escaped = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(start, index + 1);
+      }
+    }
+  }
+  return null;
 }
 
 function partitionPath(device, number) {
@@ -69,7 +127,25 @@ function sorted(value) {
   );
 }
 
-function evalDiskoDevices(file) {
+function evalNixJson(expr) {
+  return JSON.parse(
+    execFileSync("nix", ["eval", "--impure", "--json", "--expr", expr], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    }),
+  );
+}
+
+function evalDiskoDevices(file, sourceText) {
+  const embeddedDevices = extractBalancedValue(sourceText, "cfg.disko.devices");
+  if (embeddedDevices) {
+    return {
+      devices: evalNixJson(`let cfg.disko.devices = ${embeddedDevices}; in cfg.disko.devices`),
+      notes: [
+        "embedded cfg.disko.devices was extracted from a NixOS configuration example",
+      ],
+    };
+  }
   const expr = `
 let
   pkgs = import <nixpkgs> {};
@@ -82,12 +158,14 @@ let
       imported;
 in cfg.disko.devices
 `;
-  return JSON.parse(
-    execFileSync("nix", ["eval", "--impure", "--json", "--expr", expr], {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    }),
-  );
+  try {
+    return {
+      devices: evalNixJson(expr),
+      notes: [],
+    };
+  } catch (error) {
+    throw error;
+  }
 }
 
 function ensureCollection(spec, name) {
@@ -474,12 +552,13 @@ function translateTopLevel(spec, manifest, devices) {
 
 async function main() {
   await mkdir(outDir, { recursive: true });
-  const files = (await readdir(upstreamDir)).filter((file) => file.endsWith(".nix")).sort();
+  const files = await findNixFiles(upstreamDir);
   const manifest = [];
   for (const file of files) {
     const sourcePath = path.join(upstreamDir, file);
     const sourceText = await readFile(sourcePath, "utf8");
-    const devices = evalDiskoDevices(sourcePath);
+    const evaluated = evalDiskoDevices(sourcePath, sourceText);
+    const devices = evaluated.devices;
     const spec = {
       version: 1,
       apply: {
@@ -506,6 +585,7 @@ async function main() {
     if (sourceText.includes("hybrid")) {
       item.notes.push(`${file}: hybrid MBR/GPT fields are preserved in partition metadata`);
     }
+    item.notes.push(...evaluated.notes.map((note) => `${file}: ${note}`));
     translateTopLevel(spec, item, devices);
     delete item.mdMembers;
     delete item.zfsMembers;

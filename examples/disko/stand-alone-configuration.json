@@ -1,0 +1,55 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "sda",
+        "diskoSource": "sda",
+        "originalDevice": "/dev/sda"
+      },
+      "operation": "create",
+      "partitionType": "msdos"
+    }
+  },
+  "filesystems": {
+    "sda:root": {
+      "device": "/dev/sdb1",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "sda",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "stand-alone/configuration.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "sda:root": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "sda"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "start": "1M",
+      "target": "/dev/sdb1"
+    }
+  },
+  "version": 1
+}

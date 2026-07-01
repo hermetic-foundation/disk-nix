@@ -455,6 +455,20 @@
     "notes": []
   },
   {
+    "source": "stand-alone/configuration.nix",
+    "output": "stand-alone-configuration.json",
+    "originalDisks": [
+      "/dev/sda"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": [
+      "stand-alone/configuration.nix: embedded cfg.disko.devices was extracted from a NixOS configuration example"
+    ]
+  },
+  {
     "source": "swap.nix",
     "output": "swap.json",
     "originalDisks": [

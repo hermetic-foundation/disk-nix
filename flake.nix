@@ -142,9 +142,13 @@
           name = "disk-nix-integration-swap-smoke";
           runtimeInputs = [
             diskNix
+            pkgs.cryptsetup
             pkgs.coreutils
             pkgs.jq
+            pkgs.lvm2
+            pkgs.mdadm
             pkgs.util-linux
+            pkgs.zfs
           ];
           text = builtins.readFile ./scripts/integration-swap-smoke.sh;
         };
@@ -2470,6 +2474,8 @@
             ${pkgs.nodejs}/bin/node --check ${./scripts/translate-disko-examples.mjs}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_DISKO_E2E_CONFIRM' ${./scripts/integration-disko-examples.sh}
             ${pkgs.gnugrep}/bin/grep -q 'wipe-/dev/sdb-/dev/sdc-/dev/sdd-/dev/sde-/dev/sdf' ${./scripts/integration-disko-examples.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-disko-e2e' ${./scripts/integration-disko-examples.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'stand-alone/configuration.nix' ${./examples/disko/manifest.json}
             ${pkgs.gnugrep}/bin/grep -q 'zfs-with-vdevs.nix' ${./examples/disko/manifest.json}
             DISK_NIX_BIN=${diskNix}/bin/disk-nix \
               DISK_NIX_DISKO_EXAMPLES_DIR=${./examples/disko} \
