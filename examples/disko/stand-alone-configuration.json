@@ -11,9 +11,13 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "sda",
+        "diskoDiskNames": [
+          "sda"
+        ],
         "diskoSource": "sda",
-        "originalDevice": "/dev/sda"
+        "originalDevices": [
+          "/dev/sda"
+        ]
       },
       "operation": "create",
       "partitionType": "msdos"

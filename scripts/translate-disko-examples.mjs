@@ -6,6 +6,7 @@ import path from "node:path";
 const upstreamDir = process.argv[2] || "/tmp/disk-nix-disko-upstream/example";
 const outDir = process.argv[3] || "examples/disko";
 const testDisks = ["/dev/sdb", "/dev/sdc", "/dev/sdd", "/dev/sde", "/dev/sdf"];
+const coalescedDiskSizeMiB = 16 * 1024;
 
 function stableName(value) {
   return value
@@ -374,32 +375,37 @@ function translateContent(spec, manifest, source, name, device, content) {
 }
 
 function translatePartitionTable(spec, manifest, source, device, content) {
+  manifest.partitionState ??= {};
+  manifest.partitionState[device] ??= { number: 0, cursorMiB: 1 };
+  const state = manifest.partitionState[device];
   const partitions = Array.isArray(content.partitions)
     ? content.partitions.map((partition, index) => [
         partition.name || `partition-${index + 1}`,
         partition,
       ])
     : objectEntries(content.partitions);
-  let cursorMiB = 1;
-  for (const [index, [name, partition]] of partitions.entries()) {
-    const number = index + 1;
+  for (const [name, partition] of partitions) {
+    const number = state.number + 1;
     const partDevice = partitionPath(device, number);
-    const start = partition.start || formatMiB(cursorMiB);
+    const start = partition.start || formatMiB(state.cursorMiB);
     let end = partition.end;
     if (!end && partition.size === "100%") {
-      end = "100%";
+      end = manifest.coalescedPhysicalDisks?.includes(device)
+        ? formatMiB(state.cursorMiB + coalescedDiskSizeMiB)
+        : "100%";
     } else if (!end && partition.size) {
       const sizeMiB = sizeToMiB(partition.size);
       if (sizeMiB !== null) {
-        end = formatMiB(cursorMiB + sizeMiB);
+        end = formatMiB(state.cursorMiB + sizeMiB);
       }
     }
     const endMiB = sizeToMiB(end);
     if (end === "100%") {
-      cursorMiB += 1024;
-    } else if (endMiB !== null && endMiB > cursorMiB) {
-      cursorMiB = endMiB;
+      state.cursorMiB += coalescedDiskSizeMiB;
+    } else if (endMiB !== null && endMiB > state.cursorMiB) {
+      state.cursorMiB = endMiB;
     }
+    state.number = number;
     addObject(spec, "partitions", `${source}:${name}`, {
       operation: "create",
       device,
@@ -426,26 +432,36 @@ function translateTopLevel(spec, manifest, devices) {
   const originalDisks = Object.values(devices.disk || {}).map((disk) => disk.device);
   const mapping = new Map();
   originalDisks.forEach((device, index) => {
-    mapping.set(device, testDisks[index] || testDisks[testDisks.length - 1]);
+    mapping.set(device, testDisks[index % testDisks.length]);
   });
   manifest.originalDisks = originalDisks;
   manifest.testDisks = [...new Set([...mapping.values()])];
+  const physicalCounts = {};
+  for (const physical of mapping.values()) {
+    physicalCounts[physical] = (physicalCounts[physical] || 0) + 1;
+  }
+  manifest.coalescedPhysicalDisks = Object.entries(physicalCounts)
+    .filter(([, count]) => count > 1)
+    .map(([device]) => device);
   if (originalDisks.length > testDisks.length) {
-    manifest.unsupported.push(
-      `source uses ${originalDisks.length} disks; destructive harness has ${testDisks.length} test disks`,
+    manifest.notes.push(
+      `source uses ${originalDisks.length} disks; mapped onto ${testDisks.length} test disks with ${coalescedDiskSizeMiB}MiB logical slices`,
     );
   }
 
   for (const [name, disk] of objectEntries(devices.disk)) {
     const testDevice = mapping.get(disk.device) || testDisks[0];
-    addObject(spec, "disks", testDevice, {
+    const disks = ensureCollection(spec, "disks");
+    disks[testDevice] ??= {
       operation: "create",
       partitionType: disk.content?.format || disk.content?.type || "gpt",
       metadata: metadata(name, {
-        originalDevice: disk.device,
-        diskoDiskName: name,
+        originalDevices: [],
+        diskoDiskNames: [],
       }),
-    });
+    };
+    disks[testDevice].metadata.originalDevices.push(disk.device);
+    disks[testDevice].metadata.diskoDiskNames.push(name);
     translateContent(spec, manifest, name, name, testDevice, disk.content);
   }
 
@@ -589,6 +605,8 @@ async function main() {
     translateTopLevel(spec, item, devices);
     delete item.mdMembers;
     delete item.zfsMembers;
+    delete item.partitionState;
+    delete item.coalescedPhysicalDisks;
     await writeFile(path.join(outDir, item.output), `${JSON.stringify(sorted(spec), null, 2)}\n`);
     manifest.push(item);
   }

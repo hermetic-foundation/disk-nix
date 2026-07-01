@@ -11,9 +11,13 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "vdb",
+        "diskoDiskNames": [
+          "vdb"
+        ],
         "diskoSource": "vdb",
-        "originalDevice": "/dev/sda"
+        "originalDevices": [
+          "/dev/sda"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"

@@ -11,18 +11,26 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "disk0",
+        "diskoDiskNames": [
+          "disk0"
+        ],
         "diskoSource": "disk0",
-        "originalDevice": "/dev/vda"
+        "originalDevices": [
+          "/dev/vda"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdc": {
       "metadata": {
-        "diskoDiskName": "disk1",
+        "diskoDiskNames": [
+          "disk1"
+        ],
         "diskoSource": "disk1",
-        "originalDevice": "/dev/vdb"
+        "originalDevices": [
+          "/dev/vdb"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"

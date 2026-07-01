@@ -23,45 +23,83 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "cache",
+        "diskoDiskNames": [
+          "cache",
+          "dedup2",
+          "spare"
+        ],
         "diskoSource": "cache",
-        "originalDevice": "/dev/vdn"
+        "originalDevices": [
+          "/dev/vdn",
+          "/dev/vdi",
+          "/dev/vdd"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdc": {
       "metadata": {
-        "diskoDiskName": "data1",
+        "diskoDiskNames": [
+          "data1",
+          "dedup3",
+          "special1"
+        ],
         "diskoSource": "data1",
-        "originalDevice": "/dev/vda"
+        "originalDevices": [
+          "/dev/vda",
+          "/dev/vdj",
+          "/dev/vdk"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdd": {
       "metadata": {
-        "diskoDiskName": "data2",
+        "diskoDiskNames": [
+          "data2",
+          "log1",
+          "special2"
+        ],
         "diskoSource": "data2",
-        "originalDevice": "/dev/vdb"
+        "originalDevices": [
+          "/dev/vdb",
+          "/dev/vde",
+          "/dev/vdl"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sde": {
       "metadata": {
-        "diskoDiskName": "data3",
+        "diskoDiskNames": [
+          "data3",
+          "log2",
+          "special3"
+        ],
         "diskoSource": "data3",
-        "originalDevice": "/dev/vdc"
+        "originalDevices": [
+          "/dev/vdc",
+          "/dev/vdf",
+          "/dev/vdm"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdf": {
       "metadata": {
-        "diskoDiskName": "special3",
-        "diskoSource": "special3",
-        "originalDevice": "/dev/vdm"
+        "diskoDiskNames": [
+          "dedup1",
+          "log3"
+        ],
+        "diskoSource": "dedup1",
+        "originalDevices": [
+          "/dev/vdh",
+          "/dev/vdg"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
@@ -90,7 +128,7 @@
   "partitions": {
     "cache:zfs": {
       "device": "/dev/sdb",
-      "end": "100%",
+      "end": "16385MiB",
       "metadata": {
         "diskoSource": "cache"
       },
@@ -119,7 +157,7 @@
     },
     "data1:zfs": {
       "device": "/dev/sdc",
-      "end": "100%",
+      "end": "16449MiB",
       "metadata": {
         "diskoSource": "data1"
       },
@@ -133,7 +171,7 @@
     },
     "data2:zfs": {
       "device": "/dev/sdd",
-      "end": "100%",
+      "end": "16385MiB",
       "metadata": {
         "diskoSource": "data2"
       },
@@ -147,7 +185,7 @@
     },
     "data3:zfs": {
       "device": "/dev/sde",
-      "end": "100%",
+      "end": "16385MiB",
       "metadata": {
         "diskoSource": "data3"
       },
@@ -161,7 +199,7 @@
     },
     "dedup1:zfs": {
       "device": "/dev/sdf",
-      "end": "100%",
+      "end": "16385MiB",
       "metadata": {
         "diskoSource": "dedup1"
       },
@@ -174,130 +212,130 @@
       "target": "/dev/sdf1"
     },
     "dedup2:zfs": {
-      "device": "/dev/sdf",
-      "end": "100%",
+      "device": "/dev/sdb",
+      "end": "32769MiB",
       "metadata": {
         "diskoSource": "dedup2"
       },
       "name": "zfs",
       "operation": "create",
-      "partitionNumber": "1",
+      "partitionNumber": "2",
       "partitionType": "primary",
       "size": "100%",
-      "start": "1MiB",
-      "target": "/dev/sdf1"
+      "start": "16385MiB",
+      "target": "/dev/sdb2"
     },
     "dedup3:zfs": {
-      "device": "/dev/sdf",
-      "end": "100%",
+      "device": "/dev/sdc",
+      "end": "32833MiB",
       "metadata": {
         "diskoSource": "dedup3"
       },
       "name": "zfs",
       "operation": "create",
-      "partitionNumber": "1",
+      "partitionNumber": "3",
       "partitionType": "primary",
       "size": "100%",
-      "start": "1MiB",
-      "target": "/dev/sdf1"
+      "start": "16449MiB",
+      "target": "/dev/sdc3"
     },
     "log1:zfs": {
-      "device": "/dev/sdf",
-      "end": "100%",
+      "device": "/dev/sdd",
+      "end": "32769MiB",
       "metadata": {
         "diskoSource": "log1"
       },
       "name": "zfs",
       "operation": "create",
-      "partitionNumber": "1",
+      "partitionNumber": "2",
       "partitionType": "primary",
       "size": "100%",
-      "start": "1MiB",
-      "target": "/dev/sdf1"
+      "start": "16385MiB",
+      "target": "/dev/sdd2"
     },
     "log2:zfs": {
-      "device": "/dev/sdf",
-      "end": "100%",
+      "device": "/dev/sde",
+      "end": "32769MiB",
       "metadata": {
         "diskoSource": "log2"
       },
       "name": "zfs",
       "operation": "create",
-      "partitionNumber": "1",
+      "partitionNumber": "2",
       "partitionType": "primary",
       "size": "100%",
-      "start": "1MiB",
-      "target": "/dev/sdf1"
+      "start": "16385MiB",
+      "target": "/dev/sde2"
     },
     "log3:zfs": {
       "device": "/dev/sdf",
-      "end": "100%",
+      "end": "32769MiB",
       "metadata": {
         "diskoSource": "log3"
       },
       "name": "zfs",
       "operation": "create",
-      "partitionNumber": "1",
+      "partitionNumber": "2",
       "partitionType": "primary",
       "size": "100%",
-      "start": "1MiB",
-      "target": "/dev/sdf1"
+      "start": "16385MiB",
+      "target": "/dev/sdf2"
     },
     "spare:zfs": {
-      "device": "/dev/sdf",
-      "end": "100%",
+      "device": "/dev/sdb",
+      "end": "49153MiB",
       "metadata": {
         "diskoSource": "spare"
       },
       "name": "zfs",
       "operation": "create",
-      "partitionNumber": "1",
+      "partitionNumber": "3",
       "partitionType": "primary",
       "size": "100%",
-      "start": "1MiB",
-      "target": "/dev/sdf1"
+      "start": "32769MiB",
+      "target": "/dev/sdb3"
     },
     "special1:zfs": {
-      "device": "/dev/sdf",
-      "end": "100%",
+      "device": "/dev/sdc",
+      "end": "49217MiB",
       "metadata": {
         "diskoSource": "special1"
       },
       "name": "zfs",
       "operation": "create",
-      "partitionNumber": "1",
+      "partitionNumber": "4",
       "partitionType": "primary",
       "size": "100%",
-      "start": "1MiB",
-      "target": "/dev/sdf1"
+      "start": "32833MiB",
+      "target": "/dev/sdc4"
     },
     "special2:zfs": {
-      "device": "/dev/sdf",
-      "end": "100%",
+      "device": "/dev/sdd",
+      "end": "49153MiB",
       "metadata": {
         "diskoSource": "special2"
       },
       "name": "zfs",
       "operation": "create",
-      "partitionNumber": "1",
+      "partitionNumber": "3",
       "partitionType": "primary",
       "size": "100%",
-      "start": "1MiB",
-      "target": "/dev/sdf1"
+      "start": "32769MiB",
+      "target": "/dev/sdd3"
     },
     "special3:zfs": {
-      "device": "/dev/sdf",
-      "end": "100%",
+      "device": "/dev/sde",
+      "end": "49153MiB",
       "metadata": {
         "diskoSource": "special3"
       },
       "name": "zfs",
       "operation": "create",
-      "partitionNumber": "1",
+      "partitionNumber": "3",
       "partitionType": "primary",
       "size": "100%",
-      "start": "1MiB",
-      "target": "/dev/sdf1"
+      "start": "32769MiB",
+      "target": "/dev/sde3"
     }
   },
   "pools": {
@@ -308,15 +346,15 @@
         "/dev/sdd1",
         "/dev/sde1",
         "/dev/sdf1",
-        "/dev/sdf1",
-        "/dev/sdf1",
-        "/dev/sdf1",
-        "/dev/sdf1",
-        "/dev/sdf1",
-        "/dev/sdf1",
-        "/dev/sdf1",
-        "/dev/sdf1",
-        "/dev/sdf1"
+        "/dev/sdb2",
+        "/dev/sdc3",
+        "/dev/sdd2",
+        "/dev/sde2",
+        "/dev/sdf2",
+        "/dev/sdb3",
+        "/dev/sdc4",
+        "/dev/sdd3",
+        "/dev/sde3"
       ],
       "metadata": {
         "diskoSource": "zpool:zroot"

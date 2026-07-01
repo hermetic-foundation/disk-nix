@@ -580,24 +580,23 @@
       "/dev/sde",
       "/dev/sdf"
     ],
-    "unsupported": [
-      "source uses 14 disks; destructive harness has 5 test disks"
-    ],
+    "unsupported": [],
     "notes": [
+      "source uses 14 disks; mapped onto 5 test disks with 16384MiB logical slices",
       "cache: device /dev/sdb1 contributes to ZFS pool zroot",
       "data1: device /dev/sdc2 contributes to ZFS pool zroot",
       "data2: device /dev/sdd1 contributes to ZFS pool zroot",
       "data3: device /dev/sde1 contributes to ZFS pool zroot",
       "dedup1: device /dev/sdf1 contributes to ZFS pool zroot",
-      "dedup2: device /dev/sdf1 contributes to ZFS pool zroot",
-      "dedup3: device /dev/sdf1 contributes to ZFS pool zroot",
-      "log1: device /dev/sdf1 contributes to ZFS pool zroot",
-      "log2: device /dev/sdf1 contributes to ZFS pool zroot",
-      "log3: device /dev/sdf1 contributes to ZFS pool zroot",
-      "spare: device /dev/sdf1 contributes to ZFS pool zroot",
-      "special1: device /dev/sdf1 contributes to ZFS pool zroot",
-      "special2: device /dev/sdf1 contributes to ZFS pool zroot",
-      "special3: device /dev/sdf1 contributes to ZFS pool zroot"
+      "dedup2: device /dev/sdb2 contributes to ZFS pool zroot",
+      "dedup3: device /dev/sdc3 contributes to ZFS pool zroot",
+      "log1: device /dev/sdd2 contributes to ZFS pool zroot",
+      "log2: device /dev/sde2 contributes to ZFS pool zroot",
+      "log3: device /dev/sdf2 contributes to ZFS pool zroot",
+      "spare: device /dev/sdb3 contributes to ZFS pool zroot",
+      "special1: device /dev/sdc4 contributes to ZFS pool zroot",
+      "special2: device /dev/sdd3 contributes to ZFS pool zroot",
+      "special3: device /dev/sde3 contributes to ZFS pool zroot"
     ]
   },
   {

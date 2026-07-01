@@ -11,9 +11,13 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "main",
+        "diskoDiskNames": [
+          "main"
+        ],
         "diskoSource": "main",
-        "originalDevice": "/dev/disk/by-id/ata-Samsung_SSD_860_EVO_500GB_S3Z1NB0K303456L"
+        "originalDevices": [
+          "/dev/disk/by-id/ata-Samsung_SSD_860_EVO_500GB_S3Z1NB0K303456L"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"

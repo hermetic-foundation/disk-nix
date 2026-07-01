@@ -35,9 +35,13 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "root",
+        "diskoDiskNames": [
+          "root"
+        ],
         "diskoSource": "root",
-        "originalDevice": "/dev/nvme0n1"
+        "originalDevices": [
+          "/dev/nvme0n1"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"

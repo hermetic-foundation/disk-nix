@@ -61,18 +61,26 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "x",
+        "diskoDiskNames": [
+          "x"
+        ],
         "diskoSource": "x",
-        "originalDevice": "/dev/sdx"
+        "originalDevices": [
+          "/dev/sdx"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdc": {
       "metadata": {
-        "diskoDiskName": "y",
+        "diskoDiskNames": [
+          "y"
+        ],
         "diskoSource": "y",
-        "originalDevice": "/dev/sdy"
+        "originalDevices": [
+          "/dev/sdy"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"

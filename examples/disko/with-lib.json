@@ -11,45 +11,65 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "/dev/sdb",
+        "diskoDiskNames": [
+          "/dev/sdb"
+        ],
         "diskoSource": "/dev/sdb",
-        "originalDevice": "/dev/sdb"
+        "originalDevices": [
+          "/dev/sdb"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdc": {
       "metadata": {
-        "diskoDiskName": "/dev/sdc",
+        "diskoDiskNames": [
+          "/dev/sdc"
+        ],
         "diskoSource": "/dev/sdc",
-        "originalDevice": "/dev/sdc"
+        "originalDevices": [
+          "/dev/sdc"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdd": {
       "metadata": {
-        "diskoDiskName": "/dev/sdd",
+        "diskoDiskNames": [
+          "/dev/sdd"
+        ],
         "diskoSource": "/dev/sdd",
-        "originalDevice": "/dev/sdd"
+        "originalDevices": [
+          "/dev/sdd"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sde": {
       "metadata": {
-        "diskoDiskName": "/dev/sde",
+        "diskoDiskNames": [
+          "/dev/sde"
+        ],
         "diskoSource": "/dev/sde",
-        "originalDevice": "/dev/sde"
+        "originalDevices": [
+          "/dev/sde"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdf": {
       "metadata": {
-        "diskoDiskName": "/dev/sdf",
+        "diskoDiskNames": [
+          "/dev/sdf"
+        ],
         "diskoSource": "/dev/sdf",
-        "originalDevice": "/dev/sdf"
+        "originalDevices": [
+          "/dev/sdf"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"

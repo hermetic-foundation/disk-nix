@@ -27,36 +27,52 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "a",
+        "diskoDiskNames": [
+          "a"
+        ],
         "diskoSource": "a",
-        "originalDevice": "/dev/sda"
+        "originalDevices": [
+          "/dev/sda"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdc": {
       "metadata": {
-        "diskoDiskName": "x",
+        "diskoDiskNames": [
+          "x"
+        ],
         "diskoSource": "x",
-        "originalDevice": "/dev/sdx"
+        "originalDevices": [
+          "/dev/sdx"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdd": {
       "metadata": {
-        "diskoDiskName": "y",
+        "diskoDiskNames": [
+          "y"
+        ],
         "diskoSource": "y",
-        "originalDevice": "/dev/sdy"
+        "originalDevices": [
+          "/dev/sdy"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sde": {
       "metadata": {
-        "diskoDiskName": "z",
+        "diskoDiskNames": [
+          "z"
+        ],
         "diskoSource": "z",
-        "originalDevice": "/dev/sdz"
+        "originalDevices": [
+          "/dev/sdz"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"

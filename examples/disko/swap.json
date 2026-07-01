@@ -11,9 +11,13 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "main",
+        "diskoDiskNames": [
+          "main"
+        ],
         "diskoSource": "main",
-        "originalDevice": "/dev/vdb"
+        "originalDevices": [
+          "/dev/vdb"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
@@ -104,7 +108,7 @@
       "operation": "create",
       "partitionNumber": "4",
       "partitionType": "primary",
-      "start": "1535MiB",
+      "start": "16895MiB",
       "target": "/dev/sdb4"
     }
   },

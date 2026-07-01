@@ -11,9 +11,13 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "disk0",
+        "diskoDiskNames": [
+          "disk0"
+        ],
         "diskoSource": "disk0",
-        "originalDevice": "/dev/disk/by-id/ata-disk0"
+        "originalDevices": [
+          "/dev/disk/by-id/ata-disk0"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"

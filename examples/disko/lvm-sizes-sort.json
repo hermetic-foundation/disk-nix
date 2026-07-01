@@ -11,9 +11,13 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "one",
+        "diskoDiskNames": [
+          "one"
+        ],
         "diskoSource": "one",
-        "originalDevice": "/dev/disk/by-id/ata-VMware_Virtual_SATA_CDRW_Drive_00000000000000000001"
+        "originalDevices": [
+          "/dev/disk/by-id/ata-VMware_Virtual_SATA_CDRW_Drive_00000000000000000001"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"

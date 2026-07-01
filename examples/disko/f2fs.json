@@ -11,9 +11,13 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "main",
+        "diskoDiskNames": [
+          "main"
+        ],
         "diskoSource": "main",
-        "originalDevice": "/dev/disk/by-path/pci-0000:02:00.0-nvme-1"
+        "originalDevices": [
+          "/dev/disk/by-path/pci-0000:02:00.0-nvme-1"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"

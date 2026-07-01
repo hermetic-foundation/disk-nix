@@ -27,18 +27,26 @@
   "disks": {
     "/dev/sdb": {
       "metadata": {
-        "diskoDiskName": "disk1",
+        "diskoDiskNames": [
+          "disk1"
+        ],
         "diskoSource": "disk1",
-        "originalDevice": "/dev/sda"
+        "originalDevices": [
+          "/dev/sda"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
     },
     "/dev/sdc": {
       "metadata": {
-        "diskoDiskName": "disk2",
+        "diskoDiskNames": [
+          "disk2"
+        ],
         "diskoSource": "disk2",
-        "originalDevice": "/dev/sdb"
+        "originalDevices": [
+          "/dev/sdb"
+        ]
       },
       "operation": "create",
       "partitionType": "gpt"
