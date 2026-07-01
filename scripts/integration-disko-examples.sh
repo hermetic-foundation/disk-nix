@@ -5,6 +5,7 @@ repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 examples_dir="${DISK_NIX_DISKO_EXAMPLES_DIR:-$repo_root/examples/disko}"
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 execute="${DISK_NIX_DISKO_E2E_EXECUTE:-0}"
+preflight="${DISK_NIX_DISKO_E2E_PREFLIGHT:-0}"
 confirm="${DISK_NIX_DISKO_E2E_CONFIRM:-}"
 required_confirm="wipe-/dev/sdb-/dev/sdc-/dev/sdd-/dev/sde-/dev/sdf"
 test_disks=(/dev/sdb /dev/sdc /dev/sdd /dev/sde /dev/sdf)
@@ -67,13 +68,40 @@ rewrite_spec_for_execute() {
   ' "$input" >"$output"
 }
 
+validate_execute_plan_paths() {
+  local apply_json="$1"
+  local spec="$2"
+  local unsafe
+  unsafe="$(
+    jq -r --arg root "$e2e_root" '
+      .commandPlan[].commands[].argv[]?
+      | select(type == "string" and startswith("/"))
+      | select(
+          (. == "/proc/mdstat")
+          or startswith($root + "/")
+          or test("^/dev/sd[b-f](p?[0-9]+)?$")
+          or startswith("/dev/mapper/")
+          or startswith("/dev/md/")
+          or test("^/dev/[A-Za-z0-9_.+-]+/[A-Za-z0-9_.+-]+$")
+          or startswith("/dev/zvol/")
+        | not
+      )
+    ' "$apply_json" | sort -u
+  )"
+  if [[ -n "$unsafe" ]]; then
+    echo "refusing destructive plan with host path target(s) for $spec" >&2
+    printf '%s\n' "$unsafe" >&2
+    return 1
+  fi
+}
+
 # shellcheck disable=SC2329
 cleanup_on_exit() {
   if [[ "$execute" == "1" ]]; then
     cleanup_storage
-    if [[ -n "$execute_specs_dir" ]]; then
-      rm -rf "$execute_specs_dir"
-    fi
+  fi
+  if [[ -n "$execute_specs_dir" ]]; then
+    rm -rf "$execute_specs_dir"
   fi
 }
 
@@ -107,6 +135,9 @@ if [[ "$execute" == "1" ]]; then
   done
   lsblk -o NAME,PATH,SIZE,TYPE,FSTYPE,MOUNTPOINTS "${test_disks[@]}"
   mkdir -p "$e2e_root"
+fi
+
+if [[ "$execute" == "1" || "$preflight" == "1" ]]; then
   execute_specs_dir="$(mktemp -d)"
 fi
 
@@ -115,9 +146,11 @@ for spec in "$examples_dir"/*.json; do
   [[ "$(basename "$spec")" == "manifest.json" ]] && continue
   spec_name="$(basename "$spec" .json)"
   run_spec="$spec"
-  if [[ "$execute" == "1" ]]; then
+  if [[ "$execute" == "1" || "$preflight" == "1" ]]; then
     run_spec="$execute_specs_dir/$(basename "$spec")"
     rewrite_spec_for_execute "$spec" "$run_spec" "$spec_name"
+  fi
+  if [[ "$execute" == "1" ]]; then
     cleanup_storage "$run_spec"
     wipefs --all --force "${test_disks[@]}" >/dev/null 2>&1 || true
   fi
@@ -132,9 +165,6 @@ for spec in "$examples_dir"/*.json; do
   fi
 
   apply_args=(apply --spec "$run_spec" --json)
-  if [[ "$execute" == "1" ]]; then
-    apply_args+=(--execute)
-  fi
   if ! "$disk_nix_bin" "${apply_args[@]}" >"$apply_json"; then
     echo "apply failed for $spec" >&2
     cat "$apply_json" >&2 || true
@@ -147,6 +177,22 @@ for spec in "$examples_dir"/*.json; do
     echo "non-ready command plan for $spec" >&2
     jq '.apply.blockedSummary, .commandSummary, [.commandPlan[] | {actionId, notReady: [.commands[] | select(.readiness != "ready")]} | select(.notReady|length>0)]' "$apply_json" >&2
     fail=1
+    continue
+  fi
+  if [[ "$execute" == "1" || "$preflight" == "1" ]]; then
+    if ! validate_execute_plan_paths "$apply_json" "$spec"; then
+      fail=1
+      continue
+    fi
+  fi
+  if [[ "$execute" == "1" ]]; then
+    execute_json="$(mktemp)"
+    if ! "$disk_nix_bin" apply --spec "$run_spec" --json --execute >"$execute_json"; then
+      echo "execute failed for $spec" >&2
+      cat "$execute_json" >&2 || true
+      fail=1
+      continue
+    fi
   fi
   if [[ "$execute" == "1" ]]; then
     cleanup_storage "$run_spec"

@@ -66,6 +66,16 @@ That command plans and dry-runs every generated spec. It fails if any example
 has blocked policy, unresolved command inputs, manual-only commands, or
 non-ready command rendering.
 
+Run the non-root destructive-shape preflight with:
+
+```sh
+env DISK_NIX_DISKO_E2E_PREFLIGHT=1 nix run .#integration-disko-examples
+```
+
+That mode rewrites mountpoints the same way destructive execution does, renders
+the command plan, and refuses host path targets outside the disposable E2E
+root and expected storage device namespaces.
+
 Destructive execution is guarded separately. It is intended only for disposable
 lab disks `/dev/sdb` through `/dev/sdf`:
 
