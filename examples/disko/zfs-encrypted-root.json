@@ -1,0 +1,145 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "datasets": {
+    "zroot/root": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mountpoint": "/",
+      "operation": "create",
+      "properties": {
+        "encryption": "aes-256-gcm",
+        "keyformat": "passphrase",
+        "keylocation": "prompt"
+      }
+    },
+    "zroot/root/nix": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mountpoint": "/nix",
+      "operation": "create",
+      "properties": {
+        "mountpoint": "/nix"
+      }
+    }
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "root",
+        "diskoSource": "root",
+        "originalDevice": "/dev/nvme0n1"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "root:ESP": {
+      "device": "/dev/sdb1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "root",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "nofail"
+      ],
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "zfs-encrypted-root.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "root:ESP": {
+      "device": "/dev/sdb",
+      "end": "1025MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "root"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "1G",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "root:zfs": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "root"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1025MiB",
+      "target": "/dev/sdb2"
+    }
+  },
+  "pools": {
+    "zroot": {
+      "devices": [
+        "/dev/sdb2"
+      ],
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create",
+      "properties": {
+        "acltype": "posixacl",
+        "ashift": "12",
+        "com.sun:auto-snapshot": "true",
+        "compression": "zstd",
+        "mountpoint": "none",
+        "xattr": "sa"
+      }
+    }
+  },
+  "swaps": {
+    "zroot/root/swap": {
+      "device": "/dev/zvol/zroot/root/swap",
+      "metadata": {
+        "diskoSource": "zvol:zroot/root/swap"
+      },
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "version": 1,
+  "zvols": {
+    "zroot/root/swap": {
+      "desiredSize": "10M",
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create",
+      "properties": {
+        "com.sun:auto-snapshot": "false",
+        "compression": "zle",
+        "logbias": "throughput",
+        "primarycache": "metadata",
+        "secondarycache": "none",
+        "sync": "always",
+        "volblocksize": "4096"
+      }
+    }
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "btrfsSubvolumes": {
+    "main:root:/home": {
+      "metadata": {
+        "diskoSource": "main",
+        "parentFilesystem": "main:root"
+      },
+      "mountpoint": "/home",
+      "operation": "create",
+      "options": [
+        "compress=zstd"
+      ],
+      "target": "/home"
+    },
+    "main:root:/home/user": {
+      "metadata": {
+        "diskoSource": "main",
+        "parentFilesystem": "main:root"
+      },
+      "operation": "create",
+      "target": "/home/user"
+    },
+    "main:root:/nix": {
+      "metadata": {
+        "diskoSource": "main",
+        "parentFilesystem": "main:root"
+      },
+      "mountpoint": "/nix",
+      "operation": "create",
+      "options": [
+        "compress=zstd",
+        "noatime"
+      ],
+      "target": "/nix"
+    },
+    "main:root:/rootfs": {
+      "metadata": {
+        "diskoSource": "main",
+        "parentFilesystem": "main:root"
+      },
+      "mountpoint": "/",
+      "operation": "create",
+      "target": "/rootfs"
+    },
+    "main:root:/swap": {
+      "metadata": {
+        "diskoSource": "main",
+        "parentFilesystem": "main:root",
+        "swap": {
+          "swapfile": {
+            "size": "20M"
+          },
+          "swapfile2": {
+            "path": "rel-path",
+            "size": "20M"
+          }
+        }
+      },
+      "mountpoint": "/.swapvol",
+      "operation": "create",
+      "target": "/swap"
+    },
+    "main:root:/test": {
+      "metadata": {
+        "diskoSource": "main",
+        "parentFilesystem": "main:root"
+      },
+      "operation": "create",
+      "target": "/test"
+    }
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "main",
+        "diskoSource": "main",
+        "originalDevice": "/dev/disk/by-diskseq/1"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "main:ESP": {
+      "device": "/dev/sdb1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "main",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    },
+    "main:root": {
+      "device": "/dev/sdb2",
+      "fsType": "btrfs",
+      "metadata": {
+        "diskoSource": "main",
+        "diskoType": "filesystem",
+        "extraArgs": [
+          "-f"
+        ]
+      },
+      "mountpoint": "/partition-root",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "btrfs-subvolumes.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "main:ESP": {
+      "device": "/dev/sdb",
+      "end": "128M",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "main",
+        "priority": 1
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "start": "1M",
+      "target": "/dev/sdb1"
+    },
+    "main:root": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "main"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "128MiB",
+      "target": "/dev/sdb2"
+    }
+  },
+  "version": 1
+}

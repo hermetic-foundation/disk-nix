@@ -1,0 +1,341 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "datasets": {
+    "zroot/zfs_fs": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mountpoint": "/zfs_fs",
+      "operation": "create",
+      "properties": {
+        "com.sun:auto-snapshot": "true"
+      }
+    },
+    "zroot/zfs_legacy_fs": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mountpoint": "/zfs_legacy_fs",
+      "operation": "create",
+      "properties": {
+        "mountpoint": "legacy"
+      }
+    },
+    "zroot/zfs_unmounted_fs": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create",
+      "properties": {
+        "mountpoint": "none"
+      }
+    }
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "disk0",
+        "diskoSource": "disk0",
+        "originalDevice": "/dev/disk/by-id/ata-QEMU_HARDDISK_QM00001"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdc": {
+      "metadata": {
+        "diskoDiskName": "disk1",
+        "diskoSource": "disk1",
+        "originalDevice": "/dev/disk/by-id/ata-QEMU_HARDDISK_QM00002"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdd": {
+      "metadata": {
+        "diskoDiskName": "disk2",
+        "diskoSource": "disk2",
+        "originalDevice": "/dev/disk/by-id/ata-QEMU_HARDDISK_QM00003"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "disk0:ESP": {
+      "device": "/dev/sdb1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "disk0",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    },
+    "mdadm:raid1:bla": {
+      "device": "/dev/md/raid1p1",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "mdadm:raid1",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/ext4_mdadm_lvm",
+      "operation": "format",
+      "preserveData": false
+    },
+    "pool/root": {
+      "device": "/dev/pool/root",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "lvm:pool/root",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/ext4_on_lvm",
+      "operation": "format",
+      "options": [
+        "defaults"
+      ],
+      "preserveData": false
+    },
+    "zroot/zfs_testvolume": {
+      "device": "/dev/zvol/zroot/zfs_testvolume",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "zvol:zroot/zfs_testvolume",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/ext4onzfs",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "luks": {
+    "devices": {
+      "crypted1": {
+        "device": "/dev/sdc1",
+        "metadata": {
+          "additionalKeyFiles": [
+            "/tmp/additionalSecret.key"
+          ],
+          "diskoSource": "disk1",
+          "extraFormatArgs": [
+            "--iter-time 1"
+          ],
+          "settings": {
+            "keyFile": "/tmp/secret.key"
+          }
+        },
+        "operation": "format",
+        "preserveData": false
+      },
+      "crypted2": {
+        "device": "/dev/sdd1",
+        "metadata": {
+          "diskoSource": "disk2",
+          "extraFormatArgs": [
+            "--iter-time 1"
+          ],
+          "settings": {
+            "keyFile": "/tmp/secret.key",
+            "keyFileOffset": 2,
+            "keyFileSize": 8
+          }
+        },
+        "operation": "format",
+        "preserveData": false
+      }
+    }
+  },
+  "mdRaids": {
+    "raid1": {
+      "devices": [
+        "/dev/pool/raid1",
+        "/dev/pool/raid2"
+      ],
+      "level": "1",
+      "metadata": {
+        "diskoSource": "raid1"
+      },
+      "operation": "create",
+      "target": "/dev/md/raid1"
+    }
+  },
+  "metadata": {
+    "source": "complex.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "disk0:ESP": {
+      "device": "/dev/sdb",
+      "end": "128M",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "disk0"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "start": "1M",
+      "target": "/dev/sdb1"
+    },
+    "disk1:luks": {
+      "device": "/dev/sdc",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "disk1",
+        "uuid": "f0f0f0f0-f0f0-f0f0-f0f0-f0f0f0f0f0f0"
+      },
+      "name": "luks",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1M",
+      "target": "/dev/sdc1"
+    },
+    "disk2:luks": {
+      "device": "/dev/sdd",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "disk2"
+      },
+      "name": "luks",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1M",
+      "target": "/dev/sdd1"
+    },
+    "mdadm:raid1:bla": {
+      "device": "/dev/md/raid1",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "mdadm:raid1"
+      },
+      "name": "bla",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1M",
+      "target": "/dev/md/raid1p1"
+    }
+  },
+  "physicalVolumes": {
+    "/dev/mapper/crypted1": {
+      "device": "/dev/mapper/crypted1",
+      "metadata": {
+        "diskoSource": "disk1:crypted1"
+      },
+      "operation": "create"
+    },
+    "/dev/mapper/crypted2": {
+      "device": "/dev/mapper/crypted2",
+      "metadata": {
+        "diskoSource": "disk2:crypted2"
+      },
+      "operation": "create"
+    }
+  },
+  "pools": {
+    "zroot": {
+      "devices": [
+        "/dev/pool/zfs1",
+        "/dev/pool/zfs2"
+      ],
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mode": "mirror",
+      "mountpoint": "/",
+      "operation": "create",
+      "properties": {
+        "com.sun:auto-snapshot": "false",
+        "compression": "zstd"
+      }
+    }
+  },
+  "version": 1,
+  "volumeGroups": {
+    "pool": {
+      "device": "/dev/mapper/crypted1",
+      "devices": [
+        "/dev/mapper/crypted1",
+        "/dev/mapper/crypted2"
+      ],
+      "metadata": {
+        "diskoSource": "disk1:crypted1"
+      },
+      "operation": "create"
+    }
+  },
+  "volumes": {
+    "pool/raid1": {
+      "desiredSize": "30M",
+      "metadata": {
+        "diskoSource": "lvm_vg:pool",
+        "lvmType": "raid0"
+      },
+      "operation": "create",
+      "target": "pool/raid1"
+    },
+    "pool/raid2": {
+      "desiredSize": "30M",
+      "metadata": {
+        "diskoSource": "lvm_vg:pool",
+        "lvmType": "raid0"
+      },
+      "operation": "create",
+      "target": "pool/raid2"
+    },
+    "pool/root": {
+      "desiredSize": "10M",
+      "metadata": {
+        "diskoSource": "lvm_vg:pool",
+        "lvmType": "mirror"
+      },
+      "operation": "create",
+      "target": "pool/root"
+    },
+    "pool/zfs1": {
+      "desiredSize": "128M",
+      "metadata": {
+        "diskoSource": "lvm_vg:pool",
+        "lvmType": "raid0"
+      },
+      "operation": "create",
+      "target": "pool/zfs1"
+    },
+    "pool/zfs2": {
+      "desiredSize": "128M",
+      "metadata": {
+        "diskoSource": "lvm_vg:pool",
+        "lvmType": "raid0"
+      },
+      "operation": "create",
+      "target": "pool/zfs2"
+    }
+  },
+  "zvols": {
+    "zroot/zfs_testvolume": {
+      "desiredSize": "10M",
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create"
+    }
+  }
+}

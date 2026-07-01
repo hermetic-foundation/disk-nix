@@ -1,0 +1,267 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "/dev/sdb",
+        "diskoSource": "/dev/sdb",
+        "originalDevice": "/dev/sdb"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdc": {
+      "metadata": {
+        "diskoDiskName": "/dev/sdc",
+        "diskoSource": "/dev/sdc",
+        "originalDevice": "/dev/sdc"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdd": {
+      "metadata": {
+        "diskoDiskName": "/dev/sdd",
+        "diskoSource": "/dev/sdd",
+        "originalDevice": "/dev/sdd"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sde": {
+      "metadata": {
+        "diskoDiskName": "/dev/sde",
+        "diskoSource": "/dev/sde",
+        "originalDevice": "/dev/sde"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdf": {
+      "metadata": {
+        "diskoDiskName": "/dev/sdf",
+        "diskoSource": "/dev/sdf",
+        "originalDevice": "/dev/sdf"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "/dev/sdb:root": {
+      "device": "/dev/sdb2",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "/dev/sdb",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    },
+    "/dev/sdc:root": {
+      "device": "/dev/sdc2",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "/dev/sdc",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    },
+    "/dev/sdd:root": {
+      "device": "/dev/sdd2",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "/dev/sdd",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    },
+    "/dev/sde:root": {
+      "device": "/dev/sde2",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "/dev/sde",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    },
+    "/dev/sdf:root": {
+      "device": "/dev/sdf2",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "/dev/sdf",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "with-lib.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "/dev/sdb:boot": {
+      "device": "/dev/sdb",
+      "end": "2MiB",
+      "metadata": {
+        "diskoPartitionType": "EF02",
+        "diskoSource": "/dev/sdb"
+      },
+      "name": "boot",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "1M",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "/dev/sdb:root": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "/dev/sdb"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "2MiB",
+      "target": "/dev/sdb2"
+    },
+    "/dev/sdc:boot": {
+      "device": "/dev/sdc",
+      "end": "2MiB",
+      "metadata": {
+        "diskoPartitionType": "EF02",
+        "diskoSource": "/dev/sdc"
+      },
+      "name": "boot",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "1M",
+      "start": "1MiB",
+      "target": "/dev/sdc1"
+    },
+    "/dev/sdc:root": {
+      "device": "/dev/sdc",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "/dev/sdc"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "2MiB",
+      "target": "/dev/sdc2"
+    },
+    "/dev/sdd:boot": {
+      "device": "/dev/sdd",
+      "end": "2MiB",
+      "metadata": {
+        "diskoPartitionType": "EF02",
+        "diskoSource": "/dev/sdd"
+      },
+      "name": "boot",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "1M",
+      "start": "1MiB",
+      "target": "/dev/sdd1"
+    },
+    "/dev/sdd:root": {
+      "device": "/dev/sdd",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "/dev/sdd"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "2MiB",
+      "target": "/dev/sdd2"
+    },
+    "/dev/sde:boot": {
+      "device": "/dev/sde",
+      "end": "2MiB",
+      "metadata": {
+        "diskoPartitionType": "EF02",
+        "diskoSource": "/dev/sde"
+      },
+      "name": "boot",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "1M",
+      "start": "1MiB",
+      "target": "/dev/sde1"
+    },
+    "/dev/sde:root": {
+      "device": "/dev/sde",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "/dev/sde"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "2MiB",
+      "target": "/dev/sde2"
+    },
+    "/dev/sdf:boot": {
+      "device": "/dev/sdf",
+      "end": "2MiB",
+      "metadata": {
+        "diskoPartitionType": "EF02",
+        "diskoSource": "/dev/sdf"
+      },
+      "name": "boot",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "1M",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    },
+    "/dev/sdf:root": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "/dev/sdf"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "2MiB",
+      "target": "/dev/sdf2"
+    }
+  },
+  "version": 1
+}

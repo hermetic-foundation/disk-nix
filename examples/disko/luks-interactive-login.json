@@ -1,0 +1,100 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "main",
+        "diskoSource": "main",
+        "originalDevice": "/dev/vdb"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "main:crypted": {
+      "device": "/dev/mapper/crypted",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "main:crypted",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    },
+    "main:ESP": {
+      "device": "/dev/sdb1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "main",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    }
+  },
+  "luks": {
+    "devices": {
+      "crypted": {
+        "device": "/dev/sdb2",
+        "metadata": {
+          "diskoSource": "main",
+          "settings": {
+            "allowDiscards": true
+          }
+        },
+        "operation": "format",
+        "preserveData": false
+      }
+    }
+  },
+  "metadata": {
+    "source": "luks-interactive-login.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "main:ESP": {
+      "device": "/dev/sdb",
+      "end": "501MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "main"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "500M",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "main:luks": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "main"
+      },
+      "name": "luks",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "501MiB",
+      "target": "/dev/sdb2"
+    }
+  },
+  "version": 1
+}

@@ -1,0 +1,55 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "disk0",
+        "diskoSource": "disk0",
+        "originalDevice": "/dev/disk/by-id/ata-disk0"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "disk0:nix": {
+      "device": "/dev/sdb1",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "disk0",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "negative-size.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "disk0:nix": {
+      "device": "/dev/sdb",
+      "end": "-10M",
+      "metadata": {
+        "diskoSource": "disk0"
+      },
+      "name": "nix",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    }
+  },
+  "version": 1
+}

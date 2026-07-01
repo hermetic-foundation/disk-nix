@@ -1,0 +1,198 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "datasets": {
+    "storage/dataset": {
+      "metadata": {
+        "diskoSource": "zpool:storage"
+      },
+      "mountpoint": "/storage/dataset",
+      "operation": "create"
+    },
+    "storage2/dataset": {
+      "metadata": {
+        "diskoSource": "zpool:storage2"
+      },
+      "mountpoint": "/storage2/dataset",
+      "operation": "create"
+    }
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "a",
+        "diskoSource": "a",
+        "originalDevice": "/dev/sda"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdc": {
+      "metadata": {
+        "diskoDiskName": "x",
+        "diskoSource": "x",
+        "originalDevice": "/dev/sdx"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdd": {
+      "metadata": {
+        "diskoDiskName": "y",
+        "diskoSource": "y",
+        "originalDevice": "/dev/sdy"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sde": {
+      "metadata": {
+        "diskoDiskName": "z",
+        "diskoSource": "z",
+        "originalDevice": "/dev/sdz"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "x:ESP": {
+      "device": "/dev/sdc1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "x",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    },
+    "x:root": {
+      "device": "/dev/sdc2",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "x",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "non-root-zfs.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "a:zfs": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "a"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "x:ESP": {
+      "device": "/dev/sdc",
+      "end": "65MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "x"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "64M",
+      "start": "1MiB",
+      "target": "/dev/sdc1"
+    },
+    "x:root": {
+      "device": "/dev/sdc",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "x"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "65MiB",
+      "target": "/dev/sdc2"
+    },
+    "y:zfs": {
+      "device": "/dev/sdd",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "y"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdd1"
+    },
+    "z:zfs": {
+      "device": "/dev/sde",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "z"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sde1"
+    }
+  },
+  "pools": {
+    "storage": {
+      "devices": [
+        "/dev/sdd1",
+        "/dev/sde1"
+      ],
+      "metadata": {
+        "diskoSource": "zpool:storage"
+      },
+      "mode": "mirror",
+      "mountpoint": "/storage",
+      "operation": "create",
+      "properties": {}
+    },
+    "storage2": {
+      "devices": [
+        "/dev/sdb1"
+      ],
+      "metadata": {
+        "diskoSource": "zpool:storage2"
+      },
+      "mountpoint": "/storage2",
+      "operation": "create",
+      "properties": {
+        "canmount": "off"
+      }
+    }
+  },
+  "version": 1
+}

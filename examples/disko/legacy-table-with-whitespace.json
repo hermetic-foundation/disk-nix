@@ -1,0 +1,106 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "vdb",
+        "diskoSource": "vdb",
+        "originalDevice": "/dev/sda"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "vdb:ESP": {
+      "device": "/dev/sdb1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "vdb",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    },
+    "vdb:name with spaces": {
+      "device": "/dev/sdb2",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "vdb",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/name_with_spaces",
+      "operation": "format",
+      "preserveData": false
+    },
+    "vdb:root": {
+      "device": "/dev/sdb3",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "vdb",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "legacy-table-with-whitespace.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "vdb:ESP": {
+      "device": "/dev/sdb",
+      "end": "100MiB",
+      "metadata": {
+        "diskoSource": "vdb"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "vdb:name with spaces": {
+      "device": "/dev/sdb",
+      "end": "200MiB",
+      "metadata": {
+        "diskoSource": "vdb"
+      },
+      "name": "name with spaces",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "start": "100MiB",
+      "target": "/dev/sdb2"
+    },
+    "vdb:root": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "vdb"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "3",
+      "partitionType": "primary",
+      "start": "200MiB",
+      "target": "/dev/sdb3"
+    }
+  },
+  "version": 1
+}

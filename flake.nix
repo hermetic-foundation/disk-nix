@@ -286,6 +286,19 @@
           ];
           text = builtins.readFile ./scripts/integration-layered-vm-smoke.sh;
         };
+        integrationDiskoExamples = pkgs.writeShellApplication {
+          name = "disk-nix-integration-disko-examples";
+          runtimeInputs = [
+            diskNix
+            pkgs.coreutils
+            pkgs.jq
+            pkgs.util-linux
+          ];
+          text = ''
+            export DISK_NIX_DISKO_EXAMPLES_DIR="''${DISK_NIX_DISKO_EXAMPLES_DIR:-${./examples/disko}}"
+          ''
+          + builtins.readFile ./scripts/integration-disko-examples.sh;
+        };
         integrationVmSmoke = pkgs.writeShellApplication {
           name = "disk-nix-integration-vm-smoke";
           runtimeInputs = [
@@ -1639,6 +1652,7 @@
           integration-target-lun-smoke = integrationTargetLunSmoke;
           integration-failure-recovery-smoke = integrationFailureRecoverySmoke;
           integration-layered-vm-smoke = integrationLayeredVmSmoke;
+          integration-disko-examples = integrationDiskoExamples;
           integration-vm-smoke = integrationVmSmoke;
           integration-vm-test = integrationVmTest;
           integration-loop-smoke = integrationLoopSmoke;
@@ -1774,6 +1788,13 @@
             program = "${integrationLayeredVmSmoke}/bin/disk-nix-integration-layered-vm-smoke";
             meta = {
               description = "Root-only layered loop/LUKS/LVM/ext4 VM integration harness";
+            };
+          };
+          integration-disko-examples = {
+            type = "app";
+            program = "${integrationDiskoExamples}/bin/disk-nix-integration-disko-examples";
+            meta = {
+              description = "Dry-run and guarded destructive disk-nix translations of disko examples";
             };
           };
           integration-vm-smoke = {
@@ -2442,6 +2463,17 @@
             ${pkgs.gnugrep}/bin/grep -q 'resume-apply.json' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'remount,rw,relatime' ${./scripts/integration-layered-vm-smoke.sh}
             ${pkgs.gnugrep}/bin/grep -q 'fresh topology' ${./scripts/integration-layered-vm-smoke.sh}
+            touch "$out"
+          '';
+          integrationDiskoExamples = pkgs.runCommand "disk-nix-integration-disko-examples-check" { } ''
+            ${pkgs.bash}/bin/bash -n ${./scripts/integration-disko-examples.sh}
+            ${pkgs.nodejs}/bin/node --check ${./scripts/translate-disko-examples.mjs}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_DISKO_E2E_CONFIRM' ${./scripts/integration-disko-examples.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'wipe-/dev/sdb-/dev/sdc-/dev/sdd-/dev/sde-/dev/sdf' ${./scripts/integration-disko-examples.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'zfs-with-vdevs.nix' ${./examples/disko/manifest.json}
+            DISK_NIX_BIN=${diskNix}/bin/disk-nix \
+              DISK_NIX_DISKO_EXAMPLES_DIR=${./examples/disko} \
+              ${integrationDiskoExamples}/bin/disk-nix-integration-disko-examples
             touch "$out"
           '';
           integrationVmSmoke = pkgs.runCommand "disk-nix-integration-vm-smoke-check" { } ''

@@ -1,0 +1,193 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "vdb",
+        "diskoSource": "vdb",
+        "originalDevice": "/dev/vdb"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdc": {
+      "metadata": {
+        "diskoDiskName": "vdc",
+        "diskoSource": "vdc",
+        "originalDevice": "/dev/vdc"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdd": {
+      "metadata": {
+        "diskoDiskName": "vdd",
+        "diskoSource": "vdd",
+        "originalDevice": "/dev/vdd"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sde": {
+      "metadata": {
+        "diskoDiskName": "vde",
+        "diskoSource": "vde",
+        "originalDevice": "/dev/vde"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "bcachefs:mounted_subvolumes_in_multi": {
+      "addDevices": [
+        "/dev/sdc1",
+        "/dev/sdd1"
+      ],
+      "device": "/dev/sdb2",
+      "fsType": "bcachefs",
+      "metadata": {
+        "diskoFilesystem": "mounted_subvolumes_in_multi",
+        "diskoSource": "vdb",
+        "extraFormatArgs": [
+          "--compression=lz4",
+          "--background_compression=lz4"
+        ],
+        "label": "group_a.vdb2",
+        "passwordFile": "/tmp/secret.key",
+        "subvolumes": {
+          "subvolumes/home": {
+            "mountpoint": "/home"
+          },
+          "subvolumes/home/user": {},
+          "subvolumes/nix": {
+            "mountpoint": "/nix"
+          },
+          "subvolumes/root": {
+            "mountOptions": [
+              "verbose"
+            ],
+            "mountpoint": "/"
+          },
+          "subvolumes/test": {}
+        }
+      },
+      "mountpoint": "/mounted_subvolumes_in_multi",
+      "operation": "format",
+      "preserveData": false
+    },
+    "bcachefs:relies_on_external_subvolume": {
+      "device": "/dev/sde1",
+      "fsType": "bcachefs",
+      "metadata": {
+        "diskoFilesystem": "relies_on_external_subvolume",
+        "diskoSource": "vde",
+        "label": "group_a.vde1",
+        "uuid": "64e50034-ebe2-eaf8-1f93-cf56266a8d86"
+      },
+      "mountpoint": "/home/Documents",
+      "operation": "format",
+      "preserveData": false
+    },
+    "vdb:vdb1": {
+      "device": "/dev/sdb1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "vdb",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "bcachefs.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "vdb:vdb1": {
+      "device": "/dev/sdb",
+      "end": "101MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "vdb"
+      },
+      "name": "vdb1",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100M",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "vdb:vdb2": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "vdb"
+      },
+      "name": "vdb2",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "101MiB",
+      "target": "/dev/sdb2"
+    },
+    "vdc:vdc1": {
+      "device": "/dev/sdc",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "vdc"
+      },
+      "name": "vdc1",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdc1"
+    },
+    "vdd:vdd1": {
+      "device": "/dev/sdd",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "vdd"
+      },
+      "name": "vdd1",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdd1"
+    },
+    "vde:vdd1": {
+      "device": "/dev/sde",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "vde"
+      },
+      "name": "vdd1",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sde1"
+    }
+  },
+  "version": 1
+}

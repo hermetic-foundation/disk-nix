@@ -47,6 +47,37 @@ sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 \
 The individual harnesses below remain available for targeted lab debugging,
 but they should still be treated as destructive host operations.
 
+## Disko example suite
+
+The repository includes generated disk-nix equivalents for every upstream
+`nix-community/disko` file under `example/`.
+
+The generated specs live in `examples/disko/`, with source mapping and known
+translation notes in `examples/disko/manifest.json`.
+
+Run the safe dry-run gate with:
+
+```sh
+nix run .#integration-disko-examples
+```
+
+That command plans and dry-runs every generated spec. It fails if any example
+has blocked policy, unresolved command inputs, manual-only commands, or
+non-ready command rendering.
+
+Destructive execution is guarded separately. It is intended only for disposable
+lab disks `/dev/sdb` through `/dev/sdf`:
+
+```sh
+sudo env DISK_NIX_DISKO_E2E_EXECUTE=1 \
+  DISK_NIX_DISKO_E2E_CONFIRM=wipe-/dev/sdb-/dev/sdc-/dev/sdd-/dev/sde-/dev/sdf \
+  nix run .#integration-disko-examples
+```
+
+The destructive mode refuses to run unless all five requested disks exist, the
+confirmation string matches exactly, and no selected disk or child reports a
+mountpoint.
+
 The ZFS harness is packaged with the VM suite and can be selected explicitly
 with `DISK_NIX_VM_HARNESSES=zfs` in a disposable guest that has working ZFS
 kernel support and a configured host ID. It is not part of the default VM suite

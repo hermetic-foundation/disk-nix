@@ -1,0 +1,90 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "disk0",
+        "diskoSource": "disk0",
+        "originalDevice": "/dev/vda"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdc": {
+      "metadata": {
+        "diskoDiskName": "disk1",
+        "diskoSource": "disk1",
+        "originalDevice": "/dev/vdb"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "disk0:nix": {
+      "device": "/dev/sdb1",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "disk0",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/a",
+      "operation": "format",
+      "preserveData": false
+    },
+    "disk1:root": {
+      "device": "/dev/sdc1",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "disk1",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/b",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "multi-device-no-deps.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "disk0:nix": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "disk0"
+      },
+      "name": "nix",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "disk1:root": {
+      "device": "/dev/sdc",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "disk1"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdc1"
+    }
+  },
+  "version": 1
+}

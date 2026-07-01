@@ -1,0 +1,606 @@
+[
+  {
+    "source": "bcachefs.nix",
+    "output": "bcachefs.json",
+    "originalDisks": [
+      "/dev/vdb",
+      "/dev/vdc",
+      "/dev/vdd",
+      "/dev/vde"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc",
+      "/dev/sdd",
+      "/dev/sde"
+    ],
+    "unsupported": [],
+    "notes": [
+      "vdb: bcachefs multi-device membership is recorded as filesystem addDevices metadata",
+      "vde: bcachefs multi-device membership is recorded as filesystem addDevices metadata"
+    ]
+  },
+  {
+    "source": "boot-raid1.nix",
+    "output": "boot-raid1.json",
+    "originalDisks": [
+      "/dev/sda",
+      "/dev/sdb"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc"
+    ],
+    "unsupported": [],
+    "notes": [
+      "one: partition /dev/sdb2 contributes to MD RAID boot",
+      "one: partition /dev/sdb3 contributes to MD RAID raid1",
+      "two: partition /dev/sdc1 contributes to MD RAID boot",
+      "two: partition /dev/sdc3 contributes to MD RAID raid1"
+    ]
+  },
+  {
+    "source": "btrfs-only-root-subvolume.nix",
+    "output": "btrfs-only-root-subvolume.json",
+    "originalDisks": [
+      "/dev/disk/by-diskseq/1"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "btrfs-subvolumes.nix",
+    "output": "btrfs-subvolumes.json",
+    "originalDisks": [
+      "/dev/disk/by-diskseq/1"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "complex.nix",
+    "output": "complex.json",
+    "originalDisks": [
+      "/dev/disk/by-id/ata-QEMU_HARDDISK_QM00001",
+      "/dev/disk/by-id/ata-QEMU_HARDDISK_QM00002",
+      "/dev/disk/by-id/ata-QEMU_HARDDISK_QM00003"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc",
+      "/dev/sdd"
+    ],
+    "unsupported": [],
+    "notes": [
+      "disk1: LUKS settings are preserved in metadata for operator review",
+      "disk2: LUKS settings are preserved in metadata for operator review",
+      "lvm:pool/raid1: partition /dev/pool/raid1 contributes to MD RAID raid1",
+      "lvm:pool/raid2: partition /dev/pool/raid2 contributes to MD RAID raid1",
+      "lvm:pool/zfs1: device /dev/pool/zfs1 contributes to ZFS pool zroot",
+      "lvm:pool/zfs2: device /dev/pool/zfs2 contributes to ZFS pool zroot"
+    ]
+  },
+  {
+    "source": "f2fs.nix",
+    "output": "f2fs.json",
+    "originalDisks": [
+      "/dev/disk/by-path/pci-0000:02:00.0-nvme-1"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "gpt-bios-compat.nix",
+    "output": "gpt-bios-compat.json",
+    "originalDisks": [
+      "/dev/vdb"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "gpt-name-with-whitespace.nix",
+    "output": "gpt-name-with-whitespace.json",
+    "originalDisks": [
+      "/dev/disk/by-id/some-disk-id"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "gpt-unformatted.nix",
+    "output": "gpt-unformatted.json",
+    "originalDisks": [
+      "/dev/vdb"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "hybrid-mbr.nix",
+    "output": "hybrid-mbr.json",
+    "originalDisks": [
+      "/dev/sdb"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": [
+      "hybrid-mbr.nix: hybrid MBR/GPT fields are preserved in partition metadata",
+      "main: filesystem main:TOW-BOOT-FI has mountpoint = null; translated as format-only"
+    ]
+  },
+  {
+    "source": "hybrid-tmpfs-on-root.nix",
+    "output": "hybrid-tmpfs-on-root.json",
+    "originalDisks": [
+      "/dev/disk/by-id/ata-Samsung_SSD_860_EVO_500GB_S3Z1NB0K303456L"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "hybrid.nix",
+    "output": "hybrid.json",
+    "originalDisks": [
+      "/dev/disk/by-id/ata-Samsung_SSD_850_EVO_250GB_S21PNXAGB12345"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "legacy-table-with-whitespace.nix",
+    "output": "legacy-table-with-whitespace.json",
+    "originalDisks": [
+      "/dev/sda"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "legacy-table.nix",
+    "output": "legacy-table.json",
+    "originalDisks": [
+      "/dev/sda"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "long-device-name.nix",
+    "output": "long-device-name.json",
+    "originalDisks": [
+      "/dev/disk/by-id/some-disk-id"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "luks-btrfs-raid.nix",
+    "output": "luks-btrfs-raid.json",
+    "originalDisks": [
+      "/dev/sda",
+      "/dev/sdb"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc"
+    ],
+    "unsupported": [],
+    "notes": [
+      "disk1: LUKS settings are preserved in metadata for operator review",
+      "disk2: LUKS settings are preserved in metadata for operator review"
+    ]
+  },
+  {
+    "source": "luks-btrfs-subvolumes.nix",
+    "output": "luks-btrfs-subvolumes.json",
+    "originalDisks": [
+      "/dev/vdb"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": [
+      "main: LUKS settings are preserved in metadata for operator review"
+    ]
+  },
+  {
+    "source": "luks-fido2.nix",
+    "output": "luks-fido2.json",
+    "originalDisks": [
+      "/dev/vdb"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": [
+      "main: LUKS settings are preserved in metadata for operator review"
+    ]
+  },
+  {
+    "source": "luks-interactive-login.nix",
+    "output": "luks-interactive-login.json",
+    "originalDisks": [
+      "/dev/vdb"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": [
+      "main: LUKS settings are preserved in metadata for operator review"
+    ]
+  },
+  {
+    "source": "luks-lvm.nix",
+    "output": "luks-lvm.json",
+    "originalDisks": [
+      "/dev/vdb"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": [
+      "main: LUKS settings are preserved in metadata for operator review"
+    ]
+  },
+  {
+    "source": "luks-on-mdadm.nix",
+    "output": "luks-on-mdadm.json",
+    "originalDisks": [
+      "/dev/sda",
+      "/dev/sdb"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc"
+    ],
+    "unsupported": [],
+    "notes": [
+      "a: partition /dev/sdb1 contributes to MD RAID boot",
+      "a: partition /dev/sdb3 contributes to MD RAID raid1",
+      "b: partition /dev/sdc1 contributes to MD RAID boot",
+      "b: partition /dev/sdc3 contributes to MD RAID raid1",
+      "mdadm:raid1: LUKS settings are preserved in metadata for operator review"
+    ]
+  },
+  {
+    "source": "lvm-raid.nix",
+    "output": "lvm-raid.json",
+    "originalDisks": [
+      "/dev/sda",
+      "/dev/sdb"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc"
+    ],
+    "unsupported": [],
+    "notes": [
+      "one: partition /dev/sdb1 contributes to MD RAID boot",
+      "two: partition /dev/sdc1 contributes to MD RAID boot"
+    ]
+  },
+  {
+    "source": "lvm-sizes-sort.nix",
+    "output": "lvm-sizes-sort.json",
+    "originalDisks": [
+      "/dev/disk/by-id/ata-VMware_Virtual_SATA_CDRW_Drive_00000000000000000001"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "lvm-thin.nix",
+    "output": "lvm-thin.json",
+    "originalDisks": [
+      "/dev/vdb"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "mdadm-raid0.nix",
+    "output": "mdadm-raid0.json",
+    "originalDisks": [
+      "/dev/my-disk",
+      "/dev/my-disk2"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc"
+    ],
+    "unsupported": [],
+    "notes": [
+      "disk1: partition /dev/sdb2 contributes to MD RAID raid0",
+      "disk2: partition /dev/sdc2 contributes to MD RAID raid0"
+    ]
+  },
+  {
+    "source": "mdadm-raid5-args.nix",
+    "output": "mdadm-raid5-args.json",
+    "originalDisks": [
+      "/dev/my-disk",
+      "/dev/my-disk2"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc"
+    ],
+    "unsupported": [],
+    "notes": [
+      "disk1: partition /dev/sdb2 contributes to MD RAID raid5",
+      "disk2: partition /dev/sdc2 contributes to MD RAID raid5"
+    ]
+  },
+  {
+    "source": "mdadm.nix",
+    "output": "mdadm.json",
+    "originalDisks": [
+      "/dev/my-disk",
+      "/dev/my-disk2"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc"
+    ],
+    "unsupported": [],
+    "notes": [
+      "disk1: partition /dev/sdb2 contributes to MD RAID raid1",
+      "disk2: partition /dev/sdc2 contributes to MD RAID raid1"
+    ]
+  },
+  {
+    "source": "multi-device-no-deps.nix",
+    "output": "multi-device-no-deps.json",
+    "originalDisks": [
+      "/dev/vda",
+      "/dev/vdb"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "negative-size.nix",
+    "output": "negative-size.json",
+    "originalDisks": [
+      "/dev/disk/by-id/ata-disk0"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "non-root-zfs.nix",
+    "output": "non-root-zfs.json",
+    "originalDisks": [
+      "/dev/sda",
+      "/dev/sdx",
+      "/dev/sdy",
+      "/dev/sdz"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc",
+      "/dev/sdd",
+      "/dev/sde"
+    ],
+    "unsupported": [],
+    "notes": [
+      "a: device /dev/sdb1 contributes to ZFS pool storage2",
+      "y: device /dev/sdd1 contributes to ZFS pool storage",
+      "z: device /dev/sde1 contributes to ZFS pool storage"
+    ]
+  },
+  {
+    "source": "simple-efi.nix",
+    "output": "simple-efi.json",
+    "originalDisks": [
+      "/dev/disk/by-id/some-disk-id"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "swap.nix",
+    "output": "swap.json",
+    "originalDisks": [
+      "/dev/vdb"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "tmpfs.nix",
+    "output": "tmpfs.json",
+    "originalDisks": [
+      "/dev/vdb"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "with-lib.nix",
+    "output": "with-lib.json",
+    "originalDisks": [
+      "/dev/sdb",
+      "/dev/sdc",
+      "/dev/sdd",
+      "/dev/sde",
+      "/dev/sdf"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc",
+      "/dev/sdd",
+      "/dev/sde",
+      "/dev/sdf"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "xfs-with-quota.nix",
+    "output": "xfs-with-quota.json",
+    "originalDisks": [
+      "/dev/disk/by-id/some-disk-id"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": []
+  },
+  {
+    "source": "zfs-encrypted-root.nix",
+    "output": "zfs-encrypted-root.json",
+    "originalDisks": [
+      "/dev/nvme0n1"
+    ],
+    "testDisks": [
+      "/dev/sdb"
+    ],
+    "unsupported": [],
+    "notes": [
+      "root: device /dev/sdb2 contributes to ZFS pool zroot"
+    ]
+  },
+  {
+    "source": "zfs-over-legacy.nix",
+    "output": "zfs-over-legacy.json",
+    "originalDisks": [
+      "/dev/vdb",
+      "/dev/vdc"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc"
+    ],
+    "unsupported": [],
+    "notes": [
+      "disk2: device /dev/sdc contributes to ZFS pool zroot"
+    ]
+  },
+  {
+    "source": "zfs-with-vdevs.nix",
+    "output": "zfs-with-vdevs.json",
+    "originalDisks": [
+      "/dev/vdn",
+      "/dev/vda",
+      "/dev/vdb",
+      "/dev/vdc",
+      "/dev/vdh",
+      "/dev/vdi",
+      "/dev/vdj",
+      "/dev/vde",
+      "/dev/vdf",
+      "/dev/vdg",
+      "/dev/vdd",
+      "/dev/vdk",
+      "/dev/vdl",
+      "/dev/vdm"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc",
+      "/dev/sdd",
+      "/dev/sde",
+      "/dev/sdf"
+    ],
+    "unsupported": [
+      "source uses 14 disks; destructive harness has 5 test disks"
+    ],
+    "notes": [
+      "cache: device /dev/sdb1 contributes to ZFS pool zroot",
+      "data1: device /dev/sdc2 contributes to ZFS pool zroot",
+      "data2: device /dev/sdd1 contributes to ZFS pool zroot",
+      "data3: device /dev/sde1 contributes to ZFS pool zroot",
+      "dedup1: device /dev/sdf1 contributes to ZFS pool zroot",
+      "dedup2: device /dev/sdf1 contributes to ZFS pool zroot",
+      "dedup3: device /dev/sdf1 contributes to ZFS pool zroot",
+      "log1: device /dev/sdf1 contributes to ZFS pool zroot",
+      "log2: device /dev/sdf1 contributes to ZFS pool zroot",
+      "log3: device /dev/sdf1 contributes to ZFS pool zroot",
+      "spare: device /dev/sdf1 contributes to ZFS pool zroot",
+      "special1: device /dev/sdf1 contributes to ZFS pool zroot",
+      "special2: device /dev/sdf1 contributes to ZFS pool zroot",
+      "special3: device /dev/sdf1 contributes to ZFS pool zroot"
+    ]
+  },
+  {
+    "source": "zfs.nix",
+    "output": "zfs.json",
+    "originalDisks": [
+      "/dev/sdx",
+      "/dev/sdy"
+    ],
+    "testDisks": [
+      "/dev/sdb",
+      "/dev/sdc"
+    ],
+    "unsupported": [],
+    "notes": [
+      "x: device /dev/sdb2 contributes to ZFS pool zroot",
+      "y: device /dev/sdc1 contributes to ZFS pool zroot"
+    ]
+  }
+]

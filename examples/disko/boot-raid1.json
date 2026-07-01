@@ -1,0 +1,194 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "one",
+        "diskoSource": "one",
+        "originalDevice": "/dev/sda"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdc": {
+      "metadata": {
+        "diskoDiskName": "two",
+        "diskoSource": "two",
+        "originalDevice": "/dev/sdb"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "boot": {
+      "device": "/dev/md/boot",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "mdadm:boot",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    },
+    "mdadm:raid1:primary": {
+      "device": "/dev/md/raid1p1",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "mdadm:raid1",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "mdRaids": {
+    "boot": {
+      "devices": [
+        "/dev/sdb2",
+        "/dev/sdc1"
+      ],
+      "level": "1",
+      "metadata": {
+        "diskoSource": "boot",
+        "metadata": "1.0"
+      },
+      "operation": "create",
+      "target": "/dev/md/boot"
+    },
+    "raid1": {
+      "devices": [
+        "/dev/sdb3",
+        "/dev/sdc3"
+      ],
+      "level": "1",
+      "metadata": {
+        "diskoSource": "raid1"
+      },
+      "operation": "create",
+      "target": "/dev/md/raid1"
+    }
+  },
+  "metadata": {
+    "source": "boot-raid1.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "mdadm:raid1:primary": {
+      "device": "/dev/md/raid1",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "mdadm:raid1"
+      },
+      "name": "primary",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/md/raid1p1"
+    },
+    "one:BOOT": {
+      "device": "/dev/sdb",
+      "end": "2MiB",
+      "metadata": {
+        "diskoPartitionType": "EF02",
+        "diskoSource": "one"
+      },
+      "name": "BOOT",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "1M",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "one:ESP": {
+      "device": "/dev/sdb",
+      "end": "502MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "one"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "500M",
+      "start": "2MiB",
+      "target": "/dev/sdb2"
+    },
+    "one:mdadm": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "one"
+      },
+      "name": "mdadm",
+      "operation": "create",
+      "partitionNumber": "3",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "502MiB",
+      "target": "/dev/sdb3"
+    },
+    "two:boot": {
+      "device": "/dev/sdc",
+      "end": "502MiB",
+      "metadata": {
+        "diskoPartitionType": "EF02",
+        "diskoSource": "two"
+      },
+      "name": "boot",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "1M",
+      "start": "501MiB",
+      "target": "/dev/sdc2"
+    },
+    "two:ESP": {
+      "device": "/dev/sdc",
+      "end": "501MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "two"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "500M",
+      "start": "1MiB",
+      "target": "/dev/sdc1"
+    },
+    "two:mdadm": {
+      "device": "/dev/sdc",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "two"
+      },
+      "name": "mdadm",
+      "operation": "create",
+      "partitionNumber": "3",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "502MiB",
+      "target": "/dev/sdc3"
+    }
+  },
+  "version": 1
+}

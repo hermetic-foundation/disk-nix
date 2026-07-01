@@ -1,0 +1,127 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "datasets": {
+    "zroot/root": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create",
+      "properties": {
+        "mountpoint": "none"
+      }
+    },
+    "zroot/root/zfs_fs": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mountpoint": "/zfs_fs",
+      "operation": "create",
+      "properties": {
+        "com.sun:auto-snapshot": "true"
+      }
+    }
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "disk1",
+        "diskoSource": "disk1",
+        "originalDevice": "/dev/vdb"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdc": {
+      "metadata": {
+        "diskoDiskName": "disk2",
+        "diskoSource": "disk2",
+        "originalDevice": "/dev/vdc"
+      },
+      "operation": "create",
+      "partitionType": "zfs"
+    }
+  },
+  "filesystems": {
+    "disk1:ESP": {
+      "device": "/dev/sdb1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "disk1",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    },
+    "disk1:primary": {
+      "device": "/dev/sdb2",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "disk1",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "zfs-over-legacy.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "disk1:ESP": {
+      "device": "/dev/sdb",
+      "end": "501MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "disk1"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "500M",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "disk1:primary": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "disk1"
+      },
+      "name": "primary",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "501MiB",
+      "target": "/dev/sdb2"
+    }
+  },
+  "pools": {
+    "zroot": {
+      "devices": [
+        "/dev/sdc"
+      ],
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create",
+      "properties": {}
+    }
+  },
+  "version": 1
+}

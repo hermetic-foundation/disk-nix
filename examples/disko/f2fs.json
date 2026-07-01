@@ -1,0 +1,90 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "main",
+        "diskoSource": "main",
+        "originalDevice": "/dev/disk/by-path/pci-0000:02:00.0-nvme-1"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "main:ESP": {
+      "device": "/dev/sdb1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "main",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    },
+    "main:root": {
+      "device": "/dev/sdb2",
+      "fsType": "f2fs",
+      "metadata": {
+        "diskoSource": "main",
+        "diskoType": "filesystem",
+        "extraArgs": [
+          "-O",
+          "extra_attr,inode_checksum,sb_checksum,compression"
+        ]
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "options": [
+        "compress_algorithm=zstd:6,compress_chksum,atgc,gc_merge,lazytime,nodiscard"
+      ],
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "f2fs.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "main:ESP": {
+      "device": "/dev/sdb",
+      "end": "500M",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "main"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "main:root": {
+      "device": "/dev/sdb",
+      "end": "-0",
+      "metadata": {
+        "diskoSource": "main"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "start": "500MiB",
+      "target": "/dev/sdb2"
+    }
+  },
+  "version": 1
+}

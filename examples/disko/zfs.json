@@ -1,0 +1,217 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "datasets": {
+    "zroot/encrypted": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create",
+      "properties": {
+        "encryption": "aes-256-gcm",
+        "keyformat": "passphrase",
+        "keylocation": "file:///tmp/secret.key",
+        "mountpoint": "none"
+      }
+    },
+    "zroot/encrypted/test": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mountpoint": "/zfs_crypted",
+      "operation": "create"
+    },
+    "zroot/zfs_fs": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mountpoint": "/zfs_fs",
+      "operation": "create",
+      "properties": {
+        "com.sun:auto-snapshot": "true"
+      }
+    },
+    "zroot/zfs_legacy_fs": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mountpoint": "/zfs_legacy_fs",
+      "operation": "create",
+      "properties": {
+        "mountpoint": "legacy"
+      }
+    },
+    "zroot/zfs_unmounted_fs": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create",
+      "properties": {
+        "mountpoint": "none"
+      }
+    }
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "x",
+        "diskoSource": "x",
+        "originalDevice": "/dev/sdx"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdc": {
+      "metadata": {
+        "diskoDiskName": "y",
+        "diskoSource": "y",
+        "originalDevice": "/dev/sdy"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "x:ESP": {
+      "device": "/dev/sdb1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "x",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    },
+    "zroot/zfs_encryptedvolume": {
+      "device": "/dev/zvol/zroot/zfs_encryptedvolume",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "zvol:zroot/zfs_encryptedvolume",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/ext4onzfsencrypted",
+      "operation": "format",
+      "preserveData": false
+    },
+    "zroot/zfs_volume": {
+      "device": "/dev/zvol/zroot/zfs_volume",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "zvol:zroot/zfs_volume",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/ext4onzfs",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "zfs.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "x:ESP": {
+      "device": "/dev/sdb",
+      "end": "65MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "x"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "64M",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "x:zfs": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "x"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "65MiB",
+      "target": "/dev/sdb2"
+    },
+    "y:zfs": {
+      "device": "/dev/sdc",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "y"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdc1"
+    }
+  },
+  "pools": {
+    "zroot": {
+      "devices": [
+        "/dev/sdb2",
+        "/dev/sdc1"
+      ],
+      "metadata": {
+        "diskoSource": "zpool:zroot",
+        "postCreateHook": "zfs list -t snapshot -H -o name | grep -E '^zroot@blank$' || zfs snapshot zroot@blank"
+      },
+      "mode": "mirror",
+      "mountpoint": "/",
+      "operation": "create",
+      "properties": {
+        "cachefile": "none",
+        "com.sun:auto-snapshot": "false",
+        "compression": "zstd"
+      }
+    }
+  },
+  "version": 1,
+  "zvols": {
+    "zroot/zfs_encryptedvolume": {
+      "desiredSize": "10M",
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create",
+      "properties": {
+        "encryption": "aes-256-gcm",
+        "keyformat": "passphrase",
+        "keylocation": "file:///tmp/secret.key"
+      }
+    },
+    "zroot/zfs_volume": {
+      "desiredSize": "10M",
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create"
+    },
+    "zroot/zfs_volume_no_content": {
+      "desiredSize": "10M",
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "operation": "create"
+    }
+  }
+}

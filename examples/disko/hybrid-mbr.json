@@ -1,0 +1,117 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "main",
+        "diskoSource": "main",
+        "originalDevice": "/dev/sdb"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "main:ESP": {
+      "device": "/dev/sdb1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "main",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    },
+    "main:root": {
+      "device": "/dev/sdb3",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "main",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    },
+    "main:TOW-BOOT-FI": {
+      "device": "/dev/sdb2",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "main",
+        "diskoType": "filesystem",
+        "unmounted": true
+      },
+      "mountpoint": "main:TOW-BOOT-FI",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "hybrid-mbr.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "main:ESP": {
+      "device": "/dev/sdb",
+      "end": "513MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "main"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "512M",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "main:root": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "main"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "3",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "545MiB",
+      "target": "/dev/sdb3"
+    },
+    "main:TOW-BOOT-FI": {
+      "device": "/dev/sdb",
+      "end": "545MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "main",
+        "hybrid": {
+          "mbrBootableFlag": false,
+          "mbrPartitionType": "0x0c"
+        },
+        "priority": 1
+      },
+      "name": "TOW-BOOT-FI",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "32M",
+      "start": "513MiB",
+      "target": "/dev/sdb2"
+    }
+  },
+  "version": 1
+}

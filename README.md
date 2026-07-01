@@ -251,6 +251,15 @@ Run a root-only smoke harness only on disposable storage:
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 nix run .#integration-loop-smoke
 ```
 
+Dry-run the translated disko example suite:
+
+```sh
+nix run .#integration-disko-examples
+```
+
+Its destructive mode is separately guarded and expects disposable
+`/dev/sdb` through `/dev/sdf`.
+
 Run the synthetic failure-recovery harness without root:
 
 ```sh

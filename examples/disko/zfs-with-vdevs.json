@@ -1,0 +1,400 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "datasets": {
+    "zroot/zfs_fs": {
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mountpoint": "/zfs_fs",
+      "operation": "create",
+      "properties": {
+        "com.sun:auto-snapshot": "true"
+      }
+    }
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "cache",
+        "diskoSource": "cache",
+        "originalDevice": "/dev/vdn"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdc": {
+      "metadata": {
+        "diskoDiskName": "data1",
+        "diskoSource": "data1",
+        "originalDevice": "/dev/vda"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdd": {
+      "metadata": {
+        "diskoDiskName": "data2",
+        "diskoSource": "data2",
+        "originalDevice": "/dev/vdb"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sde": {
+      "metadata": {
+        "diskoDiskName": "data3",
+        "diskoSource": "data3",
+        "originalDevice": "/dev/vdc"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    },
+    "/dev/sdf": {
+      "metadata": {
+        "diskoDiskName": "special3",
+        "diskoSource": "special3",
+        "originalDevice": "/dev/vdm"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "data1:ESP": {
+      "device": "/dev/sdc1",
+      "fsType": "vfat",
+      "metadata": {
+        "diskoSource": "data1",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/boot",
+      "operation": "format",
+      "options": [
+        "umask=0077"
+      ],
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "zfs-with-vdevs.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "cache:zfs": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "cache"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "data1:ESP": {
+      "device": "/dev/sdc",
+      "end": "65MiB",
+      "metadata": {
+        "diskoPartitionType": "EF00",
+        "diskoSource": "data1"
+      },
+      "name": "ESP",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "64M",
+      "start": "1MiB",
+      "target": "/dev/sdc1"
+    },
+    "data1:zfs": {
+      "device": "/dev/sdc",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "data1"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "65MiB",
+      "target": "/dev/sdc2"
+    },
+    "data2:zfs": {
+      "device": "/dev/sdd",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "data2"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdd1"
+    },
+    "data3:zfs": {
+      "device": "/dev/sde",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "data3"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sde1"
+    },
+    "dedup1:zfs": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "dedup1"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    },
+    "dedup2:zfs": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "dedup2"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    },
+    "dedup3:zfs": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "dedup3"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    },
+    "log1:zfs": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "log1"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    },
+    "log2:zfs": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "log2"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    },
+    "log3:zfs": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "log3"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    },
+    "spare:zfs": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "spare"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    },
+    "special1:zfs": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "special1"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    },
+    "special2:zfs": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "special2"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    },
+    "special3:zfs": {
+      "device": "/dev/sdf",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "special3"
+      },
+      "name": "zfs",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "1MiB",
+      "target": "/dev/sdf1"
+    }
+  },
+  "pools": {
+    "zroot": {
+      "devices": [
+        "/dev/sdb1",
+        "/dev/sdc2",
+        "/dev/sdd1",
+        "/dev/sde1",
+        "/dev/sdf1",
+        "/dev/sdf1",
+        "/dev/sdf1",
+        "/dev/sdf1",
+        "/dev/sdf1",
+        "/dev/sdf1",
+        "/dev/sdf1",
+        "/dev/sdf1",
+        "/dev/sdf1",
+        "/dev/sdf1"
+      ],
+      "metadata": {
+        "diskoSource": "zpool:zroot"
+      },
+      "mode": {
+        "topology": {
+          "cache": [
+            "cache"
+          ],
+          "dedup": [
+            {
+              "members": [
+                "dedup1",
+                "dedup2"
+              ],
+              "mode": "mirror"
+            },
+            {
+              "members": [
+                "dedup3"
+              ]
+            }
+          ],
+          "log": [
+            {
+              "members": [
+                "log1",
+                "log2"
+              ],
+              "mode": "mirror"
+            },
+            {
+              "members": [
+                "log3"
+              ]
+            }
+          ],
+          "spare": [
+            "spare"
+          ],
+          "special": [
+            {
+              "members": [
+                "special1",
+                "special2"
+              ],
+              "mode": "mirror"
+            },
+            {
+              "members": [
+                "special3"
+              ]
+            }
+          ],
+          "type": "topology",
+          "vdev": [
+            {
+              "members": [
+                "data1"
+              ]
+            },
+            {
+              "members": [
+                "data2",
+                "data3"
+              ],
+              "mode": "mirror"
+            }
+          ]
+        }
+      },
+      "mountpoint": "/",
+      "operation": "create",
+      "properties": {
+        "com.sun:auto-snapshot": "false",
+        "compression": "zstd"
+      }
+    }
+  },
+  "version": 1
+}

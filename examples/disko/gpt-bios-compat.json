@@ -1,0 +1,74 @@
+{
+  "apply": {
+    "allowDestructive": true,
+    "allowFormat": true,
+    "allowGrow": true,
+    "allowOffline": true,
+    "allowPotentialDataLoss": true,
+    "allowShrink": true,
+    "requireBackup": false
+  },
+  "disks": {
+    "/dev/sdb": {
+      "metadata": {
+        "diskoDiskName": "main",
+        "diskoSource": "main",
+        "originalDevice": "/dev/vdb"
+      },
+      "operation": "create",
+      "partitionType": "gpt"
+    }
+  },
+  "filesystems": {
+    "main:root": {
+      "device": "/dev/sdb2",
+      "fsType": "ext4",
+      "metadata": {
+        "diskoSource": "main",
+        "diskoType": "filesystem"
+      },
+      "mountpoint": "/",
+      "operation": "format",
+      "preserveData": false
+    }
+  },
+  "metadata": {
+    "source": "gpt-bios-compat.nix",
+    "upstream": "nix-community/disko"
+  },
+  "partitions": {
+    "main:boot": {
+      "device": "/dev/sdb",
+      "end": "2MiB",
+      "metadata": {
+        "attributes": [
+          0
+        ],
+        "diskoPartitionType": "EF02",
+        "diskoSource": "main"
+      },
+      "name": "boot",
+      "operation": "create",
+      "partitionNumber": "1",
+      "partitionType": "primary",
+      "size": "1M",
+      "start": "1MiB",
+      "target": "/dev/sdb1"
+    },
+    "main:root": {
+      "device": "/dev/sdb",
+      "end": "100%",
+      "metadata": {
+        "diskoSource": "main"
+      },
+      "name": "root",
+      "operation": "create",
+      "partitionNumber": "2",
+      "partitionType": "primary",
+      "size": "100%",
+      "start": "2MiB",
+      "target": "/dev/sdb2"
+    }
+  },
+  "version": 1
+}
