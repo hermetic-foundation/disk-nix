@@ -154,13 +154,13 @@
   ${pkgs.gnugrep}/bin/grep -q 'multi-domain apply plan for' ${
     root + /docs/developer/integration-tests.md
   }
-  ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' "$checklist"
+  ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' $checklistSources
   ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' ${root + /docs/developer/planning.md}
   ${pkgs.gnugrep}/bin/grep -q 'partiallySuppressed' ${root + /docs/user/cli.md}
-  ${pkgs.gnugrep}/bin/grep -q 'bracketed IPv6 portals' "$checklist"
+  ${pkgs.gnugrep}/bin/grep -q 'bracketed IPv6 portals' $checklistSources
   ${pkgs.gnugrep}/bin/grep -q 'CHAP secret redaction' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'iSER/RDMA session transport' ${root + /docs/user/status.md}
-  ${pkgs.gnugrep}/bin/grep -q 'Real-world iSCSI fixture coverage' "$checklist"
+  ${pkgs.gnugrep}/bin/grep -q 'Real-world iSCSI fixture coverage' $checklistSources
   ${pkgs.gnugrep}/bin/grep -q 'discovery authentication redaction' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'normalizes_multi_portal_discovery_auth_and_lun_churn_fixture' ${
     root + /crates/disk-nix-probe/src/iscsi.rs
@@ -170,15 +170,15 @@
   }
   ${pkgs.gnugrep}/bin/grep -q 'iser-rdma0' ${root + /crates/disk-nix-probe/src/iscsi.rs}
   ${pkgs.gnugrep}/bin/grep -q '2001:db8:40::10' ${root + /crates/disk-nix-probe/src/iscsi.rs}
-  ${pkgs.gnugrep}/bin/grep -q 'Fibre Channel multipath fixture' "$checklist"
-  ${pkgs.gnugrep}/bin/grep -q 'Real-world physical Fibre Channel fixture coverage' "$checklist"
+  ${pkgs.gnugrep}/bin/grep -q 'Fibre Channel multipath fixture' $checklistSources
+  ${pkgs.gnugrep}/bin/grep -q 'Real-world physical Fibre Channel fixture coverage' $checklistSources
   ${pkgs.gnugrep}/bin/grep -q 'zoning-style fabric/WWPN layouts' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'zoning-style fabric/WWPN layouts' ${root + /docs/user/storage-scope.md}
   ${pkgs.gnugrep}/bin/grep -q 'fibre_channel_zoned_fixture_preserves_adapter_alua_and_failed_paths' ${
     root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'scsi.fc-target-wwpn' ${root + /crates/disk-nix-probe/src/lsscsi.rs}
-  ${pkgs.gnugrep}/bin/grep -q 'NVMe/TCP multipath fixture' "$checklist"
+  ${pkgs.gnugrep}/bin/grep -q 'NVMe/TCP multipath fixture' $checklistSources
   ${pkgs.gnugrep}/bin/grep -q 'native NVMe namespace paths' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'nvme_tcp_multipath_fixture_preserves_native_path_state' ${
     root + /crates/disk-nix-probe/src/tests/part_02.rs
@@ -186,6 +186,6 @@
   ${pkgs.gnugrep}/bin/grep -q 'uuid.aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' ${
     root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
-  ${pkgs.gnugrep}/bin/grep -q 'Real-world NVMe-oF fixture coverage' "$checklist"
+  ${pkgs.gnugrep}/bin/grep -q 'Real-world NVMe-oF fixture coverage' $checklistSources
   ${pkgs.gnugrep}/bin/grep -q 'mixed NVMe-oF fixture' ${root + /docs/user/status.md}
 ''

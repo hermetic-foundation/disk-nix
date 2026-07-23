@@ -318,6 +318,8 @@ Contributor and maintainer docs live under `docs/developer/`:
   versioning and compatibility policy
 - [docs/developer/feature-checklist.md](docs/developer/feature-checklist.md):
   completed feature scope
+- [docs/developer/testing-proof-checklist.md](docs/developer/testing-proof-checklist.md):
+  detailed test and proof coverage
 - [docs/developer/integration-tests.md](docs/developer/integration-tests.md):
   VM and host-backed smoke test entrypoints
 - [docs/developer/integration-failure-recovery.md](docs/developer/integration-failure-recovery.md):

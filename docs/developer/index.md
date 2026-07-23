@@ -9,6 +9,7 @@ maintaining its tests and compatibility contract.
 | --- | --- |
 | [Architecture](architecture.md) | Data flow, crate boundaries, graph model, probes, and safety layers. |
 | [Feature checklist](feature-checklist.md) | Requirement-by-requirement completion evidence. |
+| [Testing proof checklist](testing-proof-checklist.md) | Detailed test and proof coverage evidence. |
 | [Feature status](../user/status.md) | Implementation status and remaining hardening areas. |
 | [Storage scope](../user/storage-scope.md) | Storage-domain model and discovery coverage. |
 
@@ -28,6 +29,7 @@ maintaining its tests and compatibility contract.
 | [Integration tests](integration-tests.md) | Suite entrypoints, destructive guards, flake coverage checks. |
 | [Integration smoke harnesses](integration-smoke-harnesses.md) | Harness matrix and lab requirements. |
 | [Integration failure recovery](integration-failure-recovery.md) | Synthetic failure domains and report contract. |
+| [Testing proof checklist](testing-proof-checklist.md) | Finished test coverage and proof anchors by domain. |
 
 ## User-Facing Behavior
 
