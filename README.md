@@ -271,6 +271,8 @@ sudo env DISK_NIX_DISKO_E2E_EXECUTE=1 \
 
 On hosts without ZFS or bcachefs kernel support, the destructive suite still
 plans and preflights those examples but skips their execution.
+Use `DISK_NIX_DISKO_E2E_REQUIRE_ALL_KERNELS=1` when a green destructive run must
+prove that every generated example executed without capability skips.
 
 Run the synthetic failure-recovery harness without root:
 

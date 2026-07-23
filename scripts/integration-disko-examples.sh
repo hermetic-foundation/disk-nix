@@ -6,6 +6,7 @@ examples_dir="${DISK_NIX_DISKO_EXAMPLES_DIR:-$repo_root/examples/disko}"
 disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 execute="${DISK_NIX_DISKO_E2E_EXECUTE:-0}"
 preflight="${DISK_NIX_DISKO_E2E_PREFLIGHT:-0}"
+require_all_kernels="${DISK_NIX_DISKO_E2E_REQUIRE_ALL_KERNELS:-0}"
 confirm="${DISK_NIX_DISKO_E2E_CONFIRM:-}"
 default_test_disks=(
   /dev/disk/by-id/wwn-0x5000c500a5a461dc
@@ -456,6 +457,9 @@ if [[ "$execute" == "1" || "$preflight" == "1" ]]; then
 fi
 
 fail=0
+executed_specs=0
+skipped_specs=0
+skipped_reasons=()
 for spec in "$examples_dir"/*.json; do
   [[ "$(basename "$spec")" == "manifest.json" ]] && continue
   spec_name="$(basename "$spec" .json)"
@@ -468,11 +472,21 @@ for spec in "$examples_dir"/*.json; do
     if spec_requires_zfs "$run_spec" && ! zfs_is_available; then
       echo "== $(basename "$spec")"
       echo "skipping destructive execute because ZFS kernel support is unavailable"
+      skipped_specs=$((skipped_specs + 1))
+      skipped_reasons+=("$(basename "$spec"): missing ZFS kernel support")
+      if [[ "$require_all_kernels" == "1" ]]; then
+        fail=1
+      fi
       continue
     fi
     if spec_requires_bcachefs "$run_spec" && ! bcachefs_is_available; then
       echo "== $(basename "$spec")"
       echo "skipping destructive execute because bcachefs kernel support is unavailable"
+      skipped_specs=$((skipped_specs + 1))
+      skipped_reasons+=("$(basename "$spec"): missing bcachefs kernel support")
+      if [[ "$require_all_kernels" == "1" ]]; then
+        fail=1
+      fi
       continue
     fi
     cleanup_storage "$run_spec"
@@ -517,10 +531,21 @@ for spec in "$examples_dir"/*.json; do
       fail_current_spec "$run_spec"
       continue
     fi
+    executed_specs=$((executed_specs + 1))
   fi
   if [[ "$execute" == "1" ]]; then
     cleanup_storage "$run_spec"
   fi
 done
+
+if [[ "$execute" == "1" ]]; then
+  echo "destructive execution summary: executed=$executed_specs skipped=$skipped_specs"
+  if [[ "${#skipped_reasons[@]}" -gt 0 ]]; then
+    printf 'skipped destructive example: %s\n' "${skipped_reasons[@]}"
+  fi
+  if [[ "$require_all_kernels" == "1" && "$skipped_specs" -gt 0 ]]; then
+    echo "refusing success because DISK_NIX_DISKO_E2E_REQUIRE_ALL_KERNELS=1 and destructive examples were skipped" >&2
+  fi
+fi
 
 exit "$fail"

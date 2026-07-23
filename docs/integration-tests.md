@@ -97,6 +97,11 @@ affected generated specs after their normal dry-run and preflight coverage have
 proved that every command is ready. On a host with those kernel filesystems
 available, those specs execute through the same guarded path.
 
+Set `DISK_NIX_DISKO_E2E_REQUIRE_ALL_KERNELS=1` when using the destructive suite
+as a completion gate. In that mode, any ZFS or bcachefs capability skip makes
+the run fail after printing the skipped examples, so a green result proves that
+every generated spec executed destructively on the current host.
+
 In destructive mode, filesystem mountpoints and Btrfs subvolume targets are
 rewritten under `/mnt/disk-nix-disko-e2e/<example>/` before execution. The
 harness also performs best-effort teardown of that mount tree, swaps, ZFS
