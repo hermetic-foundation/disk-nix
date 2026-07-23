@@ -17,6 +17,7 @@
     ${root + /crates/disk-nix-exec/src/tests.rs}
     ${root + /crates/disk-nix-exec/src/tests}/*.rs
     ${root + /crates/disk-nix-exec/src/sections}/*.rs
+    ${root + /crates/disk-nix-exec/src/sections/action_commands}/*.rs
     ${root + /crates/disk-nix-exec/src/sections/block_device_commands}/*.rs
     ${root + /crates/disk-nix-exec/src/sections/target_lun_commands}/*.rs
   )
