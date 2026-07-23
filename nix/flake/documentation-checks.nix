@@ -15,11 +15,13 @@
     checklist=${root + /docs/developer/feature-checklist.md}
     execSources="${root + /crates/disk-nix-exec/src/lib.rs} ${
       root + /crates/disk-nix-exec/src/tests.rs
-    }"
+    } ${root + /crates/disk-nix-exec/src/tests}/*.rs"
     planSources="${root + /crates/disk-nix-plan/src/lib.rs} ${
       root + /crates/disk-nix-plan/src/tests.rs
-    }"
-    cliSources="${root + /crates/disk-nix-cli/src/main.rs} ${root + /crates/disk-nix-cli/src/tests.rs}"
+    } ${root + /crates/disk-nix-plan/src/tests}/*.rs"
+    cliSources="${root + /crates/disk-nix-cli/src/main.rs} ${
+      root + /crates/disk-nix-cli/src/tests.rs
+    } ${root + /crates/disk-nix-cli/src/tests}/*.rs"
     ${pkgs.gnugrep}/bin/grep -q 'docs/index.md' ${root + /README.md}
     ${pkgs.gnugrep}/bin/grep -q 'docs/user/user-guide.md' ${root + /README.md}
     ${pkgs.gnugrep}/bin/grep -q 'docs/developer/feature-checklist.md' ${root + /README.md}
