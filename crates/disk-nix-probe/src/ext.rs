@@ -277,18 +277,22 @@ Checksum:                 0x12345678
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ext.lifetime-writes" && property.value == "189 GB"
         }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ext.magic-number" && property.value == "0xEF53" }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ext.revision" && property.value == "1 (dynamic)" }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ext.fs-error-count" && property.value == "2" }));
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ext.magic-number" && property.value == "0xEF53"
+            })
+        );
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ext.revision" && property.value == "1 (dynamic)"
+            })
+        );
+        assert!(
+            filesystem
+                .properties
+                .iter()
+                .any(|property| { property.key == "ext.fs-error-count" && property.value == "2" })
+        );
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ext.first-error-function" && property.value == "ext4_lookup"
         }));
@@ -305,14 +309,18 @@ Checksum:                 0x12345678
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ext.overhead-clusters" && property.value == "123456"
         }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ext.first-block" && property.value == "0" }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ext.raid-stride" && property.value == "128" }));
+        assert!(
+            filesystem
+                .properties
+                .iter()
+                .any(|property| { property.key == "ext.first-block" && property.value == "0" })
+        );
+        assert!(
+            filesystem
+                .properties
+                .iter()
+                .any(|property| { property.key == "ext.raid-stride" && property.value == "128" })
+        );
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ext.raid-stripe-width" && property.value == "256"
         }));
@@ -327,14 +335,16 @@ Checksum:                 0x12345678
             property.key == "ext.journal-uuid"
                 && property.value == "99999999-aaaa-bbbb-cccc-dddddddddddd"
         }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ext.checksum-type" && property.value == "crc32c" }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ext.checksum" && property.value == "0x12345678" }));
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ext.checksum-type" && property.value == "crc32c"
+            })
+        );
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ext.checksum" && property.value == "0x12345678"
+            })
+        );
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0 == "block:/dev/sda2"
                 && edge.to.0 == "fs:/dev/sda2"

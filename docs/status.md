@@ -7,12 +7,13 @@ remaining work is mostly about hardening real mutation paths, expanding
 integration coverage, and proving behavior across real storage stacks.
 
 The translated upstream disko example suite now dry-runs and preflights with
-all commands ready. Its guarded destructive mode executes the
-non-ZFS/non-bcachefs examples on disposable stable `/dev/disk/by-id` lab disks
-while capability-skipping kernel-unsupported ZFS and bcachefs examples. On the
-current lab host that stable set maps to the disks currently enumerated as
-`/dev/sda` and `/dev/sdc` through `/dev/sdf`; `/dev/sdb` is excluded because it
-is the system disk after the reboot.
+all commands ready. Its guarded destructive mode executes the non-ZFS and
+non-bcachefs examples on disposable stable `/dev/disk/by-id` lab disks.
+
+The destructive suite capability-skips kernel-unsupported ZFS and bcachefs
+examples. On the current lab host, the stable disk set maps to the disks
+currently enumerated as `/dev/sda` and `/dev/sdc` through `/dev/sdf`; `/dev/sdb`
+is excluded because it is the system disk after the reboot.
 
 ## Implemented foundation
 

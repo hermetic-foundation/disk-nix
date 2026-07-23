@@ -832,6 +832,15 @@ pub fn plan_from_value(value: &Value) -> Plan {
             add_lifecycle_actions(&mut actions, "nfs.mounts", name, mount);
         }
     }
+    if let Some(iscsi_sessions) = spec
+        .get("iscsi")
+        .and_then(|iscsi| iscsi.get("sessions"))
+        .and_then(Value::as_object)
+    {
+        for (name, session) in iscsi_sessions {
+            add_lifecycle_actions(&mut actions, "iscsiSessions", name, session);
+        }
+    }
     if let Some(swaps) = spec.get("swaps").and_then(Value::as_object) {
         for (name, swap) in swaps {
             add_swap_actions(&mut actions, name, swap);
@@ -14869,8 +14878,21 @@ pub fn default_capabilities() -> Vec<Capability> {
 #[cfg(test)]
 mod tests {
     use disk_nix_model::{Identity, Usage};
+    use serde::Deserialize;
 
     use super::*;
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct MigrationExampleFixture {
+        name: String,
+        base_example: String,
+        description: String,
+        target_spec: serde_json::Value,
+        current_graph: StorageGraph,
+        expected_remaining_action_ids: Vec<String>,
+        expected_suppressed_action_ids: Vec<String>,
+    }
 
     #[test]
     fn destructive_zfs_dataset_destroy_has_advice() {
@@ -15340,10 +15362,12 @@ mod tests {
                 .unwrap_or_else(|| panic!("{node_kind} promote capability should exist"));
 
             assert_eq!(capability.risk, RiskClass::OfflineRequired);
-            assert!(capability
-                .advice
-                .as_ref()
-                .is_some_and(|advice| { advice.summary.contains("promotion") }));
+            assert!(
+                capability
+                    .advice
+                    .as_ref()
+                    .is_some_and(|advice| { advice.summary.contains("promotion") })
+            );
         }
     }
 
@@ -15928,10 +15952,12 @@ mod tests {
             filesystem.recovery_unblocks,
             vec!["loopdevices:/dev/loop7:grow".to_string()]
         );
-        assert!(loop_device
-            .notes
-            .iter()
-            .any(|note| note.contains("explicit dependency edge")));
+        assert!(
+            loop_device
+                .notes
+                .iter()
+                .any(|note| note.contains("explicit dependency edge"))
+        );
         assert!(loop_device.notes.iter().any(|note| {
             note.contains("recovery review waits for dependent action")
                 && note.contains("filesystem:root:inspect")
@@ -16600,10 +16626,12 @@ mod tests {
         assert_eq!(repair.risk, RiskClass::OfflineRequired);
         assert!(!repair.destructive);
         assert_eq!(repair.context.fs_type.as_deref(), Some("btrfs"));
-        assert!(repair
-            .advice
-            .as_ref()
-            .is_some_and(|advice| { advice.summary.contains("repair mutates metadata") }));
+        assert!(
+            repair
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("repair mutates metadata") })
+        );
     }
 
     #[test]
@@ -16655,10 +16683,12 @@ mod tests {
         assert_eq!(bcachefs.operation, Operation::Scrub);
         assert_eq!(bcachefs.risk, RiskClass::Online);
         assert_eq!(bcachefs.context.target.as_deref(), Some("/bulk"));
-        assert!(bcachefs
-            .advice
-            .as_ref()
-            .is_some_and(|advice| { advice.summary.contains("bcachefs scrub verifies") }));
+        assert!(
+            bcachefs
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("bcachefs scrub verifies") })
+        );
 
         let pool = plan
             .actions
@@ -16674,10 +16704,12 @@ mod tests {
             .find(|action| action.id == "filesystems:archive:scrub")
             .expect("unsupported filesystem scrub action exists");
         assert_eq!(unsupported.risk, RiskClass::Unsupported);
-        assert!(unsupported
-            .advice
-            .as_ref()
-            .is_some_and(|advice| { advice.summary.contains("Btrfs and bcachefs") }));
+        assert!(
+            unsupported
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("Btrfs and bcachefs") })
+        );
     }
 
     #[test]
@@ -16706,10 +16738,11 @@ mod tests {
         assert_eq!(trim.operation, Operation::Trim);
         assert_eq!(trim.risk, RiskClass::Online);
         assert_eq!(trim.context.target.as_deref(), Some("/scratch"));
-        assert!(trim
-            .advice
-            .as_ref()
-            .is_some_and(|advice| { advice.summary.contains("discards unused blocks") }));
+        assert!(
+            trim.advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("discards unused blocks") })
+        );
     }
 
     #[test]
@@ -16744,10 +16777,12 @@ mod tests {
             rescan.context.device.as_deref(),
             Some("/dev/disk/by-label/scratch")
         );
-        assert!(rescan
-            .advice
-            .as_ref()
-            .is_some_and(|advice| advice.summary.contains("refreshes mount")));
+        assert!(
+            rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("refreshes mount"))
+        );
     }
 
     #[test]
@@ -16781,10 +16816,12 @@ mod tests {
             remount.context.options.as_deref(),
             Some("rw,noatime,discard=async")
         );
-        assert!(remount
-            .advice
-            .as_ref()
-            .is_some_and(|advice| advice.summary.contains("updates local mount options")));
+        assert!(
+            remount
+                .advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("updates local mount options"))
+        );
     }
 
     #[test]
@@ -17067,10 +17104,11 @@ mod tests {
             replace.context.replacement.as_deref(),
             Some("/dev/disk/by-id/new-pv")
         );
-        assert!(replace
-            .advice
-            .as_ref()
-            .is_some_and(|advice| { advice.summary.contains("migrate extents before vgreduce") }));
+        assert!(
+            replace.advice.as_ref().is_some_and(|advice| {
+                advice.summary.contains("migrate extents before vgreduce")
+            })
+        );
         let import = plan
             .actions
             .iter()
@@ -18240,10 +18278,12 @@ mod tests {
         assert_eq!(rescan.risk, RiskClass::Online);
         assert!(!rescan.destructive);
         assert_eq!(rescan.context.target.as_deref(), Some("/mnt/persist"));
-        assert!(rescan
-            .advice
-            .as_ref()
-            .is_some_and(|advice| { advice.summary.contains("Btrfs qgroup rescan refreshes") }));
+        assert!(
+            rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("Btrfs qgroup rescan refreshes") })
+        );
     }
 
     #[test]
@@ -18661,10 +18701,12 @@ mod tests {
         assert_eq!(rescan.operation, Operation::Rescan);
         assert_eq!(rescan.risk, RiskClass::Online);
         assert!(!rescan.destructive);
-        assert!(rescan
-            .advice
-            .as_ref()
-            .is_some_and(|advice| { advice.summary.contains("thin pool rescan refreshes") }));
+        assert!(
+            rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("thin pool rescan refreshes") })
+        );
         let destroy = plan
             .actions
             .iter()
@@ -18715,10 +18757,12 @@ mod tests {
             .find(|action| action.id == "lvmsnapshots:vg0/root-rollback:rollback")
             .expect("rollback action exists");
         assert_eq!(rollback.risk, RiskClass::PotentialDataLoss);
-        assert!(rollback
-            .advice
-            .as_ref()
-            .is_some_and(|advice| advice.summary.contains("rolls the origin back")));
+        assert!(
+            rollback
+                .advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("rolls the origin back"))
+        );
         let rescan = plan
             .actions
             .iter()
@@ -18727,10 +18771,12 @@ mod tests {
         assert_eq!(rescan.operation, Operation::Rescan);
         assert_eq!(rescan.risk, RiskClass::Online);
         assert!(!rescan.destructive);
-        assert!(rescan
-            .advice
-            .as_ref()
-            .is_some_and(|advice| { advice.summary.contains("LVM snapshot rescan refreshes") }));
+        assert!(
+            rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("LVM snapshot rescan refreshes") })
+        );
     }
 
     #[test]
@@ -18842,10 +18888,11 @@ mod tests {
             Some("/var/lib/images/root.img")
         );
         assert_eq!(grow.context.desired_size.as_deref(), Some("16GiB"));
-        assert!(grow
-            .advice
-            .as_ref()
-            .is_some_and(|advice| advice.summary.contains("backing file growth")));
+        assert!(
+            grow.advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("backing file growth"))
+        );
         let rescan = plan
             .actions
             .iter()
@@ -18921,10 +18968,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 2);
         assert_eq!(comparison.summary.suppressed_action_count, 2);
         assert_eq!(plan.summary.action_count, 1);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id == "backingfiles:/var/lib/images/mismatch.img:create"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id == "backingfiles:/var/lib/images/mismatch.img:create")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "backingfiles:/var/lib/images/new.img:create"
                 && diagnostic.kind == TopologyDiagnosticKind::BackingFileCreateAlreadySatisfied
@@ -19010,10 +19058,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.summary.action_count, 2);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "partitions:root:grow"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "partitions:root:grow")
+        );
         assert!(plan.actions.iter().any(|action| {
             action.id == "partitions:data:grow" && action.operation == Operation::Grow
         }));
@@ -19122,14 +19171,16 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 2);
         assert_eq!(comparison.summary.suppressed_action_count, 2);
         assert_eq!(plan.summary.action_count, 2);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "partitions:boot:create"));
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "partitions:scratch:create"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "partitions:boot:create")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "partitions:scratch:create")
+        );
         assert!(plan.actions.iter().any(|action| {
             action.id == "partitions:root:create" && action.operation == Operation::Create
         }));
@@ -19243,14 +19294,16 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 2);
         assert_eq!(comparison.summary.suppressed_action_count, 2);
         assert_eq!(plan.summary.action_count, 3);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "disks:/dev/disk/by-id/system:create"));
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "disks:/dev/disk/by-id/default-gpt:create"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "disks:/dev/disk/by-id/system:create")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "disks:/dev/disk/by-id/default-gpt:create")
+        );
         assert!(plan.actions.iter().any(|action| {
             action.id == "disks:/dev/disk/by-id/legacy:create"
                 && action.operation == Operation::Create
@@ -19357,10 +19410,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.summary.action_count, 2);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| { action.id != "physicalvolumes:/dev/disk/by-id/pv-present:create" }));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| { action.id != "physicalvolumes:/dev/disk/by-id/pv-present:create" })
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "physicalvolumes:/dev/disk/by-id/pv-present:create"
                 && diagnostic.kind == TopologyDiagnosticKind::LvmPvCreateAlreadySatisfied
@@ -19417,10 +19471,12 @@ mod tests {
             Some("/dev/mapper/cryptroot")
         );
         assert!(!rescan.destructive);
-        assert!(rescan
-            .advice
-            .as_ref()
-            .is_some_and(|advice| advice.summary.contains("device-mapper rescan")));
+        assert!(
+            rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("device-mapper rescan"))
+        );
         let rename = plan
             .actions
             .iter()
@@ -19449,10 +19505,12 @@ mod tests {
             Some("/dev/mapper/oldmap")
         );
         assert!(destroy.destructive);
-        assert!(destroy
-            .advice
-            .as_ref()
-            .is_some_and(|advice| advice.summary.contains("device-mapper removal")));
+        assert!(
+            destroy
+                .advice
+                .as_ref()
+                .is_some_and(|advice| advice.summary.contains("device-mapper removal"))
+        );
     }
 
     #[test]
@@ -19502,10 +19560,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.summary.action_count, 1);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "datasets:tank/home:set-property:compression"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "datasets:tank/home:set-property:compression")
+        );
         assert!(plan.actions.iter().any(|action| {
             action.id == "filesystem:home:grow" && action.operation == Operation::Grow
         }));
@@ -19905,14 +19964,16 @@ mod tests {
         assert_eq!(comparison.summary.action_count, 3);
         assert_eq!(comparison.summary.already_satisfied_count, 2);
         assert_eq!(comparison.summary.suppressed_action_count, 2);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "filesystems:backup:mount"));
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "nfs.mounts:/srv/shared:mount"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "filesystems:backup:mount")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "nfs.mounts:/srv/shared:mount")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "filesystems:backup:mount"
                 && diagnostic.kind == TopologyDiagnosticKind::MountAlreadySatisfied
@@ -19953,10 +20014,11 @@ mod tests {
         assert_eq!(comparison.summary.action_count, 2);
         assert_eq!(comparison.summary.already_satisfied_count, 0);
         assert_eq!(comparison.summary.suppressed_action_count, 0);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "filesystems:backup:mount"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "filesystems:backup:mount")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "filesystems:backup:mount"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
@@ -20032,14 +20094,16 @@ mod tests {
         assert_eq!(comparison.summary.missing_count, 1);
         assert_eq!(comparison.summary.already_satisfied_count, 2);
         assert_eq!(comparison.summary.suppressed_action_count, 2);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "filesystems:archive:unmount"));
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "nfs.mounts:/srv/old:unmount"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "filesystems:archive:unmount")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "nfs.mounts:/srv/old:unmount")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "filesystems:archive:unmount"
                 && diagnostic.current.is_none()
@@ -20080,10 +20144,11 @@ mod tests {
         assert_eq!(comparison.summary.action_count, 2);
         assert_eq!(comparison.summary.already_satisfied_count, 0);
         assert_eq!(comparison.summary.suppressed_action_count, 0);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "filesystems:archive:unmount"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "filesystems:archive:unmount")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "filesystems:archive:unmount"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
@@ -20495,10 +20560,11 @@ mod tests {
         assert_eq!(comparison.summary.action_count, 2);
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "filesystems:scratch:remount"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "filesystems:scratch:remount")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "filesystems:scratch:remount"
                 && diagnostic.kind == TopologyDiagnosticKind::MountOptionsAlreadySatisfied
@@ -20573,10 +20639,11 @@ mod tests {
         assert_eq!(comparison.summary.action_count, 2);
         assert_eq!(comparison.summary.already_satisfied_count, 0);
         assert_eq!(comparison.summary.suppressed_action_count, 0);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "filesystems:scratch:remount"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "filesystems:scratch:remount")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "filesystems:scratch:remount"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
@@ -20983,10 +21050,11 @@ mod tests {
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(plan.actions.len(), 1);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "luks.devices:cryptroot:open"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "luks.devices:cryptroot:open")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "luks.devices:cryptroot:open"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
@@ -21181,10 +21249,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.actions.len(), 1);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "luksKeyslots:cryptroot:2:set-property:priority"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "luksKeyslots:cryptroot:2:set-property:priority")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "luksKeyslots:cryptroot:1:set-property:priority"
                 && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
@@ -21579,10 +21648,11 @@ mod tests {
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(plan.actions.len(), 1);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "volumes:vg0/home:activate"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "volumes:vg0/home:activate")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "volumes:vg0/home:activate"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
@@ -21650,10 +21720,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 2);
         assert_eq!(comparison.summary.suppressed_action_count, 2);
         assert_eq!(plan.summary.action_count, 1);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id == "volumes:vg0/archive:create"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id == "volumes:vg0/archive:create")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "volumes:vg0/home:create"
                 && diagnostic.kind == TopologyDiagnosticKind::LvmVolumeCreateAlreadySatisfied
@@ -21762,22 +21833,26 @@ mod tests {
         assert_eq!(comparison.summary.suppressed_action_count, 3);
         assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(plan.actions.len(), 4);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "volumes:vg0/home-old:rename"));
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "volumes:vg0/missing-old:rename"));
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "thinpools:vg0/thin-old:rename"));
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "volumegroups:vg-old:rename"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "volumes:vg0/home-old:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "volumes:vg0/missing-old:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "thinpools:vg0/thin-old:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "volumegroups:vg-old:rename")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "volumes:vg0/logs-old:rename"
                 && diagnostic.kind == TopologyDiagnosticKind::LvmRenameAlreadySatisfied
@@ -21906,10 +21981,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.summary.action_count, 2);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| { action.id != "volumegroups:vg-present:create" }));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| { action.id != "volumegroups:vg-present:create" })
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "volumegroups:vg-present:create"
                 && diagnostic.kind == TopologyDiagnosticKind::LvmVgCreateAlreadySatisfied
@@ -22320,10 +22396,11 @@ mod tests {
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(plan.actions.len(), 1);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "vdovolumes:archive:start"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "vdovolumes:archive:start")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "vdovolumes:archive:start"
                 && diagnostic.level == TopologyDiagnosticLevel::Warning
@@ -22739,10 +22816,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.summary.action_count, 2);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "vdovolumes:archive:grow"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "vdovolumes:archive:grow")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "vdovolumes:archive:grow"
                 && diagnostic.level == TopologyDiagnosticLevel::Info
@@ -22905,10 +22983,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.summary.action_count, 2);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "mdraids:existing:create"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "mdraids:existing:create")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "mdraids:existing:create"
                 && diagnostic.kind == TopologyDiagnosticKind::MdCreateAlreadySatisfied
@@ -22996,14 +23075,16 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 2);
         assert_eq!(comparison.summary.suppressed_action_count, 2);
         assert_eq!(plan.summary.action_count, 3);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "mdraids:absent:stop"));
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "mdraids:inactive:stop"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "mdraids:absent:stop")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "mdraids:inactive:stop")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "mdraids:absent:stop"
                 && diagnostic.kind == TopologyDiagnosticKind::MdStopAlreadySatisfied
@@ -23247,10 +23328,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.summary.action_count, 4);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "mdRaids:done:replace-device:/dev/sdb1"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "mdRaids:done:replace-device:/dev/sdb1")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "mdRaids:done:replace-device:/dev/sdb1"
                 && diagnostic.kind == TopologyDiagnosticKind::MdMemberReplaceAlreadySatisfied
@@ -23429,10 +23511,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.summary.action_count, 2);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "pools:tank:create"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "pools:tank:create")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "pools:tank:create"
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsPoolCreateAlreadySatisfied
@@ -23666,14 +23749,16 @@ mod tests {
         assert!(plan.actions.iter().any(|action| {
             action.id == "zvols:tank/vm/tmp:create" && action.operation == Operation::Create
         }));
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "datasets:tank/home:set-property:compression"));
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "datasets:tank/home:set-property:mountpoint"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "datasets:tank/home:set-property:compression")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "datasets:tank/home:set-property:mountpoint")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "datasets:tank/home:create"
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectCreateAlreadySatisfied
@@ -23988,14 +24073,16 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 2);
         assert_eq!(comparison.summary.suppressed_action_count, 2);
         assert_eq!(plan.actions.len(), 2);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "datasets:tank/home-review:promote"));
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "zvols:tank/vm/root-review:promote"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "datasets:tank/home-review:promote")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "zvols:tank/vm/root-review:promote")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "datasets:tank/home-promoted:promote"
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectPromoteAlreadySatisfied
@@ -24089,18 +24176,21 @@ mod tests {
         assert_eq!(comparison.summary.suppressed_action_count, 2);
         assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(plan.actions.len(), 3);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "datasets:tank/home-old:rename"));
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "datasets:tank/missing-old:rename"));
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "zvols:tank/vm/root-old:rename"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "datasets:tank/home-old:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "datasets:tank/missing-old:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "zvols:tank/vm/root-old:rename")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "datasets:tank/logs-old:rename"
                 && diagnostic.kind == TopologyDiagnosticKind::ZfsObjectRenameAlreadySatisfied
@@ -24583,10 +24673,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.summary.action_count, 1);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id == "btrfssubvolumes:/mnt/persist/plain-dir:create"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id == "btrfssubvolumes:/mnt/persist/plain-dir:create")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "btrfssubvolumes:/mnt/persist/@home:create"
                 && diagnostic.kind == TopologyDiagnosticKind::BtrfsSubvolumeCreateAlreadySatisfied
@@ -25563,10 +25654,11 @@ mod tests {
         assert_eq!(comparison.summary.already_satisfied_count, 1);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(plan.summary.action_count, 1);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id == "btrfsqgroups:0/258:create"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id == "btrfsqgroups:0/258:create")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "btrfsqgroups:0/257:create"
                 && diagnostic.kind == TopologyDiagnosticKind::BtrfsQgroupCreateAlreadySatisfied
@@ -25851,14 +25943,16 @@ mod tests {
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(comparison.summary.missing_count, 0);
         assert_eq!(plan.actions.len(), 2);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "dmmaps:cryptswap:rename"));
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "dmmaps:missing:rename"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "dmmaps:cryptswap:rename")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "dmmaps:missing:rename")
+        );
         assert!(comparison.diagnostics.iter().any(|diagnostic| {
             diagnostic.action_id == "dmmaps:cryptold:rename"
                 && diagnostic.kind == TopologyDiagnosticKind::DmMapRenameAlreadySatisfied
@@ -26619,28 +26713,34 @@ mod tests {
         assert_eq!(comparison.summary.action_count, 3);
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert!(comparison.summary.partially_suppressed_group_count >= 1);
-        assert!(plan
-            .actions
-            .iter()
-            .any(|action| action.id == "dmmaps:cryptdata:destroy"));
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "filesystems:data:unmount"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.id == "dmmaps:cryptdata:destroy")
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "filesystems:data:unmount")
+        );
 
         let group = comparison
             .reconciliation_groups
             .iter()
             .find(|group| group.identity == "dm-map:cryptdata")
             .expect("device-mapper and filesystem reconciliation group exists");
-        assert!(group
-            .planned_action_ids
-            .iter()
-            .any(|action_id| action_id == "dmmaps:cryptdata:destroy"));
-        assert!(group
-            .suppressed_action_ids
-            .iter()
-            .any(|action_id| action_id == "filesystems:data:unmount"));
+        assert!(
+            group
+                .planned_action_ids
+                .iter()
+                .any(|action_id| action_id == "dmmaps:cryptdata:destroy")
+        );
+        assert!(
+            group
+                .suppressed_action_ids
+                .iter()
+                .any(|action_id| action_id == "filesystems:data:unmount")
+        );
         assert!(group.partially_suppressed);
     }
 
@@ -26983,22 +27083,32 @@ mod tests {
             .iter()
             .find(|order| order.action_id == "filesystem:root:grow")
             .expect("filesystem dependency order exists");
-        assert!(filesystem
-            .depends_on
-            .contains(&"volumes:vg0/root:grow".to_string()));
-        assert!(filesystem
-            .depends_on
-            .contains(&"luns:/dev/disk/by-path/ip-192.0.2.10-lun-0:grow".to_string()));
-        assert!(filesystem
-            .depends_on
-            .contains(&"multipathmaps:mpatha:grow".to_string()));
+        assert!(
+            filesystem
+                .depends_on
+                .contains(&"volumes:vg0/root:grow".to_string())
+        );
+        assert!(
+            filesystem
+                .depends_on
+                .contains(&"luns:/dev/disk/by-path/ip-192.0.2.10-lun-0:grow".to_string())
+        );
+        assert!(
+            filesystem
+                .depends_on
+                .contains(&"multipathmaps:mpatha:grow".to_string())
+        );
         assert!(filesystem.recovery_depends_on.is_empty());
-        assert!(filesystem
-            .recovery_unblocks
-            .contains(&"volumes:vg0/root:grow".to_string()));
-        assert!(filesystem
-            .recovery_unblocks
-            .contains(&"luns:/dev/disk/by-path/ip-192.0.2.10-lun-0:grow".to_string()));
+        assert!(
+            filesystem
+                .recovery_unblocks
+                .contains(&"volumes:vg0/root:grow".to_string())
+        );
+        assert!(
+            filesystem
+                .recovery_unblocks
+                .contains(&"luns:/dev/disk/by-path/ip-192.0.2.10-lun-0:grow".to_string())
+        );
         assert!(filesystem.notes.iter().any(|note| {
             note.contains("current topology graph path requires")
                 && note.contains("volumes:vg0/root:grow")
@@ -27193,9 +27303,11 @@ mod tests {
             resolution.upper_direction,
             DependencyDirection::LowerLayersFirst
         );
-        assert!(resolution
-            .recommendation
-            .contains("split mixed-direction graph-path work"));
+        assert!(
+            resolution
+                .recommendation
+                .contains("split mixed-direction graph-path work")
+        );
         let json = serde_json::to_value(comparison).expect("comparison serializes");
         assert_eq!(
             json["graphDependencyConflictResolutions"][0]["buildOrUpdatePass"][0],
@@ -27249,14 +27361,16 @@ mod tests {
             .expect("comparison should be present");
         assert_eq!(comparison.summary.suppressed_action_count, 1);
         assert_eq!(comparison.summary.graph_dependency_edge_count, 0);
-        assert!(plan
-            .actions
-            .iter()
-            .all(|action| action.id != "volumes:vg0/root:grow"));
-        assert!(plan
-            .dependency_order
-            .iter()
-            .all(|order| order.depends_on.is_empty() && order.unblocks.is_empty()));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.id != "volumes:vg0/root:grow")
+        );
+        assert!(
+            plan.dependency_order
+                .iter()
+                .all(|order| order.depends_on.is_empty() && order.unblocks.is_empty())
+        );
     }
 
     #[test]
@@ -27323,6 +27437,118 @@ mod tests {
         assert_eq!(
             comparison.diagnostics[0].kind,
             TopologyDiagnosticKind::Missing
+        );
+    }
+
+    #[test]
+    fn non_destructive_migration_examples_are_verified() {
+        let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root resolves");
+        let fixture_path = repo_root.join("examples/non-destructive-migrations.json");
+        let bytes = std::fs::read(&fixture_path).expect("migration examples fixture exists");
+        let fixtures: Vec<MigrationExampleFixture> =
+            serde_json::from_slice(&bytes).expect("migration examples parse");
+
+        assert!(
+            fixtures.len() >= 20,
+            "expected at least 20 migration examples, got {}",
+            fixtures.len()
+        );
+
+        let mut mismatches = Vec::new();
+
+        for fixture in fixtures {
+            assert!(!fixture.name.trim().is_empty(), "fixture name is required");
+            assert!(
+                !fixture.description.trim().is_empty(),
+                "fixture {} description is required",
+                fixture.name
+            );
+            assert!(
+                repo_root.join(&fixture.base_example).is_file(),
+                "fixture {} base example is missing: {}",
+                fixture.name,
+                fixture.base_example
+            );
+
+            let spec_bytes =
+                serde_json::to_vec(&fixture.target_spec).expect("target spec serializes");
+            let plan = plan_from_json_bytes(&spec_bytes).unwrap_or_else(|error| {
+                panic!("fixture {} target spec parses: {error}", fixture.name)
+            });
+            let plan = compare_plan_with_topology(plan, &fixture.current_graph);
+            let comparison = plan.topology_comparison.as_ref().unwrap_or_else(|| {
+                panic!("fixture {} topology comparison is present", fixture.name)
+            });
+
+            assert_eq!(
+                plan.summary.destructive_count, 0,
+                "fixture {} should not leave destructive actions: {:?}",
+                fixture.name, plan.actions
+            );
+            assert_eq!(
+                plan.summary.potential_data_loss_count, 0,
+                "fixture {} should not leave potential-data-loss actions: {:?}",
+                fixture.name, plan.actions
+            );
+            assert!(
+                plan.actions.iter().all(|action| {
+                    !action.destructive
+                        && !matches!(
+                            action.risk,
+                            RiskClass::PotentialDataLoss
+                                | RiskClass::Destructive
+                                | RiskClass::Irreversible
+                        )
+                }),
+                "fixture {} left a destructive or loss-prone action: {:?}",
+                fixture.name,
+                plan.actions
+            );
+
+            let actual_ids: Vec<String> = plan
+                .actions
+                .iter()
+                .map(|action| action.id.clone())
+                .collect();
+            if actual_ids != fixture.expected_remaining_action_ids {
+                mismatches.push(format!(
+                    "{} remaining action ids differ\n  actual: {:?}\nexpected: {:?}",
+                    fixture.name, actual_ids, fixture.expected_remaining_action_ids
+                ));
+            }
+
+            for suppressed in &fixture.expected_suppressed_action_ids {
+                assert!(
+                    !actual_ids.contains(suppressed),
+                    "fixture {} expected {} to be suppressed",
+                    fixture.name,
+                    suppressed
+                );
+                assert!(
+                    comparison.diagnostics.iter().any(|diagnostic| {
+                        diagnostic.action_id == *suppressed
+                            && diagnostic.kind != TopologyDiagnosticKind::Missing
+                    }),
+                    "fixture {} missing diagnostic for suppressed action {}",
+                    fixture.name,
+                    suppressed
+                );
+            }
+            assert_eq!(
+                comparison.summary.suppressed_action_count,
+                fixture.expected_suppressed_action_ids.len(),
+                "fixture {} suppressed action count differs",
+                fixture.name
+            );
+        }
+
+        assert!(
+            mismatches.is_empty(),
+            "migration fixture mismatches:\n{}",
+            mismatches.join("\n")
         );
     }
 
@@ -27743,10 +27969,12 @@ mod tests {
             .expect("Btrfs snapshot rescan action exists");
         assert_eq!(btrfs_rescan.operation, Operation::Rescan);
         assert_eq!(btrfs_rescan.context.read_only, Some(true));
-        assert!(btrfs_rescan
-            .advice
-            .as_ref()
-            .is_some_and(|advice| { advice.summary.contains("without mutating data") }));
+        assert!(
+            btrfs_rescan
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("without mutating data") })
+        );
         let friendly_btrfs_rescan = plan
             .actions
             .iter()
@@ -27947,10 +28175,12 @@ mod tests {
             create.context.devices,
             vec!["iqn.2026-06.example:host.secondary".to_string()]
         );
-        assert!(create
-            .advice
-            .as_ref()
-            .is_some_and(|advice| { advice.summary.contains("target-side LUN provisioning") }));
+        assert!(
+            create
+                .advice
+                .as_ref()
+                .is_some_and(|advice| { advice.summary.contains("target-side LUN provisioning") })
+        );
 
         let property = plan
             .actions
@@ -28377,20 +28607,21 @@ mod tests {
 
         assert_eq!(plan.summary.action_count, 4);
         assert_eq!(plan.summary.offline_required_count, 3);
-        assert!(plan
-            .actions
-            .iter()
-            .filter(|action| action.operation == Operation::ReplaceDevice)
-            .all(|action| {
-                action.operation == Operation::ReplaceDevice
-                    && action.risk == RiskClass::OfflineRequired
-                    && action.advice.as_ref().is_some_and(|advice| {
-                        advice
-                            .alternatives
-                            .iter()
-                            .any(|alternative| alternative.contains("flush dirty data"))
-                    })
-            }));
+        assert!(
+            plan.actions
+                .iter()
+                .filter(|action| action.operation == Operation::ReplaceDevice)
+                .all(|action| {
+                    action.operation == Operation::ReplaceDevice
+                        && action.risk == RiskClass::OfflineRequired
+                        && action.advice.as_ref().is_some_and(|advice| {
+                            advice
+                                .alternatives
+                                .iter()
+                                .any(|alternative| alternative.contains("flush dirty data"))
+                        })
+                })
+        );
         let detach = plan
             .actions
             .iter()
@@ -28681,10 +28912,12 @@ mod tests {
         .expect("document should parse");
 
         let report = evaluate_apply_policy(&plan, policy.clone());
-        assert!(report
-            .blocked
-            .iter()
-            .any(|blocked| blocked.reason == "format actions require allowFormat=true"));
+        assert!(
+            report
+                .blocked
+                .iter()
+                .any(|blocked| blocked.reason == "format actions require allowFormat=true")
+        );
 
         policy.allow_format = true;
         let report = evaluate_apply_policy(&plan, policy);
@@ -28810,9 +29043,11 @@ mod tests {
         assert!(report.blocked.iter().any(|blocked| {
             blocked.reason == "device topology changes require allowDeviceReplacement=true"
         }));
-        assert!(report
-            .blocked
-            .iter()
-            .any(|blocked| blocked.reason == "rebalance actions require allowRebalance=true"));
+        assert!(
+            report
+                .blocked
+                .iter()
+                .any(|blocked| blocked.reason == "rebalance actions require allowRebalance=true")
+        );
     }
 }

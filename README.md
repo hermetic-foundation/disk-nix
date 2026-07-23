@@ -257,6 +257,22 @@ Dry-run the translated disko example suite:
 nix run .#integration-disko-examples
 ```
 
+Non-destructive migration coverage lives in
+`examples/non-destructive-migrations.json`. It contains 22 transitions from
+existing disko-derived examples into update-oriented target states.
+
+The corpus covers Btrfs subvolumes, qgroups, and snapshots; ZFS datasets,
+zvols, snapshots, and pools; LVM volumes and thin pools; LUKS, MD RAID, swap,
+NFS, iSCSI, and loop backing files.
+
+The planner test verifies that every migration parses, reconciles against the
+supplied current topology, suppresses already-satisfied work, and leaves no
+destructive or potential-data-loss actions:
+
+```sh
+cargo test -p disk-nix-plan non_destructive_migration_examples_are_verified
+```
+
 Its destructive mode is separately guarded and expects disposable disks through
 stable `/dev/disk/by-id` identities. On the current lab host those are the
 WWN links for the disks that currently appear as `/dev/sda` and `/dev/sdc`

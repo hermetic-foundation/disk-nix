@@ -442,17 +442,23 @@ mod tests {
                     .iter()
                     .any(|property| property.key == "lsblk.zone-count" && property.value == "64")
         }));
-        assert!(graph
-            .nodes
-            .iter()
-            .any(|node| node.kind == NodeKind::Filesystem && node.name == "xfs"));
-        assert!(graph
-            .nodes
-            .iter()
-            .any(|node| node.kind == NodeKind::Mountpoint && node.name == "/"));
-        assert!(graph
-            .edges
-            .iter()
-            .any(|edge| edge.relationship == Relationship::MountedAt));
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.kind == NodeKind::Filesystem && node.name == "xfs")
+        );
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.kind == NodeKind::Mountpoint && node.name == "/")
+        );
+        assert!(
+            graph
+                .edges
+                .iter()
+                .any(|edge| edge.relationship == Relationship::MountedAt)
+        );
     }
 }

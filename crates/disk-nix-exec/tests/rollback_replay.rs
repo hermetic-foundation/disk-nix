@@ -1,11 +1,10 @@
 use std::collections::BTreeMap;
 
 use disk_nix_exec::{
-    materialize_rollback_topology_payloads,
-    replay_proven_safe_rollback_recipe_with_topology_payloads, CommandPlanSummary,
-    CommandReadiness, ExecutionCommand, ExecutionReport, ExecutionStatus, PartialExecutionRecovery,
-    RollbackExecutionStatus, RollbackRecipe, RollbackRecipeSection, RollbackRecipeStatus,
-    VerificationPlanSummary,
+    CommandPlanSummary, CommandReadiness, ExecutionCommand, ExecutionReport, ExecutionStatus,
+    PartialExecutionRecovery, RollbackExecutionStatus, RollbackRecipe, RollbackRecipeSection,
+    RollbackRecipeStatus, VerificationPlanSummary, materialize_rollback_topology_payloads,
+    replay_proven_safe_rollback_recipe_with_topology_payloads,
 };
 use disk_nix_plan::{ApplyPolicy, ApplyReport, BlockedSummary};
 

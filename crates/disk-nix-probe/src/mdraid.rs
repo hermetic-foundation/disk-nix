@@ -784,10 +784,12 @@ unused devices: <none>\n";
         }])
         .expect("detail should parse");
 
-        assert!(graph
-            .nodes
-            .iter()
-            .any(|node| node.kind == NodeKind::MdRaid && node.name == "/dev/md0"));
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.kind == NodeKind::MdRaid && node.name == "/dev/md0")
+        );
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::MdRaid
                 && node.name == "/dev/md0"

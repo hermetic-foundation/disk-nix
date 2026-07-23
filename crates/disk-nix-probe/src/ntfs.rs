@@ -280,41 +280,48 @@ MFT Information
                 .and_then(|usage| usage.allocated_bytes),
             Some(1_073_741_824)
         );
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ntfs.volume-name" && property.value == "Windows" }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ntfs.cluster-size" && property.value == "4096" }));
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ntfs.volume-name" && property.value == "Windows"
+            })
+        );
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ntfs.cluster-size" && property.value == "4096"
+            })
+        );
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ntfs.mft-record-size" && property.value == "1024"
         }));
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ntfs.device-name" && property.value == "/dev/sda1"
         }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ntfs.device-state" && property.value == "11" }));
+        assert!(
+            filesystem
+                .properties
+                .iter()
+                .any(|property| { property.key == "ntfs.device-state" && property.value == "11" })
+        );
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ntfs.mft-zone-multiplier" && property.value == "0"
         }));
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ntfs.mft-zone-start" && property.value == "786432"
         }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ntfs.mft-zone-end" && property.value == "819200" }));
+        assert!(
+            filesystem.properties.iter().any(|property| {
+                property.key == "ntfs.mft-zone-end" && property.value == "819200"
+            })
+        );
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ntfs.mft-data-position" && property.value == "786944"
         }));
-        assert!(filesystem
-            .properties
-            .iter()
-            .any(|property| { property.key == "ntfs.mft-lcn" && property.value == "4" }));
+        assert!(
+            filesystem
+                .properties
+                .iter()
+                .any(|property| { property.key == "ntfs.mft-lcn" && property.value == "4" })
+        );
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "ntfs.volume-serial" && property.value == "01234567-89abcdef"
         }));

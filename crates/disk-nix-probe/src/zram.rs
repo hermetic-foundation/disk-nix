@@ -178,14 +178,16 @@ mod tests {
             node.usage.as_ref().and_then(|usage| usage.free_bytes),
             Some(6_442_450_944)
         );
-        assert!(node
-            .properties
-            .iter()
-            .any(|property| property.key == "zram.algorithm" && property.value == "zstd"));
-        assert!(node
-            .properties
-            .iter()
-            .any(|property| property.key == "zram.swap" && property.value == "true"));
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "zram.algorithm" && property.value == "zstd")
+        );
+        assert!(
+            node.properties
+                .iter()
+                .any(|property| property.key == "zram.swap" && property.value == "true")
+        );
         assert!(node.properties.iter().any(|property| {
             property.key == "zram.memory-peak" && property.value == "900000000"
         }));

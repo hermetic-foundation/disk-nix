@@ -1,0 +1,681 @@
+[
+  {
+    "name": "simple-efi-root-remount-noatime",
+    "baseExample": "examples/disko/simple-efi.json",
+    "description": "Remount an existing ext4 root with noatime without formatting or replacing it.",
+    "targetSpec": {
+      "version": 1,
+      "filesystems": {
+        "root": {
+          "operation": "remount",
+          "mountpoint": "/",
+          "fsType": "ext4",
+          "options": ["rw", "noatime"]
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "mount:/",
+          "kind": "mountpoint",
+          "name": "/",
+          "path": "/",
+          "identity": {},
+          "properties": [{ "key": "mount.options", "value": "rw,relatime" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["filesystem:root:inspect", "filesystems:root:remount"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "btrfs-subvolumes-add-var-log",
+    "baseExample": "examples/disko/btrfs-subvolumes.json",
+    "description": "Add a new Btrfs subvolume for /var/log under an existing Btrfs layout.",
+    "targetSpec": {
+      "version": 1,
+      "btrfsSubvolumes": {
+        "/mnt/persist/@var-log": {
+          "operation": "create"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "btrfs-subvolume:root",
+          "kind": "btrfs-subvolume",
+          "name": "@root",
+          "path": "/mnt/persist/@root",
+          "identity": {},
+          "properties": [{ "key": "btrfs.id", "value": "256" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["btrfssubvolumes:/mnt/persist/@var-log:create"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "btrfs-subvolumes-create-already-present-home",
+    "baseExample": "examples/disko/btrfs-subvolumes.json",
+    "description": "Verify a requested Btrfs home subvolume create is suppressed when the subvolume already exists.",
+    "targetSpec": {
+      "version": 1,
+      "btrfsSubvolumes": {
+        "/mnt/persist/@home": {
+          "operation": "create"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "btrfs-subvolume:home",
+          "kind": "btrfs-subvolume",
+          "name": "@home",
+          "path": "/mnt/persist/@home",
+          "identity": {},
+          "properties": [
+            { "key": "btrfs.id", "value": "257" },
+            { "key": "btrfs.generation", "value": "120" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": [],
+    "expectedSuppressedActionIds": ["btrfssubvolumes:/mnt/persist/@home:create"]
+  },
+  {
+    "name": "btrfs-snapshot-clone-review",
+    "baseExample": "examples/disko/btrfs-only-root-subvolume.json",
+    "description": "Clone an existing Btrfs snapshot to a review subvolume.",
+    "targetSpec": {
+      "version": 1,
+      "snapshots": {
+        "/mnt/persist/@root-before": {
+          "target": "/mnt/persist/@root",
+          "cloneTo": "/mnt/persist/@root-review",
+          "readOnly": true
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "btrfs-snapshot:root-before",
+          "kind": "btrfs-snapshot",
+          "name": "@root-before",
+          "path": "/mnt/persist/@root-before",
+          "identity": {},
+          "properties": [
+            { "key": "btrfs.id", "value": "300" },
+            { "key": "btrfs.parent-uuid", "value": "root-source-uuid" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": [
+      "snapshot:/mnt/persist/@root-before:clone:/mnt/persist/@root-review"
+    ],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "btrfs-qgroup-limit-home",
+    "baseExample": "examples/disko/btrfs-subvolumes.json",
+    "description": "Apply a qgroup referenced-size limit to an existing Btrfs qgroup.",
+    "targetSpec": {
+      "version": 1,
+      "btrfsQgroups": {
+        "0/257": {
+          "properties": {
+            "referencedLimit": "20GiB"
+          }
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "btrfs-qgroup:0/257",
+          "kind": "btrfs-qgroup",
+          "name": "0/257",
+          "identity": {},
+          "properties": [{ "key": "btrfs.qgroup-referenced-limit", "value": "10GiB" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["btrfsQgroups:0/257:set-property:referencedLimit"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "zfs-dataset-compression-change",
+    "baseExample": "examples/disko/zfs.json",
+    "description": "Change an existing ZFS dataset from lz4 to zstd compression.",
+    "targetSpec": {
+      "version": 1,
+      "datasets": {
+        "zroot/data": {
+          "properties": {
+            "compression": "zstd"
+          }
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "zfs-dataset:zroot/data",
+          "kind": "zfs-dataset",
+          "name": "zroot/data",
+          "identity": {},
+          "properties": [
+            { "key": "zfs.type", "value": "filesystem" },
+            { "key": "zfs.compression", "value": "lz4" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["datasets:zroot/data:set-property:compression"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "zfs-dataset-create-child",
+    "baseExample": "examples/disko/non-root-zfs.json",
+    "description": "Create a child ZFS dataset in an existing pool.",
+    "targetSpec": {
+      "version": 1,
+      "datasets": {
+        "storage/archive": {
+          "operation": "create",
+          "properties": {
+            "mountpoint": "/archive"
+          }
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "zfs-pool:storage",
+          "kind": "zfs-pool",
+          "name": "storage",
+          "identity": {},
+          "properties": [{ "key": "zfs.state", "value": "ONLINE" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": [
+      "datasets:storage/archive:create",
+      "datasets:storage/archive:set-property:mountpoint"
+    ],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "zfs-zvol-grow-vm-root",
+    "baseExample": "examples/disko/zfs.json",
+    "description": "Grow an existing ZFS volume for a VM disk.",
+    "targetSpec": {
+      "version": 1,
+      "zvols": {
+        "zroot/vm/root": {
+          "operation": "grow",
+          "desiredSize": "64GiB"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "zvol:zroot/vm/root",
+          "kind": "zvol",
+          "name": "zroot/vm/root",
+          "sizeBytes": 34359738368,
+          "identity": {},
+          "properties": [
+            { "key": "zfs.type", "value": "volume" },
+            { "key": "zfs.volsize", "value": "32G" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["zvols:zroot/vm/root:grow"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "zfs-snapshot-hold-retention",
+    "baseExample": "examples/disko/zfs.json",
+    "description": "Add a retention hold to an existing ZFS snapshot.",
+    "targetSpec": {
+      "version": 1,
+      "snapshots": {
+        "zroot/home@pre-migration": {
+          "target": "zroot/home",
+          "hold": "disk-nix-retain"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "zfs-snapshot:zroot/home@pre-migration",
+          "kind": "zfs-snapshot",
+          "name": "zroot/home@pre-migration",
+          "identity": {},
+          "properties": [{ "key": "zfs.used", "value": "8M" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["snapshot:zroot/home@pre-migration:hold:disk-nix-retain"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "zfs-dataset-rename-staged",
+    "baseExample": "examples/disko/zfs.json",
+    "description": "Rename an existing ZFS dataset to a staged name.",
+    "targetSpec": {
+      "version": 1,
+      "datasets": {
+        "zroot/home-old": {
+          "operation": "rename",
+          "renameTo": "zroot/home"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "zfs-dataset:zroot/home-old",
+          "kind": "zfs-dataset",
+          "name": "zroot/home-old",
+          "identity": {},
+          "properties": [
+            { "key": "zfs.type", "value": "filesystem" },
+            { "key": "zfs.mountpoint", "value": "/home-old" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["datasets:zroot/home-old:rename"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "zfs-pool-export-maintenance",
+    "baseExample": "examples/disko/non-root-zfs.json",
+    "description": "Export an online non-root ZFS pool before moving it.",
+    "targetSpec": {
+      "version": 1,
+      "pools": {
+        "storage": {
+          "operation": "export"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "zfs-pool:storage",
+          "kind": "zfs-pool",
+          "name": "storage",
+          "identity": {},
+          "properties": [
+            { "key": "zfs.state", "value": "ONLINE" },
+            { "key": "zfs.health", "value": "ONLINE" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["pools:storage:export"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "zfs-pool-import-readonly",
+    "baseExample": "examples/disko/non-root-zfs.json",
+    "description": "Import an existing exported pool read-only for inspection.",
+    "targetSpec": {
+      "version": 1,
+      "pools": {
+        "storage": {
+          "operation": "import",
+          "readOnly": true
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "zfs-pool:storage",
+          "kind": "zfs-pool",
+          "name": "storage",
+          "identity": {},
+          "properties": [
+            { "key": "zfs.state", "value": "EXPORTED" },
+            { "key": "zfs.health", "value": "ONLINE" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["pools:storage:import"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "lvm-logical-volume-grow-home",
+    "baseExample": "examples/disko/lvm-thin.json",
+    "description": "Grow an existing LVM logical volume.",
+    "targetSpec": {
+      "version": 1,
+      "volumes": {
+        "vg/home": {
+          "operation": "grow",
+          "desiredSize": "80GiB"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "lvm-lv:vg/home",
+          "kind": "lvm-logical-volume",
+          "name": "vg/home",
+          "sizeBytes": 42949672960,
+          "identity": {},
+          "properties": [{ "key": "lvm.lv-size", "value": "40.00g" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["volumes:vg/home:grow"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "lvm-thin-pool-grow",
+    "baseExample": "examples/disko/lvm-thin.json",
+    "description": "Grow an existing LVM thin pool.",
+    "targetSpec": {
+      "version": 1,
+      "thinPools": {
+        "vg/thin": {
+          "operation": "grow",
+          "desiredSize": "200GiB"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "lvm-thin-pool:vg/thin",
+          "kind": "lvm-thin-pool",
+          "name": "vg/thin",
+          "sizeBytes": 107374182400,
+          "identity": {},
+          "properties": [
+            { "key": "lvm.lv-size", "value": "100.00g" },
+            { "key": "lvm.data-percent", "value": "45.0" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["thinpools:vg/thin:grow"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "lvm-volume-rename-data",
+    "baseExample": "examples/disko/lvm-sizes-sort.json",
+    "description": "Rename an existing LVM logical volume without recreating it.",
+    "targetSpec": {
+      "version": 1,
+      "volumes": {
+        "vg/data-old": {
+          "operation": "rename",
+          "renameTo": "vg/data"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "lvm-lv:vg/data-old",
+          "kind": "lvm-logical-volume",
+          "name": "vg/data-old",
+          "identity": {},
+          "properties": [{ "key": "lvm.lv-path", "value": "/dev/vg/data-old" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["volumes:vg/data-old:rename"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "lvm-volume-activate-root",
+    "baseExample": "examples/disko/luks-lvm.json",
+    "description": "Activate an inactive LVM logical volume.",
+    "targetSpec": {
+      "version": 1,
+      "volumes": {
+        "vg/root": {
+          "operation": "activate"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "lvm-lv:vg/root",
+          "kind": "lvm-logical-volume",
+          "name": "vg/root",
+          "identity": {},
+          "properties": [{ "key": "lvm.lv-active", "value": "false" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["volumes:vg/root:activate"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "luks-open-existing-container",
+    "baseExample": "examples/disko/luks-lvm.json",
+    "description": "Open an existing inactive LUKS container.",
+    "targetSpec": {
+      "version": 1,
+      "luks": {
+        "devices": {
+          "cryptroot": {
+            "operation": "open",
+            "device": "/dev/disk/by-uuid/luks-root"
+          }
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "luks:/dev/disk/by-uuid/luks-root",
+          "kind": "luks-container",
+          "name": "cryptroot",
+          "path": "/dev/disk/by-uuid/luks-root",
+          "identity": { "uuid": "luks-root" },
+          "properties": [{ "key": "cryptsetup.active", "value": "false" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["luks.devices:cryptroot:open"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "mdraid-assemble-inactive-root",
+    "baseExample": "examples/disko/mdadm.json",
+    "description": "Assemble an inactive MD RAID array from existing members.",
+    "targetSpec": {
+      "version": 1,
+      "mdRaids": {
+        "root": {
+          "operation": "assemble",
+          "target": "/dev/md/root",
+          "devices": ["/dev/sdb1", "/dev/sdc1"]
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "md:/dev/md/root",
+          "kind": "md-raid",
+          "name": "/dev/md/root",
+          "path": "/dev/md/root",
+          "identity": {},
+          "properties": [
+            { "key": "md.state", "value": "inactive" },
+            { "key": "md.degraded-devices", "value": "0" },
+            { "key": "md.failed-devices", "value": "0" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["mdraids:root:assemble"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "swap-deactivate-maintenance",
+    "baseExample": "examples/disko/swap.json",
+    "description": "Deactivate an active swap device before maintenance.",
+    "targetSpec": {
+      "version": 1,
+      "swaps": {
+        "swap": {
+          "operation": "deactivate",
+          "device": "/dev/disk/by-label/swap"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "swap:/dev/disk/by-label/swap",
+          "kind": "swap",
+          "name": "swap",
+          "path": "/dev/disk/by-label/swap",
+          "identity": { "label": "swap" },
+          "properties": [
+            { "key": "swap.active", "value": "true" },
+            { "key": "swap.priority", "value": "-2" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["swaps:swap:deactivate"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "nfs-remount-shared-options",
+    "baseExample": "examples/disko/with-lib.json",
+    "description": "Remount an existing NFS client mount with updated local options.",
+    "targetSpec": {
+      "version": 1,
+      "nfs": {
+        "mounts": {
+          "/srv/shared": {
+            "operation": "remount",
+            "source": "nas.example.com:/srv/shared",
+            "options": ["rw", "hard", "timeo=600"]
+          }
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "nfs-mount:/srv/shared",
+          "kind": "nfs-mount",
+          "name": "/srv/shared",
+          "path": "/srv/shared",
+          "identity": {},
+          "properties": [
+            { "key": "nfs.source", "value": "nas.example.com:/srv/shared" },
+            { "key": "mount.options", "value": "rw,soft,timeo=100" }
+          ]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["nfs.mounts:/srv/shared:remount"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "iscsi-login-configured-target",
+    "baseExample": "examples/disko/multi-device-no-deps.json",
+    "description": "Log in to a configured iSCSI target that is not currently connected.",
+    "targetSpec": {
+      "version": 1,
+      "iscsi": {
+        "sessions": {
+          "iqn.2026-06.example:storage.root": {
+            "operation": "login",
+            "portal": "192.0.2.10:3260"
+          }
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "iscsi-target:iqn.2026-06.example:storage.root",
+          "kind": "iscsi-target",
+          "name": "iqn.2026-06.example:storage.root",
+          "identity": {},
+          "properties": [{ "key": "iscsi.node-configured", "value": "true" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["iscsisessions:iqn.2026-06.example:storage.root:login"],
+    "expectedSuppressedActionIds": []
+  },
+  {
+    "name": "loop-grow-backing-file",
+    "baseExample": "examples/disko/tmpfs.json",
+    "description": "Grow a sparse backing file used by a loop-backed test volume.",
+    "targetSpec": {
+      "version": 1,
+      "backingFiles": {
+        "/var/lib/disk-nix/images/root.img": {
+          "operation": "grow",
+          "desiredSize": "20GiB"
+        }
+      }
+    },
+    "currentGraph": {
+      "nodes": [
+        {
+          "id": "backing-file:/var/lib/disk-nix/images/root.img",
+          "kind": "backing-file",
+          "name": "/var/lib/disk-nix/images/root.img",
+          "path": "/var/lib/disk-nix/images/root.img",
+          "sizeBytes": 10737418240,
+          "identity": {},
+          "properties": [{ "key": "file.kind", "value": "regular" }]
+        }
+      ],
+      "edges": []
+    },
+    "expectedRemainingActionIds": ["backingfiles:/var/lib/disk-nix/images/root.img:grow"],
+    "expectedSuppressedActionIds": []
+  }
+]

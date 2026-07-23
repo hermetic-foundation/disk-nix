@@ -640,18 +640,24 @@ ID 257 gen 11 cgen 8 parent 256 top level 5 uuid snap-1 parent_uuid subvol-root 
         }])
         .expect("fixture should parse");
 
-        assert!(graph
-            .nodes
-            .iter()
-            .any(|node| node.kind == NodeKind::BtrfsFilesystem && node.name == "data"));
-        assert!(graph
-            .nodes
-            .iter()
-            .any(|node| node.kind == NodeKind::BtrfsSubvolume && node.name == "@"));
-        assert!(graph
-            .nodes
-            .iter()
-            .any(|node| node.kind == NodeKind::BtrfsSnapshot));
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.kind == NodeKind::BtrfsFilesystem && node.name == "data")
+        );
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.kind == NodeKind::BtrfsSubvolume && node.name == "@")
+        );
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.kind == NodeKind::BtrfsSnapshot)
+        );
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::BtrfsSnapshot
                 && node.name == "@/.snapshots/1/snapshot"
@@ -724,9 +730,11 @@ ID 257 gen 11 cgen 8 parent 256 top level 5 uuid snap-1 parent_uuid subvol-root 
                     property.key == "btrfs.device-stat-generation-errs" && property.value == "5"
                 })
         }));
-        assert!(graph
-            .edges
-            .iter()
-            .any(|edge| edge.relationship == Relationship::MemberOf));
+        assert!(
+            graph
+                .edges
+                .iter()
+                .any(|edge| edge.relationship == Relationship::MemberOf)
+        );
     }
 }

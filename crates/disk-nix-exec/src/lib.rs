@@ -4,8 +4,8 @@ use std::{
 };
 
 use disk_nix_plan::{
-    evaluate_apply_policy, ApplyPolicy, ApplyReport, Operation, Plan, PlannedAction, RiskClass,
-    TopologyComparison, TopologyDiagnosticKind,
+    ApplyPolicy, ApplyReport, Operation, Plan, PlannedAction, RiskClass, TopologyComparison,
+    TopologyDiagnosticKind, evaluate_apply_policy,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21705,7 +21705,7 @@ fn property_assignment(action: &PlannedAction) -> String {
 mod tests {
     use disk_nix_model::{Node, NodeKind, Relationship, StorageGraph};
     use disk_nix_plan::{
-        compare_plan_with_topology, plan_and_policy_from_json_bytes, ActionContext, PlanSummary,
+        ActionContext, PlanSummary, compare_plan_with_topology, plan_and_policy_from_json_bytes,
     };
 
     use super::*;
@@ -21740,10 +21740,11 @@ mod tests {
         assert_eq!(report.verification_summary.step_count, 1);
         assert!(report.verification_summary.command_count >= 1);
         assert_eq!(report.verification_plan.len(), 1);
-        assert!(report.verification_plan[0]
-            .commands
-            .iter()
-            .all(|command| { !command.mutates && command.readiness == CommandReadiness::Ready }));
+        assert!(
+            report.verification_plan[0].commands.iter().all(|command| {
+                !command.mutates && command.readiness == CommandReadiness::Ready
+            })
+        );
         assert!(report.command_plan[0].commands.iter().any(|command| {
             command
                 .argv
@@ -22253,9 +22254,11 @@ mod tests {
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));
-        assert!(btrfs_notes
-            .iter()
-            .any(|note| note.contains("backups or snapshots")));
+        assert!(
+            btrfs_notes
+                .iter()
+                .any(|note| note.contains("backups or snapshots"))
+        );
 
         assert!(ext_manual_review);
         assert!(ext_commands.iter().any(|command| {
@@ -22291,9 +22294,11 @@ mod tests {
                 && command.readiness == CommandReadiness::NeedsDomainImplementation
                 && command.unresolved_inputs == ["filesystem source device"]
         }));
-        assert!(ext_notes
-            .iter()
-            .any(|note| note.contains("migrate-to-smaller-filesystem")));
+        assert!(
+            ext_notes
+                .iter()
+                .any(|note| note.contains("migrate-to-smaller-filesystem"))
+        );
 
         assert!(xfs_manual_review);
         assert!(xfs_commands.iter().any(|command| {
@@ -22367,9 +22372,11 @@ mod tests {
         let (verification_commands, verification_checks) = verification_for_action(&action);
 
         assert!(requires_manual_review);
-        assert!(notes
-            .iter()
-            .any(|note| note.contains("remaining data and metadata space are sufficient")));
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.contains("remaining data and metadata space are sufficient"))
+        );
         assert!(commands.iter().any(|command| {
             command.argv == ["btrfs", "filesystem", "usage", "-b", "/data"] && !command.mutates
         }));
@@ -22388,9 +22395,11 @@ mod tests {
         assert!(verification_commands.iter().any(|command| {
             command.argv == ["btrfs", "filesystem", "usage", "-b", "/data"] && !command.mutates
         }));
-        assert!(verification_checks
-            .iter()
-            .any(|check| check.contains("Btrfs device list matches desired topology")));
+        assert!(
+            verification_checks
+                .iter()
+                .any(|check| check.contains("Btrfs device list matches desired topology"))
+        );
     }
 
     #[test]
@@ -22519,15 +22528,21 @@ mod tests {
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));
-        assert!(add_verification_commands
-            .iter()
-            .any(|command| { command.argv == ["bcachefs", "fs", "usage", "/bulk"] }));
-        assert!(!add_verification_commands
-            .iter()
-            .any(|command| command.argv == ["btrfs", "filesystem", "usage", "-b", "/bulk"]));
-        assert!(add_verification_checks
-            .iter()
-            .any(|check| check.contains("bcachefs member list")));
+        assert!(
+            add_verification_commands
+                .iter()
+                .any(|command| { command.argv == ["bcachefs", "fs", "usage", "/bulk"] })
+        );
+        assert!(
+            !add_verification_commands
+                .iter()
+                .any(|command| command.argv == ["btrfs", "filesystem", "usage", "-b", "/bulk"])
+        );
+        assert!(
+            add_verification_checks
+                .iter()
+                .any(|check| check.contains("bcachefs member list"))
+        );
         assert!(remove_commands.iter().any(|command| {
             command.argv == ["bcachefs", "fs", "usage", "/bulk"] && !command.mutates
         }));
@@ -22546,9 +22561,11 @@ mod tests {
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));
-        assert!(remove_notes
-            .iter()
-            .any(|note| note.contains("remaining replicas")));
+        assert!(
+            remove_notes
+                .iter()
+                .any(|note| note.contains("remaining replicas"))
+        );
         assert!(replace_commands.iter().any(|command| {
             command.argv
                 == [
@@ -22569,15 +22586,19 @@ mod tests {
                     "/dev/disk/by-id/old-bcachefs-device",
                 ]
         }));
-        assert!(replace_notes
-            .iter()
-            .any(|note| note.contains("replacement capacity")));
+        assert!(
+            replace_notes
+                .iter()
+                .any(|note| note.contains("replacement capacity"))
+        );
         assert!(rebalance_commands.iter().any(|command| {
             command.argv == ["bcachefs", "data", "rereplicate", "/bulk"] && command.mutates
         }));
-        assert!(scrub_commands
-            .iter()
-            .any(|command| { command.argv == ["bcachefs", "scrub", "/bulk"] && command.mutates }));
+        assert!(
+            scrub_commands.iter().any(|command| {
+                command.argv == ["bcachefs", "scrub", "/bulk"] && command.mutates
+            })
+        );
     }
 
     #[test]
@@ -23539,10 +23560,12 @@ mod tests {
             report.messages,
             ["apply policy blocked 1 action(s)".to_string()]
         );
-        assert!(!report
-            .command_plan
-            .iter()
-            .any(|step| step.action_id == "filesystems:archive:unmount"));
+        assert!(
+            !report
+                .command_plan
+                .iter()
+                .any(|step| step.action_id == "filesystems:archive:unmount")
+        );
     }
 
     #[test]
@@ -23652,9 +23675,11 @@ mod tests {
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));
-        assert!(pool_notes
-            .iter()
-            .any(|note| note.contains("supports device removal")));
+        assert!(
+            pool_notes
+                .iter()
+                .any(|note| note.contains("supports device removal"))
+        );
 
         assert!(vg_manual_review);
         assert!(vg_commands.iter().any(|command| {
@@ -23671,9 +23696,11 @@ mod tests {
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));
-        assert!(vg_notes
-            .iter()
-            .any(|note| note.contains("pvmove or add replacement capacity")));
+        assert!(
+            vg_notes
+                .iter()
+                .any(|note| note.contains("pvmove or add replacement capacity"))
+        );
         assert!(missing_pool_commands.iter().any(|command| {
             command.argv == ["zpool", "remove", "tank", "<device>"]
                 && command.mutates
@@ -23754,9 +23781,11 @@ mod tests {
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));
-        assert!(notes
-            .iter()
-            .any(|note| note.contains("replacement physical volume")));
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.contains("replacement physical volume"))
+        );
 
         assert!(missing_commands.iter().any(|command| {
             command.argv == ["vgextend", "vg0", "<replacement-physical-volume>"]
@@ -23826,9 +23855,11 @@ mod tests {
         assert!(verification_commands.iter().any(|command| {
             command.argv == ["zfs", "list", "-H", "-p", "tank/home"] && !command.mutates
         }));
-        assert!(verification_checks
-            .iter()
-            .any(|check| check.contains("rollback point")));
+        assert!(
+            verification_checks
+                .iter()
+                .any(|check| check.contains("rollback point"))
+        );
     }
 
     #[test]
@@ -24092,10 +24123,12 @@ mod tests {
             .iter()
             .find(|step| step.action_id == "snapshot:tank/home@before:rescan")
             .expect("ZFS snapshot rescan step exists");
-        assert!(zfs_step
-            .commands
-            .iter()
-            .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates));
+        assert!(
+            zfs_step
+                .commands
+                .iter()
+                .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+        );
         assert!(zfs_step.commands.iter().any(|command| {
             command.argv
                 == [
@@ -24108,20 +24141,24 @@ mod tests {
                     "tank/home@before",
                 ]
         }));
-        assert!(zfs_step
-            .commands
-            .iter()
-            .any(|command| command.argv == ["zfs", "holds", "tank/home@before"]));
+        assert!(
+            zfs_step
+                .commands
+                .iter()
+                .any(|command| command.argv == ["zfs", "holds", "tank/home@before"])
+        );
 
         let btrfs_step = report
             .command_plan
             .iter()
             .find(|step| step.action_id == "snapshot:/mnt/persist/@home-before:rescan")
             .expect("Btrfs snapshot rescan step exists");
-        assert!(btrfs_step
-            .commands
-            .iter()
-            .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates));
+        assert!(
+            btrfs_step
+                .commands
+                .iter()
+                .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+        );
         assert!(btrfs_step.commands.iter().any(|command| {
             command.argv == ["btrfs", "subvolume", "show", "/mnt/persist/@home-before"]
         }));
@@ -24142,10 +24179,12 @@ mod tests {
             .iter()
             .find(|step| step.action_id == "snapshot:home-before-friendly:rescan")
             .expect("friendly-key Btrfs snapshot rescan step exists");
-        assert!(friendly_btrfs_step
-            .commands
-            .iter()
-            .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates));
+        assert!(
+            friendly_btrfs_step
+                .commands
+                .iter()
+                .all(|command| command.readiness == CommandReadiness::Ready && !command.mutates)
+        );
         assert!(friendly_btrfs_step.commands.iter().any(|command| {
             command.argv
                 == [
@@ -24488,10 +24527,12 @@ mod tests {
             command.argv == ["blockdev", "--rereadpt", "/dev/disk/by-id/nvme-root"]
                 && command.readiness == CommandReadiness::Ready
         }));
-        assert!(report.verification_plan[0]
-            .commands
-            .iter()
-            .any(|command| command.argv == ["parted", "-lm"]));
+        assert!(
+            report.verification_plan[0]
+                .commands
+                .iter()
+                .any(|command| command.argv == ["parted", "-lm"])
+        );
     }
 
     #[test]
@@ -25793,10 +25834,11 @@ mod tests {
         assert_eq!(report.status, ExecutionStatus::DryRun);
         assert_eq!(report.command_plan.len(), 1);
         assert_eq!(report.command_plan[0].action_id, "zram:rescan");
-        assert!(report.command_plan[0]
-            .commands
-            .iter()
-            .all(|command| { !command.mutates && command.readiness == CommandReadiness::Ready }));
+        assert!(
+            report.command_plan[0].commands.iter().all(|command| {
+                !command.mutates && command.readiness == CommandReadiness::Ready
+            })
+        );
         assert!(report.command_plan[0].commands.iter().any(|command| {
             command.argv
                 == [
@@ -25807,14 +25849,18 @@ mod tests {
                     "--output-all",
                 ]
         }));
-        assert!(report.command_plan[0]
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["swapon", "--show", "--bytes", "--raw"] }));
-        assert!(report.command_plan[0]
-            .commands
-            .iter()
-            .any(|command| command.argv == ["disk-nix", "zram"]));
+        assert!(
+            report.command_plan[0]
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["swapon", "--show", "--bytes", "--raw"] })
+        );
+        assert!(
+            report.command_plan[0]
+                .commands
+                .iter()
+                .any(|command| command.argv == ["disk-nix", "zram"])
+        );
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "zram:rescan"
                 && step.commands.iter().any(|command| {
@@ -25853,10 +25899,12 @@ mod tests {
         assert_eq!(report.command_plan.len(), 1);
         assert_eq!(report.command_plan[0].action_id, "zram:inspect");
         assert!(!report.command_plan[0].requires_manual_review);
-        assert!(report.command_plan[0]
-            .commands
-            .iter()
-            .all(|command| !command.mutates && command.readiness == CommandReadiness::Ready));
+        assert!(
+            report.command_plan[0]
+                .commands
+                .iter()
+                .all(|command| !command.mutates && command.readiness == CommandReadiness::Ready)
+        );
         assert!(report.command_plan[0].commands.iter().any(|command| {
             command.argv
                 == [
@@ -25867,10 +25915,12 @@ mod tests {
                     "--output-all",
                 ]
         }));
-        assert!(report.command_plan[0]
-            .commands
-            .iter()
-            .any(|command| command.argv == ["disk-nix", "zram"]));
+        assert!(
+            report.command_plan[0]
+                .commands
+                .iter()
+                .any(|command| command.argv == ["disk-nix", "zram"])
+        );
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "zram:inspect"
                 && step
@@ -30111,10 +30161,12 @@ mod tests {
         assert!(!report.can_apply());
         assert_eq!(report.command_plan.len(), 1);
         assert!(report.execution_results.is_empty());
-        assert!(report
-            .messages
-            .iter()
-            .any(|message| message.contains("every planned command must be ready")));
+        assert!(
+            report
+                .messages
+                .iter()
+                .any(|message| message.contains("every planned command must be ready"))
+        );
         assert!(report.recovery_actions.iter().any(|action| {
             action.kind == RecoveryActionKind::ResolveInputs
                 && action
@@ -30422,10 +30474,12 @@ mod tests {
             ToolAvailability::Available
         );
         assert!(exportfs_requirement.message.contains("available"));
-        assert!(exportfs_requirement
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("pkgs.nfs-utils")));
+        assert!(
+            exportfs_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.nfs-utils"))
+        );
         assert!(seen.iter().any(|argv| {
             argv == &[
                 "exportfs".to_string(),
@@ -30464,11 +30518,7 @@ mod tests {
         let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |argv| {
             let status_code = if argv == ["cryptsetup", "status", "cryptclosed"] {
                 status_calls += 1;
-                if status_calls == 1 {
-                    0
-                } else {
-                    4
-                }
+                if status_calls == 1 { 0 } else { 4 }
             } else {
                 0
             };
@@ -30548,18 +30598,24 @@ mod tests {
             .expect("exportfs tool requirement is reported");
         assert_eq!(exportfs_requirement.availability, ToolAvailability::Missing);
         assert!(exportfs_requirement.message.contains("missing"));
-        assert!(exportfs_requirement
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("pkgs.nfs-utils")));
-        assert!(exportfs_requirement
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("services.disk-nix.toolPackages")));
-        assert!(report
-            .recovery_actions
-            .iter()
-            .any(|action| { action.kind == RecoveryActionKind::ResolveInputs }));
+        assert!(
+            exportfs_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.nfs-utils"))
+        );
+        assert!(
+            exportfs_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("services.disk-nix.toolPackages"))
+        );
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| { action.kind == RecoveryActionKind::ResolveInputs })
+        );
     }
 
     #[test]
@@ -30609,14 +30665,18 @@ mod tests {
         );
         assert_eq!(multipathd_requirement.command_count, 1);
         assert_eq!(multipathd_requirement.mutating_count, 1);
-        assert!(multipathd_requirement
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("pkgs.multipath-tools")));
-        assert!(multipathd_requirement
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("services.disk-nix.toolPackages")));
+        assert!(
+            multipathd_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.multipath-tools"))
+        );
+        assert!(
+            multipathd_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("services.disk-nix.toolPackages"))
+        );
     }
 
     #[test]
@@ -30670,14 +30730,18 @@ mod tests {
         assert_eq!(shell_requirement.availability, ToolAvailability::Missing);
         assert_eq!(shell_requirement.command_count, 1);
         assert_eq!(shell_requirement.mutating_count, 1);
-        assert!(shell_requirement
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("pkgs.bash")));
-        assert!(shell_requirement
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("services.disk-nix.toolPackages")));
+        assert!(
+            shell_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.bash"))
+        );
+        assert!(
+            shell_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("services.disk-nix.toolPackages"))
+        );
     }
 
     #[test]
@@ -30729,14 +30793,18 @@ mod tests {
         assert_eq!(stat_requirement.availability, ToolAvailability::Missing);
         assert_eq!(stat_requirement.command_count, 2);
         assert_eq!(stat_requirement.mutating_count, 0);
-        assert!(stat_requirement
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("pkgs.coreutils")));
-        assert!(stat_requirement
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("services.disk-nix.toolPackages")));
+        assert!(
+            stat_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.coreutils"))
+        );
+        assert!(
+            stat_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("services.disk-nix.toolPackages"))
+        );
     }
 
     #[test]
@@ -30884,10 +30952,12 @@ mod tests {
                     command.argv == ["disk-nix", "probe-status", "--json"] && !command.mutates
                 })
         }));
-        assert!(report
-            .recovery_actions
-            .iter()
-            .any(|action| { action.kind == RecoveryActionKind::PreserveRecoveryPoints }));
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| { action.kind == RecoveryActionKind::PreserveRecoveryPoints })
+        );
     }
 
     #[test]
@@ -30950,14 +31020,18 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["zfs", "list", "-H", "-p", "tank/home"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("do not retry")));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("cloning the snapshot")));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("do not retry"))
+        );
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("cloning the snapshot"))
+        );
         let roll_forward = report
             .recovery_actions
             .iter()
@@ -30992,10 +31066,12 @@ mod tests {
                 ]
                 && !command.mutates
         }));
-        assert!(roll_forward
-            .notes
-            .iter()
-            .any(|note| note.contains("fresh topology")));
+        assert!(
+            roll_forward
+                .notes
+                .iter()
+                .any(|note| note.contains("fresh topology"))
+        );
         let rollback = report
             .recovery_actions
             .iter()
@@ -31014,10 +31090,12 @@ mod tests {
                 ]
                 && !command.mutates
         }));
-        assert!(rollback
-            .notes
-            .iter()
-            .any(|note| note.contains("read-only checks")));
+        assert!(
+            rollback
+                .notes
+                .iter()
+                .any(|note| note.contains("read-only checks"))
+        );
         assert_eq!(report.rollback_recipes.len(), 1);
         let recipe = &report.rollback_recipes[0];
         assert_eq!(recipe.recipe_version, 1);
@@ -31033,22 +31111,28 @@ mod tests {
         assert!(recipe.receipt_binding_required);
         assert!(recipe.fresh_topology_probe_required);
         assert!(!recipe.read_only_validation.commands.is_empty());
-        assert!(recipe
-            .read_only_validation
-            .commands
-            .iter()
-            .all(|command| !command.mutates));
+        assert!(
+            recipe
+                .read_only_validation
+                .commands
+                .iter()
+                .all(|command| !command.mutates)
+        );
         assert!(recipe.reversible_mutations.commands.is_empty());
         assert!(recipe.destructive_mutations.commands.is_empty());
-        assert!(recipe
-            .operator_only_handoff
-            .notes
-            .iter()
-            .any(|note| note.contains("operator review")));
-        assert!(recipe
-            .safety_gates
-            .iter()
-            .any(|gate| gate.contains("original apply receipt")));
+        assert!(
+            recipe
+                .operator_only_handoff
+                .notes
+                .iter()
+                .any(|note| note.contains("operator review"))
+        );
+        assert!(
+            recipe
+                .safety_gates
+                .iter()
+                .any(|gate| gate.contains("original apply receipt"))
+        );
         for expected_gate in [
             "filesystem rollback gates",
             "block-stack rollback gates",
@@ -31063,10 +31147,12 @@ mod tests {
                 "{expected_gate} should be emitted in rollback recipe safety gates"
             );
         }
-        assert!(recipe
-            .refusal_reasons
-            .iter()
-            .any(|reason| reason.contains("snapshot rollback is refused")));
+        assert!(
+            recipe
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("snapshot rollback is refused"))
+        );
         let value = serde_json::to_value(&report).expect("report should serialize");
         assert_eq!(
             value["rollbackRecipes"][0]["readOnlyValidation"]["commands"][0]["mutates"],
@@ -31410,10 +31496,12 @@ mod tests {
         assert!(calls.is_empty());
         assert!(replay.validation_results.is_empty());
         assert!(replay.rollback_results.is_empty());
-        assert!(replay
-            .refusal_reasons
-            .iter()
-            .any(|reason| reason.contains("not marked proven-safe")));
+        assert!(
+            replay
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("not marked proven-safe"))
+        );
     }
 
     #[test]
@@ -31440,10 +31528,12 @@ mod tests {
 
         assert_eq!(replay.status, RollbackExecutionStatus::Refused);
         assert!(calls.is_empty());
-        assert!(replay
-            .refusal_reasons
-            .iter()
-            .any(|reason| reason.contains("fresh post-failure topology probe binding")));
+        assert!(
+            replay
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("fresh post-failure topology probe binding"))
+        );
     }
 
     #[test]
@@ -31472,10 +31562,12 @@ mod tests {
         assert!(calls.is_empty());
         assert!(replay.validation_results.is_empty());
         assert!(replay.rollback_results.is_empty());
-        assert!(replay
-            .refusal_reasons
-            .iter()
-            .any(|reason| reason.contains("original apply receipt binding")));
+        assert!(
+            replay
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("original apply receipt binding"))
+        );
     }
 
     #[test]
@@ -31644,10 +31736,12 @@ mod tests {
         assert!(calls.is_empty());
         assert!(replay.validation_results.is_empty());
         assert!(replay.rollback_results.is_empty());
-        assert!(replay
-            .refusal_reasons
-            .iter()
-            .any(|reason| reason.contains("missing topology evidence binding(s): preApply")));
+        assert!(
+            replay
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("missing topology evidence binding(s): preApply"))
+        );
     }
 
     #[test]
@@ -31681,10 +31775,12 @@ mod tests {
         assert!(calls.is_empty());
         assert!(replay.validation_results.is_empty());
         assert!(replay.rollback_results.is_empty());
-        assert!(replay
-            .refusal_reasons
-            .iter()
-            .any(|reason| reason.contains("missing required tool(s): disk-nix-test-rollback")));
+        assert!(
+            replay
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("missing required tool(s): disk-nix-test-rollback"))
+        );
     }
 
     #[test]
@@ -31924,10 +32020,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_clone));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_clone)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -31970,10 +32068,12 @@ mod tests {
             command.argv == ["disk-nix", "inspect", "tank/home@before", "--json"]
                 && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| { note.contains("snapshot lifecycle") && note.contains("hold tags") }));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| { note.contains("snapshot lifecycle") && note.contains("hold tags") })
+        );
         let rollback = report
             .recovery_actions
             .iter()
@@ -32021,10 +32121,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_clone));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_clone)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -32116,10 +32218,12 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["mdadm", "--detail", "/dev/md/root"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["cat", "/proc/mdstat"] && !command.mutates }));
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["cat", "/proc/mdstat"] && !command.mutates })
+        );
         assert!(domain_recovery.notes.iter().any(|note| {
             note.contains("MD RAID member changes") && note.contains("/proc/mdstat")
         }));
@@ -32136,14 +32240,18 @@ mod tests {
             .iter()
             .find(|action| action.kind == RecoveryActionKind::RollbackReview)
             .expect("MD rollback recovery review is reported");
-        assert!(rollback
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["cat", "/proc/mdstat"] && !command.mutates }));
-        assert!(report
-            .recovery_actions
-            .iter()
-            .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints));
+        assert!(
+            rollback
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["cat", "/proc/mdstat"] && !command.mutates })
+        );
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints)
+        );
     }
 
     #[test]
@@ -32331,10 +32439,12 @@ mod tests {
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["nvme", "list-subsys", "--output-format=json"] && !command.mutates
         }));
-        assert!(report
-            .recovery_actions
-            .iter()
-            .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints));
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints)
+        );
     }
 
     #[test]
@@ -32412,14 +32522,18 @@ mod tests {
                 ]
                 && !command.mutates
         }));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates }));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates }));
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
+        );
         assert!(domain_recovery.notes.iter().any(|note| {
             note.contains("iSCSI session changes") && note.contains("login or logout")
         }));
@@ -32436,10 +32550,12 @@ mod tests {
             .iter()
             .find(|action| action.kind == RecoveryActionKind::RollbackReview)
             .expect("iSCSI rollback recovery review is reported");
-        assert!(rollback
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates }));
+        assert!(
+            rollback
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
+        );
     }
 
     #[test]
@@ -32505,10 +32621,11 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["vdostats", "--human-readable", "archive"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["disk-nix", "vdo", "--json"] && !command.mutates }));
+        assert!(
+            domain_recovery.commands.iter().any(|command| {
+                command.argv == ["disk-nix", "vdo", "--json"] && !command.mutates
+            })
+        );
         assert!(domain_recovery.notes.iter().any(|note| {
             note.contains("VDO lifecycle changes") && note.contains("create, grow, start, stop")
         }));
@@ -32575,17 +32692,20 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["multipath", "-ll", "/dev/mapper/mpatha"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates }));
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["disk-nix", "multipath", "--json"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| { note.contains("multipath changes") && note.contains("reload, resize") }));
+        assert!(
+            domain_recovery.notes.iter().any(|note| {
+                note.contains("multipath changes") && note.contains("reload, resize")
+            })
+        );
         let roll_forward = report
             .recovery_actions
             .iter()
@@ -32667,17 +32787,20 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["multipath", "-ll", "/dev/mapper/mpatha"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates }));
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["disk-nix", "multipath", "--json"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| { note.contains("multipath changes") && note.contains("path removal") }));
+        assert!(
+            domain_recovery.notes.iter().any(|note| {
+                note.contains("multipath changes") && note.contains("path removal")
+            })
+        );
         let roll_forward = report
             .recovery_actions
             .iter()
@@ -32779,14 +32902,18 @@ mod tests {
                 ]
                 && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("LUKS changes")));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("alternate unlock paths")));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("LUKS changes"))
+        );
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("alternate unlock paths"))
+        );
         let roll_forward = report
             .recovery_actions
             .iter()
@@ -32861,10 +32988,11 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "vg0/root", "--json"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| { note.contains("LVM changes") && note.contains("activation, resize") }));
+        assert!(
+            domain_recovery.notes.iter().any(|note| {
+                note.contains("LVM changes") && note.contains("activation, resize")
+            })
+        );
         let roll_forward = report
             .recovery_actions
             .iter()
@@ -32915,10 +33043,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_rename));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_rename)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -32937,10 +33067,12 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "vg-old", "--json"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("LVM changes") && note.contains("import, export")));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("LVM changes") && note.contains("import, export"))
+        );
         let roll_forward = report
             .recovery_actions
             .iter()
@@ -33001,10 +33133,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_property));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_property)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -33041,10 +33175,12 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "/dev/bcache1", "--json"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("cache changes") && note.contains("dirty-data")));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("cache changes") && note.contains("dirty-data"))
+        );
         let rollback = report
             .recovery_actions
             .iter()
@@ -33097,10 +33233,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_property));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_property)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -33171,10 +33309,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_property));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_property)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -33187,10 +33327,11 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["vdostats", "--human-readable", "archive"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["disk-nix", "vdo", "--json"] && !command.mutates }));
+        assert!(
+            domain_recovery.commands.iter().any(|command| {
+                command.argv == ["disk-nix", "vdo", "--json"] && !command.mutates
+            })
+        );
         assert!(domain_recovery.notes.iter().any(|note| {
             note.contains("VDO lifecycle changes") && note.contains("operating mode")
         }));
@@ -33223,10 +33364,12 @@ mod tests {
         assert!(rollback.commands.iter().any(|command| {
             command.argv == ["vdostats", "--human-readable", "archive"] && !command.mutates
         }));
-        assert!(report
-            .recovery_actions
-            .iter()
-            .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints));
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints)
+        );
     }
 
     #[test]
@@ -33268,10 +33411,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_label));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_label)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -33294,10 +33439,12 @@ mod tests {
                 ]
                 && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("swap changes") && note.contains("resume")));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("swap changes") && note.contains("resume"))
+        );
         let rollback = report
             .recovery_actions
             .iter()
@@ -33340,10 +33487,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_rename));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_rename)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -33360,10 +33509,12 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "tank/home", "--json"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("ZFS changes") && note.contains("LUN consumers")));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("ZFS changes") && note.contains("LUN consumers"))
+        );
         let roll_forward = report
             .recovery_actions
             .iter()
@@ -33416,10 +33567,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_grow));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_grow)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -33432,10 +33585,12 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "/", "--json"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("filesystem changes") && note.contains("UUIDs")));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("filesystem changes") && note.contains("UUIDs"))
+        );
         let roll_forward = report
             .recovery_actions
             .iter()
@@ -33462,11 +33617,13 @@ mod tests {
             reason.contains("filesystem grow rollback is refused")
                 && reason.contains("not data-preserving")
         }));
-        assert!(recipe
-            .operator_only_handoff
-            .notes
-            .iter()
-            .any(|note| { note.contains("grow") && note.contains("operator review") }));
+        assert!(
+            recipe
+                .operator_only_handoff
+                .notes
+                .iter()
+                .any(|note| { note.contains("grow") && note.contains("operator review") })
+        );
     }
 
     #[test]
@@ -33512,11 +33669,11 @@ mod tests {
             .expect("filesystem remount rollback recipe is reported");
         assert_eq!(recipe.status, RollbackRecipeStatus::ProvenSafe);
         assert!(recipe.refusal_reasons.is_empty());
-        assert!(recipe
-            .read_only_validation
-            .commands
-            .iter()
-            .all(|command| { !command.mutates && command.readiness == CommandReadiness::Ready }));
+        assert!(
+            recipe.read_only_validation.commands.iter().all(|command| {
+                !command.mutates && command.readiness == CommandReadiness::Ready
+            })
+        );
         assert_eq!(recipe.reversible_mutations.commands.len(), 1);
         assert_eq!(
             recipe.reversible_mutations.commands[0].argv,
@@ -33766,11 +33923,13 @@ mod tests {
             assert_eq!(recipe.status, RollbackRecipeStatus::Refused);
             assert!(recipe.reversible_mutations.commands.is_empty());
             assert!(recipe.notes.iter().any(|note| note.contains(boundary)));
-            assert!(recipe
-                .operator_only_handoff
-                .notes
-                .iter()
-                .any(|note| note.contains("operator review")));
+            assert!(
+                recipe
+                    .operator_only_handoff
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("operator review"))
+            );
         }
     }
 
@@ -34267,15 +34426,19 @@ mod tests {
 
         assert_eq!(recipe.status, RollbackRecipeStatus::Refused);
         assert!(recipe.reversible_mutations.commands.is_empty());
-        assert!(recipe
-            .refusal_reasons
-            .iter()
-            .any(|reason| reason.contains("zram rollback is refused")));
-        assert!(recipe
-            .operator_only_handoff
-            .notes
-            .iter()
-            .any(|note| note.contains("operator review")));
+        assert!(
+            recipe
+                .refusal_reasons
+                .iter()
+                .any(|reason| reason.contains("zram rollback is refused"))
+        );
+        assert!(
+            recipe
+                .operator_only_handoff
+                .notes
+                .iter()
+                .any(|note| note.contains("operator review"))
+        );
     }
 
     #[test]
@@ -35124,10 +35287,11 @@ mod tests {
         );
         assert!(partial.remaining_action_ids.is_empty());
         assert_eq!(partial.completed_mutating_command_count, 1);
-        assert!(partial
-            .notes
-            .iter()
-            .any(|note| { note.contains("completed actions") && note.contains("fresh topology") }));
+        assert!(
+            partial.notes.iter().any(|note| {
+                note.contains("completed actions") && note.contains("fresh topology")
+            })
+        );
 
         let json = serde_json::to_value(&report).expect("report serializes");
         assert_eq!(
@@ -35187,10 +35351,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_resize));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_resize)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -35215,10 +35381,12 @@ mod tests {
             command.argv == ["disk-nix", "inspect", "/dev/disk/by-id/nvme-root", "--json"]
                 && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("partition-table changes") && note.contains("kernel")));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("partition-table changes") && note.contains("kernel"))
+        );
         let roll_forward = report
             .recovery_actions
             .iter()
@@ -35283,10 +35451,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_rename));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_rename)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -35377,10 +35547,12 @@ mod tests {
         });
 
         assert_eq!(report.status, ExecutionStatus::Failed);
-        assert!(report
-            .execution_results
-            .iter()
-            .any(|result| !result.success && result.argv == failed_remount));
+        assert!(
+            report
+                .execution_results
+                .iter()
+                .any(|result| !result.success && result.argv == failed_remount)
+        );
         let domain_recovery = report
             .recovery_actions
             .iter()
@@ -35396,10 +35568,13 @@ mod tests {
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["disk-nix", "inspect", "/srv/tuned", "--json"] && !command.mutates
         }));
-        assert!(domain_recovery
-            .notes
-            .iter()
-            .any(|note| note.contains("NFS changes") && note.contains("negotiated mount options")));
+        assert!(
+            domain_recovery
+                .notes
+                .iter()
+                .any(|note| note.contains("NFS changes")
+                    && note.contains("negotiated mount options"))
+        );
         let roll_forward = report
             .recovery_actions
             .iter()
@@ -35481,10 +35656,12 @@ mod tests {
         assert!(report.verification_plan[0].commands.iter().any(|command| {
             command.argv == ["findmnt", "--json", "--bytes", "/"] && !command.mutates
         }));
-        assert!(report.verification_plan[0]
-            .checks
-            .iter()
-            .any(|check| check.contains("filesystem size")));
+        assert!(
+            report.verification_plan[0]
+                .checks
+                .iter()
+                .any(|check| check.contains("filesystem size"))
+        );
     }
 
     #[test]
@@ -36091,10 +36268,11 @@ mod tests {
                 ]
                 && command.mutates
         }));
-        assert!(step
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["targetcli", "saveconfig"] && command.mutates }));
+        assert!(
+            step.commands
+                .iter()
+                .any(|command| { command.argv == ["targetcli", "saveconfig"] && command.mutates })
+        );
 
         assert!(report.verification_plan.iter().any(|step| {
             step.action_id == "targetluns:iqn.2026-06.example:storage.root:create"
@@ -36110,10 +36288,12 @@ mod tests {
             .iter()
             .find(|requirement| requirement.tool == "targetcli")
             .expect("targetcli tool requirement exists");
-        assert!(targetcli
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("pkgs.targetcli-fb")));
+        assert!(
+            targetcli
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.targetcli-fb"))
+        );
     }
 
     #[test]
@@ -36191,14 +36371,18 @@ mod tests {
             command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
                 && !command.mutates
         }));
-        assert!(grow_verification
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates }));
-        assert!(grow_verification
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates }));
+        assert!(
+            grow_verification
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
+        assert!(
+            grow_verification
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
+        );
         assert!(grow_verification.commands.iter().any(|command| {
             command.argv
                 == [
@@ -36303,10 +36487,12 @@ mod tests {
             .iter()
             .find(|requirement| requirement.tool == "truncate")
             .expect("truncate tool requirement exists");
-        assert!(truncate_requirement
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("pkgs.coreutils")));
+        assert!(
+            truncate_requirement
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.coreutils"))
+        );
     }
 
     #[test]
@@ -36370,10 +36556,11 @@ mod tests {
             .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
             .expect("target-side LUN domain-specific recovery action is reported");
         assert!(domain_recovery.summary.contains("Create"));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["targetcli", "/iscsi", "ls"] && !command.mutates }));
+        assert!(
+            domain_recovery.commands.iter().any(|command| {
+                command.argv == ["targetcli", "/iscsi", "ls"] && !command.mutates
+            })
+        );
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
                 && !command.mutates
@@ -36385,14 +36572,18 @@ mod tests {
                 ]
                 && !command.mutates
         }));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates }));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates }));
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
+        assert!(
+            domain_recovery
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
+        );
         assert!(domain_recovery.notes.iter().any(|note| {
             note.contains("target-side LUN changes") && note.contains("provider inventory")
         }));
@@ -36430,10 +36621,12 @@ mod tests {
                 ]
                 && !command.mutates
         }));
-        assert!(report
-            .recovery_actions
-            .iter()
-            .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints));
+        assert!(
+            report
+                .recovery_actions
+                .iter()
+                .any(|action| action.kind == RecoveryActionKind::PreserveRecoveryPoints)
+        );
     }
 
     #[test]
@@ -36494,10 +36687,11 @@ mod tests {
             .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
             .expect("target-side LUN property domain-specific recovery action is reported");
         assert!(domain_recovery.summary.contains("SetProperty"));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["targetcli", "/iscsi", "ls"] && !command.mutates }));
+        assert!(
+            domain_recovery.commands.iter().any(|command| {
+                command.argv == ["targetcli", "/iscsi", "ls"] && !command.mutates
+            })
+        );
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:storage.root", "ls"]
                 && !command.mutates
@@ -36612,10 +36806,11 @@ mod tests {
                 && command.mutates
                 && command.readiness == CommandReadiness::Ready
         }));
-        assert!(step
-            .commands
-            .iter()
-            .any(|command| command.argv == ["targetcli", "saveconfig"] && command.mutates));
+        assert!(
+            step.commands
+                .iter()
+                .any(|command| command.argv == ["targetcli", "saveconfig"] && command.mutates)
+        );
     }
 
     #[test]
@@ -36776,10 +36971,12 @@ mod tests {
             .iter()
             .find(|requirement| requirement.tool == "tgtadm")
             .expect("tgtadm tool requirement exists");
-        assert!(tgtadm
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("pkgs.tgt")));
+        assert!(
+            tgtadm
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("pkgs.tgt"))
+        );
     }
 
     #[test]
@@ -36869,14 +37066,18 @@ mod tests {
                 ]
                 && !command.mutates
         }));
-        assert!(grow_verification
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates }));
-        assert!(grow_verification
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates }));
+        assert!(
+            grow_verification
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["lsscsi", "-t", "-s"] && !command.mutates })
+        );
+        assert!(
+            grow_verification
+                .commands
+                .iter()
+                .any(|command| { command.argv == ["multipath", "-ll"] && !command.mutates })
+        );
         assert!(grow_verification.commands.iter().any(|command| {
             command.argv
                 == [
@@ -36996,10 +37197,11 @@ mod tests {
             .find(|action| action.kind == RecoveryActionKind::DomainRecovery)
             .expect("tgt target-side LUN property domain-specific recovery action is reported");
         assert!(domain_recovery.summary.contains("SetProperty"));
-        assert!(domain_recovery
-            .commands
-            .iter()
-            .any(|command| { command.argv == ["targetcli", "/iscsi", "ls"] && !command.mutates }));
+        assert!(
+            domain_recovery.commands.iter().any(|command| {
+                command.argv == ["targetcli", "/iscsi", "ls"] && !command.mutates
+            })
+        );
         assert!(domain_recovery.commands.iter().any(|command| {
             command.argv == ["targetcli", "/iscsi/iqn.2026-06.example:tgt.root", "ls"]
                 && !command.mutates
@@ -37276,10 +37478,12 @@ mod tests {
             .iter()
             .find(|requirement| requirement.tool == "scstadmin")
             .expect("scstadmin tool requirement exists");
-        assert!(scstadmin
-            .remediation
-            .iter()
-            .any(|hint| hint.contains("provides scstadmin")));
+        assert!(
+            scstadmin
+                .remediation
+                .iter()
+                .any(|hint| hint.contains("provides scstadmin"))
+        );
     }
 
     #[test]

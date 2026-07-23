@@ -1,7 +1,7 @@
 use std::{collections::BTreeSet, fs, process::Command};
 
 use disk_nix_model::StorageGraph;
-use serde::{ser::SerializeStruct, Serialize};
+use serde::{Serialize, ser::SerializeStruct};
 use thiserror::Error;
 
 mod bcache;
@@ -5084,31 +5084,43 @@ nas01.example:/exports/projects mounted on /mnt/projects:
         assert_eq!(reports[4].category(), ProbeIssueCategory::None);
         assert_eq!(reports[5].category(), ProbeIssueCategory::InaccessibleData);
         assert_eq!(reports[6].category(), ProbeIssueCategory::ParseFailed);
-        assert!(reports[0]
-            .remediation()
-            .iter()
-            .any(|item| { item.contains("pkgs.zfs") }));
-        assert!(reports[1]
-            .remediation()
-            .iter()
-            .any(|item| { item.contains("device-mapper state") }));
-        assert!(reports[2]
-            .remediation()
-            .iter()
-            .any(|item| { item.contains("fixture coverage") }));
-        assert!(reports[3]
-            .remediation()
-            .iter()
-            .any(|item| { item.contains("exit status") }));
+        assert!(
+            reports[0]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("pkgs.zfs") })
+        );
+        assert!(
+            reports[1]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("device-mapper state") })
+        );
+        assert!(
+            reports[2]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("fixture coverage") })
+        );
+        assert!(
+            reports[3]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("exit status") })
+        );
         assert!(reports[4].remediation().is_empty());
-        assert!(reports[5]
-            .remediation()
-            .iter()
-            .any(|item| { item.contains("iscsid") || item.contains("open-iscsi") }));
-        assert!(reports[6]
-            .remediation()
-            .iter()
-            .any(|item| { item.contains("nvme-cli") }));
+        assert!(
+            reports[5]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("iscsid") || item.contains("open-iscsi") })
+        );
+        assert!(
+            reports[6]
+                .remediation()
+                .iter()
+                .any(|item| { item.contains("nvme-cli") })
+        );
 
         let json = serde_json::to_string(&reports).expect("reports should serialize");
         assert!(json.contains(r#""category":"missing-tool""#));
