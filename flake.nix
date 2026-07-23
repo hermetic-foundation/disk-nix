@@ -2595,21 +2595,21 @@
             ${pkgs.nodejs}/bin/node ${./scripts/check-docs-legibility.mjs} ${self}
             ${pkgs.nodejs}/bin/node --check ${./scripts/render-docs.mjs}
             ${pkgs.nodejs}/bin/node --check ${./scripts/check-docs-legibility.mjs}
-            checklist=${./docs/feature-checklist.md}
+            checklist=${./docs/developer/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'docs/index.md' ${./README.md}
-            ${pkgs.gnugrep}/bin/grep -q 'docs/user-guide.md' ${./README.md}
-            ${pkgs.gnugrep}/bin/grep -q 'docs/feature-checklist.md' ${./README.md}
-            ${pkgs.gnugrep}/bin/grep -q 'docs/operator-runbooks.md' ${./README.md}
-            ${pkgs.gnugrep}/bin/grep -q 'feature-checklist.md' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'operator-runbooks.md' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'docs/user/user-guide.md' ${./README.md}
+            ${pkgs.gnugrep}/bin/grep -q 'docs/developer/feature-checklist.md' ${./README.md}
+            ${pkgs.gnugrep}/bin/grep -q 'docs/user/operator-runbooks.md' ${./README.md}
+            ${pkgs.gnugrep}/bin/grep -q 'feature-checklist.md' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'operator-runbooks.md' ${./docs/user/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'node scripts/render-docs.mjs' ${./docs/index.md}
             ${pkgs.gnugrep}/bin/grep -q 'Documentation index' ${./docs/index.md}
             ${pkgs.gnugrep}/bin/grep -q 'User guide' ${./docs/index.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Common Workflows' ${./docs/user-guide.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Recover From A Failed Apply' ${./docs/user-guide.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Use The NixOS Module' ${./docs/user-guide.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Hardening beyond the checklist' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Further integration hardening' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Common Workflows' ${./docs/user/user-guide.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Recover From A Failed Apply' ${./docs/user/user-guide.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Use The NixOS Module' ${./docs/user/user-guide.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Hardening beyond the checklist' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Further integration hardening' ${./docs/developer/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'Status labels:' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Update rules:' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q '\*\*Finished:\*\*' "$checklist"
@@ -2680,189 +2680,189 @@
             ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'vdo changeWritePolicy' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'exportfs -i' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real LUKS header label mutation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem label mutation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem device replacement' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real loop-backed swap label mutation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool property mutation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool device replacement' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real LVM cache property mutation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real LVM cache detach and reattach' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real LVM cache replacement' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'cached-origin ext4 sentinel' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation, real bcache cache detach/reattach' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache detach/reattach' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real bcache failed-attach recovery' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache replacement' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real bcachefs member replacement' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real backing-file mode mutation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real loop-device read-only mutation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real zram property reconciliation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real target-side LUN property mutation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'target-side LIO map/unmap' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'target-side LUN destroy refusal' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'host-side LUN rescan' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'lab-backed multipath resize' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'lab-backed multipath path add/remove' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'replacement, resize, and flush operations' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'multipath flush with `multipath -f`' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'NFS failed-and-resumed remount data-survival' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'iSCSI host-LUN failed-and-resumed rescan data-survival' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace create/delete' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace grow' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace attach/detach' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'NVMe namespace identity-drift assertions' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real MD RAID member replacement' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'MD RAID stale-superblock evidence' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'MD RAID failed-detach recovery' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'MD RAID failed-reattach recovery' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'missing-member MD RAID rescan' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel.properties.label' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'btrfsSmokeLabel.properties.label' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'filesystems.<name>.replaceDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'bcachefs device add' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'swaps.swapSmokeLabel.properties.label' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'pools.<name>.properties.autotrim' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.properties.lvm.cache-mode' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.removeDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.addDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.replaceDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-lvm-cache-replace' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'cache sentinel survives' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.properties."bcache.cache-mode"' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheReplacement.replaceDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-replace' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.removeDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheFailedAttach.addDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'failed-attach recovery' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.addDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.operation = "rescan"' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'backingFiles.<path>.properties.mode' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'loopDevices.<loop>.properties."loop.read-only"' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'zram.properties.algorithm' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'services.disk-nix.zram' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.properties."lio.writeCache"' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.operation = "attach"' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.operation = "detach"' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.destroy = true' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_LUN_PATH' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_LUN_DATA_SURVIVAL=1' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-iscsi-lun-sentinel.txt' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'luns.<target>:0.operation = "rescan"' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_RESIZE=1' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_ADD_PATH' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_REMOVE_PATH' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_REPLACE_OLD_PATH' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.paths.replaceDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_FLUSH=1' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_CREATE_DELETE=1' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_GROW=1' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_ATTACH_DETACH=1' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'namespace identity drift' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'nvme create-ns <controller>' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'nvme delete-ns <controller>' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'nvme attach-ns <controller>' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'nvme detach-ns <controller>' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.resize.operation = "grow"' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.paths.addDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.flush.destroy = true' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_VM_HARNESSES=target-lun' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes.<name>.properties.writePolicy' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'exports.<path>.properties.options' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NFS_DATA_SURVIVAL=1' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-nfs-sentinel.txt' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'mdRaids.<name>.replaceDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'mdadm <array> --replace <old-loop> --with <new-loop>' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'mdadm --examine <removed-loop>' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'mdRaids.<name>.removeDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'failed-detach recovery' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'mdRaids.<name>.addDevices' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'failed-reattach recovery' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'fails and removes one RAID1 member' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'rollback review safety' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'failed-and-resumed' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'VM-backed failure-injection apply' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'rollback review stays non-mutating' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'clean follow-up apply' ${./docs/integration-tests.md}
-            ${pkgs.gnugrep}/bin/grep -q 'partition, LUKS, LVM, filesystem grow, and remount' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'multi-domain apply plan for' ${./docs/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'ext4 grow plus real' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real LUKS header label mutation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem label mutation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real Btrfs filesystem device replacement' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real loop-backed swap label mutation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool property mutation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real ZFS pool device replacement' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real LVM cache property mutation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real LVM cache detach and reattach' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real LVM cache replacement' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'cached-origin ext4 sentinel' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache-mode mutation, real bcache cache detach/reattach' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache detach/reattach' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache failed-attach recovery' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real bcache cache replacement' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real bcachefs member replacement' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real backing-file mode mutation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real loop-device read-only mutation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real zram property reconciliation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real target-side LUN property mutation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'target-side LIO map/unmap' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'target-side LUN destroy refusal' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'host-side LUN rescan' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lab-backed multipath resize' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lab-backed multipath path add/remove' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'replacement, resize, and flush operations' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'multipath flush with `multipath -f`' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real VDO write-policy mutation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real NFS export option mutation' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'NFS failed-and-resumed remount data-survival' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'iSCSI host-LUN failed-and-resumed rescan data-survival' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace create/delete' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace grow' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lab-backed NVMe namespace attach/detach' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'NVMe namespace identity-drift assertions' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real MD RAID member replacement' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'MD RAID stale-superblock evidence' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'MD RAID failed-detach recovery' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'MD RAID failed-reattach recovery' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'missing-member MD RAID rescan' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'loopSmokeLabel.properties.label' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'luksSmokeLabel.properties.label' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'btrfsSmokeLabel.properties.label' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'filesystems.<name>.replaceDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'bcachefs device add' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'swaps.swapSmokeLabel.properties.label' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'pools.<name>.properties.autotrim' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.properties.lvm.cache-mode' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.removeDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.addDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'lvmCaches.<vg/lv>.replaceDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-lvm-cache-replace' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'cache sentinel survives' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.properties."bcache.cache-mode"' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheReplacement.replaceDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-bcache-replace' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.removeDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheFailedAttach.addDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'failed-attach recovery' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.addDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'caches.bcacheSmoke.operation = "rescan"' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'backingFiles.<path>.properties.mode' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'loopDevices.<loop>.properties."loop.read-only"' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'zram.properties.algorithm' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'services.disk-nix.zram' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.properties."lio.writeCache"' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.operation = "attach"' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.operation = "detach"' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'targetLuns.<iqn>.destroy = true' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_LUN_PATH' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_LUN_DATA_SURVIVAL=1' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-iscsi-lun-sentinel.txt' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'luns.<target>:0.operation = "rescan"' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_RESIZE=1' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_ADD_PATH' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_REMOVE_PATH' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_REPLACE_OLD_PATH' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.paths.replaceDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_MULTIPATH_FLUSH=1' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_CREATE_DELETE=1' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_GROW=1' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NVME_ATTACH_DETACH=1' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'namespace identity drift' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme create-ns <controller>' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme delete-ns <controller>' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme attach-ns <controller>' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'nvme detach-ns <controller>' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.resize.operation = "grow"' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.paths.addDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'multipathMaps.flush.destroy = true' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_VM_HARNESSES=target-lun' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'vdoVolumes.<name>.properties.writePolicy' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'exports.<path>.properties.options' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_NFS_DATA_SURVIVAL=1' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'disk-nix-nfs-sentinel.txt' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'mdRaids.<name>.replaceDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'mdadm <array> --replace <old-loop> --with <new-loop>' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'mdadm --examine <removed-loop>' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'mdRaids.<name>.removeDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'failed-detach recovery' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'mdRaids.<name>.addDevices' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'failed-reattach recovery' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'fails and removes one RAID1 member' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'real partial failure' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback review safety' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'failed-and-resumed' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'VM-backed failure-injection apply' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'rollback review stays non-mutating' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'clean follow-up apply' ${./docs/developer/integration-tests.md}
+            ${pkgs.gnugrep}/bin/grep -q 'partition, LUKS, LVM, filesystem grow, and remount' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'multi-domain apply plan for' ${./docs/developer/integration-tests.md}
             ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' ${./docs/planning.md}
-            ${pkgs.gnugrep}/bin/grep -q 'partiallySuppressed' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'reconciliationGroups' ${./docs/developer/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'partiallySuppressed' ${./docs/user/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'bracketed IPv6 portals' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'CHAP secret redaction' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'iSER/RDMA session transport' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'CHAP secret redaction' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'iSER/RDMA session transport' ${./docs/user/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'Real-world iSCSI fixture coverage' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'discovery authentication redaction' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'discovery authentication redaction' ${./docs/user/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'normalizes_multi_portal_discovery_auth_and_lun_churn_fixture' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q 'discovery.sendtargets.auth.authmethod' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q 'iser-rdma0' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q '2001:db8:40::10' ${./crates/disk-nix-probe/src/iscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q 'Fibre Channel multipath fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Real-world physical Fibre Channel fixture coverage' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'zoning-style fabric/WWPN layouts' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'zoning-style fabric/WWPN layouts' ${./docs/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'zoning-style fabric/WWPN layouts' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'zoning-style fabric/WWPN layouts' ${./docs/user/storage-scope.md}
             ${pkgs.gnugrep}/bin/grep -q 'fibre_channel_zoned_fixture_preserves_adapter_alua_and_failed_paths' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'scsi.fc-target-wwpn' ${./crates/disk-nix-probe/src/lsscsi.rs}
             ${pkgs.gnugrep}/bin/grep -q 'NVMe/TCP multipath fixture' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'native NVMe namespace paths' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'native NVMe namespace paths' ${./docs/user/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'nvme_tcp_multipath_fixture_preserves_native_path_state' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'uuid.aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'Real-world NVMe-oF fixture coverage' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'mixed NVMe-oF fixture' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'shared namespace UUID/NGUID identity' ${./docs/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'mixed NVMe-oF fixture' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'shared namespace UUID/NGUID identity' ${./docs/user/storage-scope.md}
             ${pkgs.gnugrep}/bin/grep -q 'nvme_of_mixed_fabric_fixture_preserves_sharing_and_path_churn' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'node.identity.uuid' ${./crates/disk-nix-probe/src/nvme.rs}
             ${pkgs.gnugrep}/bin/grep -q 'Real-world clustered storage fixture coverage' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'DLM/lvmlockd failure fixture' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'split-brain protection refusal' ${./docs/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'DLM/lvmlockd failure fixture' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'split-brain protection refusal' ${./docs/user/storage-scope.md}
             ${pkgs.gnugrep}/bin/grep -q 'clustered_lvm_failure_fixture_preserves_lock_manager_and_split_brain_state' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'lvm.vg-lock-failure' ${./crates/disk-nix-probe/src/lvm.rs}
             ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' ${./docs/user/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'Real-world server/client NFS fixture coverage' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'client remount drift' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'pNFS layout and' ${./docs/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'client remount drift' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'pNFS layout and' ${./docs/user/storage-scope.md}
             ${pkgs.gnugrep}/bin/grep -q 'nfs_server_client_fixture_merges_mount_usage_and_export_policy' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'nfs.export-option-sec", "krb5p' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'normalizes_referral_pnfs_remount_and_export_reload_fixture' ${./crates/disk-nix-probe/src/nfs.rs}
             ${pkgs.gnugrep}/bin/grep -q 'nfs.export-option-pnfs' ${./crates/disk-nix-probe/src/nfs.rs}
             ${pkgs.gnugrep}/bin/grep -q 'SAS enclosure fixture' "$checklist"
             ${pkgs.gnugrep}/bin/grep -q 'Real-world hardware enclosure and array fixture coverage' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'vendor LUN metadata' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'SES failure attributes' ${./docs/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'vendor LUN metadata' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'SES failure attributes' ${./docs/user/storage-scope.md}
             ${pkgs.gnugrep}/bin/grep -q 'hardware_array_fixture_preserves_ses_failures_and_identity_drift' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'vdisk-prod-77-replaced' ${./crates/disk-nix-probe/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' "$checklist"
-            ${pkgs.gnugrep}/bin/grep -q 'stressed VDO fixture' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'stressed VDO fixture' ${./docs/user/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'vdo_pressure_fixture_preserves_rebuild_policy_and_failure_state' ${./crates/disk-nix-probe/src/lib.rs}
-            ${pkgs.gnugrep}/bin/grep -q 'physical-space pressure' ${./docs/storage-scope.md}
-            ${pkgs.gnugrep}/bin/grep -q 'non-block SES enclosure records' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'active/standby state' ${./docs/storage-scope.md}
-            ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache' ${./docs/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'physical-space pressure' ${./docs/user/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'non-block SES enclosure records' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'active/standby state' ${./docs/user/storage-scope.md}
+            ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache' ${./docs/developer/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' ${./scripts/integration-failure-recovery-smoke.sh}
-            ${pkgs.gnugrep}/bin/grep -q 'tgt property updates render' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'provider = "scst"' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'providerCapabilities' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'provider capability contracts' ${./docs/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'tgt property updates render' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'provider = "scst"' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'providerCapabilities' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'provider capability contracts' ${./docs/developer/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'target-lun.capacity.expand' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_lio_backing_size_command' ${./crates/disk-nix-exec/src/lib.rs}
-            ${pkgs.gnugrep}/bin/grep -q 'LIO target-side LUN grow has a native reviewed block' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'LIO target-side LUN grow has a native reviewed block' ${./docs/developer/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_lio_fileio_grow_forces_backstore_resize_before_refresh' ${./crates/disk-nix-exec/src/lib.rs}
-            ${pkgs.gnugrep}/bin/grep -q 'backstoreType = "fileio"' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'truncate --size <desiredSize> <source>' ${./docs/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'backstoreType = "fileio"' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'truncate --size <desiredSize> <source>' ${./docs/user/cli.md}
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_tgt_logical_unit_refresh_command' ${./crates/disk-nix-exec/src/lib.rs}
-            ${pkgs.gnugrep}/bin/grep -q 'tgt target-side LUN grow has a native reviewed refresh path' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Generic target LUN verification plans' ${./docs/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'tgt target-side LUN grow has a native reviewed refresh path' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Generic target LUN verification plans' ${./docs/user/status.md}
             ${pkgs.gnugrep}/bin/grep -q 'target_lun_generic_host_verification_commands' ${./crates/disk-nix-exec/src/lib.rs}
-            ${pkgs.gnugrep}/bin/grep -q 'arrayId' ${./docs/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'arrayId' ${./docs/developer/planning.md}
             ${pkgs.gnugrep}/bin/grep -q 'target-lun.array-id.declared' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'rollback_recipes' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'read_only_validation' ${./crates/disk-nix-exec/src/lib.rs}
@@ -2901,25 +2901,25 @@
             ${pkgs.gnugrep}/bin/grep -q 'ambiguous-stale-identity-metadata' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'idempotency-externally-modified-metadata' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'plausible data-loss command metadata' ${./crates/disk-nix-exec/src/lib.rs}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses missing required tools' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit filesystem safety gates' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit block-stack safety gates' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit advanced-storage safety' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit network-storage safety gates' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'metadata advertises already rolled-back' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'idempotency diagnostics for already satisfied' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'detailed post-failure topology diagnostics report divergent' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'ambiguous rollback points and stale identity data' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'behavior for mounted filesystems' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'topology-aware refusal' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes declare required topology' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'negative tests proving' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'not bound to the failed' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'current topology differs' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'data-loss-prone operations make rollback unsafe' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay can materialize deterministic' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'receiptBinding.topologyPayloads' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'crate-level integration' ${./docs/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses missing required tools' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit filesystem safety gates' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit block-stack safety gates' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit advanced-storage safety' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes emit network-storage safety gates' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'metadata advertises already rolled-back' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'idempotency diagnostics for already satisfied' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'detailed post-failure topology diagnostics report divergent' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'ambiguous rollback points and stale identity data' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'behavior for mounted filesystems' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'topology-aware refusal' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback recipes declare required topology' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'negative tests proving' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'not bound to the failed' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'current topology differs' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'data-loss-prone operations make rollback unsafe' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay can materialize deterministic' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'receiptBinding.topologyPayloads' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'crate-level integration' ${./docs/developer/feature-checklist.md}
             ${pkgs.gnugrep}/bin/grep -q 'proven_rollback_recipe_replays_and_emits_receipt_binding' ${./crates/disk-nix-exec/tests/rollback_replay.rs}
             ${pkgs.gnugrep}/bin/grep -q 'filesystem_remount_failure_emits_proven_safe_rollback_recipe' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'filesystem_property_failure_emits_proven_safe_rollback_recipe' ${./crates/disk-nix-exec/src/lib.rs}
@@ -2932,32 +2932,32 @@
             ${pkgs.gnugrep}/bin/grep -q 'advanced_storage_refused_boundaries_emit_operator_only_rollback_recipes' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'network_storage_failures_emit_proven_safe_rollback_recipes' ${./crates/disk-nix-exec/src/lib.rs}
             ${pkgs.gnugrep}/bin/grep -q 'network_storage_refused_boundaries_emit_operator_only_rollback_recipes' ${./crates/disk-nix-exec/src/lib.rs}
-            ${pkgs.gnugrep}/bin/grep -q 'rollbackOptions' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'rollbackValue' ${./docs/planning.md}
-            ${pkgs.gnugrep}/bin/grep -q 'device-mapper rename verification failures' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Block-stack property declarations use the same' ${./docs/planning.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Advanced-storage declarations also use' ${./docs/planning.md}
-            ${pkgs.gnugrep}/bin/grep -q 'ZFS snapshot rollback/clone' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Network-storage declarations also use' ${./docs/planning.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Network-storage failures can also produce proven-safe recipes' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses proven-safe recipes when' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises ambiguous rollback points' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises active consumers' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses reversible mutation' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'rollbackRecipes' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'requiredTopologyEvidence' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'replay_proven_safe_rollback_recipe_with_topology_evidence' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'topology comparison summary already has missing targets' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'open encrypted mappings, active' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'ambiguous rollback points, ambiguous rollback targets' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Idempotency' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'operatorOnlyHandoff' ${./docs/cli.md}
-            ${pkgs.gnugrep}/bin/grep -q 'proven-safe reversible rollback' ${./docs/status.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback has an execution engine' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses' ${./docs/feature-checklist.md}
-            ${pkgs.gnugrep}/bin/grep -q 'scstadmin' ${./docs/planning.md}
-            ${pkgs.gnugrep}/bin/grep -q 'initiatorGroup' ${./docs/planning.md}
-            runbooks=${./docs/operator-runbooks.md}
+            ${pkgs.gnugrep}/bin/grep -q 'rollbackOptions' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'rollbackValue' ${./docs/developer/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'device-mapper rename verification failures' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Block-stack property declarations use the same' ${./docs/developer/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Advanced-storage declarations also use' ${./docs/developer/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'ZFS snapshot rollback/clone' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Network-storage declarations also use' ${./docs/developer/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Network-storage failures can also produce proven-safe recipes' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses proven-safe recipes when' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises ambiguous rollback points' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'commands whose metadata advertises active consumers' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses reversible mutation' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'rollbackRecipes' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'requiredTopologyEvidence' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'replay_proven_safe_rollback_recipe_with_topology_evidence' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'topology comparison summary already has missing targets' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'open encrypted mappings, active' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'ambiguous rollback points, ambiguous rollback targets' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Idempotency' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'operatorOnlyHandoff' ${./docs/user/cli.md}
+            ${pkgs.gnugrep}/bin/grep -q 'proven-safe reversible rollback' ${./docs/user/status.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback has an execution engine' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'Automatic rollback replay refuses' ${./docs/developer/feature-checklist.md}
+            ${pkgs.gnugrep}/bin/grep -q 'scstadmin' ${./docs/developer/planning.md}
+            ${pkgs.gnugrep}/bin/grep -q 'initiatorGroup' ${./docs/developer/planning.md}
+            runbooks=${./docs/user/operator-runbooks.md}
             for runbook in \
               "Device replacement" \
               Rollback \

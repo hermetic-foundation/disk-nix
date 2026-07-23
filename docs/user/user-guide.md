@@ -5,7 +5,7 @@ This guide explains how to use `disk-nix` as an operator.
 Use the reference docs when you need exact field contracts:
 
 - [CLI](cli.md)
-- [Planning](planning.md)
+- [Planning](../developer/planning.md)
 - [NixOS module](nixos-module.md)
 - [Storage scope](storage-scope.md)
 - [Operator runbooks](operator-runbooks.md)
@@ -344,7 +344,7 @@ nix build .#integration-vm-test
 sudo env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 nix run .#integration-vm-smoke
 ```
 
-Targeted harnesses are documented in [Integration tests](integration-tests.md).
+Targeted harnesses are documented in [Integration tests](../developer/integration-tests.md).
 
 ## Render Documentation
 

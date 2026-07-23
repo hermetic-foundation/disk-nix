@@ -9,8 +9,8 @@ maintaining its tests and compatibility contract.
 | --- | --- |
 | [Architecture](architecture.md) | Data flow, crate boundaries, graph model, probes, and safety layers. |
 | [Feature checklist](feature-checklist.md) | Requirement-by-requirement completion evidence. |
-| [Feature status](status.md) | Implementation status and remaining hardening areas. |
-| [Storage scope](storage-scope.md) | Storage-domain model and discovery coverage. |
+| [Feature status](../user/status.md) | Implementation status and remaining hardening areas. |
+| [Storage scope](../user/storage-scope.md) | Storage-domain model and discovery coverage. |
 
 ## Contracts
 
@@ -18,8 +18,8 @@ maintaining its tests and compatibility contract.
 | --- | --- |
 | [Compatibility](compatibility.md) | Versioning, JSON contracts, CLI text policy, generated artifacts. |
 | [Planning](planning.md) | Planner semantics, risk classes, dependency ordering, reconciliation. |
-| [CLI planning and apply](cli-plan-apply.md) | Report fields, command rendering, rollback recipes, replay gates. |
-| [NixOS module reference](nixos-module-reference.md) | Typed option behavior and native NixOS derivation rules. |
+| [CLI planning and apply](../user/cli-plan-apply.md) | Report fields, command rendering, rollback recipes, replay gates. |
+| [NixOS module reference](../user/nixos-module-reference.md) | Typed option behavior and native NixOS derivation rules. |
 
 ## Test And Proof Maintenance
 
@@ -33,6 +33,6 @@ maintaining its tests and compatibility contract.
 
 | Document | Use it for |
 | --- | --- |
-| [User guide](user-guide.md) | Expected operator workflows. |
-| [Operator runbooks](operator-runbooks.md) | Required guidance for high-risk operations. |
-| [CLI](cli.md) | Stable command surface and focused read-only views. |
+| [User guide](../user/user-guide.md) | Expected operator workflows. |
+| [Operator runbooks](../user/operator-runbooks.md) | Required guidance for high-risk operations. |
+| [CLI](../user/cli.md) | Stable command surface and focused read-only views. |

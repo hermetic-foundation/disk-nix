@@ -15,46 +15,33 @@ and recovery guidance.
 
 The license is AGPL-3.0-or-later.
 
-## Documentation
+## Usage Documentation
 
-Start here:
+Start with the user-facing docs when installing, declaring, or operating
+storage:
 
 - [docs/index.md](docs/index.md): documentation map and recommended reading
   order
-- [docs/user-docs.md](docs/user-docs.md): user and operator documentation map
-- [docs/developer-docs.md](docs/developer-docs.md): contributor and maintainer
-  documentation map
-- [docs/user-guide.md](docs/user-guide.md): task-oriented guide for using the
-  project
-- [docs/status.md](docs/status.md): implemented behavior and hardening notes
-- [docs/feature-checklist.md](docs/feature-checklist.md): completed feature
-  scope
-- [docs/operator-runbooks.md](docs/operator-runbooks.md): high-risk workflows
-  such as replacement, rollback, failed apply recovery, degraded arrays, and
-  shared storage
+- [docs/user/index.md](docs/user/index.md): user and operator documentation map
+- [docs/user/user-guide.md](docs/user/user-guide.md): task-oriented guide for
+  using the project
+- [docs/user/status.md](docs/user/status.md): implemented behavior and
+  hardening notes
+- [docs/user/operator-runbooks.md](docs/user/operator-runbooks.md): high-risk
+  workflows such as replacement, rollback, failed apply recovery, degraded
+  arrays, and shared storage
 
-Reference docs:
+Usage reference:
 
-- [docs/cli.md](docs/cli.md): CLI commands and JSON contracts
-- [docs/cli-plan-apply.md](docs/cli-plan-apply.md): planner, apply,
+- [docs/user/cli.md](docs/user/cli.md): CLI commands and JSON contracts
+- [docs/user/cli-plan-apply.md](docs/user/cli-plan-apply.md): planner, apply,
   validation, rollback, and report contracts
-- [docs/planning.md](docs/planning.md): planning, risk classification,
-  reconciliation, dependency ordering, and apply policy
-- [docs/nixos-module.md](docs/nixos-module.md): NixOS module options and
-  generated files
-- [docs/nixos-module-reference.md](docs/nixos-module-reference.md): full typed
-  option example and domain-specific module behavior
-- [docs/storage-scope.md](docs/storage-scope.md): storage domains and update
-  operations
-- [docs/integration-tests.md](docs/integration-tests.md): VM and host-backed
-  smoke test entrypoints
-- [docs/integration-failure-recovery.md](docs/integration-failure-recovery.md):
-  synthetic failed-command catalog and recovery expectations
-- [docs/integration-smoke-harnesses.md](docs/integration-smoke-harnesses.md):
-  host-backed, VM-backed, and lab-backed harness details
-- [docs/compatibility.md](docs/compatibility.md): versioning and compatibility
-  policy
-- [docs/architecture.md](docs/architecture.md): implementation structure
+- [docs/user/nixos-module.md](docs/user/nixos-module.md): NixOS module options
+  and generated files
+- [docs/user/nixos-module-reference.md](docs/user/nixos-module-reference.md):
+  full typed option example and domain-specific module behavior
+- [docs/user/storage-scope.md](docs/user/storage-scope.md): storage domains and
+  update operations
 
 ## Quick Start
 
@@ -314,5 +301,26 @@ Run the synthetic failure-recovery harness without root:
 env DISK_NIX_INTEGRATION_DESTRUCTIVE=1 nix run .#integration-failure-recovery-smoke
 ```
 
-See [docs/integration-tests.md](docs/integration-tests.md) before running any
-host-backed harness.
+See [docs/developer/integration-tests.md](docs/developer/integration-tests.md)
+before running any host-backed harness.
+
+## Contributing
+
+Contributor and maintainer docs live under `docs/developer/`:
+
+- [docs/developer/index.md](docs/developer/index.md): contributor
+  documentation map
+- [docs/developer/architecture.md](docs/developer/architecture.md):
+  implementation structure
+- [docs/developer/planning.md](docs/developer/planning.md): planning, risk
+  classification, reconciliation, dependency ordering, and apply policy
+- [docs/developer/compatibility.md](docs/developer/compatibility.md):
+  versioning and compatibility policy
+- [docs/developer/feature-checklist.md](docs/developer/feature-checklist.md):
+  completed feature scope
+- [docs/developer/integration-tests.md](docs/developer/integration-tests.md):
+  VM and host-backed smoke test entrypoints
+- [docs/developer/integration-failure-recovery.md](docs/developer/integration-failure-recovery.md):
+  synthetic failed-command catalog and recovery expectations
+- [docs/developer/integration-smoke-harnesses.md](docs/developer/integration-smoke-harnesses.md):
+  host-backed, VM-backed, and lab-backed harness details

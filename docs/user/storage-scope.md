@@ -2,7 +2,7 @@
 
 `disk-nix` is intended to grow toward full Linux storage awareness: local block devices, complex filesystems, volume managers, cache layers, network storage, fabric-visible LUNs, and runtime-only storage.
 
-Use [CLI](cli.md) for read-only views, [Planning](planning.md) for lifecycle semantics, and [Feature checklist](feature-checklist.md) for completion evidence.
+Use [CLI](cli.md) for read-only views, [Planning](../developer/planning.md) for lifecycle semantics, and [Feature checklist](../developer/feature-checklist.md) for completion evidence.
 
 ## Domain map
 

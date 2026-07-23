@@ -164,7 +164,7 @@ It also includes lifecycle declarations for:
 The schema also covers supported operation names, apply policy fields, and NixOS
 activation helper fields.
 
-Planner-compatible aliases such as `number`, `startOffset`, `endOffset`, and `raidLevel` are included for editor completion and validation parity. The Nix package installs the same generated schema at `share/disk-nix/schema/disk-nix-spec.schema.json`. See [compatibility.md](compatibility.md) for the versioning, migration, JSON, CLI text, NixOS option, and generated-artifact compatibility policy.
+Planner-compatible aliases such as `number`, `startOffset`, `endOffset`, and `raidLevel` are included for editor completion and validation parity. The Nix package installs the same generated schema at `share/disk-nix/schema/disk-nix-spec.schema.json`. See [compatibility.md](../developer/compatibility.md) for the versioning, migration, JSON, CLI text, NixOS option, and generated-artifact compatibility policy.
 
 ## Spec Migration
 

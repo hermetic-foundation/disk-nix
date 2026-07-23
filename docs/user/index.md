@@ -25,13 +25,13 @@ host.
 
 | Document | Use it for |
 | --- | --- |
-| [Planning](planning.md) | Risk classification, lifecycle operations, reconciliation, and apply policy. |
-| [Compatibility](compatibility.md) | Spec versions, JSON compatibility, CLI text policy, and safety invariants. |
+| [Planning](../developer/planning.md) | Risk classification, lifecycle operations, reconciliation, and apply policy. |
+| [Compatibility](../developer/compatibility.md) | Spec versions, JSON compatibility, CLI text policy, and safety invariants. |
 
 ## Testing Before Real Changes
 
 | Document | Use it for |
 | --- | --- |
-| [Integration tests](integration-tests.md) | Destructive opt-ins, VM suite entrypoints, and disko example checks. |
-| [Integration smoke harnesses](integration-smoke-harnesses.md) | Host-backed, VM-backed, and lab-backed harness behavior. |
-| [Integration failure recovery](integration-failure-recovery.md) | Synthetic failure reports and rollback-review behavior. |
+| [Integration tests](../developer/integration-tests.md) | Destructive opt-ins, VM suite entrypoints, and disko example checks. |
+| [Integration smoke harnesses](../developer/integration-smoke-harnesses.md) | Host-backed, VM-backed, and lab-backed harness behavior. |
+| [Integration failure recovery](../developer/integration-failure-recovery.md) | Synthetic failure reports and rollback-review behavior. |

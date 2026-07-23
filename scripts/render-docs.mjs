@@ -5,23 +5,23 @@ import path from "node:path";
 const docs = [
   ["index", "Docs index", "docs/index.md"],
   ["readme", "README", "README.md"],
-  ["user-docs", "User docs", "docs/user-docs.md"],
-  ["developer-docs", "Developer docs", "docs/developer-docs.md"],
-  ["user-guide", "User guide", "docs/user-guide.md"],
-  ["status", "Status", "docs/status.md"],
-  ["architecture", "Architecture", "docs/architecture.md"],
-  ["storage-scope", "Storage scope", "docs/storage-scope.md"],
-  ["cli", "CLI", "docs/cli.md"],
-  ["cli-plan-apply", "CLI planning and apply", "docs/cli-plan-apply.md"],
-  ["planning", "Planning", "docs/planning.md"],
-  ["nixos-module", "NixOS module", "docs/nixos-module.md"],
-  ["nixos-module-reference", "NixOS module reference", "docs/nixos-module-reference.md"],
-  ["integration-tests", "Integration tests", "docs/integration-tests.md"],
-  ["integration-failure-recovery", "Integration failure recovery", "docs/integration-failure-recovery.md"],
-  ["integration-smoke-harnesses", "Integration smoke harnesses", "docs/integration-smoke-harnesses.md"],
-  ["operator-runbooks", "Operator runbooks", "docs/operator-runbooks.md"],
-  ["compatibility", "Compatibility", "docs/compatibility.md"],
-  ["feature-checklist", "Feature checklist", "docs/feature-checklist.md"],
+  ["user-docs", "User docs", "docs/user/index.md"],
+  ["user-guide", "User guide", "docs/user/user-guide.md"],
+  ["status", "Status", "docs/user/status.md"],
+  ["storage-scope", "Storage scope", "docs/user/storage-scope.md"],
+  ["cli", "CLI", "docs/user/cli.md"],
+  ["cli-plan-apply", "CLI planning and apply", "docs/user/cli-plan-apply.md"],
+  ["nixos-module", "NixOS module", "docs/user/nixos-module.md"],
+  ["nixos-module-reference", "NixOS module reference", "docs/user/nixos-module-reference.md"],
+  ["operator-runbooks", "Operator runbooks", "docs/user/operator-runbooks.md"],
+  ["developer-docs", "Developer docs", "docs/developer/index.md"],
+  ["architecture", "Architecture", "docs/developer/architecture.md"],
+  ["planning", "Planning", "docs/developer/planning.md"],
+  ["compatibility", "Compatibility", "docs/developer/compatibility.md"],
+  ["feature-checklist", "Feature checklist", "docs/developer/feature-checklist.md"],
+  ["integration-tests", "Integration tests", "docs/developer/integration-tests.md"],
+  ["integration-failure-recovery", "Integration failure recovery", "docs/developer/integration-failure-recovery.md"],
+  ["integration-smoke-harnesses", "Integration smoke harnesses", "docs/developer/integration-smoke-harnesses.md"],
 ];
 
 const outDir = process.argv[2] || "build/docs-site";
@@ -42,36 +42,42 @@ function slugify(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-function linkHref(href) {
+function linkHref(href, currentFile) {
   if (/^[a-z]+:/i.test(href) || href.startsWith("#")) {
     return href;
   }
   const [base, hash] = href.split("#");
-  const normalized = base.replace(/^\.\//, "").replace(/^\.\.\//, "");
-  const doc = docs.find(([, , file]) => file === normalized || file === `docs/${normalized}`);
+  const currentDir = path.posix.dirname(currentFile);
+  const candidates = [
+    base,
+    path.posix.join(currentDir, base),
+  ].map((candidate) => path.posix.normalize(candidate).replace(/^\.\//, ""));
+  const doc = docs.find(([, , file]) =>
+    candidates.some((candidate) => file === candidate || file === `docs/${candidate}`),
+  );
   if (!doc) {
     return href;
   }
   return `${doc[0]}.html${hash ? `#${hash}` : ""}`;
 }
 
-function inlineMarkdown(value) {
+function inlineMarkdown(value, currentFile) {
   let html = escapeHtml(value);
   html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
   html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => {
-    return `<a href="${escapeHtml(linkHref(href))}">${label}</a>`;
+    return `<a href="${escapeHtml(linkHref(href, currentFile))}">${label}</a>`;
   });
   return html;
 }
 
-function renderTable(lines) {
+function renderTable(lines, currentFile) {
   const rows = lines.map((line) =>
     line
       .trim()
       .replace(/^\||\|$/g, "")
       .split("|")
-      .map((cell) => inlineMarkdown(cell.trim())),
+      .map((cell) => inlineMarkdown(cell.trim(), currentFile)),
   );
   const header = rows[0] || [];
   const body = rows.slice(2);
@@ -86,7 +92,7 @@ function renderTable(lines) {
   ].join("");
 }
 
-function renderMarkdown(markdown) {
+function renderMarkdown(markdown, currentFile) {
   const lines = markdown.split(/\r?\n/);
   const html = [];
   const headings = [];
@@ -151,7 +157,7 @@ function renderMarkdown(markdown) {
         table.push(lines[i]);
         i += 1;
       }
-      html.push(renderTable(table));
+      html.push(renderTable(table, currentFile));
       continue;
     }
 
@@ -163,7 +169,7 @@ function renderMarkdown(markdown) {
       const text = heading[2].trim();
       const id = slugify(text);
       headings.push({ level, text, id });
-      html.push(`<h${level} id="${id}">${inlineMarkdown(text)}</h${level}>`);
+      html.push(`<h${level} id="${id}">${inlineMarkdown(text, currentFile)}</h${level}>`);
       i += 1;
       continue;
     }
@@ -185,7 +191,7 @@ function renderMarkdown(markdown) {
         text += ` ${lines[i].trim()}`;
         i += 1;
       }
-      html.push(`<li>${inlineMarkdown(text)}</li>`);
+      html.push(`<li>${inlineMarkdown(text, currentFile)}</li>`);
       continue;
     }
 
@@ -207,7 +213,7 @@ function renderMarkdown(markdown) {
         text += ` ${lines[i].trim()}`;
         i += 1;
       }
-      html.push(`<li>${inlineMarkdown(text)}</li>`);
+      html.push(`<li>${inlineMarkdown(text, currentFile)}</li>`);
       continue;
     }
 
@@ -225,7 +231,7 @@ function renderMarkdown(markdown) {
     } else {
       html.push(" ");
     }
-    html.push(inlineMarkdown(line.trim()));
+    html.push(inlineMarkdown(line.trim(), currentFile));
     i += 1;
   }
 
@@ -445,7 +451,7 @@ await writeFile(path.join(outDir, "style.css"), css);
 
 for (const [slug, title, file] of docs) {
   const markdown = await readFile(file, "utf8");
-  const rendered = renderMarkdown(markdown);
+  const rendered = renderMarkdown(markdown, file);
   await writeFile(path.join(outDir, `${slug}.html`), page(title, slug, rendered.body, rendered.headings));
 }
 

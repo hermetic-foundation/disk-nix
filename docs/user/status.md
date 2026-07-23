@@ -6,7 +6,7 @@
 | --- | --- |
 | Rust CLI, storage graph, probe layer, lifecycle planner, guarded executor, NixOS module. | Broader destructive coverage, more real hardware fixtures, deeper failure-path proof. |
 
-Use [Feature checklist](feature-checklist.md) for requirement-level evidence and [Operator runbooks](operator-runbooks.md) for high-risk human procedures.
+Use [Feature checklist](../developer/feature-checklist.md) for requirement-level evidence and [Operator runbooks](operator-runbooks.md) for high-risk human procedures.
 
 ## At a glance
 
@@ -56,7 +56,7 @@ Generated steady state covers native NixOS mounts, swaps, zram, LUKS, supported 
 
 ### Integration Harnesses
 
-The smoke harnesses cover loop devices, Btrfs, bcachefs, LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, NVMe, zram, bcache, target-side LUNs, and synthetic failed-apply recovery. Details now live in [Integration tests](integration-tests.md), [Integration smoke harnesses](integration-smoke-harnesses.md), and [Integration failure recovery](integration-failure-recovery.md).
+The smoke harnesses cover loop devices, Btrfs, bcachefs, LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, NVMe, zram, bcache, target-side LUNs, and synthetic failed-apply recovery. Details now live in [Integration tests](../developer/integration-tests.md), [Integration smoke harnesses](../developer/integration-smoke-harnesses.md), and [Integration failure recovery](../developer/integration-failure-recovery.md).
 
 Self-contained harnesses create disposable storage and verify real `inspect --json`, reviewed apply plans, property mutation, replacement workflows, and sentinel data survival. Lab-hardware harnesses require explicit environment-selected targets.
 
@@ -100,7 +100,7 @@ Future incompatible spec versions are intentionally blocked until their contract
 
 ## Evidence Coverage
 
-The detailed checklist lives in [feature-checklist.md](feature-checklist.md).
+The detailed checklist lives in [feature-checklist.md](../developer/feature-checklist.md).
 High-risk operator procedures live in [operator-runbooks.md](operator-runbooks.md).
 
 ### Local Mutation Evidence
