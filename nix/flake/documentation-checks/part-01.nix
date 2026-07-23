@@ -39,6 +39,7 @@
     ${root + /crates/disk-nix-cli/src/tests.rs}
     ${root + /crates/disk-nix-cli/src/tests}/*.rs
     ${root + /crates/disk-nix-cli/src/sections}/*.rs
+    ${root + /crates/disk-nix-cli/src/sections/usage_details}/*.rs
   )
   failureRecoverySourcesArray=(
     ${root + /scripts/integration-failure-recovery-smoke.sh}

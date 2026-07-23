@@ -1,0 +1,29 @@
+include!("general_smart.rs");
+include!("nvme.rs");
+include!("block_identity.rs");
+include!("lvm.rs");
+include!("btrfs_vdo.rs");
+include!("device_mapper.rs");
+include!("encryption.rs");
+include!("multipath_md.rs");
+include!("network.rs");
+include!("filesystems.rs");
+include!("bcache.rs");
+include!("zfs.rs");
+include!("xfs.rs");
+
+const DETAIL_KEY_GROUPS: &[&[(&str, &str)]] = &[
+    GENERAL_SMART_DETAIL_KEYS,
+    NVME_DETAIL_KEYS,
+    BLOCK_IDENTITY_DETAIL_KEYS,
+    LVM_DETAIL_KEYS,
+    BTRFS_VDO_DETAIL_KEYS,
+    DEVICE_MAPPER_DETAIL_KEYS,
+    ENCRYPTION_DETAIL_KEYS,
+    MULTIPATH_MD_DETAIL_KEYS,
+    NETWORK_DETAIL_KEYS,
+    FILESYSTEM_DETAIL_KEYS,
+    BCACHE_DETAIL_KEYS,
+    ZFS_DETAIL_KEYS,
+    XFS_DETAIL_KEYS,
+];
