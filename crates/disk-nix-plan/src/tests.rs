@@ -1,4 +1,3 @@
-
 use disk_nix_model::{Identity, Usage};
 use serde::Deserialize;
 
