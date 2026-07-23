@@ -196,7 +196,12 @@ rec {
       pkgs.coreutils
       pkgs.jq
     ];
-    text = builtins.readFile (root + /scripts/integration-failure-recovery-smoke.sh);
+    text = ''
+      export DISK_NIX_FAILURE_RECOVERY_SCENARIO_DIR=${
+        root + /scripts/integration-failure-recovery-smoke.d
+      }
+    ''
+    + builtins.readFile (root + /scripts/integration-failure-recovery-smoke.sh);
   };
   integrationLayeredVmSmoke = pkgs.writeShellApplication {
     name = "disk-nix-integration-layered-vm-smoke";
