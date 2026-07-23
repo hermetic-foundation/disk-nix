@@ -106,10 +106,35 @@ Mutation policy should remain explicit:
 - `reportOut`
 - `receiptOut`
 
-`requireBackup` and `requireConfirmation` are additional safety gates for high-risk actions. `allowPotentialDataLoss` is the explicit opt-in for reviewed rollback, shrink, and device-removal workflows, and backup or confirmation requirements still apply when enabled. `requireConfirmationFile` stores the expected file path in the generated policy; `disk-nix apply` only treats it as confirmed when the file contains a standalone line equal to `disk-nix confirm`.
+Safety gates:
 
-`failOnBlocked` defaults to true. When false, activation and install modes keep writing the same report data but use `disk-nix validate`, which exits successfully even when policy blocks planned actions. `execute` defaults to false. When true, activation and install modes run `disk-nix apply --execute` after policy validation and command-readiness checks pass.
+| Option | Effect |
+| --- | --- |
+| `allowPotentialDataLoss` | Opts in to reviewed rollback, shrink, and device-removal workflows. |
+| `requireBackup` | Adds a backup gate for high-risk actions. |
+| `backupVerified` | Records that the backup gate was satisfied. |
+| `requireConfirmation` | Adds a confirmation gate for high-risk actions. |
+| `requireConfirmationFile` | Requires a file containing a standalone `disk-nix confirm` line. |
 
-The module requires `failOnBlocked = true` for this mode because `disk-nix validate` is report-only. `scriptOut` must be an absolute path. The apply service creates its parent directory before asking the CLI to write the review script; script generation still refuses policy-blocked or graph-conflicting plans so activation artifacts do not imply a runnable order where none has been proven.
+Execution gates:
 
-`reportOut` must also be an absolute path. The apply service creates its parent directory before asking the CLI to write the JSON apply report. `receiptOut` must also be an absolute path. The apply service creates its parent directory before asking the CLI to write the receipt envelope containing the report and invocation metadata.
+| Option | Effect |
+| --- | --- |
+| `failOnBlocked = true` | Activation/install fails when policy blocks actions. |
+| `failOnBlocked = false` | Uses `disk-nix validate` so blocked policy is reported without failing. |
+| `execute = false` | Writes plans and reports only. |
+| `execute = true` | Runs `disk-nix apply --execute` after policy and readiness checks pass. |
+
+`execute = true` requires `failOnBlocked = true` because `validate` is
+report-only.
+
+Artifact outputs:
+
+| Option | Requirement | Output |
+| --- | --- | --- |
+| `scriptOut` | Absolute path. | Review shell script. |
+| `reportOut` | Absolute path. | JSON apply report. |
+| `receiptOut` | Absolute path. | Receipt envelope with invocation metadata. |
+
+The apply service creates parent directories before asking the CLI to write
+these artifacts.

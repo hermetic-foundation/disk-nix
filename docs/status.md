@@ -1,6 +1,10 @@
 # Feature status
 
-`disk-nix` is a working Rust CLI, storage graph model, probe layer, lifecycle planner, guarded apply renderer/executor, and NixOS module integration. It is not yet a production-complete disko replacement because the remaining work is mostly proof: broader destructive coverage, more real hardware fixtures, and deeper failure-path hardening.
+`disk-nix` is now a working implementation, not just a design sketch.
+
+| Built | Still hardening |
+| --- | --- |
+| Rust CLI, storage graph, probe layer, lifecycle planner, guarded executor, NixOS module. | Broader destructive coverage, more real hardware fixtures, deeper failure-path proof. |
 
 Use [Feature checklist](feature-checklist.md) for requirement-level evidence and [Operator runbooks](operator-runbooks.md) for high-risk human procedures.
 

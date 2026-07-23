@@ -76,11 +76,13 @@ That mode rewrites mountpoints the same way destructive execution does, renders
 the command plan, and refuses host path targets outside the disposable E2E
 root and expected storage device namespaces.
 
-Destructive execution is guarded separately. It is intended only for disposable
-lab disks addressed by stable `/dev/disk/by-id` identities. On the current lab
-host, those stable identities correspond to the disks currently enumerated as
-`/dev/sda` and `/dev/sdc` through `/dev/sdf`; `/dev/sdb` is excluded because it
-is the system disk after the reboot.
+Destructive execution is guarded separately.
+
+| Requirement | Value |
+| --- | --- |
+| Disk identity | Stable `/dev/disk/by-id` paths only. |
+| Lab disk set | Disks currently enumerated as `/dev/sda` and `/dev/sdc` through `/dev/sdf`. |
+| Excluded disk | `/dev/sdb`, because it is the system disk after the reboot. |
 
 ```sh
 sudo env DISK_NIX_DISKO_E2E_EXECUTE=1 \
@@ -107,39 +109,16 @@ rewritten under `/mnt/disk-nix-disko-e2e/<example>/` before execution. The
 harness also performs best-effort teardown of that mount tree, swaps, ZFS
 pools, LVM volume groups, MD arrays, and LUKS mappings between examples.
 
-The ZFS harness is packaged with the VM suite and can be selected explicitly
-with `DISK_NIX_VM_HARNESSES=zfs` in a disposable guest that has working ZFS
-kernel support and a configured host ID. It is not part of the default VM suite
-until the flake VM test provisions that kernel support reliably.
+Additional VM-callable harnesses:
 
-The NFS client harness is also packaged with the VM suite and can be selected
-explicitly with `DISK_NIX_VM_HARNESSES=nfs` when the guest can reach a
-disposable export supplied through `DISK_NIX_NFS_SOURCE`. It is not part of the
-default VM suite because the flake VM test does not yet provision a server
-export.
-
-The VDO harness is packaged with the VM suite and can be selected explicitly
-with `DISK_NIX_VM_HARNESSES=vdo` when the guest has an existing disposable VDO
-volume named by `DISK_NIX_VDO_NAME`. It is not part of the default VM suite
-because the flake VM test does not yet provision a VDO volume.
-
-The iSCSI harness is packaged with the VM suite and can be selected explicitly
-with `DISK_NIX_VM_HARNESSES=iscsi` when the guest has an existing disposable
-iSCSI session for the target named by `DISK_NIX_ISCSI_TARGET`. It is not part
-of the default VM suite because the flake VM test does not yet provision an
-iSCSI target.
-
-The multipath harness is packaged with the VM suite and can be selected
-explicitly with `DISK_NIX_VM_HARNESSES=multipath` when the guest has an
-existing disposable multipath map named by `DISK_NIX_MULTIPATH_MAP`. It is not
-part of the default VM suite because the flake VM test does not yet provision
-multiple backing paths for a map.
-
-The NVMe harness is packaged with the VM suite and can be selected explicitly
-with `DISK_NIX_VM_HARNESSES=nvme` when the guest has an existing disposable
-controller path named by `DISK_NIX_NVME_CONTROLLER`. It is not part of the
-default VM suite because the flake VM test does not yet provision an NVMe
-controller.
+| Selector | Required disposable state | Why not default |
+| --- | --- | --- |
+| `zfs` | Working ZFS kernel support and configured host ID. | VM test does not provision ZFS reliably yet. |
+| `nfs` | Export supplied through `DISK_NIX_NFS_SOURCE`. | VM test does not provision an NFS server export. |
+| `vdo` | VDO volume named by `DISK_NIX_VDO_NAME`. | VM test does not provision a VDO volume. |
+| `iscsi` | Session for `DISK_NIX_ISCSI_TARGET`. | VM test does not provision an iSCSI target. |
+| `multipath` | Map named by `DISK_NIX_MULTIPATH_MAP`. | VM test does not provision multiple backing paths. |
+| `nvme` | Controller path named by `DISK_NIX_NVME_CONTROLLER`. | VM test does not provision an NVMe controller. |
 
 ## Detailed harness references
 
@@ -163,12 +142,15 @@ This page remains the entrypoint for destructive-suite policy, disk requirements
 It does validate that smoke harnesses parse, remain opt-in, and still contain
 expected coverage markers.
 
-Those markers cover loop setup, filesystem resize/mount, Btrfs scrub, bcachefs
-format/scrub, LUKS format/open/close, LVM create/rescan, MD RAID create/rescan,
-ZFS pool create/scrub, NFS mount/rescan/remount/export/unexport, VDO
-status/stats/rescan, iSCSI session rescan, multipath map rescan, NVMe namespace
-rescan, VM orchestration guards, layered VM grow assertions, and synthetic
-failed-apply `partialExecutionRecovery` assertions.
+Coverage marker groups:
+
+| Group | Markers |
+| --- | --- |
+| Local storage | Loop setup, filesystem resize/mount, Btrfs scrub, bcachefs format/scrub. |
+| Block stack | LUKS format/open/close, LVM create/rescan, MD RAID create/rescan. |
+| Pools and network | ZFS pool create/scrub, NFS mount/rescan/remount/export/unexport. |
+| Fabrics | VDO status/stats/rescan, iSCSI session rescan, multipath map rescan, NVMe namespace rescan. |
+| VM and recovery | VM orchestration guards, layered VM grow assertions, `partialExecutionRecovery`. |
 
 This keeps the harnesses available and packaged while preserving safe default checks.
 

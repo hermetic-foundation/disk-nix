@@ -50,15 +50,15 @@ The graph can represent:
 Nodes are merged by id when multiple probe adapters report complementary
 information.
 
-NVMe probing keeps controller, subsystem, transport, namespace id, namespace
-UUID, NGUID, EUI-64, ANA state, LBA format, formatted LBA descriptor,
-feature/capacity counters, sector size, usage, and SMART/health telemetry.
+Focused probe enrichments include:
 
-exFAT probing uses `tune.exfat` and `dump.exfat` when available to add visible label metadata, GUID, serial, tool version, sector, cluster, size, used-cluster, and free-space metadata beyond generic `blkid` fields. NTFS probing uses `ntfsinfo -m` when available to add device/volume state, volume name/version, serial, sector/cluster sizing, index block size, MFT record size, MFT zone/location metadata, and allocated size.
-
-F2FS probing uses `dump.f2fs` when available to add volume name, UUID, user/valid block counts, checkpoint/SIT/NAT/SSA segment layout, section/zone geometry, log sizing, version metadata, overprovisioning, and computed usage.
-
-bcachefs probing uses `bcachefs show-super` and `bcachefs fs usage` when available to add external/internal UUIDs, labels, superblock magic, version and upgrade state, member-device indexes, mounted capacity, filesystem data-type byte accounting, and per-device free/capacity, superblock, journal, btree, user, and cached metadata.
+| Adapter | Extra graph data |
+| --- | --- |
+| NVMe | Controllers, subsystems, transport, namespace ids, UUID/NGUID/EUI-64, ANA state, LBA format, capacity, sector size, usage, and health. |
+| exFAT | Label, GUID, serial, tool version, sector and cluster geometry, used clusters, and free-space metadata. |
+| NTFS | Volume state, name, version, serial, sector and cluster sizing, MFT metadata, and allocated size. |
+| F2FS | Volume name, UUID, block counts, checkpoint/SIT/NAT/SSA layout, section/zone geometry, log sizing, and overprovisioning. |
+| bcachefs | UUIDs, labels, version state, member indexes, mounted capacity, data-type accounting, and per-device metadata. |
 
 ## Probe Status
 
@@ -79,17 +79,34 @@ Each adapter reports one of:
   was not present
 - `failed`: the adapter unexpectedly failed
 
-Each report also includes a structured `category` in JSON and human output: `none`, `missing-tool`, `permission-denied`, `command-failed`, `parse-failed`, or `inaccessible-data`. Use this with `status` to decide whether installing tooling, changing privileges, or treating the topology as degraded is the right response. Reports also include `remediation` hints.
+Each report also includes a structured `category` in JSON and human output.
 
-Missing-tool reports point to tool installation, concrete adapter tools, and likely Nix packages for `services.disk-nix.toolPackages`, including PATH and `ENOENT` failures; permission reports call out privileged metadata reads plus adapter-specific surfaces such as device-mapper, LVM, ZFS, iSCSI, NVMe, multipath, MD RAID, and VDO state, including root-only and superuser barriers;
+| Category | Typical response |
+| --- | --- |
+| `none` | Adapter completed normally. |
+| `missing-tool` | Install the listed tool or add its package to `toolPackages`. |
+| `permission-denied` | Re-run with the privileges needed for that storage surface. |
+| `command-failed` | Inspect stderr and the adapter remediation hint. |
+| `parse-failed` | Capture raw command output and tool versions for a fixture. |
+| `inaccessible-data` | Check kernel support, service state, imports, sessions, or mountpoints. |
 
-parse failures ask for raw command-output fixtures and tool versions; inaccessible-data reports point to missing kernel surfaces, services, imports, sessions, or mountpoints. `probe-status --preflight` adds OS release, kernel release, effective UID, storage tool version probes, and preflight check summaries so CI, operators, and bug reports can tie adapter failures to the distribution, privilege context, and tool-output variant that produced them.
+`probe-status --preflight` adds environment and tool-readiness checks.
 
-The checks report whether probing is running as root, count missing or failing storage tools, list the affected tools, treat successful version probes with no output as failures, accept the first non-empty version line from stdout or stderr, and emit remediation text.
+| Preflight data | Use |
+| --- | --- |
+| OS and kernel release | Tie failures to the distribution and kernel profile. |
+| Effective UID | Explain root-only metadata failures. |
+| Storage tool versions | Capture stdout/stderr version variants. |
+| Missing or failing tools | Block mutation before required commands are used. |
+| Adapter remediation matrix | Map adapters to tools, packages, privileges, fixtures, and manual commands. |
 
-The JSON `preflightChecks.adapterRemediation` matrix maps every built-in probe adapter and sub-adapter to its canonical storage domain, required command-line tools, likely Nix packages, privilege hint, kernel/service/data hint, parse fixture hint, and manual command hint.
+The remediation matrix covers sub-adapters such as `nvme-id-ns`,
+`nvme-smart-log`, `mdadm-scan`, `mdadm-examine`, `vdostats-verbose`,
+`nfs-exports`, and `zramctl`.
 
-This covers sub-adapters such as `nvme-id-ns`, `nvme-smart-log`, `mdadm-scan`, `mdadm-examine`, `vdostats-verbose`, `nfs-exports`, and `zramctl`, so automation can recommend concrete package additions or privilege/service checks instead of generic adapter failure text. With `--json`, preflight output is wrapped as `{ environment, preflightChecks, reports }`; without `--preflight`, `probe-status --json` keeps the stable adapter-report array shape.
+With `--json`, preflight output is wrapped as
+`{ environment, preflightChecks, reports }`. Without `--preflight`,
+`probe-status --json` keeps the stable adapter-report array shape.
 
 Unavailable or partial adapters are not fatal. They mean the graph is degraded
 for that storage domain. For example, a host without `zpool` can still report
@@ -159,9 +176,29 @@ disk-nix migrate --spec ./examples/lifecycle-update.json
 disk-nix migrate --spec ./examples/lifecycle-update.json --json
 ```
 
-For the current version `1` contract, migration adds explicit `version = 1` fields to direct specs and NixOS-module wrapper specs when they are omitted. For unversioned legacy documents it also maps documented pre-version field names to current version `1` locations: `fileSystems` to `filesystems`, `swapDevices` to `swaps`, `luksDevices` to `luks.devices`, `nfsMounts` to `nfs.mounts`, and `iscsiSessions` to `iscsi.sessions`.
+For the current version `1` contract, migration adds explicit `version = 1`
+fields when they are omitted.
 
-Explicit version `1` documents are not silently rewritten through these legacy aliases. Migration validates the migrated document with the planner parser, reports the complete `legacyMappings` matrix for direct specs and NixOS-module wrapper `spec.*` documents, records the run-specific `appliedMappings` audit trail, and emits a machine-readable `versionMigrations` contract for supported source and target version paths.
+Legacy alias mapping:
+
+| Legacy field | Version `1` field |
+| --- | --- |
+| `fileSystems` | `filesystems` |
+| `swapDevices` | `swaps` |
+| `luksDevices` | `luks.devices` |
+| `nfsMounts` | `nfs.mounts` |
+| `iscsiSessions` | `iscsi.sessions` |
+
+Migration output includes:
+
+| Report field | Purpose |
+| --- | --- |
+| `legacyMappings` | Complete mapping matrix for direct and NixOS-wrapper specs. |
+| `appliedMappings` | Run-specific audit trail. |
+| `versionMigrations` | Supported source and target version paths. |
+
+Explicit version `1` documents are not silently rewritten through legacy aliases.
+The migrated document is validated with the planner parser before output.
 
 It also reports warnings that storage mutations are not applied. Future or conflicting versions are rejected instead of being guessed.
 
