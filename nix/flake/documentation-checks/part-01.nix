@@ -19,6 +19,7 @@
     ${root + /crates/disk-nix-exec/src/sections}/*.rs
     ${root + /crates/disk-nix-exec/src/sections/action_commands}/*.rs
     ${root + /crates/disk-nix-exec/src/sections/block_device_commands}/*.rs
+    ${root + /crates/disk-nix-exec/src/sections/cache_network_commands}/*.rs
     ${root + /crates/disk-nix-exec/src/sections/filesystem_commands}/*.rs
     ${root + /crates/disk-nix-exec/src/sections/recovery_domain_targets}/*.rs
     ${root + /crates/disk-nix-exec/src/sections/rollback_recipes}/*.rs
