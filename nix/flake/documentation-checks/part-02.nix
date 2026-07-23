@@ -166,7 +166,7 @@
     root + /crates/disk-nix-probe/src/iscsi.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'discovery.sendtargets.auth.authmethod' ${
-    root + /crates/disk-nix-probe/src/iscsi.rs
+    root + /crates/disk-nix-probe/src/iscsi/nodes.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'iser-rdma0' ${root + /crates/disk-nix-probe/src/iscsi.rs}
   ${pkgs.gnugrep}/bin/grep -q '2001:db8:40::10' ${root + /crates/disk-nix-probe/src/iscsi.rs}
