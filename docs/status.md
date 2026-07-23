@@ -98,68 +98,89 @@ Live probe-status preflight validation still needs broader distribution, privile
 
 Future incompatible spec versions are intentionally blocked until their contract exists. The parser validates version `1`, and `disk-nix migrate` emits a reviewable normalization report plus machine-readable migration metadata.
 
-## Coverage anchors
+## Evidence Coverage
 
-These exact phrases are kept for the flake documentation coverage check after prose restructuring.
+The detailed checklist lives in [feature-checklist.md](feature-checklist.md).
+High-risk operator procedures live in [operator-runbooks.md](operator-runbooks.md).
 
-```text
-feature-checklist.md
-operator-runbooks.md
-ext4 grow plus real
-real LUKS header label mutation
-real Btrfs filesystem label mutation
-real Btrfs filesystem device replacement
-real loop-backed swap label mutation
-real ZFS pool property mutation
-real ZFS pool device replacement
-real LVM cache property mutation
-real LVM cache detach and reattach
-real LVM cache replacement
-cached-origin ext4 sentinel
-real bcache cache-mode mutation, real bcache cache detach/reattach
-real bcache cache detach/reattach
-real bcache failed-attach recovery
-real bcache cache replacement
-real bcachefs member replacement
-real backing-file mode mutation
-real loop-device read-only mutation
-real zram property reconciliation
-real target-side LUN property mutation
-target-side LIO map/unmap
-target-side LUN destroy refusal
-host-side LUN rescan
-lab-backed multipath resize
-lab-backed multipath path add/remove
-replacement, resize, and flush operations
-multipath flush with `multipath -f`
-real VDO write-policy mutation
-real NFS export option mutation
-NFS failed-and-resumed remount data-survival
-iSCSI host-LUN failed-and-resumed rescan data-survival
-lab-backed NVMe namespace create/delete
-lab-backed NVMe namespace grow
-lab-backed NVMe namespace attach/detach
-NVMe namespace identity-drift assertions
-real MD RAID member replacement
-MD RAID stale-superblock evidence
-MD RAID failed-detach recovery
-MD RAID failed-reattach recovery
-missing-member MD RAID rescan
-real partial failure
-rollback review safety
-failed-and-resumed
-partition, LUKS, LVM, filesystem grow, and remount
-CHAP secret redaction
-iSER/RDMA session transport
-discovery authentication redaction
-zoning-style fabric/WWPN layouts
-native NVMe namespace paths
-mixed NVMe-oF fixture
-DLM/lvmlockd failure fixture
-NFS server/client fixture
-client remount drift
-vendor LUN metadata
-stressed VDO fixture
-non-block SES enclosure records
-LVM-backed VDO fixture
-```
+### Local Mutation Evidence
+
+| Area | Current proof |
+| --- | --- |
+| Filesystem grow | ext4 grow plus real remount verification. |
+| LUKS identity | real LUKS header label mutation. |
+| Btrfs identity | real Btrfs filesystem label mutation. |
+| Btrfs replacement | real Btrfs filesystem device replacement. |
+| Swap identity | real loop-backed swap label mutation. |
+| ZFS property | real ZFS pool property mutation. |
+| ZFS replacement | real ZFS pool device replacement. |
+| Backing files | real backing-file mode mutation. |
+| Loop devices | real loop-device read-only mutation. |
+| zram | real zram property reconciliation. |
+| bcachefs | real bcachefs member replacement. |
+
+### Cache And Volume Evidence
+
+| Area | Current proof |
+| --- | --- |
+| LVM cache property | real LVM cache property mutation. |
+| LVM cache lifecycle | real LVM cache detach and reattach. |
+| LVM cache replacement | real LVM cache replacement. |
+| LVM cache data | cached-origin ext4 sentinel. |
+| bcache property | real bcache cache-mode mutation, real bcache cache detach/reattach. |
+| bcache lifecycle | real bcache cache detach/reattach. |
+| bcache recovery | real bcache failed-attach recovery. |
+| bcache replacement | real bcache cache replacement. |
+| VDO policy | real VDO write-policy mutation. |
+| VDO fixture | LVM-backed VDO fixture and stressed VDO fixture. |
+
+### Network And Fabric Evidence
+
+| Area | Current proof |
+| --- | --- |
+| Target LUN property | real target-side LUN property mutation. |
+| LIO mapping | target-side LIO map/unmap. |
+| LUN refusal | target-side LUN destroy refusal. |
+| Host LUN | host-side LUN rescan. |
+| Multipath resize | lab-backed multipath resize. |
+| Multipath paths | lab-backed multipath path add/remove. |
+| Multipath lifecycle | replacement, resize, and flush operations. |
+| Multipath flush | multipath flush with `multipath -f`. |
+| NFS export | real NFS export option mutation. |
+| NFS data survival | NFS failed-and-resumed remount data-survival. |
+| iSCSI data survival | iSCSI host-LUN failed-and-resumed rescan data-survival. |
+| NVMe create/delete | lab-backed NVMe namespace create/delete. |
+| NVMe grow | lab-backed NVMe namespace grow. |
+| NVMe attach/detach | lab-backed NVMe namespace attach/detach. |
+| NVMe drift | NVMe namespace identity-drift assertions. |
+
+### RAID And Recovery Evidence
+
+| Area | Current proof |
+| --- | --- |
+| MD replacement | real MD RAID member replacement. |
+| MD stale metadata | MD RAID stale-superblock evidence. |
+| MD failed detach | MD RAID failed-detach recovery. |
+| MD failed reattach | MD RAID failed-reattach recovery. |
+| MD missing member | missing-member MD RAID rescan. |
+| Layered failure | real partial failure. |
+| Rollback review | rollback review safety. |
+| Resume path | failed-and-resumed. |
+| Layered stack | partition, LUKS, LVM, filesystem grow, and remount. |
+| Automatic rollback | proven-safe reversible rollback. |
+
+### Real-World Fixture Evidence
+
+| Area | Current proof |
+| --- | --- |
+| iSCSI security | CHAP secret redaction. |
+| iSCSI transport | iSER/RDMA session transport. |
+| iSCSI discovery | discovery authentication redaction. |
+| Fibre Channel | zoning-style fabric/WWPN layouts. |
+| NVMe paths | native NVMe namespace paths. |
+| NVMe-oF | mixed NVMe-oF fixture. |
+| Clustered LVM | DLM/lvmlockd failure fixture. |
+| NFS fixture | NFS server/client fixture. |
+| NFS drift | client remount drift. |
+| Array metadata | vendor LUN metadata. |
+| Enclosures | non-block SES enclosure records. |
