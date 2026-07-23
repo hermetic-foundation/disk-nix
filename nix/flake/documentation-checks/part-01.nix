@@ -14,7 +14,9 @@
   checklist=${root + /docs/developer/feature-checklist.md}
   execSources="${root + /crates/disk-nix-exec/src/lib.rs} ${
     root + /crates/disk-nix-exec/src/tests.rs
-  } ${root + /crates/disk-nix-exec/src/tests}/*.rs"
+  } ${root + /crates/disk-nix-exec/src/tests}/*.rs ${
+    root + /crates/disk-nix-exec/src/sections
+  }/*.rs ${root + /crates/disk-nix-exec/src/sections/block_device_commands}/*.rs"
   planSources="${root + /crates/disk-nix-plan/src/lib.rs} ${
     root + /crates/disk-nix-plan/src/tests.rs
   } ${root + /crates/disk-nix-plan/src/tests}/*.rs ${
