@@ -33,6 +33,7 @@
     ${root + /crates/disk-nix-plan/src/sections/capabilities}/*.rs
     ${root + /crates/disk-nix-plan/src/sections/dependencies}/*.rs
     ${root + /crates/disk-nix-plan/src/sections/local_diagnostics}/*.rs
+    ${root + /crates/disk-nix-plan/src/sections/mapping_diagnostics}/*.rs
     ${root + /crates/disk-nix-plan/src/sections/operation_classification}/*.rs
     ${root + /crates/disk-nix-plan/src/sections/storage_diagnostics}/*.rs
     ${root + /crates/disk-nix-plan/src/sections/topology_properties}/*.rs
