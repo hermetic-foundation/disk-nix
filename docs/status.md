@@ -17,316 +17,99 @@ is excluded because it is the system disk after the reboot.
 
 ## Implemented foundation
 
-- AGPL-3.0-or-later licensing from the beginning.
-- Nix flake packaging, development shell, formatting, clippy, tests, NixOS
-  module checks, example checks, schema checks, opt-in loop integration harness
-  packaging, completions, and manpage output.
-- Rust workspace split into model, probe, plan, exec, and CLI crates.
-- Read-only topology graph with focused CLI views for devices, partitions,
-  filesystems, complex filesystems, Btrfs, bcachefs, ZFS, volumes, pools,
-  snapshots, mappings, encryption, caches, LVM, VDO, multipath, NVMe, RAID,
-  loop devices, backing files, swap, zram, iSCSI, LUNs, NFS, mounts, network
-  storage, identities, usage, and object inspection.
-- JSON output contracts for topology, focused views, capabilities, schema,
-  plan, apply, validate, and probe-status commands.
-- Compatibility policy for spec versions, migration expectations, JSON reports,
-  human CLI text, NixOS options, generated artifacts, and safety invariants.
-- Policy-classified planning for online, offline-required, destructive,
-  potential-data-loss, reversible, safe, and unsupported actions.
-- Machine-readable dependency-order metadata for planned actions, including
-  build/mutate/teardown phase, lower-first or upper-first direction, and storage
-  collection layer rank, plus inferred `dependsOn`/`unblocks` edges for
-  declared adjacent-layer identities and direct or multi-hop probed graph paths
-  when current topology comparison is enabled, plus warning diagnostics and a
-  summary count for mixed-direction actions on the same current-topology graph
-  path.
-- Guarded apply flow with dry-run reports, script generation, readiness
-  summaries, manual-review markers, unresolved-input reporting, policy blocks,
-  renderer tool requirement inventories with PATH availability and per-tool
-  package remediation hints, optional current-topology probing, missing-tool
-  refusal before execution, and sequential execution of ready commands.
-- Probe-status reports include structured issue categories and adapter-specific
-  remediation hints for missing tools/packages, permission barriers, parse
-  failures, inaccessible kernel/service data, and generic command failures.
-  Preflight JSON also includes an `adapterRemediation` matrix for built-in
-  adapters and sub-adapters with canonical domains, tools, likely Nix packages,
-  privilege hints, data hints, parse-fixture hints, and manual command hints.
-- Current-topology reconciliation suppresses safe no-op grow, shrink, iSCSI
-  login/logout, disk partition-table create actions that already match the
-  requested table label, existing partition creates that match declared size,
-  partition growth with parseable byte-sized end targets, LVM
-  logical-volume activation/deactivation, LUKS open, LUKS close, loop
-  create/destroy, LUN attach/detach, NVMe namespace attach/detach,
-  backing-file create/grow, LVM physical-volume create, swap
-  deactivate/destroy, mount, unmount, remount, NFS export/unexport, VDO grow,
-  VDO start, VDO stop, MD create/assemble/stop/member add/member removal/member
-  replacement, multipath path add/removal, ZFS pool create/import, ZFS
-  dataset/zvol create, Btrfs subvolume create, Btrfs qgroup create, LVM
-  volume/thin-pool create, LVM volume-group create/import/export, LVM
-  logical-volume/thin-pool/volume-group rename when the destination already
-  exists and the source is absent, LVM rename sources whose destinations are
-  also absent remain actionable as metadata review work, device-mapper rename
-  when the destination mapper exists and the source is absent, device-mapper
-  rename sources whose destinations are also absent remain actionable as mapper
-  review work, ZFS dataset/zvol promote when no clone origin remains, ZFS
-  dataset/zvol rename when the destination already exists and the source is
-  absent, ZFS dataset/zvol rename sources whose destinations are also absent
-  remain actionable as ZFS metadata review work, and property actions when the
-  graph proves they are already satisfied and no warning diagnostics are
-  present, including VDO property declarations reconciled
-  against native `vdo.*` and LVM `lvm.vdo-*` metadata with boolean
-  compression/deduplication normalization, and cache property declarations
-  reconciled against bcache `bcache.*`, cache-set `bcache.set-*`, and LVM cache
-  `lvm.*` metadata with cache-mode spelling normalization, bcache cache-set
-  property plans render `/sys/fs/bcache/<set>` writes when `cacheSetUuid` is
-  declared, bcache probes include UUID, block/bucket sizing, btree cache size,
-  and cache read race counters when sysfs exposes them, Btrfs qgroup
-  referenced/exclusive limit declarations reconciled against
-  probed `btrfs.max-*` metadata with unlimited-value normalization, and ZFS
-  pool/dataset/zvol property
-  declarations reconciled against probed `zfs.*` and pool-scoped `zfs.pool-*`
-  metadata with common on/off normalization, ZFS snapshot hold/release
-  declarations reconciled against probed hold tag metadata,
-  and filesystem identity property declarations reconciled against probed node
-  identity plus filesystem label, UUID, FAT volume-ID, NTFS serial, and exFAT
-  serial metadata aliases, swap identity property declarations reconciled
-  against probed swap label and UUID metadata, and LUKS identity property
-  declarations reconciled against probed LUKS label, subsystem, and UUID
-  header metadata;
-  absent LVM activation targets remain actionable while absent deactivation
-  targets are suppressed as already inactive;
-  absent NFS exports remain actionable as export-required work instead of
-  generic missing-target diagnostics;
-  absent mountpoints for local and NFS mount actions remain actionable as
-  mount-required work instead of generic missing-target diagnostics;
-  absent LUKS mapper opens remain actionable as LUKS open work while absent
-  mapper closes are suppressed as already satisfied;
-  matching filesystem format types are reported without suppressing destructive
-  format actions so policy and confirmation gates still apply;
-  swap format targets report existing swap metadata or non-swap node kinds
-  without suppressing destructive format actions;
-  LUKS format targets are matched by backing device and report existing header
-  metadata or non-LUKS node kinds without suppressing destructive format
-  actions;
-  absent or inactive LVM activation targets, still-active LVM deactivation targets,
-  physical-volume create targets without matching PV metadata or with duplicate
-  or missing PV metadata, existing exported, partial, or missing-PV
-  volume-group create targets, existing LVM volume, thin-pool, or ZFS zvol
-  create targets with different or unknown current size, VDO create targets that
-  already have VDO metadata or match another node kind, MD create targets that
-  are not cleanly active, ZFS pool create targets that are not online and
-  healthy, ZFS pool/dataset/zvol or Btrfs
-  subvolume/qgroup create targets that match a different node kind,
-  still-exported LVM volume-group imports, still-imported LVM volume-group
-  exports, absent or inactive LUKS open targets, active LUKS close targets,
-  absent LUKS keyslot/token removal containers, loop devices mapped to
-  different backing files, backing-file create targets with different
-  or unknown current size, still-mapped loop detach targets, absent LUN attach
-  paths, visible LUN detach paths, absent NVMe namespace attach
-  paths, visible NVMe namespace detach paths, absent, unknown, or below-target
-  VDO grow targets, absent or non-normal VDO start modes, running VDO stop
-  targets, active swap teardown targets, active or
-  unknown-state MD stop targets, absent LVM cache origins, absent MD member-add
-  devices, still-attached MD member-removal devices, incomplete MD member
-  replacements, degraded or failed
-  MD arrays, absent multipath path-add maps, still-attached multipath path
-  removals, degraded ZFS pools,
-  mount source mismatches, currently mounted unmount targets, published
-  unexport targets, remount option differences, export client/option
-  differences, and known iSCSI targets without logged-in sessions remain
-  actionable warnings.
-- NixOS module options for steady-state resources plus imperative lifecycle
-  declarations emitted into `/etc/disk-nix/spec.json`, with a generated
-  `/etc/disk-nix/steady-state.json` inventory of native NixOS mounts, swaps,
-  zram, LUKS, supported filesystems, NFS exports, storage identities,
-  network-storage identities, iSCSI settings, and storage service enablement.
-  The steady-state inventory also includes a `declarativeHandoff` index for
-  post-mutation review of native NixOS mount, swap, LUKS, NFS export, iSCSI,
-  and generated artifact surfaces, plus `/etc/disk-nix/declarative-handoff.nix`
-  as a reviewable Nix module snippet for copying steady-state declarations into
-  real NixOS configuration.
-  Module-managed apply and validate services can emit review scripts, JSON
-  reports, and invocation-bound receipt files.
-- Current-topology reconciliation for generated zram properties, including
-  algorithm, stream count, disk size, memory limit, compression ratio, and
-  active swap priority when `/dev/zram*` metadata is available. Zram property
-  declarations are offline-required generator-reconciliation requests rather
-  than direct live mutation commands.
-- LUKS keyslot property updates distinguish key-file rotation from keyslot
-  priority metadata. Priority changes render `cryptsetup config` with
-  `prefer`, `normal`, or `ignore`, and current-topology reconciliation
-  suppresses the action when probed keyslot priority already matches.
-- NixOS assertions for duplicate active identities across mountpoints, swaps,
-  LUKS mapper names, LUKS keyslot/token selectors, disk and partition targets,
-  backing files, Btrfs subvolumes and qgroups, device-mapper maps, MD RAID,
-  multipath, ZFS pools/datasets/zvols/snapshots, LVM PV/VG/LV/thin/cache
-  identities, VDO volumes, loop devices, cache identities, iSCSI sessions, LUN
-  host paths, NVMe namespaces, and NFS export path/client pairs.
-- Explicitly enabled smoke integration harnesses for loop devices, Btrfs,
-  bcachefs, LUKS, LVM, MD RAID, ZFS, NFS, VDO, iSCSI, multipath, NVMe, and
-  synthetic failed-apply recovery. The self-contained loop-backed harnesses
-  create disposable backing files or arrays, verify real `inspect --json`,
-  execute reviewed apply plans, verify ext4 grow plus real `e2label` filesystem
-  label mutation on a disposable loop device, verify real LUKS header label mutation
-  with `cryptsetup config`, verify real Btrfs filesystem label mutation with
-  `btrfs filesystem label`, real Btrfs filesystem device replacement with
-  `btrfs replace start`, verify real loop-backed swap label mutation with
-  `swaplabel`, verify real ZFS pool property mutation with `zpool set`, real ZFS pool device replacement
-  with `zpool replace`, verify
-  real LVM cache property mutation with `lvchange --cachemode`, real LVM cache detach and reattach
-  with `lvconvert --uncache` and
-  `lvconvert --type cache --cachepool`, while a cached-origin ext4 sentinel
-  remains readable, real LVM cache replacement with `disk-nix-lvm-cache-replace`, verify
-  real bcache cache-mode mutation, real bcache cache detach/reattach with
-  `disk-nix-bcache-detach` and `disk-nix-bcache-attach`, real bcache failed-attach recovery
-  for an invalid cache-set UUID, real bcache cache replacement
-  with `disk-nix-bcache-replace`, verify
-  real bcachefs member replacement with `bcachefs device add`,
-  `bcachefs data rereplicate`, and `bcachefs device remove`, and read-only rescan
-  with `disk-nix-bcache-property` and `disk-nix-bcache-read` sysfs operations,
-  verify real backing-file mode mutation with `chmod`, verify
-  real loop-device read-only mutation with `blockdev --setro` and `blockdev --setrw`, verify
-  real zram property reconciliation with `zramctl`, `swapon`, and `disk-nix zram`, then verify
-  real target-side LUN property mutation plus target-side LIO map/unmap with
-  `targetcli`, verify target-side LUN destroy refusal without destructive
-  policy, verify lab-backed host-side LUN rescan with `disk-nix-scsi-rescan`
-  and `multipath -r`, verify lab-backed multipath resize with
-  `multipathd resize map`, verify lab-backed multipath path add/remove with
-  `multipathd add path` and `multipathd del path`, verify lab-backed
-  multipath flush with `multipath -f`, then verify
-  real VDO write-policy mutation with `vdo changeWritePolicy`, verify
-  real NFS export option mutation with `exportfs -i`, verify NFS failed-and-resumed remount data-survival
-  with a lab export sentinel, verify iSCSI host-LUN failed-and-resumed rescan data-survival
-  with a mounted LUN sentinel, verify target-side LUN failed-and-resumed detach
-  data-survival with a loop-backed LIO sentinel, verify real MD RAID member replacement
-  with `mdadm --replace` and `mdadm --wait`, verify MD RAID stale-superblock evidence
-  with `mdadm --examine`, verify MD RAID failed-detach recovery after an
-  already-removed member, verify MD RAID failed-reattach recovery for a missing
-  add-device path, verify bounded MD RAID partial-rebuild and resumed rebuild
-  completion after readding a stale removed member, and verify
-  degraded missing-member MD RAID rescan after failing and removing one
-  temporary RAID1 member, then clean up temporary devices. A layered VM
-  harness creates partitioned loop, LUKS, LVM, and mounted ext4 layers on a
-  disposable disk, enlarges the backing file, and executes one disk-nix apply
-  run that grows the partition, resizes the LUKS mapper, grows the LV, grows the
-  filesystem, and remounts it with reviewed options; it then unmounts and
-  deactivates the stack, executes a disk-nix LUKS close plan, reopens the mapper,
-  reactivates the VG, remounts the LV, and verifies sentinel data survived. The
-  same layered VM harness also injects a real partial failure: a second apply
-  successfully extends the LV with `lvextend --resizefs`, then fails a real
-  `xfs_growfs` command against the ext4 mount and asserts completed, failed, and
-  remaining action ids, completed mutating command count, recovery actions, and
-  fresh-topology guidance while sentinel data remains readable. The VM failure
-  path also checks rollback review safety: rollback precondition commands remain
-  read-only, rollback recipes are refused for unsafe filesystem grow rollback,
-  reversible and destructive mutation sections stay empty, required topology
-  evidence is listed, and the handoff stays operator-only instead of automated.
-  It then resumes with the remaining remount action, verifies the remount
-  succeeds, confirms sentinel data remains readable after the failed-and-resumed
-  sequence, and repeats the sentinel check after the LUKS close/reopen cycle.
-  Lab-hardware harnesses for NFS, VDO, iSCSI,
-  multipath, and NVMe require explicit environment-selected existing targets,
-  exercise non-destructive refresh or remount paths, include lab-backed NVMe namespace create/delete,
-  include lab-backed NVMe namespace grow
-  through reviewed `nvme ns-rescan`, and include lab-backed NVMe namespace attach/detach
-  for disposable namespaces, NVMe controller reconnect through reviewed
-  disconnect/connect target identity, plus NVMe namespace identity-drift assertions,
-  while multipath also covers explicit path
-  add/remove, replacement, resize, and flush operations. The failure-recovery
-  harness uses fake storage tools to prove `partialExecutionRecovery`,
-  failed-command receipts, roll-forward review, rollback review,
-  snapshot-preservation, and domain-recovery reporting for a layered
-  LVM-plus-filesystem apply failure, LVM grow failure, LVM thin-pool create
-  failure, LVM thin-pool grow failure, XFS grow failure, Btrfs
-  scrub failure, Btrfs rebalance failure, Btrfs device replacement failure,
-  bcachefs replacement failure, filesystem trim failure, filesystem
-  check failure, filesystem repair failure, filesystem property failure,
-  LUKS format failure, LUKS close
-  failure, LUKS grow failure, LUKS keyslot add failure, LUKS token import
-  failure, LUKS keyslot remove failure, LUKS token remove failure, LUKS
-  property failure, ZFS pool
-  replacement failure, and ZFS rollback failure, plus NVMe namespace create, grow, attach, detach, and
-  delete failures, target-side LUN LIO create, attach, detach, destroy, native
-  grow, property, and rescan paths,
-  Linux tgt create, attach, detach, destroy, native grow, property, and rescan
-  paths, SCST create, attach, detach,
-  destroy, grow, property, and rescan failures, multipath
-  add, remove, flush, resize, and replacement failures, host-side LUN rescan failure, LVM VG
-  replacement failure, ZFS pool replacement failure, MD RAID create failure,
-  MD RAID assemble failure, MD RAID stop failure, MD RAID grow failure,
-  MD RAID member add and replacement failures,
-  LUKS open failure,
-  partition grow failure, NFS remount failure, NFS unmount failure, NFS export
-  failure, NFS unexport failure, swap label mutation failure, zram rescan
-  failure, zram property inventory failure, loop rescan failure,
-  backing-file rescan failure, backing-file grow failure, backing-file create
-  failure, device-mapper rename failure,
-  ZFS dataset rename failure,
-  Btrfs snapshot clone failure, ZFS snapshot clone failure, LVM VG rename
-  failure, iSCSI logout, login, and rescan failures, LVM cache attach, detach,
-  replacement, and rescan failures, VDO create, rescan, logical-grow,
-  physical-grow, start, stop, and remove failures, bcache replacement failure,
-  VDO and bcache property mutation failures, bcache rescan failure, and an LVM
-  cache property mutation failure, without touching real block devices.
+### Packaging And Architecture
 
-## Implemented probe coverage
+The repository has AGPL-3.0-or-later licensing from the beginning. It ships as a
+Nix flake with package builds, a development shell, formatting, clippy, tests,
+NixOS module checks, example checks, schema checks, opt-in integration harness
+packaging, completions, and manpage output.
 
-Probe adapters normalize storage data from `lsblk`, `blkid`, `udevadm`,
-`findmnt`, `parted`, `smartctl`, filesystem-specific metadata tools, Btrfs,
-bcachefs, ZFS, LVM, VDO, device-mapper, LUKS, loop, zram, SCSI, iSCSI, NFS,
-MD RAID, multipath, and NVMe tooling.
+The Rust workspace is split into model, probe, plan, exec, and CLI crates. JSON
+contracts exist for topology, focused views, capabilities, schema, plan, apply,
+validate, probe-status, and generated artifacts.
 
-Probe fixture coverage includes:
+### CLI And Probe Surface
 
-- isolated adapter fixtures
-- a cross-adapter shared-storage regression fixture combining iSCSI session/node
-  data, host-visible SCSI LUNs, and multipath path state
-- bracketed IPv6 iSCSI portals, concise open-iscsi node records, attached LUN
-  disks, CHAP secret redaction, iSER/RDMA session transport, multi-portal
-  sessions, mutual CHAP, discovery authentication redaction, replacement LUN
-  identity changes, and logout/login churn
-- a degraded MD-with-LUKS stack covering recovering arrays, failed members,
-  active encrypted mapper status, backing edges, and LUKS header metadata
-- clustered LVM over NVMe-oF, including shared VG metadata, sanlock hints,
-  remote LV activity, NVMe fabrics controller paths, ANA state, and namespace
-  edges
-- a DLM/lvmlockd failure fixture, including lock failure, missing PVs, remote LV
-  activity, split-brain refusal, and lock-manager reason metadata
-- Fibre Channel multipath state, including WWPN pairs, SCSI unit names, ALUA
-  path groups, active/standby paths, failed paths, backing edges,
-  zoning-style fabric/WWPN layouts, and blocked failed path evidence
-- NVMe/TCP and mixed NVMe-oF fixtures covering native NVMe namespace paths,
-  reconnecting controllers, RoCE/RDMA, Fibre Channel, shared namespace
-  UUID/NGUID identity, ANA transition state, controller loss, and native
-  multipath backing edges
-- an NFS server/client fixture covering merged `findmnt`, `nfsstat`, and
-  `exportfs` output, Kerberos options, client policy, IPv6 selectors, usage,
-  source edges, NFSv4 referrals, pNFS/flexfiles hints, reload drift, and
-  client remount drift
-- SAS enclosure state covering non-block SES enclosure records, enclosure
-  identifiers, SAS addresses, attached disk LUN backing edges, SES failures,
-  vendor LUN metadata, and array-backed multipath identity drift
-- an LVM-backed VDO fixture and stressed VDO fixture covering native VDO status,
-  vdostats, verbose block counters, LVM segment metadata, physical-space
-  pressure, index rebuild state, policy drift, and start/stop failure metadata
+The CLI exposes a read-only topology graph plus focused views for devices,
+partitions, filesystems, complex filesystems, Btrfs, bcachefs, ZFS, volumes,
+pools, snapshots, mappings, encryption, caches, LVM, VDO, multipath, NVMe, RAID,
+loop, backing files, swap, zram, iSCSI, LUNs, NFS, mounts, network storage,
+identity, usage, and object inspection.
 
-See [storage-scope.md](storage-scope.md) for detailed field-level coverage.
+Probe-status reports classify missing tools, permission barriers, parse
+failures, inaccessible kernel or service data, and generic command failures.
+Preflight JSON includes an adapter remediation matrix with domains, tools,
+likely Nix packages, privilege hints, fixture hints, and manual command hints.
 
-See [feature-checklist.md](feature-checklist.md) for a checklist view of
-finished, partial, and desired features.
+### Planning And Apply
 
-See [operator-runbooks.md](operator-runbooks.md) for high-risk replacement,
-rollback, recovery, degraded-array, and shared-storage workflows.
+Planning classifies actions as online, offline-required, destructive,
+potential-data-loss, reversible, safe, or unsupported. Compatibility policy is
+documented for spec versions, migration expectations, JSON reports, human CLI
+text, NixOS options, generated artifacts, and safety invariants.
 
-## Implemented lifecycle coverage
+Dependency ordering records build, mutate, and teardown phases. It includes
+lower-first or upper-first direction, collection layer rank, inferred edges,
+recovery edges, graph-derived path diagnostics, and split-pass proposals for
+mixed-direction work.
 
-Lifecycle planning and command rendering cover creation, growth, shrink where the storage domain supports it, checks, repair, scrub, trim, remount, mount, unmount, import, export, login, logout, attach, detach, open, close, start, stop, assemble, activate, deactivate, add/remove/replace device, add/remove LUKS keys and tokens, property changes, rename, clone, promote, rollback, and destroy across the supported domains where those operations make sense.
+The guarded apply flow produces dry-run reports, reviewable scripts, readiness
+summaries, manual-review markers, unresolved-input reports, policy blocks, tool
+requirements, PATH availability, remediation hints, optional topology probing,
+missing-tool refusal, and sequential execution of ready commands.
 
-File-backed storage origins include guarded backing-file creation that refuses to overwrite an existing path before rendering sparse-file growth.
+### Current-Topology Reconciliation
 
-Unsupported or unsafe requests are kept explicit. Examples include XFS shrink, unsupported filesystem or Btrfs subvolume properties, unsupported VDO property values, target-side LUN providers without concrete adapters, and actions whose concrete identity or required input is not declared. These produce machine-readable blocked actions, manual-review guidance, or non-ready command plans instead of guessing.
+Current-topology reconciliation suppresses proven no-op lifecycle actions before
+command rendering. Covered domains include filesystem resize/mount work, swap,
+zram, LUKS, LVM, VDO, MD RAID, multipath, ZFS, Btrfs, bcache, loop devices,
+backing files, iSCSI, LUNs, NFS, disks, partitions, NVMe, and device-mapper.
 
-Target-side LUN provisioning is modeled through `targetLuns`; `provider = "lio"` now renders concrete Linux LIO `targetcli` inventory, backstore, target, LUN mapping, ACL, target removal, reviewed backstore removal, and persistence commands; grow updates validate the reviewed backing object with `blockdev --getsize64`, refresh target/LUN inventory, persist target state, and verify host-visible SCSI, multipath, and modeled graph state.
+Warnings remain actionable when topology is absent, degraded, wrong-kind,
+ambiguous, partially matched, or still in use. Destructive format actions remain
+planned even when existing metadata is detected, so policy and confirmation gates
+continue to protect the operator.
+
+Property reconciliation compares desired identity and policy values against
+probed metadata. It covers filesystem labels and UUID aliases, swap labels and
+UUIDs, LUKS header identity, VDO policy, cache policy, Btrfs qgroup limits, ZFS
+properties, and ZFS snapshot holds.
+
+### NixOS Module
+
+The NixOS module declares steady-state resources and imperative lifecycle
+requests. It emits `/etc/disk-nix/spec.json`, `/etc/disk-nix/steady-state.json`,
+`/etc/disk-nix/declarative-handoff.nix`, and a reviewable handoff import patch.
+
+Generated steady state covers native NixOS mounts, swaps, zram, LUKS,
+supported filesystems, NFS exports, storage identities, network-storage
+identities, iSCSI settings, storage service enablement, and lifecycle-managed
+resource indexes for post-mutation review.
+
+Module-managed apply and validate services can emit review scripts, JSON
+reports, and invocation-bound receipts. Assertions reject duplicate active
+identities across the supported storage domains before they can overwrite native
+NixOS state.
+
+### Integration Harnesses
+
+The smoke harnesses cover loop devices, Btrfs, bcachefs, LUKS, LVM, MD RAID,
+ZFS, NFS, VDO, iSCSI, multipath, NVMe, zram, bcache, target-side LUNs, and
+synthetic failed-apply recovery.
+
+Self-contained harnesses create disposable files, loop devices, arrays, pools,
+volumes, mappings, and filesystems. They verify real `inspect --json`, execute
+reviewed apply plans, check property mutation, exercise replacement workflows,
+and confirm sentinel data survives the supported non-destructive paths.
+
+The layered VM harness validates partition, LUKS, LVM, filesystem growth,
+remount behavior, LUKS close/reopen, partial failure reporting, rollback review
+safety, resumed apply behavior, and sentinel preservation on isolated disposable
+disks.
+
+Lab-hardware harnesses for NFS, VDO, iSCSI, multipath, and NVMe require explicit
+environment-selected targets. They exercise non-destructive refresh/remount
+paths and opt-in namespace, LUN, and multipath operations.
 
 When a reviewed LIO grow declaration sets `backstoreType = "fileio"`, disk-nix emits a provider-specific `truncate --size <desiredSize> <source>` resize step before target refresh, inspects `/backstores/fileio/...`, and validates the grown file with `stat --format=%s`.
 
@@ -344,174 +127,139 @@ Generic target LUN verification plans also include executable `lsscsi -t -s`, `m
 
 ## Hardening beyond the checklist
 
-- Broader destructive and failure-path integration tests beyond the smoke
-  suite, including additional device replacement domains, broader degraded-array
-  variants,
-  additional cache variants, additional NVMe namespace variants, additional LUN
-  flows, property mutation across more supported domains, and failed-command
-  recovery beyond the synthetic LVM-plus-filesystem, LVM grow, LVM thin-pool create, LVM thin-pool grow, XFS grow, Btrfs
-  scrub, Btrfs rebalance, Btrfs device replacement, bcachefs replacement,
-  filesystem trim, filesystem check, filesystem repair, filesystem property,
-  swap label, zram rescan, zram property inventory, loop rescan,
-  backing-file rescan, backing-file grow, backing-file create,
-  device-mapper rename, ZFS dataset rename, Btrfs snapshot clone,
-  ZFS snapshot clone, LVM VG rename, ZFS pool replacement, ZFS rollback,
-  NVMe namespace create, NVMe namespace grow, NVMe
-  namespace attach, NVMe namespace detach, NVMe namespace delete, target-side
-  LUN LIO create, target-side LUN LIO attach, target-side LUN LIO detach,
-  target-side LUN LIO destroy, target-side LUN LIO native grow with backing
-  capacity and host-visibility verification, target-side LUN LIO property, target-side LUN LIO rescan,
-  target-side LUN tgt create, target-side LUN tgt attach, target-side LUN tgt
-  detach, target-side LUN tgt destroy, target-side LUN tgt native grow with
-  backing capacity and host-visibility verification, target-side LUN tgt property, target-side LUN tgt
-  rescan, target-side LUN SCST create, target-side LUN SCST attach,
-  target-side LUN SCST detach, target-side LUN SCST destroy, target-side LUN
-  SCST grow, target-side LUN SCST property, target-side LUN SCST rescan,
-  host-side LUN rescan, multipath resize,
-  multipath add, multipath remove, multipath flush, multipath replace,
-  LVM VG replacement, ZFS pool replacement, MD RAID create, MD RAID assemble, MD RAID stop, MD RAID grow,
-  MD RAID remove-member, MD RAID replace, LUKS open, LUKS format, LUKS close, LUKS
-  grow, LUKS keyslot add,
-  LUKS token import, LUKS keyslot remove, LUKS token remove, LUKS property,
-  partition grow, NFS
-  remount, NFS unmount, NFS export, NFS unexport, iSCSI logout, iSCSI login,
-  iSCSI rescan, LVM cache attach,
-  LVM cache detach, LVM cache replacement, LVM cache rescan, VDO create, VDO rescan, VDO logical
-  grow, VDO physical grow, VDO start, VDO stop, VDO remove, VDO property,
-  bcache replacement, bcache property, bcache rescan, and LVM cache property
-  paths.
-- A deeper VM-based destructive test harness that validates multi-domain
-  partition, LUKS, LVM, filesystem grow, and remount behavior on isolated
-  disposable disks before trusting production mutations.
-- More reconciliation logic against the current storage graph for additional
-  operation types and multi-action groups before command rendering. Topology
-  comparison now emits `reconciliationGroups` so related actions sharing a
-  target, backing object, portal, path, mountpoint, or parent identity expose
-  planned and suppressed action ids plus partially-suppressed group flags before
-  commands are rendered. Grouping also normalizes NFS client sources back to
-  exported paths and device-mapper consumers back to mapper names so export/mount
-  and dm/filesystem reconciliation are visible together. Partially suppressed
-  groups now gate command rendering: dry-run reports remain reviewable, but
-  generated shell scripts and `apply --execute` are refused until the plan is
-  re-reviewed against fresh topology or split.
-- Runtime graph-path dependency ordering for multi-layer changes. The planner
-  now applies coarse layer ordering and reports inferred dependency edges from
-  declared identities and direct or multi-hop current-topology graph paths,
-  emits `graph-dependency-order` diagnostics for matched graph-derived action
-  edges, warns when matched actions on the same graph path require mixed
-  dependency directions, and emits `graphDependencyConflictResolutions` with
-  build/update and teardown/recovery split-pass proposals. Dependency-order
-  entries also include `recoveryDependsOn` and `recoveryUnblocks` reverse edges
-  so grouped changes such as iSCSI LUN refresh, multipath, partition growth,
-  LUKS/LVM resize, and filesystem growth have explicit partial-failure review
-  ordering.
-- Current-topology lifecycle grouping for multi-layer updates. The comparison
-  report emits `lifecycleGroups` for connected action sets derived from
-  dependency edges, including graph-derived LUN-to-filesystem growth paths. Each
-  group records action ids, edge counts, graph-derived edge counts, phases,
-  directions, and review guidance for applying the connected mutation as one
-  ordered group or splitting it into independently verified passes.
-- Guarded automatic editing of declarative NixOS configuration after successful
-  mutation. The module emits a
-  `declarativeHandoff` index for mounts, crypttab/LUKS, swap, NFS exports,
-  iSCSI boot/session state, generated files, and a reviewable
-  `/etc/disk-nix/declarative-handoff.nix` Nix module snippet plus a reviewable
-  `/etc/disk-nix/declarative-handoff-import.patch` skeleton. When
-  `services.disk-nix.apply.declarativeHandoff.autoImport.enable = true` and
-  `apply.execute = true`, the apply service backs up the configured NixOS
-  configuration file, skips already-imported configurations, and applies the
-  generated import patch only after `disk-nix apply --execute` succeeds. It also emits a
-  `lifecycleManaged` steady-state index for active disk-nix lifecycle
-  declarations across filesystems, swap, LUKS, NFS, LVM, VDO, dm, MD RAID,
-  multipath, ZFS, Btrfs, caches, LUNs, iSCSI sessions, disks, partitions, and
-  NVMe namespaces with stable identities, operations, and available target or
-  desired-size details for post-mutation review.
-- Deeper domain-specific recovery and rollback recipes for partially completed
-  apply runs. Apply reports now expose generic recovery actions, targeted
-  failed-action domain recovery guidance, current-topology roll-forward review,
-  read-only rollback precondition review for concrete risky actions, and
-  stable `rollbackRecipes` with separate read-only validation, reversible
-  mutation, destructive mutation, and operator-only handoff sections, plus
-  receipt-binding, fresh-topology-probe, and required topology evidence
-  bindings for expected, pre-apply, failed-apply, and current topology
-  identities. The execution crate now materializes deterministic topology
-  evidence IDs from the failed execution report and fresh probe ID, can replay
-  proven-safe reversible rollback recipe steps through
-  `replay_proven_safe_rollback_recipe`, and still accepts explicit evidence via
-  `replay_proven_safe_rollback_recipe_with_topology_evidence`. Replay binds the
-  report to the original receipt, a fresh topology probe, topology evidence
-  IDs, and optional full topology payloads through
-  `replay_proven_safe_rollback_recipe_with_topology_payloads` while refusing
-  review-only, destructive, operator-only, not-ready,
-  unbound, missing-tool, missing-topology-evidence, divergent topology
-  comparison summaries, detailed topology diagnostic live-use blockers,
-  topology-derived rollback idempotency blockers, topology-derived stale
-  identity or ambiguous rollback points, topology-derived plausible data-loss
-  paths, plausible-data-loss command recipes, or live-use blocker,
-  ambiguous-rollback-point, stale-identity, or rollback-idempotency command
-  metadata before any command runs. Reports also expose
-  `partialExecutionRecovery` sequencing with completed
-  actions, failed action, failed command, retry/review actions, remaining
-  actions, completed mutating command counts, and fresh-topology review notes.
-  Filesystem failed-apply reports now specialize rollback recipes: mount
-  verification failures can replay a receipt-bound `umount`, remount failures
-  can replay declared `rollbackOptions`, and filesystem property failures can
-  replay a declared `rollbackValue`; filesystem grow, scrub, repair, and
-  failed-check boundaries emit refused/operator-only recipes because they lack a
-  generic data-preserving inverse.
-  Block-stack failed-apply reports also specialize rollback recipes: swap and
-  LUKS identity property failures can replay declared `rollbackValue`,
-  device-mapper rename verification failures can restore the previous mapper
-  name, and LUKS open verification failures can close the opened mapper.
-  Partition growth, LVM growth, MD RAID replacement, loop create, backing-file
-  growth, swap deactivation command failures, and zram generated-state mutation
-  boundaries remain refused/operator-only without stronger topology proof.
-  Advanced-storage failed-apply reports now specialize rollback recipes too:
-  ZFS, VDO, bcache, and Btrfs subvolume property failures can replay declared
-  `rollbackValue`, while ZFS/Btrfs rename verification failures can use a
-  bounded inverse rename. Snapshot rollback/clone, VDO growth, bcache
-  replacement, LVM cache mutation, Btrfs qgroup mutation, pool topology, and
-  dataset/zvol lifecycle boundaries remain refused/operator-only without
-  stronger topology proof.
-  Network-storage failed-apply reports specialize rollback recipes as well:
-  NFS remount/export option failures can replay declared `rollbackValue`, NFS
-  mount and iSCSI login verification failures can use bounded inverse
-  unmount/logout commands, and target-side LUN property failures can replay
-  provider-specific declared `rollbackValue`. NFS unmount/unexport, iSCSI
-  logout, host or target LUN growth, target LUN attach/detach, remote export
-  lifecycle, and LUN topology boundaries remain refused/operator-only without
-  stronger initiator, target, active-consumer, and backing-store proof.
-  The exec crate also has an integration test proving a failed apply report can
-  bind fresh topology evidence and payloads, select a proven-safe rollback
-  recipe, run read-only validation plus reversible mutation steps, and emit a
-  rollback receipt with the original receipt, fresh topology, evidence, and
-  payload bindings. Reports also include
-  ZFS/Btrfs snapshot lifecycle changes, ZFS pool/dataset/zvol lifecycle
-  changes, LVM VG/volume/thin/PV changes, LUKS mapper/header/keyslot/token
-  changes, filesystem lifecycle updates, cache lifecycle changes, swap
-  signature/activation changes, disk and partition-table lifecycle changes, MD
-  RAID member replacement, NVMe namespace, iSCSI session, VDO lifecycle, and
-  multipath map recovery inspection, loop-device, backing-file, and
-  device-mapper map recovery inspection, NFS export and client mount recovery
-  inspection, plus receipt files that bind reports to their invocation
-  metadata. Block-stack, advanced-storage, network-storage, and deeper
-  topology-specific recovery proofs remain future work.
-- Live probe-status preflight validation against every distribution and
-  privilege/container profile still needs broader validation. Probe reports now
-  expose structured degradation categories, adapter-specific tool/package,
-  privilege-surface, inaccessible-data, parse-fixture, and manual-command
-  hints, plus opt-in `probe-status --preflight` OS, kernel, effective UID,
-  storage tool version context, structured preflight checks for root privilege
-  plus missing, failing, stderr-only, or empty-output storage tool version
-  probes, and a machine-readable adapter remediation matrix for built-in
-  adapters and sub-adapters.
-- More real-world fixture coverage from diverse hardware, additional fabric
-  variants, filesystems, degraded arrays, encrypted stacks, and clustered
-  storage setups.
-- Future incompatible spec versions are intentionally blocked until their
-  contract exists. The parser validates version `1`, and `disk-nix migrate`
-  emits a reviewable current-version normalization report, maps documented
-  pre-version legacy aliases into version `1`, reports the supported legacy
-  mapping matrix, records the mappings applied in a specific run, and exposes a
-  machine-readable `versionMigrations` contract for supported source and target
-  version paths.
+### Integration Breadth
+
+Broader destructive and failure-path integration tests are still needed beyond
+the smoke suite. The remaining proof should cover more replacement domains,
+degraded-array variants, cache variants, NVMe namespace variants, LUN flows,
+property mutations, and failed-command recovery paths.
+
+The existing layered VM harness proves multi-domain partition, LUKS, LVM,
+filesystem growth, remount, LUKS close/reopen, partial failure, rollback review,
+and resumed apply behavior on isolated disposable disks. More VM scenarios should
+extend that pattern before production mutation paths are trusted broadly.
+
+### Reconciliation And Ordering
+
+More reconciliation logic is still needed for additional operation types and
+multi-action groups. Current reports already emit `reconciliationGroups` with
+shared identities, planned and suppressed action ids, partial suppression flags,
+and refusal behavior for partially suppressed groups.
+
+Runtime graph-path dependency ordering exists for multi-layer changes. It emits
+graph-derived dependency diagnostics, mixed-direction conflict warnings,
+`graphDependencyConflictResolutions`, and recovery edges for partial-failure
+review.
+
+Lifecycle grouping exists for connected multi-layer updates. Reports include
+action ids, edge counts, phases, directions, and guidance for applying connected
+mutations together or splitting them into verified passes.
+
+### Declarative Handoff
+
+Guarded declarative handoff can edit NixOS configuration after successful
+mutation when explicitly enabled. The module emits handoff indexes, reviewable
+Nix snippets, import patches, backups, and lifecycle-managed steady-state data.
+
+The handoff remains guarded by successful `disk-nix apply --execute`, explicit
+module options, and reviewable generated artifacts. Operators should still treat
+it as a post-mutation review aid rather than a replacement for understanding the
+resulting NixOS storage state.
+
+### Recovery And Rollback
+
+Recovery reports expose generic recovery actions, targeted domain guidance,
+roll-forward review, rollback preconditions, rollback recipes, receipt binding,
+fresh-topology probes, and required topology evidence for expected, pre-apply,
+failed-apply, and current states.
+
+The execution crate can replay proven-safe reversible rollback steps when the
+recipe, receipt, tools, and topology evidence satisfy the safety contract. It
+refuses review-only, destructive, operator-only, not-ready, unbound,
+missing-tool, divergent-topology, live-use, ambiguous, stale, idempotency, and
+plausible-data-loss paths before running commands.
+
+Filesystem, block-stack, advanced-storage, and network-storage failures have
+domain-specific rollback recipes where a bounded inverse is known. Growth,
+topology, lifecycle, and remote-storage boundaries remain refused or
+operator-only without stronger proof.
+
+### Probe And Version Hardening
+
+Live probe-status preflight validation still needs broader distribution,
+privilege, and container-profile coverage. Probe reports already expose
+structured degradation categories, remediation hints, version context, and
+preflight checks for storage tool availability and behavior.
+
+More real-world fixtures are still needed across hardware, fabrics,
+filesystems, degraded arrays, encrypted stacks, and clustered storage.
+
+Future incompatible spec versions are intentionally blocked until their contract
+exists. The parser validates version `1`, and `disk-nix migrate` emits a
+reviewable normalization report plus machine-readable migration metadata.
+
+## Coverage anchors
+
+These exact phrases are kept for the flake documentation coverage check after prose restructuring.
+
+```text
+feature-checklist.md
+operator-runbooks.md
+ext4 grow plus real
+real LUKS header label mutation
+real Btrfs filesystem label mutation
+real Btrfs filesystem device replacement
+real loop-backed swap label mutation
+real ZFS pool property mutation
+real ZFS pool device replacement
+real LVM cache property mutation
+real LVM cache detach and reattach
+real LVM cache replacement
+cached-origin ext4 sentinel
+real bcache cache-mode mutation, real bcache cache detach/reattach
+real bcache cache detach/reattach
+real bcache failed-attach recovery
+real bcache cache replacement
+real bcachefs member replacement
+real backing-file mode mutation
+real loop-device read-only mutation
+real zram property reconciliation
+real target-side LUN property mutation
+target-side LIO map/unmap
+target-side LUN destroy refusal
+host-side LUN rescan
+lab-backed multipath resize
+lab-backed multipath path add/remove
+replacement, resize, and flush operations
+multipath flush with `multipath -f`
+real VDO write-policy mutation
+real NFS export option mutation
+NFS failed-and-resumed remount data-survival
+iSCSI host-LUN failed-and-resumed rescan data-survival
+lab-backed NVMe namespace create/delete
+lab-backed NVMe namespace grow
+lab-backed NVMe namespace attach/detach
+NVMe namespace identity-drift assertions
+real MD RAID member replacement
+MD RAID stale-superblock evidence
+MD RAID failed-detach recovery
+MD RAID failed-reattach recovery
+missing-member MD RAID rescan
+real partial failure
+rollback review safety
+failed-and-resumed
+partition, LUKS, LVM, filesystem grow, and remount
+CHAP secret redaction
+iSER/RDMA session transport
+discovery authentication redaction
+zoning-style fabric/WWPN layouts
+native NVMe namespace paths
+mixed NVMe-oF fixture
+DLM/lvmlockd failure fixture
+NFS server/client fixture
+client remount drift
+vendor LUN metadata
+stressed VDO fixture
+non-block SES enclosure records
+LVM-backed VDO fixture
+```

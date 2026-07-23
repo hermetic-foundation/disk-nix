@@ -147,7 +147,7 @@ Typed filesystem declarations can also use `operation = "mount"` or `operation =
 
 `destroy = true` follows the same planner-only path for local filesystems. Teardown-only filesystem declarations are also filtered out of `boot.supportedFilesystems`; only active steady-state filesystems drive NixOS filesystem support. The same `filesystems` option is also the typed path for non-block mounted filesystems that NixOS represents through `fileSystems`, including tmpfs, bind mounts, and overlayfs.
 
-Declare `device = "tmpfs"; fsType = "tmpfs"` for tmpfs mounts, `options = [ "bind" ... ]` for bind mounts, and `device = "overlay"; fsType = "overlay"` with `lowerdir`, `upperdir`, and `workdir` options for overlayfs. These declarations are emitted to the disk-nix spec for planning/probing context and to NixOS `fileSystems` for steady-state mounting.
+Declare `device = "tmpfs"; fsType = "tmpfs"` for tmpfs mounts, `options = [ "bind" .. ]` for bind mounts, and `device = "overlay"; fsType = "overlay"` with `lowerdir`, `upperdir`, and `workdir` options for overlayfs. These declarations are emitted to the disk-nix spec for planning/probing context and to NixOS `fileSystems` for steady-state mounting.
 
 Typed active LVM declarations enable NixOS LVM support and initrd LVM support by default, and typed thin-pool or LVM-cache declarations also enable NixOS thin support. Typed active MD RAID declarations enable `boot.swraid` and add the same no-op `PROGRAM` line used by the installer profile unless the host overrides `boot.swraid.mdadmConf`.
 
@@ -473,32 +473,25 @@ Typed snapshot declarations include:
 
 Address fields have domain-specific meaning:
 
-- `action`: alias for `operation`; action-only teardown declarations are filtered
-  from generated NixOS steady-state resources the same way as operation-based
-  teardown declarations.
+- `action`.
 
-- `target`: native object name or required concrete command target; use
-  `vg/lv` for logical volumes, `vg/pool` for thin pools, `/dev/md*` for MD
-  arrays, `/dev/bcache*` for bcache, and `mpath*` or `/dev/mapper/*` for
-  multipath maps
+`action`: alias for `operation`; action-only teardown declarations are filtered from generated NixOS steady-state resources the same way as operation-based teardown declarations.
 
-- `path`: local filesystem path for Btrfs subvolumes, Btrfs qgroups, and NFS
-  exports; in snapshot declarations it is also accepted as the concrete
-  snapshot path when the attribute name is a friendly key. NFS client mounts
-  use the typed `mountpoint` field instead.
+- `target`.
 
-- `name`, `snapshotName`, `snapshot-name`: concrete snapshot identity for
-  snapshot lifecycle actions when the declaration key is a friendly name.
-  Snapshot rollback remains non-ready until this resolves to a concrete ZFS
-  snapshot name. Snapshot clone remains non-ready until this resolves to a
-  concrete ZFS snapshot name or absolute Btrfs snapshot path.
+`target`: native object name or required concrete command target; use `vg/lv` for logical volumes, `vg/pool` for thin pools, `/dev/md*` for MD arrays, `/dev/bcache*` for bcache, and `mpath*` or `/dev/mapper/*` for multipath maps
 
-- `snapshotPath`: explicit snapshot identity alias for `path`, useful for
-  Btrfs snapshot rescans, clones, and renames with non-path attribute names.
-  Snapshot clone and rename remain non-ready until the declaration resolves to
-  a concrete ZFS snapshot name or absolute Btrfs snapshot path. With
-  `probeCurrent = true`, snapshot clone reconciliation uses this path as the
-  concrete source when the map key is friendly.
+- `path`.
+
+`path`: local filesystem path for Btrfs subvolumes, Btrfs qgroups, and NFS exports; in snapshot declarations it is also accepted as the concrete snapshot path when the attribute name is a friendly key. NFS client mounts use the typed `mountpoint` field instead.
+
+- `name`, `snapshotName`, `snapshot-name`.
+
+`name`, `snapshotName`, `snapshot-name`: concrete snapshot identity for snapshot lifecycle actions when the declaration key is a friendly name. Snapshot rollback remains non-ready until this resolves to a concrete ZFS snapshot name. Snapshot clone remains non-ready until this resolves to a concrete ZFS snapshot name or absolute Btrfs snapshot path.
+
+- `snapshotPath`.
+
+`snapshotPath`: explicit snapshot identity alias for `path`, useful for Btrfs snapshot rescans, clones, and renames with non-path attribute names. Snapshot clone and rename remain non-ready until the declaration resolves to a concrete ZFS snapshot name or absolute Btrfs snapshot path. With `probeCurrent = true`, snapshot clone reconciliation uses this path as the concrete source when the map key is friendly.
 
 - `device`: backing block device or image path used by formats, LUKS, swap,
   filesystems, partitions, and loop-device setup
@@ -857,26 +850,31 @@ Example lifecycle planning through NixOS options:
 ## Apply modes
 
 - `manual`: only install the spec and CLI
-- `activation`: run apply-policy validation during activation; destructive and
-  potential-data-loss actions are refused by default. Set `probeCurrent = true`
-  to include current topology comparison in that validation report. Set
-  `scriptOut` to emit the allowed command and verification plan as a reviewable
-  shell script during validation. Set `reportOut` to persist the JSON report
-  before blocked-policy failures are returned. Set `receiptOut` to persist the
-  same report with invocation metadata for apply journals and recovery handoff.
-  Set `failOnBlocked = false` to run `disk-nix validate` during activation so
-  blocked policy is reported without failing the unit. Set `execute = true` to
-  run ready, policy-allowed commands with `disk-nix apply --execute` during
-  activation; this requires `failOnBlocked = true`.
-- `boot`: run the same service-backed policy validation and optional execution
-  path as install mode, ordered after local filesystems and udev settle and
-  before `multi-user.target`. This is intended for boot-time refresh or repair
-  workflows that still use explicit apply-policy gates.
-- `install`: run the same service-backed policy validation and optional
-  execution path as activation mode, but without activation-mode's extra
-  destructive-action assertion. This is intended for installer or image-build
-  workflows where destructive provisioning is explicit in the apply policy and
-  confirmation gates.
+- `activation`: run apply-policy validation during activation
+
+Destructive and potential-data-loss actions are refused by default. Set
+`probeCurrent = true` to include current topology comparison in that validation
+report.
+
+Set `scriptOut`, `reportOut`, and `receiptOut` to emit reviewable shell,
+JSON report, and invocation receipt artifacts. Set `failOnBlocked = false`
+to report blocked policy without failing the unit.
+
+Set `execute = true` to run ready, policy-allowed commands with
+`disk-nix apply --execute` during activation. This requires
+`failOnBlocked = true`.
+
+- `boot`: run the same service-backed policy path as install mode
+
+Boot mode is ordered after local filesystems and udev settle and before
+`multi-user.target`. It is intended for boot-time refresh or repair workflows
+that still use explicit apply-policy gates.
+
+- `install`: run the same service-backed policy path as activation mode
+
+Install mode skips activation-mode's extra destructive-action assertion. It is
+intended for installer or image-build workflows where destructive provisioning
+is explicit in the apply policy and confirmation gates.
 
 ## Policy
 

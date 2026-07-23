@@ -242,246 +242,155 @@ nodes plus directly related neighbors and the relationship edges that connect
 them, so automation can see immediate backing devices, mountpoints, members,
 exports, snapshots, and imported targets without fetching the full topology.
 
-Use these commands for:
+Use these commands for the focused views below. Each view returns the same graph
+shape, filtered to the domain named by the command.
 
-- `devices`: disks, partitions, dm devices, LVM objects, VDO, RAID, zvols,
-  cache devices, multipath devices, NVMe subsystems/controllers/namespaces, loop
-  devices, zram, and swap, including model/vendor, transport, rotational, NVMe
-  model/firmware/namespace
-  geometry, SCSI host/channel/target/LUN address, generic device, transport,
-  LU/WWN identity, queue state, SMART health, smartctl provenance,
-  self-test/offline collection state, ATA error-log and self-test log counts,
-  temperature, power-on, capacity, sector, SCSI grown-defect counts, and ATA
-  reallocation/pending-sector/offline-uncorrectable raw, normalized, worst,
-  threshold, and failure fields,
-  `lsblk` sector/I/O
-  alignment, discard, scheduler, zoned-device, DAX, and hotplug metadata,
-  partition table/number,
-  filesystem type, zram compression/memory accounting, loop
-  backing inode, backing major/minor, offset/autoclear/partition-scan metadata,
-  multipath path host/major-minor, parsed
-  SCSI coordinates, split dm/checker/online state details, and extra path
-  flags, MD RAID member number/major/minor/raid-device/state, active swap
-  state/type/priority, and udev by-id/by-path links, encoded labels,
-  filesystem UUID sub-identifiers, filesystem block-size/last-block geometry,
-  partition table metadata, major/minor numbers, and device-mapper flags when
-  probes expose them
-- `partitions`: partition nodes with size, PARTUUID, path, filesystem type,
-  `blkid` signature details, partition number, raw start/end geometry,
-  normalized byte offsets, type/name, and flags when probes expose them
-- `filesystems`: regular filesystems, Btrfs filesystems/subvolumes/snapshots,
-  bcachefs filesystems, ZFS datasets/snapshots, and NFS exports, with selected
-  filesystem metadata details such as `blkid` version/block-size/usage, exFAT
-  label, GUID/serial, volume length, FAT and cluster-heap layout, root cluster,
-  and raw plus derived cluster geometry, NTFS volume identity, version, cluster
-  sizing, MFT record and zone/location metadata, F2FS block usage, valid
-  inode/node counts, segment layout, section/zone geometry, log sizing, version,
-  and overprovisioning metadata, XFS source, allocation-group, inode, data,
-  naming format, log type/sizing, realtime type/geometry, and metadata feature
-  details,
-  bcachefs external/internal UUID, superblock magic, version/upgrade state,
-  member-device, mounted usage, and filesystem/member data-type byte
-  accounting, Btrfs Data/Metadata/System allocation profiles and byte counts,
-  and ext state/features, reserved and overhead block accounting, block/inode
-  group geometry, first-block and RAID stride/stripe layout hints, mount/check
-  counters, timestamps, directory hash settings, default mount options,
-  lifetime writes, journal identity, first/last filesystem error telemetry, and
-  checksum metadata when probes expose them
-- `complex-filesystems`: Btrfs, bcachefs, and ZFS pools, vdevs, datasets,
-  zvols, subvolumes, snapshots, qgroups, and member devices, including size,
-  used/free capacity, utilization, backing/member counts, allocation profiles,
-  qgroup hierarchy and limits, bcachefs superblock and member accounting, ZFS
-  health/vdev state, and ZFS compression/dedup/checksum/copies/cache/sync/record-size,
-  quota/reservation/encryption, and POSIX metadata policy properties when
-  probes expose them
-- `btrfs`: Btrfs filesystems, subvolumes, snapshots, and qgroups, including
-  size, used/free capacity, utilization, mount targets, backing relationships,
-  allocation profiles, subvolume IDs/generations/parentage, snapshot UUID
-  lineage, qgroup hierarchy and limits, and member device write/read/flush I/O,
-  corruption, and generation error counters
-- `bcachefs`: bcachefs filesystems and member devices, including external and
-  internal UUIDs, mount target, version/upgrade state, online reservation,
-  member count, data-type accounting, member labels, member state, member free
-  and capacity counters, and one-hop member relationships
-- `zfs`: ZFS pools, vdevs, datasets, snapshots, and zvols, including pool
-  health/state, capacity, dedup ratio, fragmentation, altroot, ashift,
-  autotrim, autoexpand, autoreplace, bootfs, cachefile, delegation, failmode,
-  listsnapshots, multihost, status/action advisories, scan/error summaries,
-  pool aggregate READ/WRITE/CKSUM counters, vdev roles and error counters,
-  dataset compression, dedup, checksum, copies, sync, cache policy, record
-  size, quota, reservation, encryption, key status, POSIX metadata policy,
-  snapshot user references and hold tags, zvol volume size, origin, and
-  pool/dataset/snapshot child
-  relationships when `zpool` and `zfs` probes expose them
-- `volumes`: logical storage objects such as LVM, Btrfs, bcachefs, ZFS, zvols,
-  LUNs, and exports, including LVM origin/pool/data metadata, activation state,
-  activation locality/exclusivity, role, layout, health, tags, device-mapper
-  path, parent, read-ahead, table state, thin-pool fullness behavior, metadata
-  size, and cache or writecache status, MD RAID level/state, iSCSI attached
-  disks, NFS server/export details, and ZFS zvol `volsize` when reported by
-  `zfs list`
-- `pools`: storage pools and grouping layers such as LVM volume groups, thin
-  pools, Btrfs filesystems/qgroups, bcachefs filesystems, ZFS pools/vdevs, and
-  MD RAID arrays,
-  including ZFS health/vdev role/state/error counters, LVM extent/free extent
-  counts, PV/LV/snapshot counts, permissions, allocation policy, lock/system-id,
-  and metadata-area counters, Btrfs qgroup hierarchy and limits, and MD RAID
-  metadata version, name, level, state, device counts, and event counters where
-  probes expose them
-- `snapshots`: snapshot objects across LVM, Btrfs, and ZFS, including known
-  source relationships, LVM origin/pool/data metadata, Btrfs subvolume IDs,
-  generation, creation generation, parent IDs, top-level, parent UUIDs, and
-  received UUIDs, and ZFS user-reference, hold tag, compression, and encryption
-  details
-- `mappings`: encryption headers/keyslots/tokens, device-mapper, LVM, VDO,
-  RAID, multipath, and cache layers, including LUKS active/keyslot/token
-  counts, keyslot priorities/ciphers/PBKDF cost and keyslot area metadata,
-  digest identifiers and digest hash/iteration metadata, token-to-keyslot
-  bindings, token metadata such as TPM PCR/hash hints, header area/epoch/flag
-  details, data-segment cipher/offset/length
-  details, dm name/UUID, major/minor numbers, open/segment counters, mapper
-  table targets, live target status, sanitized dm-crypt table details, parsed
-  linear/striped/thin/cache/snapshot table fields, cache/thin-pool/snapshot
-  status usage counters, LVM segment data/metadata device mappings,
-  thin-pool discard/zeroing/transaction details, cache segment policy/settings,
-  VDO segment compression/dedup/write-policy details, multipath WWID/size,
-  parsed SCSI path coordinates, and split path state, VDO backing device,
-  logical/physical size, mode, configured and active write policy, index/cache
-  sizing, data-reduction settings, and block
-  accounting, loop backing/offset/read-only/direct-I/O settings, and bcache
-  role/cache-set/tuning details such as UUID, label, state, running flag,
-  block/bucket sizing, btree cache size, available cache percentage, cache mode,
-  discard, cache read races, I/O errors, written/metadata-written accounting,
-  readahead, sequential cutoff, priority stats, writeback delay, and writeback
-  rate when probes expose them
-- `dm`: device-mapper maps, including dm name/UUID, major/minor numbers,
-  open and segment counters, table target payloads, live status target
-  payloads, sanitized dm-crypt table fields, cache/thin/snapshot status
-  counters, and one-hop backing relationships
-- `encryption`: LUKS/dm-crypt mappings and header metadata, including cipher,
-  active/in-use state, keyslot/token counts and ids, LUKS version, epoch,
-  metadata/keyslot area sizes, flags, subsystem, keyslot priority/cipher/PBKDF
-  details, keyslot area offsets/lengths, AF stripes, digest identifiers,
-  digest hash/iteration metadata, token-to-keyslot bindings, token metadata
-  such as TPM PCR/hash hints, and data-segment details
-- `cache`: bcache devices/cache sets, LVM cache/writecache metadata, bcachefs
-  member-device cache accounting, and ZFS cache vdevs, including cache mode,
-  policy, dirty/writeback data, LVM cache block totals, dirty blocks,
-  hit/miss and promotion/demotion counters, writecache total/free/block-size/
-  error counters, backing device, cache-set identity, state/running flags,
-  cache-set average key size, root usage, journal delay, error thresholds,
-  available cache percentage, discard, I/O errors,
-  written/metadata-written accounting, priority stats, congestion thresholds,
-  writeback-rate tuning, and vdev state
-- `lvm`: LVM physical volumes, volume groups, logical volumes, segments, thin
-  pools, snapshots, and cache/writecache layers, including data and metadata
-  percentages, active state and locality/exclusivity, device-mapper paths,
-  parent links, read-ahead, table suspension/live/inactive state, host and
-  historical flags, PV format/device-id/extent/metadata-area state, VG
-  permissions/allocation/lock/system-id and extent/PV/LV/snapshot counts,
-  origin/pool relationships, thin-pool fullness behavior, segment device
-  mappings, stripe/reshape/range metadata, segment integrity settings, detailed
-  VDO segment tuning, cache policy, LVM RAID sync/recovery/integrity status,
-  health, tags, and backing/member counts when `pvs`, `vgs`, `lvs`, or
-  `dmsetup` expose them
-- `vdo`: native VDO volumes and LVM VDO segment metadata, including backing
-  device, logical and physical size, used/free/percent utilization columns,
-  status/stat counters, operating mode, recovery progress, configured and
-  active write policy, LVM VDO compression and index state, byte-normalized
-  used size, saving counters, index/cache sizing, compression, deduplication,
-  version/release data, and block accounting when probes expose them
-- `multipath`: multipath maps and their backing paths, including WWID, dm
-  device, vendor/product, raw size, normalized byte capacity, features,
-  hardware handler, write protection, path count, host path, SCSI
-  host/channel/id/LUN coordinates, major/minor, path-group policy, priority,
-  group status, dm/checker/online state columns, extra path flags, and raw path
-  state when `multipath -ll` exposes them
-- `nvme`: NVMe subsystems, controllers, and namespaces, including path, serial,
-  model, firmware, namespace index/id, generic namespace path, subsystem NQN,
-  host NQN, controller, controller id, transport, address, fabrics endpoint,
-  path state, ANA state, namespace capacity, LBA format, maximum LBA, sector
-  size, formatted LBA descriptor, namespace feature/capacity counters,
-  controller capabilities/capacity, physical size, used bytes, free bytes,
-  utilization, temperature, spare capacity, media errors, unsafe shutdowns,
-  error-log count, and power-on telemetry when `nvme list-subsys -o json`,
-  `nvme list -o json`, `nvme id-ns -o json`, `nvme id-ctrl -o json`, and
-  `nvme smart-log -o json` expose them
-- `raid`: MD RAID arrays and member devices, including array UUID, scan-level
-  metadata version, array name, spare count, device hints, active detail
-  metadata version, level, state, size, raid, total, array, active, working,
-  failed, spare, and degraded device counts, event counters, chunk/layout
-  details, preferred minor, consistency policy, rebuild, reshape, resync, and
-  check progress, intent bitmap, persistence, bitmap detail, timestamps,
-  `/proc/mdstat` runtime state, device health strings, live recovery/resync
-  progress, finish and speed estimates, bitmap state, and per-member number,
-  major/minor, raid-device, slot, flags, and state when `/proc/mdstat`,
-  `mdadm --detail --scan`, `mdadm --examine --scan`, or
-  `mdadm --detail` exposes them
-- `loop`: loop devices and backing files/devices, including backing path,
-  backing inode, backing major/minor, offset, size limit, logical sector size,
-  major/minor, autoclear, partition-scan, read-only, and direct-I/O settings
-  when `losetup --json` exposes them
-- `backing-files`: file-backed storage origins, including path, size,
-  utilization, loop backing metadata, consumer counts, and one-hop loop or
-  swapfile relationships
-- `swap`: active swap devices and files plus zram swap devices, including type,
-  priority, active state, size, used bytes, free bytes, utilization, zram
-  compression algorithm, compressed/data/total memory accounting, memory limit
-  and high-water use, compression ratio, and backing relationship when
-  `/proc/swaps` exposes them
-- `zram`: generated compressed swap devices, including logical disk size,
-  active data bytes, compressed bytes, total memory, memory limit, memory used,
-  high-water memory use, compression algorithm, stream count, compression
-  ratio, mountpoint, and swap activation marker when `zramctl` exposes them
-- `iscsi`: configured iSCSI nodes, sessions, targets, and LUNs, including node
-  portals, node startup policy, interface, leading-login, CHAP method/user
-  hints, current and persistent session portals plus parsed portal
-  address/port/TPGT fields, target portal group tag, connection/session state,
-  connection CID/local/peer addresses, interface identity, negotiated transfer
-  parameters, target IQNs, LUN sizes, SCSI host/channel/id coordinates,
-  generic devices, transport, LU/WWN identity, queue state, attached disk
-  path/state, table-level path identity for attached LUN block devices,
-  session to target imports, target-contained LUN counts, and
-  LUN-to-block-device backing relationships when `iscsiadm --mode node -P 1`,
-  `iscsiadm --mode session -P 3`, or `lsscsi` exposes them
-- `luns`: host-visible LUN nodes, including path, size, transport, generic
-  device, SCSI host/channel/target/LUN coordinates, queue state, attached disk
-  state, and one-hop target or backing-block relationships
-- `nfs`: NFS server exports and client mounts, including exportfs path,
-  client, server/export split, export option state such as rw/ro, sync,
-  subtree checking, security flavor, squash flags, FSID, NFS protocol version,
-  transport and mount transport, client/server addresses, port/mount address,
-  read/write transfer sizes, timeout/retransmit settings, local locking,
-  lookup cache, FS-Cache, capability flags, transfer multipliers, directory
-  transfer/block sizing, RPC security flavor identifiers, age, and
-  export-to-client mount relationships when `exportfs -v`, `findmnt`, or NFS
-  mount probes expose them
-- `mounts`: local mountpoints and NFS mounts, including mount source,
-  read/write state, bind indicators, tmpfs sizing/mode metadata, and overlayfs
-  lower/upper/work directory options when `findmnt` reports them
-- `network-storage`: iSCSI sessions, iSCSI targets, LUNs, NFS exports, and NFS
-  mounts, including iSCSI current and persistent portals, connection/session
-  state, interface identity, negotiated transfer parameters, SCSI coordinates,
-  attached disk state, plus NFS mount source, server/export, protocol,
-  security, client/server address, mount transport, cache, timeout, and
-  transfer-size details when probes expose them
-- `ids`: nodes with UUID, PARTUUID, label, serial, or WWN identity fields
-- `usage`: nodes with size, used, free, allocated, utilization, or selected
-  metadata detail data, including bcache role/backing-device/set/state, UUID,
-  cache mode, replacement policy, block/bucket sizing, available cache
-  percentage, dirty data, cache read races, I/O errors, writeback percentage,
-  `blkid` signature
-  details, ext superblock state, block/inode geometry, RAID layout hints,
-  reservation, mount/check, and journal details, LVM layout, health,
-  thin/cache/writecache
-  capacity/status counters, NTFS volume geometry and MFT record sizing, F2FS
-  block usage,
-  valid inode/node counts, segment layout, section/zone geometry, log sizing,
-  bcachefs filesystem and member-device capacity plus data-type accounting,
-  Btrfs allocation class profiles and byte counts, VDO backing, logical/physical
-  size, used/free capacity, data-reduction, cache/index, and block-accounting
-  details, NVMe namespace details, loop mapping details, and active swap
-  state/type/priority when probed
+### Device And Partition Views
+
+`devices` covers disks, partitions, dm devices, LVM objects, VDO, RAID, zvols,
+cache devices, multipath devices, NVMe objects, loop devices, zram, and swap.
+
+The device view carries physical identity, transport, capacity, sector geometry,
+queue, discard, scheduler, DAX, zoned-device, SMART, SCSI, NVMe, udev,
+partition-table, loop, zram, swap, dm, multipath, and MD member metadata when
+those probes expose it.
+
+`partitions` focuses on partition nodes. It reports size, paths, PARTUUID,
+filesystem signature details, partition numbers, raw and normalized geometry,
+type/name metadata, and flags.
+
+### Filesystem Views
+
+`filesystems` covers regular filesystems, Btrfs filesystems and subvolumes,
+bcachefs filesystems, ZFS datasets and snapshots, and NFS exports.
+
+Filesystem details include blkid data, ext superblock state, XFS geometry, NTFS
+volume metadata, exFAT and F2FS layout data, bcachefs member accounting, and
+Btrfs allocation profiles when the matching probes are available.
+
+`complex-filesystems` narrows the graph to Btrfs, bcachefs, and ZFS structures.
+It includes pools, vdevs, datasets, zvols, subvolumes, snapshots, qgroups,
+member devices, utilization, allocation policy, and data-integrity properties.
+
+`btrfs` reports filesystems, subvolumes, snapshots, qgroups, allocation
+profiles, member-device counters, subvolume lineage, and qgroup limits.
+
+`bcachefs` reports filesystem and member identity, mount target, version state,
+reservation state, member labels, member capacity, and data-type accounting.
+
+`zfs` reports pools, vdevs, datasets, snapshots, and zvols. It includes pool
+health, capacity, scan/error state, vdev counters, dataset policy, encryption,
+snapshot holds, zvol size/origin, and child relationships.
+
+### Volume And Pool Views
+
+`volumes` covers logical storage objects such as LVM, Btrfs, bcachefs, ZFS,
+zvols, LUNs, and exports. It emphasizes activation state, parent links, health,
+layout, thin/cache status, MD RAID state, iSCSI disks, NFS details, and zvol
+size.
+
+`pools` covers LVM volume groups and thin pools, Btrfs filesystems and qgroups,
+bcachefs filesystems, ZFS pools and vdevs, and MD RAID arrays. It emphasizes
+capacity, extent counts, allocation policy, pool health, device counts, qgroup
+limits, and array event counters.
+
+`snapshots` covers LVM, Btrfs, and ZFS snapshots. It includes source
+relationships, LVM origin/pool metadata, Btrfs generation and UUID lineage, and
+ZFS user-reference, hold, compression, and encryption details.
+
+### Mapping And Cache Views
+
+`mappings` covers encryption headers, keyslots, tokens, device-mapper, LVM,
+VDO, RAID, multipath, loop, and cache layers. It emphasizes headers, active
+mapper state, table/status payloads, LVM segment mappings, VDO accounting,
+multipath path state, loop backing data, and bcache tuning.
+
+`dm` focuses on device-mapper maps. It reports names, UUIDs, major/minor
+numbers, open and segment counters, table payloads, status payloads, sanitized
+dm-crypt fields, cache/thin/snapshot counters, and one-hop backing links.
+
+`encryption` focuses on LUKS and dm-crypt. It reports active state, cipher,
+LUKS version, keyslot and token counts, priority, PBKDF, digest, token binding,
+header layout, subsystem, flags, and data-segment details.
+
+`cache` covers bcache devices and cache sets, LVM cache/writecache, bcachefs
+member cache accounting, and ZFS cache vdevs. It reports cache mode, policy,
+dirty data, utilization, writeback tuning, error counters, identities, and vdev
+state.
+
+### LVM, VDO, And Multipath Views
+
+`lvm` reports physical volumes, volume groups, logical volumes, segments, thin
+pools, snapshots, and cache/writecache layers. It includes activation, device
+mapper paths, extent accounting, VG policy, origin/pool links, segment details,
+VDO tuning, RAID status, health, tags, and member counts.
+
+`vdo` reports native VDO volumes and LVM VDO segment metadata. It includes
+backing devices, logical and physical size, used/free capacity, write policy,
+recovery progress, compression, deduplication, cache/index state, version data,
+and block accounting.
+
+`multipath` reports maps and backing paths. It includes WWID, dm device,
+vendor/product, size, features, handler, write protection, path count, SCSI
+coordinates, path-group policy, priorities, online/checker state, and raw path
+state.
+
+### Network And Remote Storage Views
+
+`nvme` reports subsystems, controllers, and namespaces. It includes serial,
+model, firmware, namespace IDs, NQN identity, fabrics endpoints, path state, ANA
+state, namespace capacity, LBA data, controller capabilities, utilization,
+health, and power-on telemetry.
+
+`iscsi` reports configured nodes, sessions, targets, and LUNs. It includes
+portals, startup policy, interfaces, CHAP hints, session addresses, transfer
+parameters, target IQNs, LUN sizes, SCSI coordinates, attached disks, and
+LUN-to-block relationships.
+
+`luns` reports host-visible LUN nodes. It includes path, size, transport,
+generic device, SCSI host/channel/target/LUN coordinates, queue state, attached
+disk state, and one-hop target or backing-block relationships.
+
+`nfs` reports server exports and client mounts. It includes export paths,
+clients, source splits, option state, protocol and transport, address data,
+locking, cache, sizing, RPC security, age, and export-to-client relationships.
+
+`network-storage` combines iSCSI sessions, iSCSI targets, LUNs, NFS exports,
+and NFS mounts. It emphasizes portal state, session state, SCSI coordinates,
+attached disks, NFS source identity, protocol, security, cache, timeouts, and
+transfer sizing.
+
+### Local Runtime Views
+
+`raid` reports MD RAID arrays and member devices. It includes UUIDs, metadata
+version, level, state, device counts, event counters, chunk/layout details,
+bitmap data, runtime progress, and per-member slot/state fields.
+
+`loop` reports loop devices and backing files or block devices. It includes
+backing path, inode, major/minor, offset, size limit, sector size, autoclear,
+partition scan, read-only, and direct-I/O settings.
+
+`backing-files` reports file-backed storage origins. It includes path, size,
+utilization, loop backing metadata, consumer counts, and one-hop loop or
+swapfile relationships.
+
+`swap` reports active swap devices, swap files, and zram swap devices. It
+includes type, priority, active state, size, used/free bytes, utilization, zram
+compression and memory accounting, compression ratio, and backing links.
+
+`zram` reports generated compressed swap devices. It includes logical disk size,
+active data, compressed data, total memory, memory limit, high-water use,
+algorithm, stream count, compression ratio, mountpoint, and swap activation.
+
+`mounts` reports local mountpoints and NFS mounts. It includes source,
+read/write state, bind indicators, tmpfs metadata, and overlayfs lower, upper,
+and work directory options.
+
+`ids` returns nodes with UUID, PARTUUID, label, serial, or WWN identity fields.
+
+`usage` returns nodes with capacity or usage data. It includes size, used, free,
+allocated, utilization, and selected domain-specific details for bcache, blkid,
+ext, LVM, NTFS, F2FS, bcachefs, Btrfs, VDO, NVMe, loop, and swap.
 
 ## Inspect
 

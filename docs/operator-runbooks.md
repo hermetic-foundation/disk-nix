@@ -109,9 +109,9 @@ Preflight:
    disk-nix lvm --json > lvm.rollback-review.json
    ```
 
-1. Confirm the rollback point still exists, its origin is correct, newer
-   snapshots/clones are understood, and dependent mounts, services, exports, or
-   remote clients are stopped or drained.
+1. Confirm the rollback point still exists, its origin.
+
+Confirm the rollback point still exists, its origin is correct, newer snapshots/clones are understood, and dependent mounts, services, exports, or remote clients are stopped or drained.
 
 Execution:
 
@@ -157,11 +157,9 @@ Preflight:
 1. Review `recoveryActions` in the failed apply report. Run only read-only
    inspection commands first.
 
-1. If the report includes `rollbackRecipes`, treat them as review-only recipe
-   records. Check `readOnlyValidation` first, keep `reversibleMutations` and
-   `destructiveMutations` empty unless a future domain recipe proves them safe,
-   and bind any operator rollback decision to the original receipt plus the
-   fresh topology captured above.
+1. If the report includes `rollbackRecipes`, treat them as.
+
+If the report includes `rollbackRecipes`, treat them as review-only recipe records. Check `readOnlyValidation` first, keep `reversibleMutations` and `destructiveMutations` empty unless a future domain recipe proves them safe, and bind any operator rollback decision to the original receipt plus the fresh topology captured above.
 
 Decision:
 
