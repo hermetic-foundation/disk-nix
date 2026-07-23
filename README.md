@@ -257,12 +257,15 @@ Dry-run the translated disko example suite:
 nix run .#integration-disko-examples
 ```
 
-Its destructive mode is separately guarded and expects disposable
-`/dev/sdb` through `/dev/sdf`.
+Its destructive mode is separately guarded and expects disposable disks through
+stable `/dev/disk/by-id` identities. On the current lab host those are the
+WWN links for the disks that currently appear as `/dev/sda` and `/dev/sdc`
+through `/dev/sdf`; `/dev/sdb` is intentionally excluded because it is the
+system disk after the reboot.
 
 ```sh
 sudo env DISK_NIX_DISKO_E2E_EXECUTE=1 \
-  DISK_NIX_DISKO_E2E_CONFIRM=wipe-/dev/sdb-/dev/sdc-/dev/sdd-/dev/sde-/dev/sdf \
+  DISK_NIX_DISKO_E2E_CONFIRM=wipe-/dev/disk/by-id/wwn-0x5000c500a5a461dc-/dev/disk/by-id/wwn-0x5000c50087a102ce-/dev/disk/by-id/wwn-0x5000c50087a11cd1-/dev/disk/by-id/wwn-0x5000c500a5a40803-/dev/disk/by-id/wwn-0x5000c500a5a3ab29 \
   nix run .#integration-disko-examples
 ```
 

@@ -77,11 +77,14 @@ the command plan, and refuses host path targets outside the disposable E2E
 root and expected storage device namespaces.
 
 Destructive execution is guarded separately. It is intended only for disposable
-lab disks `/dev/sdb` through `/dev/sdf`:
+lab disks addressed by stable `/dev/disk/by-id` identities. On the current lab
+host, those stable identities correspond to the disks currently enumerated as
+`/dev/sda` and `/dev/sdc` through `/dev/sdf`; `/dev/sdb` is excluded because it
+is the system disk after the reboot.
 
 ```sh
 sudo env DISK_NIX_DISKO_E2E_EXECUTE=1 \
-  DISK_NIX_DISKO_E2E_CONFIRM=wipe-/dev/sdb-/dev/sdc-/dev/sdd-/dev/sde-/dev/sdf \
+  DISK_NIX_DISKO_E2E_CONFIRM=wipe-/dev/disk/by-id/wwn-0x5000c500a5a461dc-/dev/disk/by-id/wwn-0x5000c50087a102ce-/dev/disk/by-id/wwn-0x5000c50087a11cd1-/dev/disk/by-id/wwn-0x5000c500a5a40803-/dev/disk/by-id/wwn-0x5000c500a5a3ab29 \
   nix run .#integration-disko-examples
 ```
 

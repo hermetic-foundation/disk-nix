@@ -8,8 +8,11 @@ integration coverage, and proving behavior across real storage stacks.
 
 The translated upstream disko example suite now dry-runs and preflights with
 all commands ready. Its guarded destructive mode executes the
-non-ZFS/non-bcachefs examples on disposable `/dev/sdb` through `/dev/sdf` while
-capability-skipping kernel-unsupported ZFS and bcachefs examples.
+non-ZFS/non-bcachefs examples on disposable stable `/dev/disk/by-id` lab disks
+while capability-skipping kernel-unsupported ZFS and bcachefs examples. On the
+current lab host that stable set maps to the disks currently enumerated as
+`/dev/sda` and `/dev/sdc` through `/dev/sdf`; `/dev/sdb` is excluded because it
+is the system disk after the reboot.
 
 ## Implemented foundation
 

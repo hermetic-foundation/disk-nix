@@ -7,8 +7,20 @@ disk_nix_bin="${DISK_NIX_BIN:-disk-nix}"
 execute="${DISK_NIX_DISKO_E2E_EXECUTE:-0}"
 preflight="${DISK_NIX_DISKO_E2E_PREFLIGHT:-0}"
 confirm="${DISK_NIX_DISKO_E2E_CONFIRM:-}"
-required_confirm="wipe-/dev/sdb-/dev/sdc-/dev/sdd-/dev/sde-/dev/sdf"
-test_disks=(/dev/sdb /dev/sdc /dev/sdd /dev/sde /dev/sdf)
+default_test_disks=(
+  /dev/disk/by-id/wwn-0x5000c500a5a461dc
+  /dev/disk/by-id/wwn-0x5000c50087a102ce
+  /dev/disk/by-id/wwn-0x5000c50087a11cd1
+  /dev/disk/by-id/wwn-0x5000c500a5a40803
+  /dev/disk/by-id/wwn-0x5000c500a5a3ab29
+)
+if [[ -n "${DISK_NIX_DISKO_E2E_DEVICES:-}" ]]; then
+  read -r -a test_disks <<<"$DISK_NIX_DISKO_E2E_DEVICES"
+else
+  test_disks=("${default_test_disks[@]}")
+fi
+test_disk_list="${test_disks[*]}"
+required_confirm="wipe-${test_disk_list// /-}"
 e2e_root="${DISK_NIX_DISKO_E2E_ROOT:-/mnt/disk-nix-disko-e2e}"
 e2e_passphrase="${DISK_NIX_DISKO_E2E_PASSPHRASE:-disk-nix-e2e-passphrase}"
 execute_specs_dir=""
@@ -362,7 +374,7 @@ fi
 if [[ "$execute" == "1" ]]; then
   if [[ "$confirm" != "$required_confirm" ]]; then
     echo "refusing destructive run" >&2
-    echo "set DISK_NIX_DISKO_E2E_CONFIRM=$required_confirm to wipe /dev/sdb through /dev/sdf" >&2
+    echo "set DISK_NIX_DISKO_E2E_CONFIRM=$required_confirm to wipe: $test_disk_list" >&2
     exit 1
   fi
   if [[ "$(id -u)" != "0" ]]; then
