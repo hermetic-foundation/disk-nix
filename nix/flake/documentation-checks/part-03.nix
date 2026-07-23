@@ -60,9 +60,7 @@
   ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'active/standby state' ${root + /docs/user/storage-scope.md}
   ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache' ${root + /docs/developer/planning.md}
-  ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' ${
-    root + /scripts/integration-failure-recovery-smoke.sh
-  }
+  ${pkgs.gnugrep}/bin/grep -q 'emulate_write_cache=0' $failureRecoverySources
   ${pkgs.gnugrep}/bin/grep -q 'tgt property updates render' ${root + /docs/user/cli.md}
   ${pkgs.gnugrep}/bin/grep -q 'provider = "scst"' ${root + /docs/user/cli.md}
   ${pkgs.gnugrep}/bin/grep -q 'providerCapabilities' ${root + /docs/user/cli.md}

@@ -12,19 +12,35 @@
   ${pkgs.nodejs}/bin/node --check ${root + /scripts/render-docs.mjs}
   ${pkgs.nodejs}/bin/node --check ${root + /scripts/check-docs-legibility.mjs}
   checklist=${root + /docs/developer/feature-checklist.md}
-  execSources="${root + /crates/disk-nix-exec/src/lib.rs} ${
-    root + /crates/disk-nix-exec/src/tests.rs
-  } ${root + /crates/disk-nix-exec/src/tests}/*.rs ${
-    root + /crates/disk-nix-exec/src/sections
-  }/*.rs ${root + /crates/disk-nix-exec/src/sections/block_device_commands}/*.rs"
-  planSources="${root + /crates/disk-nix-plan/src/lib.rs} ${
-    root + /crates/disk-nix-plan/src/tests.rs
-  } ${root + /crates/disk-nix-plan/src/tests}/*.rs ${
-    root + /crates/disk-nix-plan/src/sections
-  }/*.rs ${root + /crates/disk-nix-plan/src/sections/capabilities}/*.rs"
-  cliSources="${root + /crates/disk-nix-cli/src/main.rs} ${
-    root + /crates/disk-nix-cli/src/tests.rs
-  } ${root + /crates/disk-nix-cli/src/tests}/*.rs ${root + /crates/disk-nix-cli/src/sections}/*.rs"
+  execSourcesArray=(
+    ${root + /crates/disk-nix-exec/src/lib.rs}
+    ${root + /crates/disk-nix-exec/src/tests.rs}
+    ${root + /crates/disk-nix-exec/src/tests}/*.rs
+    ${root + /crates/disk-nix-exec/src/sections}/*.rs
+    ${root + /crates/disk-nix-exec/src/sections/block_device_commands}/*.rs
+    ${root + /crates/disk-nix-exec/src/sections/target_lun_commands}/*.rs
+  )
+  planSourcesArray=(
+    ${root + /crates/disk-nix-plan/src/lib.rs}
+    ${root + /crates/disk-nix-plan/src/tests.rs}
+    ${root + /crates/disk-nix-plan/src/tests}/*.rs
+    ${root + /crates/disk-nix-plan/src/sections}/*.rs
+    ${root + /crates/disk-nix-plan/src/sections/capabilities}/*.rs
+  )
+  cliSourcesArray=(
+    ${root + /crates/disk-nix-cli/src/main.rs}
+    ${root + /crates/disk-nix-cli/src/tests.rs}
+    ${root + /crates/disk-nix-cli/src/tests}/*.rs
+    ${root + /crates/disk-nix-cli/src/sections}/*.rs
+  )
+  failureRecoverySourcesArray=(
+    ${root + /scripts/integration-failure-recovery-smoke.sh}
+    ${root + /scripts/integration-failure-recovery-smoke.d}/*.sh
+  )
+  execSources="$(printf '%s\n' "''${execSourcesArray[@]}")"
+  planSources="$(printf '%s\n' "''${planSourcesArray[@]}")"
+  cliSources="$(printf '%s\n' "''${cliSourcesArray[@]}")"
+  failureRecoverySources="$(printf '%s\n' "''${failureRecoverySourcesArray[@]}")"
   ${pkgs.gnugrep}/bin/grep -q 'docs/index.md' ${root + /README.md}
   ${pkgs.gnugrep}/bin/grep -q 'docs/user/user-guide.md' ${root + /README.md}
   ${pkgs.gnugrep}/bin/grep -q 'docs/developer/feature-checklist.md' ${root + /README.md}
