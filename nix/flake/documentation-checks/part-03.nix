@@ -17,7 +17,9 @@
   ${pkgs.gnugrep}/bin/grep -q 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff' ${
     root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
-  ${pkgs.gnugrep}/bin/grep -q 'node.identity.uuid' ${root + /crates/disk-nix-probe/src/nvme.rs}
+  ${pkgs.gnugrep}/bin/grep -q 'uuid: namespace_uuid' ${
+    root + /crates/disk-nix-probe/src/nvme/graph.rs
+  }
   ${pkgs.gnugrep}/bin/grep -q 'Real-world clustered storage fixture coverage' "$checklist"
   ${pkgs.gnugrep}/bin/grep -q 'DLM/lvmlockd failure fixture' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'split-brain protection refusal' ${root + /docs/user/storage-scope.md}
