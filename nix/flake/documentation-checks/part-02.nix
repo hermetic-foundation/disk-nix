@@ -175,16 +175,16 @@
   ${pkgs.gnugrep}/bin/grep -q 'zoning-style fabric/WWPN layouts' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'zoning-style fabric/WWPN layouts' ${root + /docs/user/storage-scope.md}
   ${pkgs.gnugrep}/bin/grep -q 'fibre_channel_zoned_fixture_preserves_adapter_alua_and_failed_paths' ${
-    root + /crates/disk-nix-probe/src/lib.rs
+    root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'scsi.fc-target-wwpn' ${root + /crates/disk-nix-probe/src/lsscsi.rs}
   ${pkgs.gnugrep}/bin/grep -q 'NVMe/TCP multipath fixture' "$checklist"
   ${pkgs.gnugrep}/bin/grep -q 'native NVMe namespace paths' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'nvme_tcp_multipath_fixture_preserves_native_path_state' ${
-    root + /crates/disk-nix-probe/src/lib.rs
+    root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'uuid.aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' ${
-    root + /crates/disk-nix-probe/src/lib.rs
+    root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'Real-world NVMe-oF fixture coverage' "$checklist"
   ${pkgs.gnugrep}/bin/grep -q 'mixed NVMe-oF fixture' ${root + /docs/user/status.md}

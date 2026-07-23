@@ -12,17 +12,17 @@
     root + /docs/user/storage-scope.md
   }
   ${pkgs.gnugrep}/bin/grep -q 'nvme_of_mixed_fabric_fixture_preserves_sharing_and_path_churn' ${
-    root + /crates/disk-nix-probe/src/lib.rs
+    root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff' ${
-    root + /crates/disk-nix-probe/src/lib.rs
+    root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'node.identity.uuid' ${root + /crates/disk-nix-probe/src/nvme.rs}
   ${pkgs.gnugrep}/bin/grep -q 'Real-world clustered storage fixture coverage' "$checklist"
   ${pkgs.gnugrep}/bin/grep -q 'DLM/lvmlockd failure fixture' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'split-brain protection refusal' ${root + /docs/user/storage-scope.md}
   ${pkgs.gnugrep}/bin/grep -q 'clustered_lvm_failure_fixture_preserves_lock_manager_and_split_brain_state' ${
-    root + /crates/disk-nix-probe/src/lib.rs
+    root + /crates/disk-nix-probe/src/tests/part_03.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'lvm.vg-lock-failure' ${root + /crates/disk-nix-probe/src/lvm.rs}
   ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' "$checklist"
@@ -31,10 +31,10 @@
   ${pkgs.gnugrep}/bin/grep -q 'client remount drift' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'pNFS layout and' ${root + /docs/user/storage-scope.md}
   ${pkgs.gnugrep}/bin/grep -q 'nfs_server_client_fixture_merges_mount_usage_and_export_policy' ${
-    root + /crates/disk-nix-probe/src/lib.rs
+    root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'nfs.export-option-sec", "krb5p' ${
-    root + /crates/disk-nix-probe/src/lib.rs
+    root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'normalizes_referral_pnfs_remount_and_export_reload_fixture' ${
     root + /crates/disk-nix-probe/src/nfs.rs
@@ -45,13 +45,15 @@
   ${pkgs.gnugrep}/bin/grep -q 'vendor LUN metadata' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'SES failure attributes' ${root + /docs/user/storage-scope.md}
   ${pkgs.gnugrep}/bin/grep -q 'hardware_array_fixture_preserves_ses_failures_and_identity_drift' ${
-    root + /crates/disk-nix-probe/src/lib.rs
+    root + /crates/disk-nix-probe/src/tests/part_02.rs
   }
-  ${pkgs.gnugrep}/bin/grep -q 'vdisk-prod-77-replaced' ${root + /crates/disk-nix-probe/src/lib.rs}
+  ${pkgs.gnugrep}/bin/grep -q 'vdisk-prod-77-replaced' ${
+    root + /crates/disk-nix-probe/src/tests/part_02.rs
+  }
   ${pkgs.gnugrep}/bin/grep -q 'LVM-backed VDO fixture' "$checklist"
   ${pkgs.gnugrep}/bin/grep -q 'stressed VDO fixture' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'vdo_pressure_fixture_preserves_rebuild_policy_and_failure_state' ${
-    root + /crates/disk-nix-probe/src/lib.rs
+    root + /crates/disk-nix-probe/src/tests/part_03.rs
   }
   ${pkgs.gnugrep}/bin/grep -q 'physical-space pressure' ${root + /docs/user/storage-scope.md}
   ${pkgs.gnugrep}/bin/grep -q 'non-block SES enclosure records' ${root + /docs/user/status.md}
