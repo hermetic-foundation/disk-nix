@@ -24,7 +24,9 @@
   ${pkgs.gnugrep}/bin/grep -q 'clustered_lvm_failure_fixture_preserves_lock_manager_and_split_brain_state' ${
     root + /crates/disk-nix-probe/src/tests/part_03.rs
   }
-  ${pkgs.gnugrep}/bin/grep -q 'lvm.vg-lock-failure' ${root + /crates/disk-nix-probe/src/lvm.rs}
+  ${pkgs.gnugrep}/bin/grep -q 'lvm.vg-lock-failure' ${
+    root + /crates/disk-nix-probe/src/lvm/volume_groups.rs
+  }
   ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' "$checklist"
   ${pkgs.gnugrep}/bin/grep -q 'NFS server/client fixture' ${root + /docs/user/status.md}
   ${pkgs.gnugrep}/bin/grep -q 'Real-world server/client NFS fixture coverage' "$checklist"
