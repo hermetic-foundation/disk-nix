@@ -284,8 +284,43 @@ rewrite_spec_for_execute() {
   local output="$2"
   local name="$3"
   local root="$e2e_root/$name"
-  jq --arg root "$root" '
+  jq \
+    --arg root "$root" \
+    --arg disk_b "${test_disks[0]}" \
+    --arg disk_c "${test_disks[1]}" \
+    --arg disk_d "${test_disks[2]}" \
+    --arg disk_e "${test_disks[3]}" \
+    --arg disk_f "${test_disks[4]}" \
+    '
     . as $original |
+    def remap_disk($from; $to):
+      if . == $from then
+        $to
+      elif startswith($from) and ((.[($from | length):]) | test("^p?[0-9]+$")) then
+        $to + "-part" + ((.[($from | length):]) | sub("^p"; ""))
+      else
+        .
+      end;
+    def remap_device:
+      if type == "string" then
+        remap_disk("/dev/sdb"; $disk_b)
+        | remap_disk("/dev/sdc"; $disk_c)
+        | remap_disk("/dev/sdd"; $disk_d)
+        | remap_disk("/dev/sde"; $disk_e)
+        | remap_disk("/dev/sdf"; $disk_f)
+      else
+        .
+      end;
+    def remap_devices:
+      walk(
+        if type == "object" then
+          with_entries(.key |= remap_device)
+        elif type == "string" then
+          remap_device
+        else
+          .
+        end
+      );
     def remap_path:
       if type == "string" and startswith("/") then
         if . == "/" then $root else $root + . end
@@ -306,7 +341,8 @@ rewrite_spec_for_execute() {
       if $path | startswith("/") then $path else "/" + $path end;
     def join_paths($base; $path):
       if $base == "/" then $path else $base + $path end;
-    .filesystems |= ((. // {}) | with_entries(.value.mountpoint |= remap_mountpoint))
+    remap_devices
+    | .filesystems |= ((. // {}) | with_entries(.value.mountpoint |= remap_mountpoint))
     | .pools |= ((. // {}) | with_entries(.value.mountpoint |= remap_mountpoint))
     | .datasets |= ((. // {}) | with_entries(.value.mountpoint |= remap_mountpoint))
     | .btrfsSubvolumes |= ((. // {}) | with_entries(
@@ -327,19 +363,32 @@ rewrite_spec_for_execute() {
 validate_execute_plan_paths() {
   local apply_json="$1"
   local spec="$2"
+  local allowed_disk_roots
+  allowed_disk_roots="$(
+    for disk in "${test_disks[@]}"; do
+      printf '%s\n' "$disk"
+    done | sort -u
+  )"
   local unsafe
   unsafe="$(
-    jq -r --arg root "$e2e_root" '
+    jq -r --arg root "$e2e_root" --arg allowed_disk_roots "$allowed_disk_roots" '
+      def allowed_disks: $allowed_disk_roots | split("\n") | map(select(. != ""));
+      def is_allowed_disk_path($path):
+        any(allowed_disks[]; . as $disk
+          | ($path == $disk)
+            or (($path | startswith($disk + "-part")) and (($path[($disk + "-part" | length):]) | test("^[0-9]+$")))
+        );
       .commandPlan[].commands[].argv[]?
       | select(type == "string" and startswith("/"))
+      | . as $path
       | select(
-          (. == "/proc/mdstat")
-          or startswith($root + "/")
-          or test("^/dev/sd[b-f](p?[0-9]+)?$")
-          or startswith("/dev/mapper/")
-          or startswith("/dev/md/")
-          or test("^/dev/[A-Za-z0-9_.+-]+/[A-Za-z0-9_.+-]+$")
-          or startswith("/dev/zvol/")
+          ($path == "/proc/mdstat")
+          or ($path | startswith($root + "/"))
+          or is_allowed_disk_path($path)
+          or ($path | startswith("/dev/mapper/"))
+          or ($path | startswith("/dev/md/"))
+          or ($path | test("^/dev/[A-Za-z0-9_.+-]+/[A-Za-z0-9_.+-]+$"))
+          or ($path | startswith("/dev/zvol/"))
         | not
       )
     ' "$apply_json" | sort -u

@@ -2489,6 +2489,8 @@
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_DISKO_E2E_PREFLIGHT' ${./scripts/integration-disko-examples.sh}
             ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_DISKO_E2E_DEVICES' ${./scripts/integration-disko-examples.sh}
             ${pkgs.gnugrep}/bin/grep -q 'wwn-0x5000c500a5a461dc' ${./scripts/integration-disko-examples.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'remap_devices' ${./scripts/integration-disko-examples.sh}
+            ${pkgs.gnugrep}/bin/grep -q 'allowed_disk_roots' ${./scripts/integration-disko-examples.sh}
             ${pkgs.gnugrep}/bin/grep -q 'disk-nix-disko-e2e' ${./scripts/integration-disko-examples.sh}
             ${pkgs.gnugrep}/bin/grep -q 'validate_execute_plan_paths' ${./scripts/integration-disko-examples.sh}
             ${pkgs.gnugrep}/bin/grep -q 'stand-alone/configuration.nix' ${./examples/disko/manifest.json}
