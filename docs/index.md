@@ -1,36 +1,44 @@
 # Documentation index
 
-This directory is the operator and developer manual for `disk-nix`. Read it in
-the order below when evaluating the project as a storage lifecycle manager.
+This directory contains both user-facing and developer-facing documentation for
+`disk-nix`.
 
-## Fast path
+## Pick An Audience
 
-- Start with [Feature status](status.md) for the current implementation state,
-  proof level, and known hardening areas.
-- Use [User guide](user-guide.md) for task-oriented workflows from discovery
-  through apply and recovery.
-- Use [Storage scope](storage-scope.md) to see which Linux storage domains are
-  modeled, inspected, planned, and mutated.
-- Use [CLI](cli.md) when integrating with automation. JSON output is the stable
-  interface; human text is presentation.
-- Use [CLI planning and apply](cli-plan-apply.md) for planner, apply,
-  validation, rollback, and report contracts.
-- Use [NixOS module](nixos-module.md) when declaring storage from NixOS.
-- Use [NixOS module reference](nixos-module-reference.md) for the full typed
-  option example and domain-specific module behavior.
-- Use the integration detail docs for harness catalogs.
+| Audience | Start here |
+| --- | --- |
+| Users and operators | [User docs](user-docs.md) |
+| Contributors and maintainers | [Developer docs](developer-docs.md) |
 
-[Integration smoke harnesses](integration-smoke-harnesses.md) covers host-backed
-and lab-backed harnesses. [Integration failure recovery](integration-failure-recovery.md)
-covers synthetic failure cases and recovery reports.
-- Use [Operator runbooks](operator-runbooks.md) before any replacement,
-  rollback, recovery, degraded-array, or shared-storage operation.
+## User Fast Path
+
+| Step | Document |
+| --- | --- |
+| Learn the workflow | [User guide](user-guide.md) |
+| Check supported scope | [Storage scope](storage-scope.md) |
+| Review current maturity | [Feature status](status.md) |
+| Use the CLI | [CLI](cli.md) |
+| Declare NixOS storage | [NixOS module](nixos-module.md) |
+| Prepare risky work | [Operator runbooks](operator-runbooks.md) |
+
+## Developer Fast Path
+
+| Step | Document |
+| --- | --- |
+| Understand internals | [Architecture](architecture.md) |
+| Review contracts | [Compatibility](compatibility.md) |
+| Work on planner behavior | [Planning](planning.md) |
+| Work on apply reports | [CLI planning and apply](cli-plan-apply.md) |
+| Work on module behavior | [NixOS module reference](nixos-module-reference.md) |
+| Work on tests | [Integration tests](integration-tests.md) |
 
 ## Reference map
 
 | Document | Use it for |
 | --- | --- |
 | [README](../README.md) | Project overview, development commands, CLI examples, and safety model. |
+| [User docs](user-docs.md) | User and operator documentation map. |
+| [Developer docs](developer-docs.md) | Contributor and maintainer documentation map. |
 | [User guide](user-guide.md) | Operator workflows for inspecting, planning, applying, recovering, using NixOS, and testing safely. |
 | [Architecture](architecture.md) | Data flow, crate boundaries, storage graph, probe adapters, and safety layers. |
 | [Storage scope](storage-scope.md) | Domain-by-domain storage awareness and update operation coverage. |

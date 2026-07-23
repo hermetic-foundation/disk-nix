@@ -5,6 +5,8 @@ import path from "node:path";
 const files = [
   "README.md",
   "docs/index.md",
+  "docs/user-docs.md",
+  "docs/developer-docs.md",
   "docs/user-guide.md",
   "docs/architecture.md",
   "docs/storage-scope.md",

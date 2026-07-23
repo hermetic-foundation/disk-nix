@@ -21,6 +21,9 @@ Start here:
 
 - [docs/index.md](docs/index.md): documentation map and recommended reading
   order
+- [docs/user-docs.md](docs/user-docs.md): user and operator documentation map
+- [docs/developer-docs.md](docs/developer-docs.md): contributor and maintainer
+  documentation map
 - [docs/user-guide.md](docs/user-guide.md): task-oriented guide for using the
   project
 - [docs/status.md](docs/status.md): implemented behavior and hardening notes

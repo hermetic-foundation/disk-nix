@@ -5,6 +5,8 @@ import path from "node:path";
 const docs = [
   ["index", "Docs index", "docs/index.md"],
   ["readme", "README", "README.md"],
+  ["user-docs", "User docs", "docs/user-docs.md"],
+  ["developer-docs", "Developer docs", "docs/developer-docs.md"],
   ["user-guide", "User guide", "docs/user-guide.md"],
   ["status", "Status", "docs/status.md"],
   ["architecture", "Architecture", "docs/architecture.md"],
