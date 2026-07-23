@@ -1175,12 +1175,10 @@ mod tests {
         let graph =
             normalize_lvm_json(PVS, VGS, LVS, Some(SEGMENTS)).expect("fixture should parse");
 
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::LvmPhysicalVolume)
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::LvmPhysicalVolume));
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::LvmPhysicalVolume
                 && node
@@ -1202,12 +1200,10 @@ mod tests {
                     property.key == "lvm.pv-device-id" && property.value == "wwn-0x1234"
                 })
         }));
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::LvmVolumeGroup && node.name == "vg0")
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::LvmVolumeGroup && node.name == "vg0"));
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::LvmVolumeGroup
                 && node.name == "vg0"
@@ -1233,18 +1229,14 @@ mod tests {
                     property.key == "lvm.vg-mda-copies" && property.value == "unmanaged"
                 })
         }));
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::LvmSnapshot && node.name == "vg0/root-snap")
-        );
-        assert!(
-            graph
-                .edges
-                .iter()
-                .any(|edge| edge.relationship == Relationship::SnapshotOf)
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::LvmSnapshot && node.name == "vg0/root-snap"));
+        assert!(graph
+            .edges
+            .iter()
+            .any(|edge| edge.relationship == Relationship::SnapshotOf));
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::LvmSegment
                 && node.properties.iter().any(|property| {

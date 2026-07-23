@@ -935,73 +935,64 @@ mod tests {
             node.identity.wwn.as_deref(),
             Some("00112233445566778899aabbccddeeff")
         );
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.model" && property.value == "Example NVMe")
-        );
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.model" && property.value == "Example NVMe"));
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.generic-path" && property.value == "/dev/ng0n1"
         }));
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.product" && property.value == "Example Controller"
         }));
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.namespace" && property.value == "1")
-        );
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| { property.key == "nvme.namespace-id" && property.value == "1" })
-        );
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.namespace" && property.value == "1"));
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| { property.key == "nvme.namespace-id" && property.value == "1" }));
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.namespace-uuid"
                 && property.value == "12345678-1234-1234-1234-123456789abc"
         }));
-        assert!(
-            node.properties.iter().any(
-                |property| property.key == "nvme.eui64" && property.value == "0011223344556677"
-            )
-        );
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.eui64" && property.value == "0011223344556677"));
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.nguid" && property.value == "00112233445566778899aabbccddeeff"
         }));
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.subsystem" && property.value == "nvme-subsys0"
         }));
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.controller" && property.value == "nvme0")
-        );
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.address" && property.value == "0000:01:00.0")
-        );
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.transport" && property.value == "pcie")
-        );
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| { property.key == "nvme.controller-id" && property.value == "1" })
-        );
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.controller" && property.value == "nvme0"));
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.address" && property.value == "0000:01:00.0"));
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.transport" && property.value == "pcie"));
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| { property.key == "nvme.controller-id" && property.value == "1" }));
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.namespace-capacity" && property.value == "900"
         }));
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.lba-format" && property.value == "512 B + 0 B"
         }));
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.ana-state" && property.value == "optimized")
-        );
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.ana-state" && property.value == "optimized"));
 
         let controller = graph
             .nodes
@@ -1011,12 +1002,10 @@ mod tests {
         assert_eq!(controller.name, "nvme0");
         assert_eq!(controller.path.as_deref(), Some("/dev/nvme0"));
         assert_eq!(controller.identity.serial.as_deref(), Some("SERIAL123"));
-        assert!(
-            controller
-                .properties
-                .iter()
-                .any(|property| property.key == "nvme.controller" && property.value == "nvme0")
-        );
+        assert!(controller
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.controller" && property.value == "nvme0"));
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0 == "nvme-controller:nvme0"
                 && edge.to.0 == "block:/dev/nvme0n1"
@@ -1054,17 +1043,14 @@ mod tests {
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.formatted-lba-metadata-size" && property.value == "0"
         }));
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.id-ns.nsze" && property.value == "1953125")
-        );
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.id-ns.nvmcap"
-                    && property.value == "1000000000")
-        );
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.id-ns.nsze" && property.value == "1953125"));
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.id-ns.nvmcap" && property.value == "1000000000"));
     }
 
     #[test]
@@ -1091,11 +1077,10 @@ mod tests {
             .iter()
             .find(|node| node.id.0 == "nvme-controller:nvme1")
             .expect("tcp controller node should exist");
-        assert!(
-            tcp_controller.properties.iter().any(|property| {
-                property.key == "nvme.traddr" && property.value == "192.0.2.10"
-            })
-        );
+        assert!(tcp_controller
+            .properties
+            .iter()
+            .any(|property| { property.key == "nvme.traddr" && property.value == "192.0.2.10" }));
         assert!(tcp_controller.properties.iter().any(|property| {
             property.key == "nvme.path-state" && property.value == "connecting"
         }));
@@ -1129,16 +1114,14 @@ mod tests {
         assert_eq!(node.name, "nvme0");
         assert_eq!(node.path.as_deref(), Some("/dev/nvme0"));
         assert_eq!(node.identity.serial.as_deref(), Some("SERIAL123"));
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.model" && property.value == "Example NVMe")
-        );
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.controller-id" && property.value == "1")
-        );
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.model" && property.value == "Example NVMe"));
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.controller-id" && property.value == "1"));
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.id-ctrl.total-nvm-capacity" && property.value == "1000000000"
         }));
@@ -1164,22 +1147,19 @@ mod tests {
 
         assert_eq!(node.name, "nvme0");
         assert_eq!(node.path.as_deref(), Some("/dev/nvme0"));
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.smart.temperature-kelvin"
-                    && property.value == "301")
-        );
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.smart.percent-used" && property.value == "2")
-        );
-        assert!(
-            node.properties
-                .iter()
-                .any(|property| property.key == "nvme.smart.media-errors" && property.value == "0")
-        );
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.smart.temperature-kelvin"
+                && property.value == "301"));
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.smart.percent-used" && property.value == "2"));
+        assert!(node
+            .properties
+            .iter()
+            .any(|property| property.key == "nvme.smart.media-errors" && property.value == "0"));
         assert!(node.properties.iter().any(|property| {
             property.key == "nvme.smart.temperature-sensor-2-kelvin" && property.value == "302"
         }));

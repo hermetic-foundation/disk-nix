@@ -214,11 +214,9 @@ USAGE=crypto
         assert!(graph.nodes.iter().any(|node| {
             node.id.0 == "block:/dev/nvme0n1p2" && node.kind == NodeKind::LuksContainer
         }));
-        assert!(
-            !graph
-                .nodes
-                .iter()
-                .any(|node| node.id.0 == "fs:/dev/nvme0n1p2")
-        );
+        assert!(!graph
+            .nodes
+            .iter()
+            .any(|node| node.id.0 == "fs:/dev/nvme0n1p2"));
     }
 }

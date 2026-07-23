@@ -423,11 +423,10 @@ mod tests {
             .expect("lun exists");
         assert_eq!(lun.kind, NodeKind::Lun);
         assert_eq!(lun.size_bytes, Some(1_000_000_000_000));
-        assert!(
-            lun.properties
-                .iter()
-                .any(|property| property.key == "scsi.queue-depth" && property.value == "32")
-        );
+        assert!(lun
+            .properties
+            .iter()
+            .any(|property| property.key == "scsi.queue-depth" && property.value == "32"));
         let block = graph
             .nodes
             .iter()
@@ -519,18 +518,14 @@ mod tests {
         assert!(enclosure.properties.iter().any(|property| {
             property.key == "scsi.peripheral-type" && property.value == "enclosu"
         }));
-        assert!(
-            enclosure
-                .properties
-                .iter()
-                .any(|property| { property.key == "scsi.model" && property.value == "D3710" })
-        );
-        assert!(
-            enclosure
-                .properties
-                .iter()
-                .any(|property| { property.key == "scsi.revision" && property.value == "0141" })
-        );
+        assert!(enclosure
+            .properties
+            .iter()
+            .any(|property| { property.key == "scsi.model" && property.value == "D3710" }));
+        assert!(enclosure
+            .properties
+            .iter()
+            .any(|property| { property.key == "scsi.revision" && property.value == "0141" }));
         assert!(enclosure.properties.iter().any(|property| {
             property.key == "scsi.enclosure-identifier" && property.value == "0x500143803426abcd"
         }));

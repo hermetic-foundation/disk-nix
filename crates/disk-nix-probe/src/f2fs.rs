@@ -192,11 +192,10 @@ secs_per_zone = 1
             filesystem.usage.as_ref().and_then(|usage| usage.free_bytes),
             Some(738_197_504)
         );
-        assert!(
-            filesystem.properties.iter().any(|property| {
-                property.key == "f2fs.segment-count" && property.value == "2048"
-            })
-        );
+        assert!(filesystem
+            .properties
+            .iter()
+            .any(|property| { property.key == "f2fs.segment-count" && property.value == "2048" }));
         assert!(filesystem.properties.iter().any(|property| {
             property.key == "f2fs.overprov-segment-count" && property.value == "64"
         }));

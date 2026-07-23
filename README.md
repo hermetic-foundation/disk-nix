@@ -274,6 +274,13 @@ plans and preflights those examples but skips their execution.
 Use `DISK_NIX_DISKO_E2E_REQUIRE_ALL_KERNELS=1` when a green destructive run must
 prove that every generated example executed without capability skips.
 
+Run the kernel-dependent disko examples in a disposable NixOS VM with ZFS and
+bcachefs support:
+
+```sh
+nix build .#integration-disko-kernel-examples-vm-test
+```
+
 Run the synthetic failure-recovery harness without root:
 
 ```sh

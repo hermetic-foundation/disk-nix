@@ -491,12 +491,10 @@ Device                    1K-blocks    Used Available Use% Space saving%
 
         assert_eq!(volume.path.as_deref(), Some("/dev/mapper/archive"));
         assert_eq!(volume.size_bytes, Some(1_099_511_627_776));
-        assert!(
-            volume
-                .properties
-                .iter()
-                .any(|property| property.key == "vdo.compression" && property.value == "enabled")
-        );
+        assert!(volume
+            .properties
+            .iter()
+            .any(|property| property.key == "vdo.compression" && property.value == "enabled"));
         assert!(volume.properties.iter().any(|property| {
             property.key == "vdo.storage-device" && property.value == "/dev/sdb"
         }));
@@ -553,12 +551,10 @@ Device                    1K-blocks    Used Available Use% Space saving%
         assert!(archive.properties.iter().any(|property| {
             property.key == "vdo.operating-mode" && property.value == "normal"
         }));
-        assert!(
-            archive
-                .properties
-                .iter()
-                .any(|property| property.key == "vdo.write-policy" && property.value == "sync")
-        );
+        assert!(archive
+            .properties
+            .iter()
+            .any(|property| property.key == "vdo.write-policy" && property.value == "sync"));
         assert!(archive.properties.iter().any(|property| {
             property.key == "vdo.overhead-blocks-used" && property.value == "8192"
         }));

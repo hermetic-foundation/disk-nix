@@ -202,37 +202,29 @@ realtime =none                   extsz=4096   blocks=0, rtextents=0
             mount.usage.as_ref().and_then(|usage| usage.allocated_bytes),
             Some(1_073_741_824)
         );
-        assert!(
-            mount.properties.iter().any(|property| {
-                property.key == "xfs.meta-data.reflink" && property.value == "1"
-            })
-        );
-        assert!(
-            mount
-                .properties
-                .iter()
-                .any(|property| { property.key == "xfs.data.bsize" && property.value == "4096" })
-        );
-        assert!(
-            mount
-                .properties
-                .iter()
-                .any(|property| { property.key == "xfs.log.blocks" && property.value == "2560" })
-        );
-        assert!(
-            mount
-                .properties
-                .iter()
-                .any(|property| { property.key == "xfs.naming.version" && property.value == "2" })
-        );
+        assert!(mount
+            .properties
+            .iter()
+            .any(|property| { property.key == "xfs.meta-data.reflink" && property.value == "1" }));
+        assert!(mount
+            .properties
+            .iter()
+            .any(|property| { property.key == "xfs.data.bsize" && property.value == "4096" }));
+        assert!(mount
+            .properties
+            .iter()
+            .any(|property| { property.key == "xfs.log.blocks" && property.value == "2560" }));
+        assert!(mount
+            .properties
+            .iter()
+            .any(|property| { property.key == "xfs.naming.version" && property.value == "2" }));
         assert!(mount.properties.iter().any(|property| {
             property.key == "xfs.log.type" && property.value == "internal log"
         }));
-        assert!(
-            mount.properties.iter().any(|property| {
-                property.key == "xfs.realtime.type" && property.value == "none"
-            })
-        );
+        assert!(mount
+            .properties
+            .iter()
+            .any(|property| { property.key == "xfs.realtime.type" && property.value == "none" }));
 
         let filesystem = graph
             .nodes
@@ -242,11 +234,10 @@ realtime =none                   extsz=4096   blocks=0, rtextents=0
         assert_eq!(filesystem.kind, NodeKind::Filesystem);
         assert_eq!(filesystem.path.as_deref(), Some("/dev/mapper/vg-root"));
         assert_eq!(filesystem.size_bytes, Some(1_073_741_824));
-        assert!(
-            filesystem.properties.iter().any(|property| {
-                property.key == "xfs.meta-data.bigtime" && property.value == "1"
-            })
-        );
+        assert!(filesystem
+            .properties
+            .iter()
+            .any(|property| { property.key == "xfs.meta-data.bigtime" && property.value == "1" }));
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0 == "fs-source:/dev/mapper/vg-root"
                 && edge.to.0 == "mount:/"

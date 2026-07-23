@@ -827,18 +827,14 @@ Target: iqn.2026-06.example:rdma.archive
     fn normalizes_iscsi_session_target_lun_and_disk() {
         let graph = normalize_iscsi_session_output(SESSION).expect("fixture should parse");
 
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::IscsiSession && node.name == "iscsi-session:12")
-        );
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::IscsiTarget)
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::IscsiSession && node.name == "iscsi-session:12"));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::IscsiTarget));
         assert!(graph.nodes.iter().any(|node| node.kind == NodeKind::Lun));
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::IscsiSession
@@ -1046,27 +1042,21 @@ Target: iqn.2026-06.example:storage.ipv6
         assert!(session.properties.iter().any(|property| {
             property.key == "iscsi.portal-address" && property.value == "2001:db8::10"
         }));
-        assert!(
-            session
-                .properties
-                .iter()
-                .any(|property| property.key == "iscsi.portal-port" && property.value == "3260")
-        );
-        assert!(
-            session
-                .properties
-                .iter()
-                .any(|property| property.key == "iscsi.portal-tpgt" && property.value == "2")
-        );
+        assert!(session
+            .properties
+            .iter()
+            .any(|property| property.key == "iscsi.portal-port" && property.value == "3260"));
+        assert!(session
+            .properties
+            .iter()
+            .any(|property| property.key == "iscsi.portal-tpgt" && property.value == "2"));
         assert!(session.properties.iter().any(|property| {
             property.key == "iscsi.persistent-portal-address" && property.value == "2001:db8::11"
         }));
-        assert!(
-            session
-                .properties
-                .iter()
-                .any(|property| property.key == "iscsi.host-number" && property.value == "8")
-        );
+        assert!(session
+            .properties
+            .iter()
+            .any(|property| property.key == "iscsi.host-number" && property.value == "8"));
         assert!(session_graph.nodes.iter().any(|node| {
             node.kind == NodeKind::Lun
                 && node.id.0 == "iscsi-lun:iqn.2026-06.example:storage.ipv6:3"
@@ -1113,21 +1103,17 @@ Target: iqn.2026-06.example:storage.chap
         assert!(chap_node.properties.iter().any(|property| {
             property.key == "iscsi.node-auth-username" && property.value == "host-user"
         }));
-        assert!(
-            !chap_node
-                .properties
-                .iter()
-                .any(|property| { property.key == "iscsi.node-auth-password-configured" })
-        );
+        assert!(!chap_node
+            .properties
+            .iter()
+            .any(|property| { property.key == "iscsi.node-auth-password-configured" }));
         assert!(chap_node.properties.iter().any(|property| {
             property.key == "iscsi.node-auth-password-in-configured" && property.value == "true"
         }));
-        assert!(
-            !chap_node
-                .properties
-                .iter()
-                .any(|property| property.value == "inbound-secret")
-        );
+        assert!(!chap_node
+            .properties
+            .iter()
+            .any(|property| property.value == "inbound-secret"));
     }
 
     #[test]
@@ -1242,11 +1228,10 @@ Target: iqn.2026-06.example:storage.replacement
         assert!(stale.properties.iter().any(|property| {
             property.key == "iscsi.internal-session-state" && property.value == "REOPEN"
         }));
-        assert!(
-            stale.properties.iter().any(|property| {
-                property.key == "iscsi.host-state" && property.value == "blocked"
-            })
-        );
+        assert!(stale
+            .properties
+            .iter()
+            .any(|property| { property.key == "iscsi.host-state" && property.value == "blocked" }));
 
         let target = graph
             .nodes
@@ -1294,16 +1279,14 @@ Target: iqn.2026-06.example:storage.replacement
             .iter()
             .find(|node| node.id.0 == "iscsi-lun:iqn.2026-06.example:storage.churn:5")
             .expect("merged churn LUN identity should exist");
-        assert!(
-            churn_lun.properties.iter().any(|property| {
-                property.key == "iscsi.attached-disk" && property.value == "sdh"
-            })
-        );
-        assert!(
-            churn_lun.properties.iter().any(|property| {
-                property.key == "iscsi.attached-disk" && property.value == "sdg"
-            })
-        );
+        assert!(churn_lun
+            .properties
+            .iter()
+            .any(|property| { property.key == "iscsi.attached-disk" && property.value == "sdh" }));
+        assert!(churn_lun
+            .properties
+            .iter()
+            .any(|property| { property.key == "iscsi.attached-disk" && property.value == "sdg" }));
         assert!(churn_lun.properties.iter().any(|property| {
             property.key == "iscsi.attached-disk-state" && property.value == "running"
         }));

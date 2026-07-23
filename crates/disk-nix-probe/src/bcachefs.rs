@@ -437,11 +437,10 @@ capacity:            16000900661248        30519296
             property.key == "bcachefs.internal-uuid"
                 && property.value == "55083d1e-27cf-4929-ada4-3fe6e45cf02c"
         }));
-        assert!(
-            filesystem.properties.iter().any(|property| {
-                property.key == "bcachefs.device-index" && property.value == "6"
-            })
-        );
+        assert!(filesystem
+            .properties
+            .iter()
+            .any(|property| { property.key == "bcachefs.device-index" && property.value == "6" }));
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0 == "block:/dev/sdc"
                 && edge.to.0 == "bcachefs:a2d6fc04-efd0-4e36-aece-2475941d09a3"

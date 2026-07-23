@@ -741,22 +741,19 @@ errors: No known data errors
         let graph = normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, ZFS_HOLDS, ZPOOL_STATUS)
             .expect("fixture should parse");
 
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::ZfsPool && node.name == "tank")
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::ZfsPool && node.name == "tank"));
         let pool = graph
             .nodes
             .iter()
             .find(|node| node.kind == NodeKind::ZfsPool && node.name == "tank")
             .expect("pool node exists");
-        assert!(
-            pool.properties
-                .iter()
-                .any(|property| { property.key == "zfs.pool-capacity" && property.value == "40%" })
-        );
+        assert!(pool
+            .properties
+            .iter()
+            .any(|property| { property.key == "zfs.pool-capacity" && property.value == "40%" }));
         assert!(pool.properties.iter().any(|property| {
             property.key == "zfs.pool-dedupratio" && property.value == "1.00x"
         }));
@@ -766,123 +763,97 @@ errors: No known data errors
         assert!(pool.properties.iter().any(|property| {
             property.key == "zfs.pool-altroot" && property.value == "/mnt/rescue"
         }));
-        assert!(
-            pool.properties
-                .iter()
-                .any(|property| property.key == "zfs.pool-ashift" && property.value == "12")
-        );
-        assert!(
-            pool.properties
-                .iter()
-                .any(|property| property.key == "zfs.pool-autotrim" && property.value == "on")
-        );
-        assert!(
-            pool.properties.iter().any(|property| {
-                property.key == "zfs.pool-autoexpand" && property.value == "off"
-            })
-        );
+        assert!(pool
+            .properties
+            .iter()
+            .any(|property| property.key == "zfs.pool-ashift" && property.value == "12"));
+        assert!(pool
+            .properties
+            .iter()
+            .any(|property| property.key == "zfs.pool-autotrim" && property.value == "on"));
+        assert!(pool
+            .properties
+            .iter()
+            .any(|property| { property.key == "zfs.pool-autoexpand" && property.value == "off" }));
         assert!(pool.properties.iter().any(|property| {
             property.key == "zfs.pool-cachefile" && property.value == "/etc/zfs/zpool.cache"
         }));
-        assert!(
-            pool.properties.iter().any(|property| {
-                property.key == "zfs.pool-failmode" && property.value == "wait"
-            })
-        );
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::ZfsDataset && node.name == "tank/home")
-        );
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::ZfsSnapshot && node.name == "tank/home@daily")
-        );
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::ZfsSnapshot && node.name == "tank/vm@clean")
-        );
+        assert!(pool
+            .properties
+            .iter()
+            .any(|property| { property.key == "zfs.pool-failmode" && property.value == "wait" }));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::ZfsDataset && node.name == "tank/home"));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::ZfsSnapshot && node.name == "tank/home@daily"));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::ZfsSnapshot && node.name == "tank/vm@clean"));
         let snapshot = graph
             .nodes
             .iter()
             .find(|node| node.kind == NodeKind::ZfsSnapshot && node.name == "tank/home@daily")
             .expect("snapshot node exists");
-        assert!(
-            snapshot
-                .properties
-                .iter()
-                .any(|property| property.key == "zfs.userrefs" && property.value == "2")
-        );
+        assert!(snapshot
+            .properties
+            .iter()
+            .any(|property| property.key == "zfs.userrefs" && property.value == "2"));
         assert!(snapshot.properties.iter().any(|property| {
             property.key == "zfs.holds" && property.value == "disk-nix-retain"
         }));
         assert!(snapshot.properties.iter().any(|property| {
             property.key == "zfs.hold.disk-nix-retain" && property.value == "Wed Jun 24 18:00 2026"
         }));
-        assert!(
-            snapshot
-                .properties
-                .iter()
-                .any(|property| property.key == "zfs.hold.backup-job")
-        );
+        assert!(snapshot
+            .properties
+            .iter()
+            .any(|property| property.key == "zfs.hold.backup-job"));
         let dataset = graph
             .nodes
             .iter()
             .find(|node| node.kind == NodeKind::ZfsDataset && node.name == "tank/home")
             .expect("dataset node exists");
-        assert!(
-            dataset
-                .properties
-                .iter()
-                .any(|property| property.key == "zfs.compression" && property.value == "zstd")
-        );
+        assert!(dataset
+            .properties
+            .iter()
+            .any(|property| property.key == "zfs.compression" && property.value == "zstd"));
         assert!(dataset.properties.iter().any(|property| {
             property.key == "zfs.encryption" && property.value == "aes-256-gcm"
         }));
-        assert!(
-            dataset.properties.iter().any(|property| {
-                property.key == "zfs.recordsize" && property.value == "1048576"
-            })
-        );
-        assert!(
-            dataset
-                .properties
-                .iter()
-                .any(|property| property.key == "zfs.checksum" && property.value == "sha512")
-        );
-        assert!(
-            dataset
-                .properties
-                .iter()
-                .any(|property| property.key == "zfs.primarycache" && property.value == "metadata")
-        );
+        assert!(dataset
+            .properties
+            .iter()
+            .any(|property| { property.key == "zfs.recordsize" && property.value == "1048576" }));
+        assert!(dataset
+            .properties
+            .iter()
+            .any(|property| property.key == "zfs.checksum" && property.value == "sha512"));
+        assert!(dataset
+            .properties
+            .iter()
+            .any(|property| property.key == "zfs.primarycache" && property.value == "metadata"));
         let zvol = graph
             .nodes
             .iter()
             .find(|node| node.kind == NodeKind::Zvol && node.name == "tank/vm")
             .expect("zvol node exists");
-        assert!(
-            zvol.properties
-                .iter()
-                .any(|property| property.key == "zfs.volsize" && property.value == "85899345920")
-        );
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::Zvol && node.name == "tank/vm")
-        );
-        assert!(
-            graph
-                .edges
-                .iter()
-                .any(|edge| edge.relationship == Relationship::MountedAt)
-        );
+        assert!(zvol
+            .properties
+            .iter()
+            .any(|property| property.key == "zfs.volsize" && property.value == "85899345920"));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::Zvol && node.name == "tank/vm"));
+        assert!(graph
+            .edges
+            .iter()
+            .any(|edge| edge.relationship == Relationship::MountedAt));
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::ZfsVdev
                 && node.name == "mirror-0"
@@ -943,16 +914,14 @@ errors: No known data errors
         assert!(pool.properties.iter().any(|property| {
             property.key == "zfs.errors" && property.value == "No known data errors"
         }));
-        assert!(
-            pool.properties.iter().any(|property| {
-                property.key == "zfs.pool-read-errors" && property.value == "4"
-            })
-        );
-        assert!(
-            pool.properties.iter().any(|property| {
-                property.key == "zfs.pool-write-errors" && property.value == "5"
-            })
-        );
+        assert!(pool
+            .properties
+            .iter()
+            .any(|property| { property.key == "zfs.pool-read-errors" && property.value == "4" }));
+        assert!(pool
+            .properties
+            .iter()
+            .any(|property| { property.key == "zfs.pool-write-errors" && property.value == "5" }));
         assert!(pool.properties.iter().any(|property| {
             property.key == "zfs.pool-checksum-errors" && property.value == "6"
         }));

@@ -297,12 +297,10 @@ E: DM_SUBSYSTEM_UDEV_FLAG0=1
             property.key == "udev.symlink"
                 && property.value == "disk/by-id/ata-Samsung_SSD_SERIAL-part1"
         }));
-        assert!(
-            partition
-                .properties
-                .iter()
-                .any(|property| { property.key == "udev.id-fs-type" && property.value == "vfat" })
-        );
+        assert!(partition
+            .properties
+            .iter()
+            .any(|property| { property.key == "udev.id-fs-type" && property.value == "vfat" }));
         assert!(partition.properties.iter().any(|property| {
             property.key == "udev.id-fs-uuid-sub" && property.value == "CCCC-DDDD"
         }));
@@ -318,12 +316,10 @@ E: DM_SUBSYSTEM_UDEV_FLAG0=1
         assert!(partition.properties.iter().any(|property| {
             property.key == "udev.id-path" && property.value == "pci-0000:00:17.0-ata-1"
         }));
-        assert!(
-            partition
-                .properties
-                .iter()
-                .any(|property| { property.key == "udev.major" && property.value == "8" })
-        );
+        assert!(partition
+            .properties
+            .iter()
+            .any(|property| { property.key == "udev.major" && property.value == "8" }));
     }
 
     #[test]
@@ -336,17 +332,14 @@ E: DM_SUBSYSTEM_UDEV_FLAG0=1
             .expect("mapper exists");
 
         assert_eq!(mapper.kind, NodeKind::DeviceMapper);
-        assert!(
-            mapper.properties.iter().any(|property| {
-                property.key == "udev.dm-name" && property.value == "cryptroot"
-            })
-        );
-        assert!(
-            mapper
-                .properties
-                .iter()
-                .any(|property| { property.key == "udev.dm-vg-name" && property.value == "vg0" })
-        );
+        assert!(mapper
+            .properties
+            .iter()
+            .any(|property| { property.key == "udev.dm-name" && property.value == "cryptroot" }));
+        assert!(mapper
+            .properties
+            .iter()
+            .any(|property| { property.key == "udev.dm-vg-name" && property.value == "vg0" }));
         assert!(mapper.properties.iter().any(|property| {
             property.key == "udev.dm-subsystem-udev-flag0" && property.value == "1"
         }));

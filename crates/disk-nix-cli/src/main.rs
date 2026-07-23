@@ -11,18 +11,18 @@ use std::{
 };
 
 use clap::{CommandFactory, Parser, Subcommand};
-use clap_complete::{Shell, generate};
+use clap_complete::{generate, Shell};
 use clap_mangen::Man;
-use disk_nix_exec::{ExecutionMode, ExecutionReport, ExecutionStatus, prepare_execution};
+use disk_nix_exec::{prepare_execution, ExecutionMode, ExecutionReport, ExecutionStatus};
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use disk_nix_plan::{
-    ApplyPolicy, Plan, SUPPORTED_SPEC_VERSION, TopologyComparison, TopologyDiagnosticLevel,
     compare_plan_with_topology, default_capabilities, plan_and_policy_from_json_bytes,
-    plan_from_json_bytes,
+    plan_from_json_bytes, ApplyPolicy, Plan, TopologyComparison, TopologyDiagnosticLevel,
+    SUPPORTED_SPEC_VERSION,
 };
 use disk_nix_probe::{
-    LinuxProbe, ProbeAdapter, ProbeAdapterRemediation, ProbeIssueCategory, ProbeStatus,
-    adapter_remediation,
+    adapter_remediation, LinuxProbe, ProbeAdapter, ProbeAdapterRemediation, ProbeIssueCategory,
+    ProbeStatus,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -5671,16 +5671,15 @@ fn human_bytes(value: Option<u64>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use disk_nix_exec::{ExecutionMode, prepare_execution};
+    use disk_nix_exec::{prepare_execution, ExecutionMode};
     use disk_nix_model::{Edge, Identity, Node, NodeKind, Relationship, StorageGraph, Usage};
     use disk_nix_plan::{compare_plan_with_topology, plan_and_policy_from_json_bytes};
     use disk_nix_probe::{ProbeReport, ProbeStatus};
     use serde_json::Value;
 
     use super::{
-        ProbePreflightEnvironment, ProbeStatusPreflightReport, ToolVersionReport,
-        ToolVersionStatus, apply_receipt, command_stdout_first_line, confirmation_file_accepts,
-        consumer_count, is_backing_file_node, is_bcachefs_node, is_btrfs_node, is_cache_node,
+        apply_receipt, command_stdout_first_line, confirmation_file_accepts, consumer_count,
+        is_backing_file_node, is_bcachefs_node, is_btrfs_node, is_cache_node,
         is_complex_filesystem_node, is_device_node, is_dm_node, is_encryption_node,
         is_filesystem_node, is_iscsi_node, is_loop_node, is_lun_node, is_lvm_node, is_mapping_node,
         is_multipath_node, is_network_storage_node, is_nfs_node, is_nvme_node, is_partition_node,
@@ -5696,6 +5695,8 @@ mod tests {
         print_swap, print_usage, print_vdo, print_volumes, print_zfs, print_zram,
         probe_preflight_checks, script_refusal_message, snapshot_source,
         storage_tool_version_report, usage_details, usage_percent, zfs_child_count,
+        ProbePreflightEnvironment, ProbeStatusPreflightReport, ToolVersionReport,
+        ToolVersionStatus,
     };
 
     fn assert_mapping(
@@ -5781,12 +5782,10 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         );
         assert_eq!(report.status, ToolVersionStatus::Unavailable);
         assert!(report.version.is_none());
-        assert!(
-            report
-                .message
-                .as_deref()
-                .is_some_and(|message| message.contains("not found"))
-        );
+        assert!(report
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("not found")));
     }
 
     #[test]
@@ -5887,17 +5886,15 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert_eq!(json["preflightChecks"]["status"], "ready");
         assert_eq!(json["preflightChecks"]["root"], true);
         assert_eq!(json["preflightChecks"]["unavailableToolCount"], 0);
-        assert!(
-            json["preflightChecks"]["adapterRemediation"]
-                .as_array()
-                .is_some_and(|items| items.iter().any(|item| {
-                    item["adapter"] == "nvme-id-ns"
-                        && item["canonicalAdapter"] == "nvme"
-                        && item["nixPackages"].as_array().is_some_and(|packages| {
-                            packages.iter().any(|package| package == "pkgs.nvme-cli")
-                        })
-                }))
-        );
+        assert!(json["preflightChecks"]["adapterRemediation"]
+            .as_array()
+            .is_some_and(|items| items.iter().any(|item| {
+                item["adapter"] == "nvme-id-ns"
+                    && item["canonicalAdapter"] == "nvme"
+                    && item["nixPackages"].as_array().is_some_and(|packages| {
+                        packages.iter().any(|package| package == "pkgs.nvme-cli")
+                    })
+            })));
         assert_eq!(json["reports"][0]["adapter"], "lsblk");
         assert_eq!(json["reports"][0]["category"], "none");
     }
@@ -6013,18 +6010,14 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert_eq!(report.target_version, 1);
         assert!(report.migrated);
         assert_eq!(report.spec["version"], 1);
-        assert!(
-            report
-                .changes
-                .iter()
-                .any(|change| change == "set version to 1")
-        );
-        assert!(
-            report
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("does not apply storage mutations"))
-        );
+        assert!(report
+            .changes
+            .iter()
+            .any(|change| change == "set version to 1"));
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("does not apply storage mutations")));
         assert_eq!(report.version_migrations.len(), 2);
         let legacy_contract = report
             .version_migrations
@@ -6043,12 +6036,10 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
             "filesystems",
             "top-level",
         );
-        assert!(
-            legacy_contract
-                .safety_notes
-                .iter()
-                .any(|note| note.contains("does not apply storage mutations"))
-        );
+        assert!(legacy_contract
+            .safety_notes
+            .iter()
+            .any(|note| note.contains("does not apply storage mutations")));
     }
 
     #[test]
@@ -6073,18 +6064,14 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(report.migrated);
         assert_eq!(report.spec["version"], 1);
         assert_eq!(report.spec["spec"]["version"], 1);
-        assert!(
-            report
-                .changes
-                .iter()
-                .any(|change| change == "set version to 1")
-        );
-        assert!(
-            report
-                .changes
-                .iter()
-                .any(|change| change == "set spec.version to 1")
-        );
+        assert!(report
+            .changes
+            .iter()
+            .any(|change| change == "set version to 1"));
+        assert!(report
+            .changes
+            .iter()
+            .any(|change| change == "set spec.version to 1"));
     }
 
     #[test]
@@ -6196,18 +6183,14 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
             report.spec["iscsi"]["sessions"]["iqn.2026-06.example:storage.root"]["operation"],
             "login"
         );
-        assert!(
-            report
-                .changes
-                .iter()
-                .any(|change| { change == "mapped legacy field fileSystems to filesystems" })
-        );
-        assert!(
-            report
-                .changes
-                .iter()
-                .any(|change| { change == "mapped legacy field luksDevices to luks.devices" })
-        );
+        assert!(report
+            .changes
+            .iter()
+            .any(|change| { change == "mapped legacy field fileSystems to filesystems" }));
+        assert!(report
+            .changes
+            .iter()
+            .any(|change| { change == "mapped legacy field luksDevices to luks.devices" }));
     }
 
     #[test]
@@ -6262,11 +6245,10 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(report.changes.iter().any(|change| {
             change == "mapped legacy field spec.fileSystems to spec.filesystems"
         }));
-        assert!(
-            report.changes.iter().any(|change| {
-                change == "mapped legacy field spec.nfsMounts to spec.nfs.mounts"
-            })
-        );
+        assert!(report
+            .changes
+            .iter()
+            .any(|change| { change == "mapped legacy field spec.nfsMounts to spec.nfs.mounts" }));
     }
 
     #[test]
@@ -6289,11 +6271,9 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         )
         .expect_err("conflicting aliases should be rejected");
 
-        assert!(
-            error
-                .to_string()
-                .contains("legacy field fileSystems conflicts with current field filesystems")
-        );
+        assert!(error
+            .to_string()
+            .contains("legacy field fileSystems conflicts with current field filesystems"));
     }
 
     #[test]
@@ -6316,12 +6296,10 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(report.applied_mappings.is_empty());
         assert!(report.spec.get("fileSystems").is_some());
         assert!(report.spec.get("filesystems").is_none());
-        assert!(
-            report
-                .changes
-                .iter()
-                .any(|change| change.contains("already declares"))
-        );
+        assert!(report
+            .changes
+            .iter()
+            .any(|change| change.contains("already declares")));
     }
 
     #[test]
@@ -6351,18 +6329,14 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert_eq!(current_contract.target_version, 1);
         assert_eq!(current_contract.status, "supported");
         assert!(current_contract.field_mappings.is_empty());
-        assert!(
-            current_contract
-                .safety_notes
-                .iter()
-                .any(|note| note.contains("validated without legacy alias rewrites"))
-        );
-        assert!(
-            report
-                .changes
-                .iter()
-                .any(|change| change.contains("already declares"))
-        );
+        assert!(current_contract
+            .safety_notes
+            .iter()
+            .any(|note| note.contains("validated without legacy alias rewrites")));
+        assert!(report
+            .changes
+            .iter()
+            .any(|change| change.contains("already declares")));
     }
 
     #[test]
@@ -6387,22 +6361,18 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
             json["versionMigrations"][0]["mappingScope"],
             "pre-version legacy aliases to version 1"
         );
-        assert!(
-            json["versionMigrations"][0]["fieldMappings"]
-                .as_array()
-                .is_some_and(|mappings| mappings.iter().any(|mapping| {
-                    mapping["source"] == "fileSystems"
-                        && mapping["target"] == "filesystems"
-                        && mapping["scope"] == "top-level"
-                }))
-        );
+        assert!(json["versionMigrations"][0]["fieldMappings"]
+            .as_array()
+            .is_some_and(|mappings| mappings.iter().any(|mapping| {
+                mapping["source"] == "fileSystems"
+                    && mapping["target"] == "filesystems"
+                    && mapping["scope"] == "top-level"
+            })));
         assert_eq!(json["versionMigrations"][1]["sourceVersion"], 1);
         assert_eq!(json["versionMigrations"][1]["targetVersion"], 1);
-        assert!(
-            json["versionMigrations"][1]["fieldMappings"]
-                .as_array()
-                .is_some_and(Vec::is_empty)
-        );
+        assert!(json["versionMigrations"][1]["fieldMappings"]
+            .as_array()
+            .is_some_and(Vec::is_empty));
     }
 
     #[test]
@@ -6419,11 +6389,9 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
             }"#,
         )
         .expect_err("future version should not migrate implicitly");
-        assert!(
-            future
-                .to_string()
-                .contains("unsupported disk-nix spec version 2")
-        );
+        assert!(future
+            .to_string()
+            .contains("unsupported disk-nix spec version 2"));
 
         let conflict = migration_report_from_json_bytes(
             br#"{
@@ -6434,11 +6402,9 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
             }"#,
         )
         .expect_err("conflicting versions should be rejected");
-        assert!(
-            conflict
-                .to_string()
-                .contains("conflicting disk-nix spec versions")
-        );
+        assert!(conflict
+            .to_string()
+            .contains("conflicting disk-nix spec versions"));
     }
 
     #[test]
@@ -6461,9 +6427,7 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(output.contains("Migration: None -> 1"));
         assert!(output.contains("migrated: true"));
         assert!(output.contains("Version migration contracts:"));
-        assert!(
-            output.contains("- None -> 1: supported (pre-version legacy aliases to version 1)")
-        );
+        assert!(output.contains("- None -> 1: supported (pre-version legacy aliases to version 1)"));
         assert!(output.contains("- Some(1) -> 1: supported (version 1 metadata normalization)"));
         assert!(output.contains("Legacy mappings:"));
         assert!(output.contains("- fileSystems -> filesystems (top-level)"));
@@ -6769,19 +6733,15 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         let graph: StorageGraph = serde_json::from_str(&output).expect("valid storage graph json");
 
         assert_eq!(graph.nodes.len(), 2);
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.id.0 == "filesystem:root")
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.id.0 == "filesystem:root"));
         assert!(graph.nodes.iter().any(|node| node.id.0 == "mount:/"));
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .all(|node| node.id.0 != "block:/dev/nvme0n1")
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .all(|node| node.id.0 != "block:/dev/nvme0n1"));
         assert_eq!(
             graph.edges,
             vec![Edge::new(
@@ -7719,18 +7679,14 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert_eq!(graph.nodes.len(), 3);
         assert!(graph.nodes.iter().any(|node| node.id.0 == "filesystem:/"));
         assert!(graph.nodes.iter().any(|node| node.id.0 == "lvm-lv:vg/root"));
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.id.0 == "block:/dev/mapper/cryptroot")
-        );
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .all(|node| node.id.0 != "block:/dev/nvme0n1p2")
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.id.0 == "block:/dev/mapper/cryptroot"));
+        assert!(graph
+            .nodes
+            .iter()
+            .all(|node| node.id.0 != "block:/dev/nvme0n1p2"));
         assert_eq!(graph.edges.len(), 2);
     }
 
@@ -8369,10 +8325,8 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(output.contains(
             "status=some devices need attention action=replace the faulted device scan=scrub repaired 0B errors=No known data errors pool-read-errors=3 pool-write-errors=4 pool-checksum-errors=5"
         ));
-        assert!(
-            output
-                .contains("data vdev-state=ONLINE read-errors=0 write-errors=1 checksum-errors=2")
-        );
+        assert!(output
+            .contains("data vdev-state=ONLINE read-errors=0 write-errors=1 checksum-errors=2"));
         assert!(output.contains("tank/home"));
         assert!(output.contains(
             "compression=zstd quota=500G reservation=10G encryption=aes-256-gcm keystatus=available"
@@ -8710,10 +8664,8 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         }));
         assert!(output.contains("target=iqn.2026-06.example:storage"));
         assert!(output.contains("portal-address=10.0.0.10 portal-port=3260 portal-tpgt=1"));
-        assert!(
-            output
-                .contains("persistent-portal=10.0.0.11:3260,1 persistent-portal-address=10.0.0.11")
-        );
+        assert!(output
+            .contains("persistent-portal=10.0.0.11:3260,1 persistent-portal-address=10.0.0.11"));
         assert!(output.contains("persistent-portal-port=3260 persistent-portal-tpgt=1"));
         assert!(output.contains("tpgt=1 connection-state=LOGGED IN"));
         assert!(output.contains("cid=0 connection-detail-state=LOGGED IN"));
@@ -9506,11 +9458,8 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(output.contains("scsi-host=2 scsi-channel=0 scsi-id=0 scsi-lun=1"));
         assert!(output.contains("scsi-lun=1 major-minor=8:16"));
         assert!(output.contains("group-policy=service-time 0 group-prio=50 group-status=active"));
-        assert!(
-            output.contains(
-                "dm-state=active checker-state=ready online-state=running path-flags=ghost"
-            )
-        );
+        assert!(output
+            .contains("dm-state=active checker-state=ready online-state=running path-flags=ghost"));
         assert!(output.contains("path-state=active ready running ghost"));
         assert!(output.contains("path-flags=faulty shaky"));
         assert!(output.contains("path-state=active ready running faulty shaky"));
@@ -9648,10 +9597,8 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(output.contains("nvme0"));
         assert!(output.contains("nqn.2014-08.org.nvmexpress:uuid:12345678"));
         assert!(output.contains("vid=5197 ssvid=5197 mdts=9 controller-type=1"));
-        assert!(
-            output
-                .contains("optional-admin-commands=31 fused-operations=1 format-nvm-attributes=4")
-        );
+        assert!(output
+            .contains("optional-admin-commands=31 fused-operations=1 format-nvm-attributes=4"));
         assert!(output.contains(
             "atomic-write-unit-normal=255 atomic-write-unit-powerfail=0 atomic-compare-write-unit=0 sgl-support=131073"
         ));
@@ -9662,14 +9609,10 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(output.contains(
             "warning-composite-temp=343 critical-composite-temp=353 min-thermal-management-temp=273 max-thermal-management-temp=358"
         ));
-        assert!(
-            output.contains("total-nvm-capacity=1000000000 unallocated-nvm-capacity=500000000")
-        );
+        assert!(output.contains("total-nvm-capacity=1000000000 unallocated-nvm-capacity=500000000"));
         assert!(output.contains("namespace-count=16 oncs=95 volatile-write-cache=1"));
         assert!(output.contains("sanitize-capabilities=7 ana-capabilities=3"));
-        assert!(
-            output.contains("critical-warning=0 temperature-k=301 available-spare-percent=100")
-        );
+        assert!(output.contains("critical-warning=0 temperature-k=301 available-spare-percent=100"));
         assert!(output.contains("percent-used=2 data-units-read=123456"));
         assert!(output.contains("data-units-written=654321"));
         assert!(output.contains("power-on-hours=1200 unsafe-shutdowns=3 media-errors=0"));
@@ -9695,10 +9638,8 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
             "transport=pcie controller-id=1 namespace-capacity=900000000000 lba-format=512 B + 0 B"
         ));
         assert!(output.contains("max-lba=1953125 sector-size=512 ana-state=optimized"));
-        assert!(
-            output
-                .contains("flba-index=0 flba-data=512 flba-metadata=0 flba-relative-performance=0")
-        );
+        assert!(output
+            .contains("flba-index=0 flba-data=512 flba-metadata=0 flba-relative-performance=0"));
         assert!(output.contains("nsze=1953125 ncap=1800000 nuse=900000 nsfeat=0"));
         assert!(output.contains("nlbaf=1 flbas=0 nmic=1 nvmcap=1000000000"));
     }
@@ -10324,11 +10265,8 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
         assert!(output.contains(
             "dm-status-read-hits=900 dm-status-read-misses=100 dm-status-write-hits=700 dm-status-write-misses=50 dm-status-dirty=4"
         ));
-        assert!(
-            output.contains(
-                "dm=dm-2 wwid=3600508b400105e210000900000490000 vendor=IBM,2145 size=100G"
-            )
-        );
+        assert!(output
+            .contains("dm=dm-2 wwid=3600508b400105e210000900000490000 vendor=IBM,2145 size=100G"));
         assert!(
             output.contains(
                 "backing=/dev/sdb logical=1T physical=250G mode=normal write-policy=sync compression=enabled deduplication=disabled"
@@ -10496,9 +10434,7 @@ PRETTY_NAME="NixOS 26.05 (Hermetic)"
 
         assert!(output.contains("DETAILS"));
         assert!(output.contains("source=/var/cache/disk-nix bind=true"));
-        assert!(
-            output
-                .contains("source=overlay lowerdir=/lower upperdir=/upper workdir=/work index=off")
-        );
+        assert!(output
+            .contains("source=overlay lowerdir=/lower upperdir=/upper workdir=/work index=off"));
     }
 }

@@ -294,11 +294,19 @@ rewrite_spec_for_execute() {
     --arg disk_f "${test_disks[4]}" \
     '
     . as $original |
+    def partition_path($device; $number):
+      if ($device | test("[0-9]$")) then
+        $device + "p" + $number
+      elif ($device | startswith("/dev/disk/by-id/")) then
+        $device + "-part" + $number
+      else
+        $device + $number
+      end;
     def remap_disk($from; $to):
       if . == $from then
         $to
       elif startswith($from) and ((.[($from | length):]) | test("^p?[0-9]+$")) then
-        $to + "-part" + ((.[($from | length):]) | sub("^p"; ""))
+        partition_path($to; ((.[($from | length):]) | sub("^p"; "")))
       else
         .
       end;
@@ -344,8 +352,26 @@ rewrite_spec_for_execute() {
       if $base == "/" then $path else $base + $path end;
     remap_devices
     | .filesystems |= ((. // {}) | with_entries(.value.mountpoint |= remap_mountpoint))
-    | .pools |= ((. // {}) | with_entries(.value.mountpoint |= remap_mountpoint))
-    | .datasets |= ((. // {}) | with_entries(.value.mountpoint |= remap_mountpoint))
+    | .pools |= ((. // {}) | with_entries(
+        .value.mountpoint |= remap_mountpoint
+        | .value.properties |= (
+            if type == "object" and has("mountpoint") then
+              .mountpoint |= remap_mountpoint
+            else
+              .
+            end
+          )
+      ))
+    | .datasets |= ((. // {}) | with_entries(
+        .value.mountpoint |= remap_mountpoint
+        | .value.properties |= (
+            if type == "object" and has("mountpoint") then
+              .mountpoint |= remap_mountpoint
+            else
+              .
+            end
+          )
+      ))
     | .btrfsSubvolumes |= ((. // {}) | with_entries(
         (.value.metadata.parentFilesystem // null) as $parent
         | ($original.filesystems[$parent].mountpoint // null) as $parent_mount
@@ -378,6 +404,8 @@ validate_execute_plan_paths() {
         any(allowed_disks[]; . as $disk
           | ($path == $disk)
             or (($path | startswith($disk + "-part")) and (($path[($disk + "-part" | length):]) | test("^[0-9]+$")))
+            or (($path | startswith($disk + "p")) and (($path[($disk + "p" | length):]) | test("^[0-9]+$")))
+            or (($disk | test("[^0-9]$")) and ($path | startswith($disk)) and (($path[($disk | length):]) | test("^[0-9]+$")))
         );
       .commandPlan[].commands[].argv[]?
       | select(type == "string" and startswith("/"))

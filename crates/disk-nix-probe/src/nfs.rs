@@ -298,19 +298,14 @@ nas-pnfs.example:/exports/media mounted on /mnt/media:
     fn normalizes_nfsstat_mount_metadata() {
         let graph = normalize_nfsstat_mounts(NFSSTAT).expect("fixture should parse");
 
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::NfsMount && node.name == "/home")
-        );
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::NfsExport
-                    && node.name == "10.0.0.11:/srv/backups")
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::NfsMount && node.name == "/home"));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::NfsExport && node.name == "10.0.0.11:/srv/backups"));
         assert!(graph.nodes.iter().any(|node| {
             node.name == "/home"
                 && node.path.as_deref() == Some("/home")
@@ -453,74 +448,56 @@ nas-pnfs.example:/exports/media mounted on /mnt/media:
         assert!(remounted.properties.iter().any(|property| {
             property.key == "nfs.source" && property.value == "nas-ref.example:/exports/projects"
         }));
-        assert!(
-            remounted
-                .properties
-                .iter()
-                .any(|property| { property.key == "nfs.sec" && property.value == "krb5i" })
-        );
-        assert!(
-            remounted
-                .properties
-                .iter()
-                .any(|property| { property.key == "nfs.sec" && property.value == "krb5p" })
-        );
-        assert!(
-            remounted
-                .properties
-                .iter()
-                .any(|property| property.key == "nfs.referral" && property.value == "true")
-        );
-        assert!(
-            remounted
-                .properties
-                .iter()
-                .any(|property| property.key == "nfs.pnfs" && property.value == "true")
-        );
-        assert!(
-            remounted
-                .properties
-                .iter()
-                .any(|property| { property.key == "nfs.remount" && property.value == "true" })
-        );
-        assert!(
-            remounted.properties.iter().any(|property| {
-                property.key == "nfs.lookupcache" && property.value == "positive"
-            })
-        );
-        assert!(
-            remounted
-                .properties
-                .iter()
-                .any(|property| { property.key == "nfs.lookupcache" && property.value == "none" })
-        );
-        assert!(
-            remounted
-                .properties
-                .iter()
-                .any(|property| property.key == "nfs.noac" && property.value == "true")
-        );
+        assert!(remounted
+            .properties
+            .iter()
+            .any(|property| { property.key == "nfs.sec" && property.value == "krb5i" }));
+        assert!(remounted
+            .properties
+            .iter()
+            .any(|property| { property.key == "nfs.sec" && property.value == "krb5p" }));
+        assert!(remounted
+            .properties
+            .iter()
+            .any(|property| property.key == "nfs.referral" && property.value == "true"));
+        assert!(remounted
+            .properties
+            .iter()
+            .any(|property| property.key == "nfs.pnfs" && property.value == "true"));
+        assert!(remounted
+            .properties
+            .iter()
+            .any(|property| { property.key == "nfs.remount" && property.value == "true" }));
+        assert!(remounted
+            .properties
+            .iter()
+            .any(|property| { property.key == "nfs.lookupcache" && property.value == "positive" }));
+        assert!(remounted
+            .properties
+            .iter()
+            .any(|property| { property.key == "nfs.lookupcache" && property.value == "none" }));
+        assert!(remounted
+            .properties
+            .iter()
+            .any(|property| property.key == "nfs.noac" && property.value == "true"));
 
         let pnfs = graph
             .nodes
             .iter()
             .find(|node| node.id.0 == "mount:/mnt/media")
             .expect("pNFS media mount should exist");
-        assert!(
-            pnfs.properties
-                .iter()
-                .any(|property| { property.key == "nfs.layout" && property.value == "flexfiles" })
-        );
-        assert!(
-            pnfs.properties
-                .iter()
-                .any(|property| property.key == "nfs.dsaddr" && property.value == "10.44.1.10")
-        );
-        assert!(
-            pnfs.properties
-                .iter()
-                .any(|property| property.key == "nfs.dsaddr2" && property.value == "10.44.1.11")
-        );
+        assert!(pnfs
+            .properties
+            .iter()
+            .any(|property| { property.key == "nfs.layout" && property.value == "flexfiles" }));
+        assert!(pnfs
+            .properties
+            .iter()
+            .any(|property| property.key == "nfs.dsaddr" && property.value == "10.44.1.10"));
+        assert!(pnfs
+            .properties
+            .iter()
+            .any(|property| property.key == "nfs.dsaddr2" && property.value == "10.44.1.11"));
 
         let reloaded_export = graph
             .nodes

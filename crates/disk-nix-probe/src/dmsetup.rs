@@ -454,33 +454,27 @@ vg-root: 1 dependencies  : (253, 0) (dm-0)
             .expect("cryptroot should exist");
 
         assert_eq!(cryptroot.kind, NodeKind::LuksContainer);
-        assert!(
-            cryptroot
-                .properties
-                .iter()
-                .any(|property| property.key == "dm.uuid"
-                    && property.value == "CRYPT-LUKS2-crypt-uuid-cryptroot")
-        );
+        assert!(cryptroot
+            .properties
+            .iter()
+            .any(|property| property.key == "dm.uuid"
+                && property.value == "CRYPT-LUKS2-crypt-uuid-cryptroot"));
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0 == "block:/dev/nvme0n1p2"
                 && edge.to.0 == "block:/dev/mapper/cryptroot"
                 && edge.relationship == Relationship::Backs
         }));
-        assert!(
-            cryptroot
-                .properties
-                .iter()
-                .any(|property| property.key == "dm.table.targets" && property.value == "crypt")
-        );
+        assert!(cryptroot
+            .properties
+            .iter()
+            .any(|property| property.key == "dm.table.targets" && property.value == "crypt"));
         assert!(cryptroot.properties.iter().any(|property| {
             property.key == "dm.table.segment.0.crypt.cipher" && property.value == "aes-xts-plain64"
         }));
-        assert!(
-            !cryptroot
-                .properties
-                .iter()
-                .any(|property| property.value.contains("0123456789abcdef"))
-        );
+        assert!(!cryptroot
+            .properties
+            .iter()
+            .any(|property| property.value.contains("0123456789abcdef")));
 
         let root = graph
             .nodes
