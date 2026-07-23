@@ -28,6 +28,7 @@
     ${root + /crates/disk-nix-plan/src/tests}/*.rs
     ${root + /crates/disk-nix-plan/src/sections}/*.rs
     ${root + /crates/disk-nix-plan/src/sections/capabilities}/*.rs
+    ${root + /crates/disk-nix-plan/src/sections/operation_classification}/*.rs
   )
   cliSourcesArray=(
     ${root + /crates/disk-nix-cli/src/main.rs}
