@@ -18,7 +18,9 @@
     } ${root + /crates/disk-nix-exec/src/tests}/*.rs"
     planSources="${root + /crates/disk-nix-plan/src/lib.rs} ${
       root + /crates/disk-nix-plan/src/tests.rs
-    } ${root + /crates/disk-nix-plan/src/tests}/*.rs"
+    } ${root + /crates/disk-nix-plan/src/tests}/*.rs ${
+      root + /crates/disk-nix-plan/src/sections
+    }/*.rs ${root + /crates/disk-nix-plan/src/sections/capabilities}/*.rs"
     cliSources="${root + /crates/disk-nix-cli/src/main.rs} ${
       root + /crates/disk-nix-cli/src/tests.rs
     } ${root + /crates/disk-nix-cli/src/tests}/*.rs"
