@@ -31,6 +31,7 @@
     ${root + /crates/disk-nix-plan/src/tests.rs}
     ${root + /crates/disk-nix-plan/src/tests}/*.rs
     ${root + /crates/disk-nix-plan/src/sections}/*.rs
+    ${root + /crates/disk-nix-plan/src/sections/action_builders}/*.rs
     ${root + /crates/disk-nix-plan/src/sections/action_fields}/*.rs
     ${root + /crates/disk-nix-plan/src/sections/capabilities}/*.rs
     ${root + /crates/disk-nix-plan/src/sections/dependencies}/*.rs
