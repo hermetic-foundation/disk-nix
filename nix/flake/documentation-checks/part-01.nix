@@ -24,7 +24,7 @@
   }/*.rs ${root + /crates/disk-nix-plan/src/sections/capabilities}/*.rs"
   cliSources="${root + /crates/disk-nix-cli/src/main.rs} ${
     root + /crates/disk-nix-cli/src/tests.rs
-  } ${root + /crates/disk-nix-cli/src/tests}/*.rs"
+  } ${root + /crates/disk-nix-cli/src/tests}/*.rs ${root + /crates/disk-nix-cli/src/sections}/*.rs"
   ${pkgs.gnugrep}/bin/grep -q 'docs/index.md' ${root + /README.md}
   ${pkgs.gnugrep}/bin/grep -q 'docs/user/user-guide.md' ${root + /README.md}
   ${pkgs.gnugrep}/bin/grep -q 'docs/developer/feature-checklist.md' ${root + /README.md}
