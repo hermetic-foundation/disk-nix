@@ -33,14 +33,22 @@ Start here:
 Reference docs:
 
 - [docs/cli.md](docs/cli.md): CLI commands and JSON contracts
+- [docs/cli-plan-apply.md](docs/cli-plan-apply.md): planner, apply,
+  validation, rollback, and report contracts
 - [docs/planning.md](docs/planning.md): planning, risk classification,
   reconciliation, dependency ordering, and apply policy
 - [docs/nixos-module.md](docs/nixos-module.md): NixOS module options and
   generated files
+- [docs/nixos-module-reference.md](docs/nixos-module-reference.md): full typed
+  option example and domain-specific module behavior
 - [docs/storage-scope.md](docs/storage-scope.md): storage domains and update
   operations
 - [docs/integration-tests.md](docs/integration-tests.md): VM and host-backed
-  smoke tests
+  smoke test entrypoints
+- [docs/integration-failure-recovery.md](docs/integration-failure-recovery.md):
+  synthetic failed-command catalog and recovery expectations
+- [docs/integration-smoke-harnesses.md](docs/integration-smoke-harnesses.md):
+  host-backed, VM-backed, and lab-backed harness details
 - [docs/compatibility.md](docs/compatibility.md): versioning and compatibility
   policy
 - [docs/architecture.md](docs/architecture.md): implementation structure
