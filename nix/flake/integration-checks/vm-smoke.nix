@@ -21,6 +21,7 @@
   integrationFailureRecoverySmoke,
   integrationLayeredVmSmoke,
   integrationDiskoExamples,
+  integrationInstallerSmoke,
   integrationVmSmoke,
   ...
 }:
@@ -196,6 +197,29 @@
     ${pkgs.gnugrep}/bin/grep -q 'disk-nix-integration-layered-vm-smoke' ${
       root + /scripts/integration-vm-smoke.sh
     }
+    touch "$out"
+  '';
+  integrationInstallerSmoke = pkgs.runCommand "disk-nix-integration-installer-smoke-check" { } ''
+    ${pkgs.bash}/bin/bash -n ${root + /scripts/integration-installer-smoke.sh}
+    ${pkgs.gnugrep}/bin/grep -q 'DISK_NIX_INSTALLER_E2E_DESTRUCTIVE' ${
+      root + /scripts/integration-installer-smoke.sh
+    }
+    ${pkgs.gnugrep}/bin/grep -q 'install template zfs-root' ${
+      root + /scripts/integration-installer-smoke.sh
+    }
+    ${pkgs.gnugrep}/bin/grep -q -- '--part-prefix "$disk"' ${
+      root + /scripts/integration-installer-smoke.sh
+    }
+    ${pkgs.gnugrep}/bin/grep -q '"$disk_nix_bin" apply' ${
+      root + /scripts/integration-installer-smoke.sh
+    }
+    ${pkgs.gnugrep}/bin/grep -q 'install mount --spec' ${root + /scripts/integration-installer-smoke.sh}
+    ${pkgs.gnugrep}/bin/grep -q 'install nixos' ${root + /scripts/integration-installer-smoke.sh}
+    ${pkgs.gnugrep}/bin/grep -q 'mountpoint -q "$target/var/log"' ${
+      root + /scripts/integration-installer-smoke.sh
+    }
+    DISK_NIX_BIN=${diskNix}/bin/disk-nix ${integrationInstallerSmoke}/bin/disk-nix-integration-installer-smoke >/tmp/installer-refusal.log 2>&1 && exit 1
+    ${pkgs.gnugrep}/bin/grep -q 'Refusing to run disk-nix installer E2E smoke test' /tmp/installer-refusal.log
     touch "$out"
   '';
 }

@@ -715,6 +715,7 @@ fn create_open_action_commands(
                 partition_create_command(disk, partition_type, start, end),
                 partition_probe_command(disk),
                 partition_table_reread_command(disk),
+                partition_udev_settle_command(),
                 disk_nix_inspect_command(
                     partition_target,
                     "<partition>",

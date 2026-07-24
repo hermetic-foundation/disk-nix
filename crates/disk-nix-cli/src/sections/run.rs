@@ -485,6 +485,83 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
 
             Ok(())
         }
+        Command::Install { command } => match command {
+            InstallCommand::Template { command } => match command {
+                InstallTemplateCommand::ZfsRoot {
+                    disk,
+                    out,
+                    pool,
+                    root_dataset,
+                    boot_label,
+                    swap_label,
+                    efi_start,
+                    efi_end,
+                    swap_start,
+                    swap_end,
+                    zfs_start,
+                    part_prefix,
+                    encrypt,
+                } => {
+                    let root_dataset = root_dataset.unwrap_or_else(|| format!("{pool}/root"));
+                    let options = InstallZfsRootOptions {
+                        disk,
+                        pool,
+                        root_dataset,
+                        boot_label,
+                        swap_label,
+                        efi_start,
+                        efi_end,
+                        swap_start,
+                        swap_end,
+                        zfs_start,
+                        part_prefix,
+                        encrypt,
+                    };
+                    validate_install_zfs_root_options(&options)?;
+                    let spec = install_zfs_root_spec(&options);
+                    write_install_template(&out, &spec)?;
+                    writeln!(output, "wrote {out}")?;
+                    Ok(())
+                }
+            },
+            InstallCommand::Mount {
+                spec,
+                target,
+                script_out,
+                execute,
+            } => {
+                let script = install_mount_script_from_spec_path(&spec, &target)?;
+                if let Some(script_out) = script_out.as_deref() {
+                    write_install_script(script_out, &script)?;
+                    writeln!(output, "wrote {script_out}")?;
+                } else {
+                    write!(output, "{script}")?;
+                }
+                if execute {
+                    execute_install_script(&script)?;
+                }
+                Ok(())
+            }
+            InstallCommand::Nixos {
+                spec,
+                flake,
+                target,
+                script_out,
+                execute,
+            } => {
+                let script = nixos_install_script_from_spec_path(&spec, &target, &flake)?;
+                if let Some(script_out) = script_out.as_deref() {
+                    write_install_script(script_out, &script)?;
+                    writeln!(output, "wrote {script_out}")?;
+                } else {
+                    write!(output, "{script}")?;
+                }
+                if execute {
+                    execute_install_script(&script)?;
+                }
+                Ok(())
+            }
+        },
         Command::Migrate { spec, json } => {
             let bytes = std::fs::read(&spec)?;
             let report = migration_report_from_json_bytes(&bytes)

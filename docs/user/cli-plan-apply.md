@@ -18,6 +18,74 @@ Use [CLI](cli.md) for discovery commands and focused read-only views.
 | Emit a review script | `disk-nix apply --spec ./examples/lifecycle-update.json --script-out ./disk-nix-apply.sh` |
 | Persist a report | `disk-nix apply --spec ./examples/lifecycle-update.json --report-out ./apply-report.json` |
 | Persist a receipt | `disk-nix apply --spec ./examples/lifecycle-update.json --receipt-out ./apply-receipt.json` |
+| Render a NixOS ZFS root install spec | `disk-nix install template zfs-root --disk /dev/disk/by-id/... --encrypt --out ./install.json` |
+| Render mount commands for install | `disk-nix install mount --spec ./install.json --target /mnt --script-out ./mount.sh` |
+| Render mount plus nixos-install | `disk-nix install nixos --spec ./install.json --flake .#host --script-out ./install.sh` |
+
+## NixOS Install Workflow
+
+`disk-nix install` provides reusable installer handoff commands so host flakes do
+not need one-off disk rendering scripts. The storage mutation still uses the
+normal `plan` and `apply` safety model.
+
+Render a reusable encrypted ZFS root spec:
+
+```sh
+disk-nix install template zfs-root \
+  --disk /dev/disk/by-id/<install-disk> \
+  --encrypt \
+  --swap-end 65GiB \
+  --zfs-start 65GiB \
+  --out ./disk-nix-install.json
+```
+
+The default template creates:
+
+| Object | Default |
+| --- | --- |
+| EFI partition | `1MiB` to `1025MiB`, label `BOOT` |
+| Swap partition | `1025MiB` to `65GiB`, label `swap` |
+| ZFS partition | `65GiB` to `100%` |
+| ZFS pool | `zroot` |
+| Root dataset | `zroot/root` |
+| Child datasets | `home`, `nix`, `var`, `log` under the root dataset |
+
+Review and execute storage creation with the usual apply path:
+
+```sh
+disk-nix plan --spec ./disk-nix-install.json --probe-current
+disk-nix apply --spec ./disk-nix-install.json --probe-current --script-out ./disk-nix-apply.sh
+less ./disk-nix-apply.sh
+disk-nix apply --spec ./disk-nix-install.json --probe-current --execute
+```
+
+Generate a mount handoff after successful storage creation:
+
+```sh
+disk-nix install mount \
+  --spec ./disk-nix-install.json \
+  --target /mnt \
+  --script-out ./disk-nix-mount.sh
+```
+
+Review the script, then run it:
+
+```sh
+./disk-nix-mount.sh
+```
+
+Generate a combined mount plus `nixos-install` script:
+
+```sh
+disk-nix install nixos \
+  --spec ./disk-nix-install.json \
+  --flake .#host \
+  --target /mnt \
+  --script-out ./disk-nix-install.sh
+```
+
+`--execute` is available for `install mount` and `install nixos`, but reviewable
+scripts are the intended operator path for destructive installs.
 
 ## Plan Report
 

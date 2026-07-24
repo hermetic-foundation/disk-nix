@@ -106,13 +106,15 @@ let
       printf 'disk-nix declarative handoff import patch applied to %s; backup: %s\n' "$config_path" "$backup_path" >&2
     ''}
   '';
-  moduleTypes = import ./disk-nix/types.nix { inherit lib json; };
+  moduleTypes = import ./types.nix { inherit lib json; };
   inherit (moduleTypes)
     operationType
     lifecycleAttrs
     snapshotAttrs
     ;
   cleanSpecAttrs = lib.filterAttrs (_: value: value != null && value != [ ] && value != { });
+  lifecycle = import ./lifecycle.nix { inherit lib cleanSpecAttrs; };
+  inherit (lifecycle) isDestroyLifecycle;
   normalizeLifecycleSpec = lib.mapAttrs (
     _: object:
     object.metadata
@@ -248,25 +250,6 @@ let
       ;
     device = mount.source;
   }) cfg.nfs.mounts;
-  isDestroyLifecycle =
-    object:
-    let
-      requestedOperation =
-        if (object.operation or null) != null then object.operation else (object.action or null);
-    in
-    (object.destroy or false)
-    || builtins.elem requestedOperation [
-      "destroy"
-      "close"
-      "deactivate"
-      "logout"
-      "unmount"
-      "unexport"
-      "detach"
-      "stop"
-      "remove-key"
-      "remove-token"
-    ];
   activeNfsMounts = lib.filterAttrs (_: mount: !isDestroyLifecycle mount) cfg.nfs.mounts;
   activeLuksDevices = lib.filterAttrs (_: luks: !isDestroyLifecycle luks) cfg.luks.devices;
   typedNfsFilesystemSpec = lib.mapAttrs (_: mount: {
@@ -399,7 +382,7 @@ let
     };
     sessions = normalizeLifecycleSpec cfg.iscsi.sessions;
   };
-  runtimeState = import ./disk-nix/runtime-state.nix {
+  runtimeState = import ./runtime-state.nix {
     inherit
       cfg
       lib
@@ -461,7 +444,7 @@ let
     ;
 in
 {
-  options.services.disk-nix = import ./disk-nix/options.nix {
+  options.services.disk-nix = import ./options.nix {
     inherit
       self
       lib
