@@ -175,8 +175,18 @@ fn partition_creation_reports_reviewable_commands_when_offline_allowed() {
             && command.readiness == CommandReadiness::Ready
     }));
     assert!(report.command_plan[0].commands.iter().any(|command| {
-        command.argv == ["blockdev", "--rereadpt", "/dev/disk/by-id/nvme-root"]
+        command.argv
+            == [
+                "sh",
+                "-c",
+                "blockdev --rereadpt \"$1\" || true",
+                "disk-nix-rereadpt",
+                "/dev/disk/by-id/nvme-root",
+            ]
             && command.readiness == CommandReadiness::Ready
+    }));
+    assert!(report.command_plan[0].commands.iter().any(|command| {
+        command.argv == ["udevadm", "settle"] && command.readiness == CommandReadiness::Ready
     }));
     assert!(report.verification_plan[0]
         .commands
@@ -266,7 +276,14 @@ fn partition_growth_uses_partition_number_for_resizepart() {
             && command.readiness == CommandReadiness::Ready
     }));
     assert!(report.command_plan[0].commands.iter().any(|command| {
-        command.argv == ["blockdev", "--rereadpt", "/dev/disk/by-id/nvme-root"]
+        command.argv
+            == [
+                "sh",
+                "-c",
+                "blockdev --rereadpt \"$1\" || true",
+                "disk-nix-rereadpt",
+                "/dev/disk/by-id/nvme-root",
+            ]
             && command.mutates
             && command.readiness == CommandReadiness::Ready
     }));
@@ -311,7 +328,14 @@ fn partition_table_rescan_reports_partprobe_and_rereadpt_commands() {
                         && command.readiness == CommandReadiness::Ready
                 })
                 && step.commands.iter().any(|command| {
-                    command.argv == ["blockdev", "--rereadpt", "/dev/disk/by-id/nvme-data"]
+                    command.argv
+                        == [
+                            "sh",
+                            "-c",
+                            "blockdev --rereadpt \"$1\" || true",
+                            "disk-nix-rereadpt",
+                            "/dev/disk/by-id/nvme-data",
+                        ]
                         && command.mutates
                         && command.readiness == CommandReadiness::Ready
                 })

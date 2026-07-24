@@ -363,10 +363,16 @@ fn partition_probe_command(disk: Option<&str>) -> ExecutionCommand {
 
 fn partition_table_reread_command(disk: Option<&str>) -> ExecutionCommand {
     match disk {
-        Some(disk) => command(
-            ["blockdev", "--rereadpt", disk],
+        Some(disk) => command_vec(
+            vec![
+                "sh",
+                "-c",
+                "blockdev --rereadpt \"$1\" || true",
+                "disk-nix-rereadpt",
+                disk,
+            ],
             true,
-            "force a partition table reread for the reviewed backing disk",
+            "best-effort partition table reread before udev and partition-node verification",
         ),
         None => command_with_readiness(
             ["blockdev", "--rereadpt", "<disk>"],
@@ -376,6 +382,14 @@ fn partition_table_reread_command(disk: Option<&str>) -> ExecutionCommand {
             "force a partition table reread when supported by the block device",
         ),
     }
+}
+
+fn partition_udev_settle_command() -> ExecutionCommand {
+    command(
+        ["udevadm", "settle"],
+        false,
+        "wait for udev to publish partition device nodes after the reread",
+    )
 }
 
 fn disk_parted_machine_list_command(

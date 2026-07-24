@@ -19,6 +19,9 @@ fn spec_schema() -> serde_json::Value {
             "apply": {
                 "$ref": "#/$defs/applyPolicy"
             },
+            "install": {
+                "$ref": "#/$defs/installSpec"
+            },
             "filesystems": {
                 "$ref": "#/$defs/filesystemMap"
             },
@@ -132,6 +135,7 @@ fn spec_schema() -> serde_json::Value {
                         "const": SUPPORTED_SPEC_VERSION,
                         "description": "Optional disk-nix spec contract version. Version 1 is the current supported contract."
                     },
+                    "install": { "$ref": "#/$defs/installSpec" },
                     "filesystems": { "$ref": "#/$defs/filesystemMap" },
                     "swaps": { "$ref": "#/$defs/lifecycleMap" },
                     "zram": { "$ref": "#/$defs/zramSpec" },
@@ -555,6 +559,58 @@ fn spec_schema() -> serde_json::Value {
                     "rollback",
                     "destroy"
                 ]
+            },
+            "installSpec": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["nixos-zfs-root"],
+                        "description": "Installer handoff kind understood by disk-nix install mount and disk-nix install nixos."
+                    },
+                    "targetDefault": {
+                        "type": "string",
+                        "default": "/mnt"
+                    },
+                    "boot": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                            "device": { "type": "string" },
+                            "mountpoint": { "type": "string", "default": "/boot" }
+                        }
+                    },
+                    "swap": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                            "device": { "type": "string" }
+                        }
+                    },
+                    "zfs": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                            "pool": { "type": "string" },
+                            "rootDataset": { "type": "string" },
+                            "loadKeyDataset": { "type": ["string", "null"] },
+                            "datasets": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": true,
+                                    "properties": {
+                                        "dataset": { "type": "string" },
+                                        "mountpoint": { "type": "string" }
+                                    },
+                                    "required": ["dataset", "mountpoint"]
+                                }
+                            }
+                        }
+                    }
+                },
+                "required": ["kind"]
             },
             "applyPolicy": {
                 "type": "object",

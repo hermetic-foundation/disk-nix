@@ -3,6 +3,7 @@
   root,
   integrationVmSmoke,
   integrationDiskoExamples,
+  integrationInstallerSmoke,
   ...
 }:
 
@@ -94,6 +95,40 @@
           "DISK_NIX_DISKO_E2E_REQUIRE_ALL_KERNELS=1 "
           "DISK_NIX_DISKO_E2E_CONFIRM='wipe-/dev/vdb-/dev/vdc-/dev/vdd-/dev/vde-/dev/vdf' "
           "disk-nix-integration-disko-examples"
+      )
+    '';
+  };
+  integrationInstallerVmTest = pkgs.testers.nixosTest {
+    name = "disk-nix-installer-e2e-vm-test";
+    nodes.machine =
+      { pkgs, ... }:
+      {
+        system.stateVersion = "26.05";
+        networking.hostId = "f5e12e2a";
+        virtualisation = {
+          diskSize = 4096;
+          emptyDiskImages = [ 4096 ];
+          memorySize = 3072;
+        };
+        boot.supportedFilesystems = [ "zfs" ];
+        boot.kernelModules = [ "zfs" ];
+        environment.systemPackages = [
+          integrationInstallerSmoke
+          pkgs.coreutils
+          pkgs.kmod
+          pkgs.util-linux
+        ];
+      };
+    testScript = ''
+      machine.start()
+      machine.wait_for_unit("multi-user.target")
+      machine.succeed("modprobe zfs")
+      machine.succeed("lsblk -o NAME,PATH,SIZE,TYPE,FSTYPE,MOUNTPOINTS /dev/vdb")
+      machine.succeed(
+          "DISK_NIX_INSTALLER_E2E_DESTRUCTIVE=1 "
+          "DISK_NIX_INSTALLER_E2E_DISK=/dev/vdb "
+          "DISK_NIX_INSTALLER_E2E_TARGET=/mnt/disk-nix-installer-e2e "
+          "disk-nix-integration-installer-smoke"
       )
     '';
   };

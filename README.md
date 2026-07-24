@@ -35,7 +35,7 @@ Usage reference:
 
 - [docs/user/cli.md](docs/user/cli.md): CLI commands and JSON contracts
 - [docs/user/cli-plan-apply.md](docs/user/cli-plan-apply.md): planner, apply,
-  validation, rollback, and report contracts
+  NixOS install handoff, validation, rollback, and report contracts
 - [docs/user/nixos-module.md](docs/user/nixos-module.md): NixOS module options
   and generated files
 - [docs/user/nixos-module-reference.md](docs/user/nixos-module-reference.md):
@@ -170,6 +170,27 @@ sudo disk-nix apply --spec ./storage.json --execute --report-out ./apply-report.
 High-risk operations stay blocked until the spec opts in with the relevant
 policy flags, such as `allowOffline`, `allowDestructive`,
 `allowPotentialDataLoss`, or `requireBackup`.
+
+## Install NixOS
+
+Render a reusable install spec instead of keeping host-specific disk scripts in
+your NixOS flake:
+
+```sh
+disk-nix install template zfs-root \
+  --disk /dev/disk/by-id/<install-disk> \
+  --encrypt \
+  --out ./disk-nix-install.json
+```
+
+Review and apply storage creation with the normal guarded path, then generate
+the mount and `nixos-install` handoff:
+
+```sh
+disk-nix plan --spec ./disk-nix-install.json --probe-current
+disk-nix apply --spec ./disk-nix-install.json --probe-current --script-out ./disk-nix-apply.sh
+disk-nix install nixos --spec ./disk-nix-install.json --flake .#host --script-out ./disk-nix-install.sh
+```
 
 ## NixOS Module
 

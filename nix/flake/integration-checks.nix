@@ -21,6 +21,7 @@ args@{
   integrationFailureRecoverySmoke,
   integrationLayeredVmSmoke,
   integrationDiskoExamples,
+  integrationInstallerSmoke,
   integrationVmSmoke,
   ...
 }:

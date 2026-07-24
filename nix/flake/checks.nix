@@ -23,9 +23,11 @@ args@{
   integrationFailureRecoverySmoke,
   integrationLayeredVmSmoke,
   integrationDiskoExamples,
+  integrationInstallerSmoke,
   integrationVmSmoke,
   integrationVmTest,
   integrationDiskoKernelExamplesVmTest,
+  integrationInstallerVmTest,
   nixosModuleTest,
   zramTuningOnlyModuleTest,
   nixosModuleExecuteTest,
@@ -62,6 +64,7 @@ args@{
 
 {
   inherit diskNix;
+  integrationInstallerVm = integrationInstallerVmTest;
   clippy = pkgs.rustPlatform.buildRustPackage {
     pname = "disk-nix-clippy";
     version = "0.1.0";

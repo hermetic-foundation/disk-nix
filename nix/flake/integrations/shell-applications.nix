@@ -246,6 +246,20 @@ rec {
     ''
     + builtins.readFile (root + /scripts/integration-disko-examples.sh);
   };
+  integrationInstallerSmoke = pkgs.writeShellApplication {
+    name = "disk-nix-integration-installer-smoke";
+    runtimeInputs = [
+      diskNix
+      pkgs.coreutils
+      pkgs.dosfstools
+      pkgs.gnugrep
+      pkgs.jq
+      pkgs.parted
+      pkgs.util-linux
+      pkgs.zfs
+    ];
+    text = builtins.readFile (root + /scripts/integration-installer-smoke.sh);
+  };
   integrationVmSmoke = pkgs.writeShellApplication {
     name = "disk-nix-integration-vm-smoke";
     runtimeInputs = [

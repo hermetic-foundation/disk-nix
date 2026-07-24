@@ -32,9 +32,11 @@ let
     integrationFailureRecoverySmoke
     integrationLayeredVmSmoke
     integrationDiskoExamples
+    integrationInstallerSmoke
     integrationVmSmoke
     integrationVmTest
     integrationDiskoKernelExamplesVmTest
+    integrationInstallerVmTest
     ;
   integrationArgs = {
     inherit
@@ -57,9 +59,11 @@ let
       integrationFailureRecoverySmoke
       integrationLayeredVmSmoke
       integrationDiskoExamples
+      integrationInstallerSmoke
       integrationVmSmoke
       integrationVmTest
       integrationDiskoKernelExamplesVmTest
+      integrationInstallerVmTest
       ;
   };
 

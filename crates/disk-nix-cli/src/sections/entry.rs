@@ -321,6 +321,11 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Prepare and install NixOS systems with disk-nix storage specs.
+    Install {
+        #[command(subcommand)]
+        command: InstallCommand,
+    },
     /// Normalize a desired storage spec to the current supported contract version.
     Migrate {
         /// Desired storage specification path.
@@ -339,6 +344,94 @@ enum Command {
     },
     /// Generate a roff manpage.
     Manpage,
+}
+
+#[derive(Debug, Subcommand)]
+enum InstallCommand {
+    /// Render a reusable install storage spec template.
+    Template {
+        #[command(subcommand)]
+        command: InstallTemplateCommand,
+    },
+    /// Emit or run mount commands for an install spec.
+    Mount {
+        /// Desired storage specification path with disk-nix install metadata.
+        #[arg(long)]
+        spec: String,
+        /// Mount target for nixos-install.
+        #[arg(long, default_value = "/mnt")]
+        target: String,
+        /// Write a reviewable mount script.
+        #[arg(long)]
+        script_out: Option<String>,
+        /// Execute the generated mount script.
+        #[arg(long)]
+        execute: bool,
+    },
+    /// Emit or run mount commands followed by nixos-install.
+    Nixos {
+        /// Desired storage specification path with disk-nix install metadata.
+        #[arg(long)]
+        spec: String,
+        /// NixOS flake reference, such as .#hostname.
+        #[arg(long)]
+        flake: String,
+        /// Mount target for nixos-install.
+        #[arg(long, default_value = "/mnt")]
+        target: String,
+        /// Write a reviewable install script.
+        #[arg(long)]
+        script_out: Option<String>,
+        /// Execute the generated install script.
+        #[arg(long)]
+        execute: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum InstallTemplateCommand {
+    /// Render an encrypted or unencrypted ZFS root spec for NixOS installs.
+    ZfsRoot {
+        /// Stable install disk path, preferably /dev/disk/by-id/...
+        #[arg(long)]
+        disk: String,
+        /// Output JSON spec path.
+        #[arg(long, default_value = "disk-nix-install.json")]
+        out: String,
+        /// ZFS pool name.
+        #[arg(long, default_value = "zroot")]
+        pool: String,
+        /// Root dataset name. Defaults to <pool>/root.
+        #[arg(long)]
+        root_dataset: Option<String>,
+        /// EFI partition label.
+        #[arg(long, default_value = "BOOT")]
+        boot_label: String,
+        /// Swap partition label.
+        #[arg(long, default_value = "swap")]
+        swap_label: String,
+        /// EFI partition start.
+        #[arg(long, default_value = "1MiB")]
+        efi_start: String,
+        /// EFI partition end.
+        #[arg(long, default_value = "1025MiB")]
+        efi_end: String,
+        /// Swap partition start.
+        #[arg(long, default_value = "1025MiB")]
+        swap_start: String,
+        /// Swap partition end.
+        #[arg(long, default_value = "65GiB")]
+        swap_end: String,
+        /// ZFS partition start.
+        #[arg(long, default_value = "65GiB")]
+        zfs_start: String,
+        /// Partition path prefix. Defaults to <disk>-part.
+        #[arg(long)]
+        part_prefix: Option<String>,
+        /// Enable native ZFS encryption on the root dataset.
+        #[arg(long)]
+        encrypt: bool,
+    },
 }
 
 #[derive(Debug)]
