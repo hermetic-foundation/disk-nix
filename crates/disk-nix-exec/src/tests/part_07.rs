@@ -538,6 +538,7 @@ fn zfs_lifecycle_accepts_targets_for_logical_names() {
                     && command.argv[2].contains("zfs list -H")
                     && command.argv[2].contains("zfs create")
                     && command.argv[2].contains("status=\"$?\"")
+                    && command.argv[2].contains("verify_properties")
                     && command.argv[3] == "disk-nix-zfs-create"
                     && command.argv[4] == "tank/home"
                     && command.argv[5..] == ["-o", "compression=zstd", "-o", "mountpoint=/home"]
@@ -595,6 +596,7 @@ fn zfs_lifecycle_accepts_targets_for_logical_names() {
                     && command.argv[2].contains("zfs list -H")
                     && command.argv[2].contains("zfs create")
                     && command.argv[2].contains("status=\"$?\"")
+                    && command.argv[2].contains("verify_properties")
                     && command.argv[3] == "disk-nix-zfs-create"
                     && command.argv[4] == "tank/vm/root"
                     && command.argv[5..] == ["-o", "compression=zstd", "-V", "32GiB"]
@@ -661,6 +663,130 @@ fn zfs_lifecycle_accepts_targets_for_logical_names() {
                 .iter()
                 .any(|command| command.argv == ["zfs", "get", "all", "tank/vm/root"])
     }));
+}
+
+#[test]
+fn zfs_encrypted_dataset_create_uses_tty_for_prompt_and_verifies_properties() {
+    let (plan, policy) = plan_and_policy_from_json_bytes(
+        br#"{
+              "spec": {
+                "datasets": {
+                  "encryptedRoot": {
+                    "target": "tank/root",
+                    "operation": "create",
+                    "properties": {
+                      "encryption": "aes-256-gcm",
+                      "keyformat": "passphrase",
+                      "keylocation": "prompt",
+                      "mountpoint": "legacy"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+    )
+    .expect("document parses");
+
+    let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+    let create = report
+        .command_plan
+        .iter()
+        .flat_map(|step| &step.commands)
+        .find(|command| command.argv.get(3).is_some_and(|arg| arg == "disk-nix-zfs-create"))
+        .expect("encrypted dataset create command should be rendered");
+
+    assert_eq!(create.readiness, CommandReadiness::Ready);
+    assert!(create.argv[2].contains("keylocation=prompt"));
+    assert!(create.argv[2].contains("</dev/tty >/dev/tty 2>&1"));
+    assert!(create.argv[2].contains("requires a controlling terminal"));
+    assert!(create.argv[2].contains("verify_properties \"$@\""));
+    assert_eq!(
+        create.argv[5..],
+        [
+            "-o",
+            "encryption=aes-256-gcm",
+            "-o",
+            "keyformat=passphrase",
+            "-o",
+            "keylocation=prompt",
+            "-o",
+            "mountpoint=legacy",
+        ]
+    );
+}
+
+#[test]
+fn zfs_create_wrapper_preserves_failed_create_status() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = std::env::temp_dir().join(format!(
+        "disk-nix-zfs-wrapper-test-{}",
+        std::process::id()
+    ));
+    std::fs::remove_dir_all(&temp_dir).ok();
+    std::fs::create_dir_all(&temp_dir).expect("temp dir can be created");
+    let fake_zfs = temp_dir.join("zfs");
+    let bash = std::env::var_os("PATH")
+        .and_then(|path| {
+            std::env::split_paths(&path)
+                .map(|entry| entry.join("bash"))
+                .find(|candidate| candidate.is_file())
+        })
+        .expect("bash should be available on PATH");
+    std::fs::write(
+        &fake_zfs,
+        format!(
+            "#!{}\ncase \"$1\" in\n  list) exit 1 ;;\n  create) exit 37 ;;\n  get) exit 1 ;;\n  *) exit 99 ;;\nesac\n",
+            bash.display()
+        ),
+    )
+    .expect("fake zfs can be written");
+    let mut permissions = std::fs::metadata(&fake_zfs)
+        .expect("fake zfs metadata is available")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&fake_zfs, permissions).expect("fake zfs can be executable");
+
+    let (plan, policy) = plan_and_policy_from_json_bytes(
+        br#"{
+              "spec": {
+                "datasets": {
+                  "root": {
+                    "target": "tank/root",
+                    "operation": "create",
+                    "properties": {
+                      "compression": "zstd"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+    )
+    .expect("document parses");
+    let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+    let create = report
+        .command_plan
+        .iter()
+        .flat_map(|step| &step.commands)
+        .find(|command| command.argv.get(3).is_some_and(|arg| arg == "disk-nix-zfs-create"))
+        .expect("dataset create command should be rendered");
+    let (program, args) = create.argv.split_first().expect("command has program");
+    let old_path = std::env::var("PATH").unwrap_or_default();
+    let status = std::process::Command::new(program)
+        .args(args)
+        .env("PATH", format!("{}:{old_path}", temp_dir.display()))
+        .status()
+        .expect("wrapper command can run");
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+
+    assert_eq!(status.code(), Some(37));
 }
 
 #[test]

@@ -167,5 +167,8 @@ swapon --show=NAME --noheadings | grep -F "$swap_device" >/dev/null
 echo "installer E2E: rendered nixos-install script"
 
 grep -F "nixos-install --root \"\$target\" --flake '.#disk-nix-installer-e2e'" "$nixos_script" >/dev/null
+grep -F "target fstab contains live ISO overlay mounts" "$nixos_script" >/dev/null
+grep -F "target fstab matches install metadata" "$nixos_script" >/dev/null
+grep -F "missing ZFS fstab entry for $pool/root on /" "$nixos_script" >/dev/null
 
 echo "disk-nix installer E2E smoke test provisioned and mounted $pool on $disk"

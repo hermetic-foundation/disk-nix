@@ -349,12 +349,118 @@ fn nixos_install_script_from_spec_path(
     target: &str,
     flake: &str,
 ) -> Result<String, AppError> {
-    let mut script = install_mount_script_from_spec_path(spec_path, target)?;
+    let bytes = std::fs::read(spec_path)?;
+    plan_from_json_bytes(&bytes)
+        .map_err(|error| AppError::Message(format!("failed to parse {spec_path}: {error}")))?;
+    let spec: Value = serde_json::from_slice(&bytes)
+        .map_err(|error| AppError::Message(format!("failed to parse {spec_path}: {error}")))?;
+    let mut script = install_mount_script_from_spec(&spec, target)?;
     script.push_str(&format!(
         "nixos-install --root \"$target\" --flake {}\n",
         shell_quote(flake)
     ));
+    script.push_str(&install_fstab_validation_script(&spec)?);
     Ok(script)
+}
+
+fn install_fstab_validation_script(spec: &Value) -> Result<String, AppError> {
+    let install = spec
+        .get("install")
+        .or_else(|| spec.get("spec").and_then(|spec| spec.get("install")))
+        .ok_or_else(|| AppError::Message("install metadata is missing from spec".to_string()))?;
+    let kind = install
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| AppError::Message("install.kind is missing from spec".to_string()))?;
+    match kind {
+        "nixos-zfs-root" => nixos_zfs_root_fstab_validation_script(install),
+        other => Err(AppError::Message(format!(
+            "unsupported install.kind {other}; supported kind is nixos-zfs-root"
+        ))),
+    }
+}
+
+fn nixos_zfs_root_fstab_validation_script(install: &Value) -> Result<String, AppError> {
+    let zfs = install
+        .get("zfs")
+        .ok_or_else(|| AppError::Message("install.zfs is missing from spec".to_string()))?;
+    let datasets = zfs
+        .get("datasets")
+        .and_then(Value::as_array)
+        .ok_or_else(|| AppError::Message("install.zfs.datasets is missing from spec".to_string()))?;
+    let boot_device = install
+        .get("boot")
+        .and_then(|boot| boot.get("device"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| AppError::Message("install.boot.device is missing from spec".to_string()))?;
+    let swap_device = install
+        .get("swap")
+        .and_then(|swap| swap.get("device"))
+        .and_then(Value::as_str);
+
+    let mut lines = vec![
+        String::new(),
+        "resolve_target_symlink() {".to_string(),
+        "  local path=\"$1\"".to_string(),
+        "  local next".to_string(),
+        "  local count=0".to_string(),
+        "  while [ -L \"$target$path\" ]; do".to_string(),
+        "    count=$((count + 1))".to_string(),
+        "    if [ \"$count\" -gt 40 ]; then".to_string(),
+        "      echo \"disk-nix install validation: symlink loop while resolving $path\" >&2".to_string(),
+        "      return 1".to_string(),
+        "    fi".to_string(),
+        "    next=\"$(readlink \"$target$path\")\"".to_string(),
+        "    if [[ \"$next\" = /* ]]; then".to_string(),
+        "      path=\"$next\"".to_string(),
+        "    else".to_string(),
+        "      path=\"$(dirname \"$path\")/$next\"".to_string(),
+        "    fi".to_string(),
+        "  done".to_string(),
+        "  printf '%s\\n' \"$path\"".to_string(),
+        "}".to_string(),
+        String::new(),
+        "target_system=\"$(resolve_target_symlink /nix/var/nix/profiles/system)\"".to_string(),
+        "target_static_etc=\"$(resolve_target_symlink \"$target_system/etc\")\"".to_string(),
+        "target_fstab=\"$(resolve_target_symlink \"$target_static_etc/fstab\")\"".to_string(),
+        "if [ ! -f \"$target$target_fstab\" ]; then".to_string(),
+        "  echo \"disk-nix install validation: generated target fstab is missing: $target_fstab\" >&2".to_string(),
+        "  exit 1".to_string(),
+        "fi".to_string(),
+        "if grep -Eq '(^tmpfs / tmpfs|/iso/nix-store\\.squashfs|overlay /nix/store)' \"$target$target_fstab\"; then".to_string(),
+        "  echo \"disk-nix install validation: target fstab contains live ISO overlay mounts\" >&2".to_string(),
+        "  sed -n '1,120p' \"$target$target_fstab\" >&2".to_string(),
+        "  exit 1".to_string(),
+        "fi".to_string(),
+    ];
+
+    for dataset in datasets {
+        let dataset_name = required_install_str(dataset, "dataset")?;
+        let mountpoint = required_install_str(dataset, "mountpoint")?;
+        lines.push(format!(
+            "grep -F -- {} \"$target$target_fstab\" | grep -F -- {} | grep -F -- ' zfs ' >/dev/null || {{ echo {} >&2; sed -n '1,120p' \"$target$target_fstab\" >&2; exit 1; }}",
+            shell_quote(dataset_name),
+            shell_quote(mountpoint),
+            shell_quote(&format!(
+                "disk-nix install validation: missing ZFS fstab entry for {dataset_name} on {mountpoint}"
+            ))
+        ));
+    }
+    lines.push(format!(
+        "grep -F -- {} \"$target$target_fstab\" | grep -F -- ' /boot ' >/dev/null || {{ echo {} >&2; sed -n '1,120p' \"$target$target_fstab\" >&2; exit 1; }}",
+        shell_quote(boot_device),
+        shell_quote("disk-nix install validation: missing /boot fstab entry")
+    ));
+    if let Some(swap_device) = swap_device {
+        lines.push(format!(
+            "grep -F -- {} \"$target$target_fstab\" | grep -F -- ' swap ' >/dev/null || {{ echo {} >&2; sed -n '1,120p' \"$target$target_fstab\" >&2; exit 1; }}",
+            shell_quote(swap_device),
+            shell_quote("disk-nix install validation: missing swap fstab entry")
+        ));
+    }
+    lines.push("echo \"disk-nix install validation: target fstab matches install metadata\"".to_string());
+    lines.push(String::new());
+    Ok(lines.join("\n"))
 }
 
 fn write_install_script(path: &str, script: &str) -> Result<(), AppError> {

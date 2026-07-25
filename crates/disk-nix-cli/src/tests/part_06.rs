@@ -128,6 +128,37 @@ fn install_mount_script_renders_zfs_handoff_commands() {
 }
 
 #[test]
+fn install_nixos_validation_rejects_live_iso_fstab_and_requires_target_entries() {
+    let spec = install_zfs_root_spec(&InstallZfsRootOptions {
+        disk: "/dev/disk/by-id/nvme-test".to_string(),
+        pool: "tank".to_string(),
+        root_dataset: "tank/root".to_string(),
+        boot_label: "ESP".to_string(),
+        swap_label: "swap0".to_string(),
+        efi_start: "1MiB".to_string(),
+        efi_end: "1025MiB".to_string(),
+        swap_start: "1025MiB".to_string(),
+        swap_end: "65GiB".to_string(),
+        zfs_start: "65GiB".to_string(),
+        part_prefix: Some("/dev/disk/by-id/nvme-test-part".to_string()),
+        encrypt: false,
+    });
+
+    let script =
+        install_fstab_validation_script(&spec).expect("validation script should render");
+
+    assert!(script.contains("resolve_target_symlink"));
+    assert!(script.contains("/iso/nix-store\\.squashfs"));
+    assert!(script.contains("overlay /nix/store"));
+    assert!(script.contains("target fstab contains live ISO overlay mounts"));
+    assert!(script.contains("missing ZFS fstab entry for tank/root on /"));
+    assert!(script.contains("missing ZFS fstab entry for tank/root/home on /home"));
+    assert!(script.contains("'/dev/disk/by-label/ESP'"));
+    assert!(script.contains("'/dev/disk/by-label/swap0'"));
+    assert!(script.contains("target fstab matches install metadata"));
+}
+
+#[test]
 fn install_zfs_root_template_can_follow_custom_pool_dataset_names() {
     let spec = install_zfs_root_spec(&InstallZfsRootOptions {
         disk: "/dev/vdb".to_string(),

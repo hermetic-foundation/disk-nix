@@ -192,6 +192,11 @@ disk-nix apply --spec ./disk-nix-install.json --probe-current --script-out ./dis
 disk-nix install nixos --spec ./disk-nix-install.json --flake .#host --script-out ./disk-nix-install.sh
 ```
 
+Encrypted ZFS templates use `keylocation=prompt`; run execution from a real TTY
+so the passphrase prompt is visible. `install nixos` validates the installed
+target `fstab` and fails if it still contains live ISO overlay mounts or lacks
+the ZFS, `/boot`, or swap entries described by the install spec.
+
 ## NixOS Module
 
 Import the module:

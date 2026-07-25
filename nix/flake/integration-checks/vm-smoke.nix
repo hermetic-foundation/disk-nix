@@ -218,6 +218,12 @@
     ${pkgs.gnugrep}/bin/grep -q 'mountpoint -q "$target/var/log"' ${
       root + /scripts/integration-installer-smoke.sh
     }
+    ${pkgs.gnugrep}/bin/grep -q 'target fstab contains live ISO overlay mounts' ${
+      root + /scripts/integration-installer-smoke.sh
+    }
+    ${pkgs.gnugrep}/bin/grep -q 'target fstab matches install metadata' ${
+      root + /scripts/integration-installer-smoke.sh
+    }
     DISK_NIX_BIN=${diskNix}/bin/disk-nix ${integrationInstallerSmoke}/bin/disk-nix-integration-installer-smoke >/tmp/installer-refusal.log 2>&1 && exit 1
     ${pkgs.gnugrep}/bin/grep -q 'Refusing to run disk-nix installer E2E smoke test' /tmp/installer-refusal.log
     touch "$out"

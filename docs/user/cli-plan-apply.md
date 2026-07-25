@@ -59,6 +59,12 @@ less ./disk-nix-apply.sh
 disk-nix apply --spec ./disk-nix-install.json --probe-current --execute
 ```
 
+When the spec uses native ZFS encryption with `keylocation=prompt`, run
+`apply --execute` from a real terminal. The generated ZFS create wrapper sends
+the passphrase prompt through `/dev/tty`, so JSON output stays parseable while
+the operator still sees the prompt. Without a controlling terminal, execution
+fails before treating the encrypted dataset as successfully created.
+
 Generate a mount handoff after successful storage creation:
 
 ```sh
@@ -86,6 +92,11 @@ disk-nix install nixos \
 
 `--execute` is available for `install mount` and `install nixos`, but reviewable
 scripts are the intended operator path for destructive installs.
+
+`install nixos` validates the generated target system `fstab` after
+`nixos-install`. It fails if the installed profile still contains live ISO
+overlay mounts or if the expected ZFS, `/boot`, or swap entries from the install
+metadata are missing.
 
 ## Plan Report
 
