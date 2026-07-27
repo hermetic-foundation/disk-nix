@@ -146,7 +146,11 @@ fn partition_creation_reports_reviewable_commands_when_offline_allowed() {
                     "device": "/dev/disk/by-id/nvme-root",
                     "start": "1MiB",
                     "end": "100%",
-                    "partitionType": "linux"
+                    "partitionNumber": "1",
+                    "partitionType": "primary",
+                    "metadata": {
+                      "gptType": "EF00"
+                    }
                   }
                 }
               },
@@ -168,10 +172,14 @@ fn partition_creation_reports_reviewable_commands_when_offline_allowed() {
                 "-s",
                 "/dev/disk/by-id/nvme-root",
                 "mkpart",
-                "linux",
+                "primary",
                 "1MiB",
                 "100%",
             ]
+            && command.readiness == CommandReadiness::Ready
+    }));
+    assert!(report.command_plan[0].commands.iter().any(|command| {
+        command.argv == ["sgdisk", "--typecode=1:EF00", "/dev/disk/by-id/nvme-root"]
             && command.readiness == CommandReadiness::Ready
     }));
     assert!(report.command_plan[0].commands.iter().any(|command| {

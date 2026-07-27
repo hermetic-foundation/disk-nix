@@ -1,4 +1,3 @@
-
 pub const SUPPORTED_SPEC_VERSION: u64 = 1;
 
 #[derive(Debug)]
@@ -496,6 +495,8 @@ pub struct ActionContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub partition_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpt_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client: Option<String>,
@@ -573,6 +574,7 @@ impl ActionContext {
             && self.end.is_none()
             && self.partition_number.is_none()
             && self.partition_type.is_none()
+            && self.gpt_type.is_none()
             && self.level.is_none()
             && self.client.is_none()
             && self.portal.is_none()

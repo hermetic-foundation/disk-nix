@@ -292,6 +292,7 @@ fn nix_package_for_tool(tool: &str) -> Option<&'static str> {
         "mkfs.ntfs" | "ntfsfix" | "ntfsinfo" | "ntfslabel" => Some("ntfs3g"),
         "nvme" => Some("nvme-cli"),
         "parted" => Some("parted"),
+        "sgdisk" => Some("gptfdisk"),
         "smartctl" => Some("smartmontools"),
         "targetcli" => Some("targetcli-fb"),
         "tgtadm" => Some("tgt"),
@@ -317,6 +318,7 @@ fn disk_nix_default_tool_package(package: &str) -> bool {
             | "e2fsprogs"
             | "exfatprogs"
             | "f2fs-tools"
+            | "gptfdisk"
             | "lvm2"
             | "lsscsi"
             | "mdadm"

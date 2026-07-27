@@ -36,6 +36,7 @@
         e2fsprogs
         exfatprogs
         f2fs-tools
+        gptfdisk
         lvm2
         lsscsi
         mdadm

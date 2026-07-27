@@ -106,6 +106,39 @@ fn partition_create_command(
     }
 }
 
+fn partition_gpt_type_command(
+    disk: Option<&str>,
+    partition_number: Option<&str>,
+    gpt_type: Option<&str>,
+) -> Option<ExecutionCommand> {
+    let gpt_type = gpt_type?;
+    let argv = vec![
+        "sgdisk".to_string(),
+        format!(
+            "--typecode={}:{}",
+            partition_number.unwrap_or("<partition-number>"),
+            gpt_type
+        ),
+        disk.unwrap_or("<disk>").to_string(),
+    ];
+    let missing = missing_partition_gpt_type_inputs(disk, partition_number);
+    Some(if missing.is_empty() {
+        command_vec(
+            argv,
+            true,
+            "set the reviewed GPT partition type code after creating the partition",
+        )
+    } else {
+        command_vec_with_readiness(
+            argv,
+            true,
+            CommandReadiness::NeedsDomainImplementation,
+            missing,
+            "set the GPT partition type code after resolving the disk and partition number",
+        )
+    })
+}
+
 fn pool_create_devices(device: Option<&str>, devices: &[String]) -> Vec<String> {
     if devices.is_empty() {
         device.into_iter().map(ToString::to_string).collect()
@@ -340,6 +373,20 @@ fn missing_partition_create_inputs(
     }
     if end.is_none() {
         missing.push("partition end offset");
+    }
+    missing
+}
+
+fn missing_partition_gpt_type_inputs(
+    disk: Option<&str>,
+    partition_number: Option<&str>,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if disk.is_none() {
+        missing.push("disk path");
+    }
+    if partition_number.is_none() {
+        missing.push("partition number");
     }
     missing
 }

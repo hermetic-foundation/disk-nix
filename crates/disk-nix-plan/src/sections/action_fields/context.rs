@@ -56,6 +56,16 @@ fn lifecycle_context(collection: &str, name: &str, object: &Value) -> ActionCont
         end: string_field(object, &["end", "endOffset"]),
         partition_number: string_field(object, &["partitionNumber", "number"]),
         partition_type: string_field(object, &["partitionType", "type"]),
+        gpt_type: metadata_string_field(
+            object,
+            &[
+                "gptType",
+                "gpt-type",
+                "gpt_type",
+                "partitionGuidType",
+                "partition-guid-type",
+            ],
+        ),
         level: string_field(object, &["level", "raidLevel"]),
         client: string_field(object, &["client"]),
         portal: lifecycle_portal(object),

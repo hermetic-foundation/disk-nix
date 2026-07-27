@@ -700,6 +700,8 @@ fn create_open_action_commands(
             let start = action.context.start.as_deref();
             let end = action.context.end.as_deref();
             let partition_type = action.context.partition_type.as_deref();
+            let partition_number = action.context.partition_number.as_deref();
+            let gpt_type = action.context.gpt_type.as_deref();
             let mut commands = vec![disk_nix_inspect_command(
                 disk,
                 "<disk>",
@@ -711,8 +713,11 @@ fn create_open_action_commands(
             {
                 commands.push(disk_create_label_command(disk, "gpt"));
             }
+            commands.push(partition_create_command(disk, partition_type, start, end));
+            if let Some(command) = partition_gpt_type_command(disk, partition_number, gpt_type) {
+                commands.push(command);
+            }
             commands.extend([
-                partition_create_command(disk, partition_type, start, end),
                 partition_probe_command(disk),
                 partition_table_reread_command(disk),
                 partition_udev_settle_command(),

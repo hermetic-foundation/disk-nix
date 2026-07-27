@@ -412,6 +412,10 @@ fn plan_classifies_disk_and_partition_lifecycle_safely() {
                   "device": "/dev/disk/by-id/nvme-root",
                   "start": "1MiB",
                   "end": "100%",
+                  "partitionNumber": "1",
+                  "metadata": {
+                    "gptType": "EF00"
+                  },
                   "partitionType": "linux"
                 },
                 "home": {
@@ -445,7 +449,9 @@ fn plan_classifies_disk_and_partition_lifecycle_safely() {
     );
     assert_eq!(root.context.start.as_deref(), Some("1MiB"));
     assert_eq!(root.context.end.as_deref(), Some("100%"));
+    assert_eq!(root.context.partition_number.as_deref(), Some("1"));
     assert_eq!(root.context.partition_type.as_deref(), Some("linux"));
+    assert_eq!(root.context.gpt_type.as_deref(), Some("EF00"));
 
     let home = plan
         .actions

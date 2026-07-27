@@ -231,6 +231,7 @@ rec {
       pkgs.dosfstools
       pkgs.e2fsprogs
       pkgs.f2fs-tools
+      pkgs.gptfdisk
       pkgs.gnugrep
       pkgs.jq
       pkgs.kmod
@@ -252,6 +253,7 @@ rec {
       diskNix
       pkgs.coreutils
       pkgs.dosfstools
+      pkgs.gptfdisk
       pkgs.gnugrep
       pkgs.jq
       pkgs.parted

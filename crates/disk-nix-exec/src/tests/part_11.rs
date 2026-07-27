@@ -322,6 +322,7 @@ fn tool_requirements_map_inventory_and_lvm_helpers() {
         ("lsblk", "util-linux"),
         ("mkfs", "util-linux"),
         ("pvmove", "lvm2"),
+        ("sgdisk", "gptfdisk"),
         ("vgchange", "lvm2"),
         ("vgexport", "lvm2"),
         ("vgimport", "lvm2"),
