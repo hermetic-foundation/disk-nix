@@ -272,7 +272,9 @@ fn nixos_zfs_root_mount_script(install: &Value, target: &str) -> Result<String, 
     let datasets = zfs
         .get("datasets")
         .and_then(Value::as_array)
-        .ok_or_else(|| AppError::Message("install.zfs.datasets is missing from spec".to_string()))?;
+        .ok_or_else(|| {
+            AppError::Message("install.zfs.datasets is missing from spec".to_string())
+        })?;
     let root_dataset = datasets
         .iter()
         .find(|dataset| {
@@ -300,10 +302,7 @@ fn nixos_zfs_root_mount_script(install: &Value, target: &str) -> Result<String, 
     }
     lines.extend([
         "mkdir -p \"$target\"".to_string(),
-        format!(
-            "mount -t zfs {} \"$target\"",
-            shell_quote(root_dataset)
-        ),
+        format!("mount -i -t zfs {} \"$target\"", shell_quote(root_dataset)),
     ]);
 
     for dataset in datasets {
@@ -313,9 +312,12 @@ fn nixos_zfs_root_mount_script(install: &Value, target: &str) -> Result<String, 
             continue;
         }
         let relative_mountpoint = mountpoint.trim_start_matches('/');
-        lines.push(format!("mkdir -p \"$target/{}\"", shell_escape_double(relative_mountpoint)));
         lines.push(format!(
-            "mount -t zfs {} \"$target/{}\"",
+            "mkdir -p \"$target/{}\"",
+            shell_escape_double(relative_mountpoint)
+        ));
+        lines.push(format!(
+            "mount -i -t zfs {} \"$target/{}\"",
             shell_quote(dataset_name),
             shell_escape_double(relative_mountpoint)
         ));
@@ -356,7 +358,7 @@ fn nixos_install_script_from_spec_path(
         .map_err(|error| AppError::Message(format!("failed to parse {spec_path}: {error}")))?;
     let mut script = install_mount_script_from_spec(&spec, target)?;
     script.push_str(&format!(
-        "nixos-install --root \"$target\" --flake {}\n",
+        "nixos-install --root \"$target\" --flake {} --no-channel-copy\n",
         shell_quote(flake)
     ));
     script.push_str(&install_fstab_validation_script(&spec)?);
@@ -387,7 +389,9 @@ fn nixos_zfs_root_fstab_validation_script(install: &Value) -> Result<String, App
     let datasets = zfs
         .get("datasets")
         .and_then(Value::as_array)
-        .ok_or_else(|| AppError::Message("install.zfs.datasets is missing from spec".to_string()))?;
+        .ok_or_else(|| {
+            AppError::Message("install.zfs.datasets is missing from spec".to_string())
+        })?;
     let boot_device = install
         .get("boot")
         .and_then(|boot| boot.get("device"))
@@ -458,7 +462,9 @@ fn nixos_zfs_root_fstab_validation_script(install: &Value) -> Result<String, App
             shell_quote("disk-nix install validation: missing swap fstab entry")
         ));
     }
-    lines.push("echo \"disk-nix install validation: target fstab matches install metadata\"".to_string());
+    lines.push(
+        "echo \"disk-nix install validation: target fstab matches install metadata\"".to_string(),
+    );
     lines.push(String::new());
     Ok(lines.join("\n"))
 }

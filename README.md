@@ -196,6 +196,8 @@ Encrypted ZFS templates use `keylocation=prompt`; run execution from a real TTY
 so the passphrase prompt is visible. `install nixos` validates the installed
 target `fstab` and fails if it still contains live ISO overlay mounts or lacks
 the ZFS, `/boot`, or swap entries described by the install spec.
+The generated `nixos-install` command uses `--no-channel-copy` so a completed
+closure handoff does not depend on readable channel state from live media.
 
 ## NixOS Module
 

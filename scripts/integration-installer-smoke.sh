@@ -138,6 +138,8 @@ zfs list -H "$pool/root/log" >/dev/null
 "$disk_nix_bin" install mount --spec "$spec" --target "$target" --script-out "$mount_script"
 echo "installer E2E: rendered mount script"
 grep -F "zpool import -R \"\$target\" '$pool'" "$mount_script" >/dev/null
+grep -F "mount -i -t zfs '$pool/root' \"\$target\"" "$mount_script" >/dev/null
+grep -F "mount -i -t zfs '$pool/root/home' \"\$target/home\"" "$mount_script" >/dev/null
 grep -F "if [[ -e '/dev/disk/by-label/E2E-BOOT' ]]; then" "$mount_script" >/dev/null
 grep -F "mount '${disk}1' \"\$target/boot\"" "$mount_script" >/dev/null
 grep -F "if [[ -e '/dev/disk/by-label/disknix-e2e-swap' ]]; then" "$mount_script" >/dev/null
@@ -166,7 +168,7 @@ swapon --show=NAME --noheadings | grep -F "$swap_device" >/dev/null
   --script-out "$nixos_script"
 echo "installer E2E: rendered nixos-install script"
 
-grep -F "nixos-install --root \"\$target\" --flake '.#disk-nix-installer-e2e'" "$nixos_script" >/dev/null
+grep -F "nixos-install --root \"\$target\" --flake '.#disk-nix-installer-e2e' --no-channel-copy" "$nixos_script" >/dev/null
 grep -F "target fstab contains live ISO overlay mounts" "$nixos_script" >/dev/null
 grep -F "target fstab matches install metadata" "$nixos_script" >/dev/null
 grep -F "missing ZFS fstab entry for $pool/root on /" "$nixos_script" >/dev/null

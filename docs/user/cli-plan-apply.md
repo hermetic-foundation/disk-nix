@@ -96,7 +96,8 @@ scripts are the intended operator path for destructive installs.
 `install nixos` validates the generated target system `fstab` after
 `nixos-install`. It fails if the installed profile still contains live ISO
 overlay mounts or if the expected ZFS, `/boot`, or swap entries from the install
-metadata are missing.
+metadata are missing. It also passes `--no-channel-copy` to avoid depending on
+readable live-media channel state after the NixOS closure has been handed off.
 
 ## Plan Report
 

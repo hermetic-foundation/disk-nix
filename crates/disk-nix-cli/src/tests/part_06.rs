@@ -113,14 +113,13 @@ fn install_mount_script_renders_zfs_handoff_commands() {
         encrypt: false,
     });
 
-    let script =
-        install_mount_script_from_spec(&spec, "/mnt").expect("mount script should render");
+    let script = install_mount_script_from_spec(&spec, "/mnt").expect("mount script should render");
 
     assert!(script.contains("zpool export 'tank'"));
     assert!(script.contains("zpool import -R \"$target\" 'tank'"));
     assert!(!script.contains("zfs load-key"));
-    assert!(script.contains("mount -t zfs 'tank/root' \"$target\""));
-    assert!(script.contains("mount -t zfs 'tank/root/home' \"$target/home\""));
+    assert!(script.contains("mount -i -t zfs 'tank/root' \"$target\""));
+    assert!(script.contains("mount -i -t zfs 'tank/root/home' \"$target/home\""));
     assert!(script.contains("udevadm trigger --subsystem-match=block --action=change"));
     assert!(script.contains("udevadm settle"));
     assert!(script.contains("mount '/dev/disk/by-id/nvme-test-part1' \"$target/boot\""));
@@ -144,8 +143,7 @@ fn install_nixos_validation_rejects_live_iso_fstab_and_requires_target_entries()
         encrypt: false,
     });
 
-    let script =
-        install_fstab_validation_script(&spec).expect("validation script should render");
+    let script = install_fstab_validation_script(&spec).expect("validation script should render");
 
     assert!(script.contains("resolve_target_symlink"));
     assert!(script.contains("/iso/nix-store\\.squashfs"));
@@ -156,6 +154,44 @@ fn install_nixos_validation_rejects_live_iso_fstab_and_requires_target_entries()
     assert!(script.contains("'/dev/disk/by-label/ESP'"));
     assert!(script.contains("'/dev/disk/by-label/swap0'"));
     assert!(script.contains("target fstab matches install metadata"));
+}
+
+#[test]
+fn install_nixos_script_avoids_live_iso_channel_copy() {
+    let spec = install_zfs_root_spec(&InstallZfsRootOptions {
+        disk: "/dev/disk/by-id/nvme-test".to_string(),
+        pool: "tank".to_string(),
+        root_dataset: "tank/root".to_string(),
+        boot_label: "ESP".to_string(),
+        swap_label: "swap0".to_string(),
+        efi_start: "1MiB".to_string(),
+        efi_end: "1025MiB".to_string(),
+        swap_start: "1025MiB".to_string(),
+        swap_end: "65GiB".to_string(),
+        zfs_start: "65GiB".to_string(),
+        part_prefix: Some("/dev/disk/by-id/nvme-test-part".to_string()),
+        encrypt: false,
+    });
+    let spec_dir =
+        std::env::temp_dir().join(format!("disk-nix-install-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&spec_dir);
+    std::fs::create_dir(&spec_dir).expect("tempdir should be created");
+    let spec_path = spec_dir.join("install.json");
+    std::fs::write(
+        &spec_path,
+        serde_json::to_vec(&spec).expect("spec should serialize"),
+    )
+    .expect("spec should write");
+
+    let script = nixos_install_script_from_spec_path(
+        spec_path.to_str().expect("utf8 path"),
+        "/mnt",
+        ".#host",
+    )
+    .expect("nixos install script should render");
+
+    assert!(script.contains("nixos-install --root \"$target\" --flake '.#host' --no-channel-copy"));
+    std::fs::remove_dir_all(spec_dir).expect("tempdir should be removed");
 }
 
 #[test]
@@ -201,9 +237,7 @@ fn install_zfs_root_template_rejects_fat_labels_that_cannot_round_trip() {
     );
 
     let error = result.expect_err("long FAT boot labels should be rejected");
-    assert!(
-        error
-            .to_string()
-            .contains("boot label \"DISKNIX-E2E-BOOT\" is too long")
-    );
+    assert!(error
+        .to_string()
+        .contains("boot label \"DISKNIX-E2E-BOOT\" is too long"));
 }

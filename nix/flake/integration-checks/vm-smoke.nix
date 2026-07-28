@@ -214,6 +214,7 @@
       root + /scripts/integration-installer-smoke.sh
     }
     ${pkgs.gnugrep}/bin/grep -q 'install mount --spec' ${root + /scripts/integration-installer-smoke.sh}
+    ${pkgs.gnugrep}/bin/grep -q 'mount -i -t zfs' ${root + /scripts/integration-installer-smoke.sh}
     ${pkgs.gnugrep}/bin/grep -q 'install nixos' ${root + /scripts/integration-installer-smoke.sh}
     ${pkgs.gnugrep}/bin/grep -q 'mountpoint -q "$target/var/log"' ${
       root + /scripts/integration-installer-smoke.sh
