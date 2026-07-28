@@ -1,14 +1,14 @@
 name: CI
 
 on:
-  pull_request:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   flake-check:
-    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted","Linux","X64","monarchic-local","nixos"]') }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS) }}
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v14
