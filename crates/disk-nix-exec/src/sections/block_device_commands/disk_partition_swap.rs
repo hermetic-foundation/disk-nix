@@ -284,16 +284,20 @@ fn zfs_pool_preflight_commands(devices: &[String]) -> Vec<ExecutionCommand> {
             "inspect vdev device identity before creating the ZFS pool",
         )]
     } else {
-        inspect_targets
-            .into_iter()
-            .map(|device| {
-                command_vec(
-                    vec!["disk-nix", "inspect", device],
-                    false,
-                    "inspect vdev device identity before creating the ZFS pool",
-                )
-            })
-            .collect()
+        let mut commands = Vec::with_capacity(inspect_targets.len() * 2);
+        for device in inspect_targets {
+            commands.push(command_vec(
+                vec!["disk-nix", "inspect", device],
+                false,
+                "inspect vdev device identity before creating the ZFS pool",
+            ));
+            commands.push(command_vec(
+                vec!["wipefs", "--all", "--force", device],
+                true,
+                "clear stale signatures from the reviewed vdev before ZFS pool creation",
+            ));
+        }
+        commands
     }
 }
 

@@ -225,6 +225,13 @@ fn pool_actions_report_domain_specific_commands() {
         })
     }));
     assert!(report.command_plan.iter().any(|step| {
+        step.action_id == "pools:newtank:create"
+            && step.commands.iter().any(|command| {
+                command.argv == ["wipefs", "--all", "--force", "/dev/disk/by-id/new-pool-vdev"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+    }));
+    assert!(report.command_plan.iter().any(|step| {
         step.commands.iter().any(|command| {
             command.argv
                 == [
@@ -245,6 +252,17 @@ fn pool_actions_report_domain_specific_commands() {
                 ]
                 && command.readiness == CommandReadiness::Ready
         })
+    }));
+    assert!(report.command_plan.iter().any(|step| {
+        step.action_id == "pools:mirrorpool:create"
+            && step.commands.iter().any(|command| {
+                command.argv == ["wipefs", "--all", "--force", "/dev/disk/by-id/mirror-a"]
+                    && command.readiness == CommandReadiness::Ready
+            })
+            && step.commands.iter().any(|command| {
+                command.argv == ["wipefs", "--all", "--force", "/dev/disk/by-id/mirror-b"]
+                    && command.readiness == CommandReadiness::Ready
+            })
     }));
     assert!(report.command_plan.iter().any(|step| {
         step.action_id == "pools:mirrorpool:create"
