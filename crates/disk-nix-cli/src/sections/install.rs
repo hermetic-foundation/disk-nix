@@ -294,7 +294,7 @@ fn nixos_zfs_root_mount_script(install: &Value, target: &str) -> Result<String, 
         String::new(),
         format!("target={}", shell_quote(target)),
         String::new(),
-        format!("zpool export {}", shell_quote(pool)),
+        format!("zpool export {} 2>/dev/null || true", shell_quote(pool)),
         format!("zpool import -R \"$target\" {}", shell_quote(pool)),
     ];
     if let Some(load_key_dataset) = load_key_dataset {

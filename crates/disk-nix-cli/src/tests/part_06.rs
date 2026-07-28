@@ -115,7 +115,7 @@ fn install_mount_script_renders_zfs_handoff_commands() {
 
     let script = install_mount_script_from_spec(&spec, "/mnt").expect("mount script should render");
 
-    assert!(script.contains("zpool export 'tank'"));
+    assert!(script.contains("zpool export 'tank' 2>/dev/null || true"));
     assert!(script.contains("zpool import -R \"$target\" 'tank'"));
     assert!(!script.contains("zfs load-key"));
     assert!(script.contains("mount -i -t zfs 'tank/root' \"$target\""));
