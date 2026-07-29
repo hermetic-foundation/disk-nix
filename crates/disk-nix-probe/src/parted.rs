@@ -259,16 +259,14 @@ BYT;
             .find(|node| node.id.0 == "block:/dev/nvme0n1")
             .expect("disk exists");
         assert_eq!(disk.size_bytes, Some(1_000_204_886_016));
-        assert!(
-            disk.properties
-                .iter()
-                .any(|property| { property.key == "partition.table" && property.value == "gpt" })
-        );
-        assert!(
-            disk.properties
-                .iter()
-                .any(|property| { property.key == "model" && property.value == "Samsung:SSD" })
-        );
+        assert!(disk
+            .properties
+            .iter()
+            .any(|property| { property.key == "partition.table" && property.value == "gpt" }));
+        assert!(disk
+            .properties
+            .iter()
+            .any(|property| { property.key == "model" && property.value == "Samsung:SSD" }));
 
         let partition = graph
             .nodes
@@ -296,12 +294,10 @@ BYT;
                 && edge.to.0 == "block:/dev/nvme0n1p1"
                 && edge.relationship == Relationship::Contains
         }));
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.id.0 == "block:/dev/sdb1")
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.id.0 == "block:/dev/sdb1"));
     }
 
     #[test]

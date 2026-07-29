@@ -126,11 +126,10 @@ Filename				Type		Size		Used		Priority
             swap.usage.as_ref().and_then(|usage| usage.used_bytes),
             Some(53_592_064)
         );
-        assert!(
-            swap.properties
-                .iter()
-                .any(|property| { property.key == "swap.priority" && property.value == "-2" })
-        );
+        assert!(swap
+            .properties
+            .iter()
+            .any(|property| { property.key == "swap.priority" && property.value == "-2" }));
         assert!(graph.edges.iter().any(|edge| {
             edge.from.0 == "block:/dev/sda3"
                 && edge.to.0 == "swap:/dev/sda3"

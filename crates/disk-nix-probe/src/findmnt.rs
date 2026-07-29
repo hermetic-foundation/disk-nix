@@ -291,27 +291,21 @@ mod tests {
     fn normalizes_mounts_and_nfs_exports() {
         let graph = normalize_findmnt_json(FIXTURE).expect("fixture should parse");
 
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::Mountpoint && node.name == "/")
-        );
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::NfsMount && node.name == "/mnt/share")
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::Mountpoint && node.name == "/"));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::NfsMount && node.name == "/mnt/share"));
         assert!(graph.nodes.iter().any(|node| {
             node.kind == NodeKind::NfsExport && node.name == "storage.example:/export/share"
         }));
-        assert!(
-            graph
-                .edges
-                .iter()
-                .any(|edge| edge.relationship == Relationship::MountedAt)
-        );
+        assert!(graph
+            .edges
+            .iter()
+            .any(|edge| edge.relationship == Relationship::MountedAt));
 
         let run = graph
             .nodes

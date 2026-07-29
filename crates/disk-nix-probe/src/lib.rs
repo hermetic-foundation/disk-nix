@@ -1,7 +1,7 @@
 use std::{collections::BTreeSet, fs, process::Command};
 
 use disk_nix_model::StorageGraph;
-use serde::{Serialize, ser::SerializeStruct};
+use serde::{ser::SerializeStruct, Serialize};
 use thiserror::Error;
 
 mod bcache;

@@ -178,26 +178,21 @@ mod tests {
         assert!(loop0.properties.iter().any(|property| {
             property.key == "loop.back-file" && property.value == "/var/lib/images/root.img"
         }));
-        assert!(
-            loop0.properties.iter().any(|property| {
-                property.key == "loop.backing-inode" && property.value == "12345"
-            })
-        );
+        assert!(loop0
+            .properties
+            .iter()
+            .any(|property| { property.key == "loop.backing-inode" && property.value == "12345" }));
         assert!(loop0.properties.iter().any(|property| {
             property.key == "loop.backing-major-minor" && property.value == "0:45"
         }));
-        assert!(
-            loop0
-                .properties
-                .iter()
-                .any(|property| { property.key == "loop.autoclear" && property.value == "true" })
-        );
-        assert!(
-            loop0
-                .properties
-                .iter()
-                .any(|property| { property.key == "loop.partscan" && property.value == "true" })
-        );
+        assert!(loop0
+            .properties
+            .iter()
+            .any(|property| { property.key == "loop.autoclear" && property.value == "true" }));
+        assert!(loop0
+            .properties
+            .iter()
+            .any(|property| { property.key == "loop.partscan" && property.value == "true" }));
 
         let backing = graph
             .nodes

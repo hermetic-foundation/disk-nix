@@ -425,12 +425,10 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
     fn normalizes_multipath_map_and_paths() {
         let graph = normalize_multipath_output(MULTIPATH).expect("fixture should parse");
 
-        assert!(
-            graph
-                .nodes
-                .iter()
-                .any(|node| node.kind == NodeKind::MultipathDevice && node.name == "mpatha")
-        );
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.kind == NodeKind::MultipathDevice && node.name == "mpatha"));
         let map = graph
             .nodes
             .iter()
@@ -440,11 +438,10 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
         assert!(map.properties.iter().any(|property| {
             property.key == "multipath.features" && property.value == "1 queue_if_no_path"
         }));
-        assert!(
-            map.properties
-                .iter()
-                .any(|property| { property.key == "multipath.size" && property.value == "100G" })
-        );
+        assert!(map
+            .properties
+            .iter()
+            .any(|property| { property.key == "multipath.size" && property.value == "100G" }));
         assert!(map.properties.iter().any(|property| {
             property.key == "multipath.vendor-product" && property.value == "IBM,2145"
         }));
@@ -459,43 +456,33 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
         assert!(active_path.properties.iter().any(|property| {
             property.key == "multipath.group-policy" && property.value == "service-time 0"
         }));
-        assert!(
-            active_path
-                .properties
-                .iter()
-                .any(|property| { property.key == "multipath.scsi-host" && property.value == "2" })
-        );
-        assert!(
-            active_path.properties.iter().any(|property| {
-                property.key == "multipath.scsi-channel" && property.value == "0"
-            })
-        );
-        assert!(
-            active_path
-                .properties
-                .iter()
-                .any(|property| { property.key == "multipath.scsi-id" && property.value == "0" })
-        );
-        assert!(
-            active_path
-                .properties
-                .iter()
-                .any(|property| { property.key == "multipath.scsi-lun" && property.value == "1" })
-        );
-        assert!(
-            active_path.properties.iter().any(|property| {
-                property.key == "multipath.group-prio" && property.value == "50"
-            })
-        );
+        assert!(active_path
+            .properties
+            .iter()
+            .any(|property| { property.key == "multipath.scsi-host" && property.value == "2" }));
+        assert!(active_path
+            .properties
+            .iter()
+            .any(|property| { property.key == "multipath.scsi-channel" && property.value == "0" }));
+        assert!(active_path
+            .properties
+            .iter()
+            .any(|property| { property.key == "multipath.scsi-id" && property.value == "0" }));
+        assert!(active_path
+            .properties
+            .iter()
+            .any(|property| { property.key == "multipath.scsi-lun" && property.value == "1" }));
+        assert!(active_path
+            .properties
+            .iter()
+            .any(|property| { property.key == "multipath.group-prio" && property.value == "50" }));
         assert!(active_path.properties.iter().any(|property| {
             property.key == "multipath.group-status" && property.value == "active"
         }));
-        assert!(
-            active_path
-                .properties
-                .iter()
-                .any(|property| property.key == "multipath.dm-state" && property.value == "active")
-        );
+        assert!(active_path
+            .properties
+            .iter()
+            .any(|property| property.key == "multipath.dm-state" && property.value == "active"));
         assert!(active_path.properties.iter().any(|property| {
             property.key == "multipath.checker-state" && property.value == "ready"
         }));
@@ -511,11 +498,10 @@ size=100G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
             .iter()
             .find(|node| node.path.as_deref() == Some("/dev/sdc"))
             .expect("enabled path should exist");
-        assert!(
-            enabled_path.properties.iter().any(|property| {
-                property.key == "multipath.group-prio" && property.value == "10"
-            })
-        );
+        assert!(enabled_path
+            .properties
+            .iter()
+            .any(|property| { property.key == "multipath.group-prio" && property.value == "10" }));
         assert!(enabled_path.properties.iter().any(|property| {
             property.key == "multipath.group-status" && property.value == "enabled"
         }));
