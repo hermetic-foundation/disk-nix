@@ -199,6 +199,26 @@ the ZFS, `/boot`, or swap entries described by the install spec.
 The generated `nixos-install` command uses `--no-channel-copy` so a completed
 closure handoff does not depend on readable channel state from live media.
 
+After the first reboot, verify the installed host with read-only commands:
+
+```sh
+target="root@current-target-address"
+
+ssh "$target" 'findmnt -no SOURCE,FSTYPE /'
+ssh "$target" 'findmnt -no SOURCE,FSTYPE /boot'
+ssh "$target" 'swapon --show'
+ssh "$target" 'zpool status -x || true'
+ssh "$target" 'disk-nix inspect zroot/root --json || true'
+ssh "$target" 'systemctl --failed --no-pager --plain'
+```
+
+For follow-up changes, write lifecycle specs instead of rerunning install specs.
+For example, a ZFS dataset property update can run with only
+`allowPropertyChanges = true` while format, shrink, destructive, offline, and
+potential-data-loss operations remain blocked. See
+[CLI planning and apply](docs/user/cli-plan-apply.md#non-destructive-updates)
+for a complete reviewed migration example.
+
 ## NixOS Module
 
 Import the module:

@@ -99,6 +99,85 @@ overlay mounts or if the expected ZFS, `/boot`, or swap entries from the install
 metadata are missing. It also passes `--no-channel-copy` to avoid depending on
 readable live-media channel state after the NixOS closure has been handed off.
 
+### Post-Install Verification
+
+After rebooting into the installed host and unlocking encrypted storage if
+needed, verify the installed system from the operator machine:
+
+```sh
+target="root@current-target-address"
+
+ssh "$target" 'hostname'
+ssh "$target" 'findmnt -no SOURCE,FSTYPE /'
+ssh "$target" 'findmnt -no SOURCE,FSTYPE /boot'
+ssh "$target" 'swapon --show'
+ssh "$target" 'zpool status -x || true'
+ssh "$target" \
+  'zfs get -H -o name,property,value encryption,keystatus,compression zroot/root || true'
+ssh "$target" 'disk-nix inspect zroot/root --json || true'
+ssh "$target" 'systemctl --failed --no-pager --plain'
+```
+
+For the default encrypted ZFS template, expect the root filesystem to be ZFS,
+`/boot` to be vfat, swap to include the labeled disk swap from the spec, the
+pool to be healthy, the root dataset key to be available, and systemd to report
+zero failed units.
+
+### Non-Destructive Updates
+
+Install specs create the initial layout. Later changes should use normal
+lifecycle specs with conservative policy. For example, this spec changes a ZFS
+dataset property without allowing format, shrink, destructive, offline, or
+data-loss operations:
+
+```json
+{
+  "version": 1,
+  "datasets": {
+    "home": {
+      "target": "zroot/root/home",
+      "operation": "set-property",
+      "properties": {
+        "atime": "off"
+      }
+    }
+  },
+  "apply": {
+    "mode": "manual",
+    "probeCurrent": true,
+    "allowDestructive": false,
+    "allowFormat": false,
+    "allowShrink": false,
+    "allowPotentialDataLoss": false,
+    "allowOffline": false,
+    "allowPropertyChanges": true,
+    "requireConfirmation": false
+  }
+}
+```
+
+Review and execute it with the same apply path:
+
+```sh
+disk-nix apply --spec ./zfs-home-atime.json --probe-current --json
+disk-nix apply --spec ./zfs-home-atime.json --probe-current --script-out ./zfs-home-atime.sh
+disk-nix apply --spec ./zfs-home-atime.json --probe-current --execute \
+  --report-out ./zfs-home-atime-report.json \
+  --receipt-out ./zfs-home-atime-receipt.json
+```
+
+Then verify the actual storage state:
+
+```sh
+zfs get -H -o name,property,value,source atime zroot/root/home
+disk-nix inspect zroot/root/home --json
+zpool status -x
+```
+
+If the plan proposes destructive, offline, shrink, or potential-data-loss work,
+stop and review the non-destructive alternatives and recovery guidance in the
+report before changing policy flags.
+
 ## Plan Report
 
 | Field | Purpose |
