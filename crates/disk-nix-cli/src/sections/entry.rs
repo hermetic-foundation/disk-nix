@@ -431,6 +431,12 @@ enum InstallTemplateCommand {
         /// Enable native ZFS encryption on the root dataset.
         #[arg(long)]
         encrypt: bool,
+        /// Allow non-by-id install disk paths such as /dev/sda or /dev/nvme0n1.
+        #[arg(long)]
+        allow_unstable_disk: bool,
+        /// Write a post-install verification checklist next to the generated spec.
+        #[arg(long)]
+        verification_out: Option<String>,
     },
 }
 

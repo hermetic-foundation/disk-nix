@@ -180,7 +180,8 @@ your NixOS flake:
 disk-nix install template zfs-root \
   --disk /dev/disk/by-id/<install-disk> \
   --encrypt \
-  --out ./disk-nix-install.json
+  --out ./disk-nix-install.json \
+  --verification-out ./disk-nix-verify.md
 ```
 
 Review and apply storage creation with the normal guarded path, then generate
@@ -198,6 +199,11 @@ target `fstab` and fails if it still contains live ISO overlay mounts or lacks
 the ZFS, `/boot`, or swap entries described by the install spec.
 The generated `nixos-install` command uses `--no-channel-copy` so a completed
 closure handoff does not depend on readable channel state from live media.
+
+`zfs-root` templates require a stable `/dev/disk/by-id/...` install disk path by
+default. If you intentionally need a volatile path such as `/dev/sda`, pass
+`--allow-unstable-disk` only after confirming the target cannot change across
+boot or kexec.
 
 After the first reboot, verify the installed host with read-only commands:
 

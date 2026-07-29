@@ -195,6 +195,15 @@ fn validate_install_zfs_root_options(options: &InstallZfsRootOptions) -> Result<
     Ok(())
 }
 
+fn validate_install_disk_path(disk: &str, allow_unstable: bool) -> Result<(), AppError> {
+    if allow_unstable || disk.starts_with("/dev/disk/by-id/") {
+        return Ok(());
+    }
+    Err(AppError::Message(format!(
+        "install disk {disk:?} is not a stable /dev/disk/by-id path; use a by-id disk path or pass --allow-unstable-disk after confirming the target will not change across reboot"
+    )))
+}
+
 fn validate_install_label(name: &str, label: &str, max_bytes: usize) -> Result<(), AppError> {
     if label.is_empty() {
         return Err(AppError::Message(format!("{name} must not be empty")));
@@ -218,6 +227,65 @@ fn write_install_template(path: &str, spec: &Value) -> Result<(), AppError> {
     json.push('\n');
     std::fs::write(path, json)?;
     Ok(())
+}
+
+fn write_install_verification_checklist(path: &str, spec: &Value) -> Result<(), AppError> {
+    let checklist = install_verification_checklist(spec)?;
+    std::fs::write(path, checklist)?;
+    Ok(())
+}
+
+fn install_verification_checklist(spec: &Value) -> Result<String, AppError> {
+    let install = spec
+        .get("install")
+        .or_else(|| spec.get("spec").and_then(|spec| spec.get("install")))
+        .ok_or_else(|| AppError::Message("install metadata is missing from spec".to_string()))?;
+    let zfs = install
+        .get("zfs")
+        .ok_or_else(|| AppError::Message("install.zfs is missing from spec".to_string()))?;
+    let root_dataset = required_install_str(zfs, "rootDataset")?;
+    let pool = required_install_str(zfs, "pool")?;
+    let boot_mountpoint = install
+        .get("boot")
+        .and_then(|boot| boot.get("mountpoint"))
+        .and_then(Value::as_str)
+        .unwrap_or("/boot");
+
+    Ok(format!(
+        r#"# disk-nix post-install verification
+
+Set the current runtime SSH target. Do not bake DHCP addresses into NixOS config:
+
+```sh
+target="root@current-target-address"
+```
+
+Run these read-only checks after the first reboot and after unlocking encrypted storage if prompted:
+
+```sh
+ssh "$target" 'hostname'
+ssh "$target" 'findmnt -no SOURCE,FSTYPE /'
+ssh "$target" 'findmnt -no SOURCE,FSTYPE {boot_mountpoint}'
+ssh "$target" 'swapon --show'
+ssh "$target" 'zpool status -x || true'
+ssh "$target" 'zfs get -H -o name,property,value encryption,keystatus,compression {root_dataset} || true'
+ssh "$target" 'disk-nix inspect {root_dataset} --json || true'
+ssh "$target" 'systemctl --failed --no-pager --plain'
+```
+
+Expected baseline for the generated install spec:
+
+- root dataset: `{root_dataset}`
+- ZFS pool: `{pool}`
+- boot mountpoint: `{boot_mountpoint}`
+- root filesystem is ZFS
+- boot filesystem is vfat
+- disk swap from the install spec is active
+- encrypted ZFS key is available when encryption was enabled
+- pool health is clean
+- systemd reports zero failed units
+"#
+    ))
 }
 
 fn install_mount_script_from_spec_path(spec_path: &str, target: &str) -> Result<String, AppError> {

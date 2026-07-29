@@ -501,7 +501,10 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                     zfs_start,
                     part_prefix,
                     encrypt,
+                    allow_unstable_disk,
+                    verification_out,
                 } => {
+                    validate_install_disk_path(&disk, allow_unstable_disk)?;
                     let root_dataset = root_dataset.unwrap_or_else(|| format!("{pool}/root"));
                     let options = InstallZfsRootOptions {
                         disk,
@@ -521,6 +524,10 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
                     let spec = install_zfs_root_spec(&options);
                     write_install_template(&out, &spec)?;
                     writeln!(output, "wrote {out}")?;
+                    if let Some(verification_out) = verification_out {
+                        write_install_verification_checklist(&verification_out, &spec)?;
+                        writeln!(output, "wrote {verification_out}")?;
+                    }
                     Ok(())
                 }
             },

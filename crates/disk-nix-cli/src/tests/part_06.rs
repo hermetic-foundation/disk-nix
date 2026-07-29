@@ -230,6 +230,7 @@ fn install_zfs_root_template_rejects_fat_labels_that_cannot_round_trip() {
             "zfs-root",
             "--disk",
             "/dev/vdb",
+            "--allow-unstable-disk",
             "--boot-label",
             "DISKNIX-E2E-BOOT",
         ]),
@@ -240,4 +241,68 @@ fn install_zfs_root_template_rejects_fat_labels_that_cannot_round_trip() {
     assert!(error
         .to_string()
         .contains("boot label \"DISKNIX-E2E-BOOT\" is too long"));
+}
+
+#[test]
+fn install_zfs_root_template_rejects_unstable_disk_paths_by_default() {
+    let mut output = Vec::new();
+    let result = run(
+        Cli::parse_from([
+            "disk-nix",
+            "install",
+            "template",
+            "zfs-root",
+            "--disk",
+            "/dev/sda",
+        ]),
+        &mut output,
+    );
+
+    let error = result.expect_err("unstable disk paths should be rejected by default");
+    assert!(error
+        .to_string()
+        .contains("is not a stable /dev/disk/by-id path"));
+    assert!(error.to_string().contains("--allow-unstable-disk"));
+}
+
+#[test]
+fn install_zfs_root_template_can_emit_verification_checklist() {
+    let temp = std::env::temp_dir().join(format!(
+        "disk-nix-install-verification-test-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&temp);
+    std::fs::create_dir_all(&temp).expect("tempdir");
+    let spec_path = temp.join("install.json");
+    let verification_path = temp.join("verify.md");
+    let mut output = Vec::new();
+
+    run(
+        Cli::parse_from([
+            "disk-nix",
+            "install",
+            "template",
+            "zfs-root",
+            "--disk",
+            "/dev/disk/by-id/nvme-test",
+            "--encrypt",
+            "--out",
+            spec_path.to_str().expect("utf8 path"),
+            "--verification-out",
+            verification_path.to_str().expect("utf8 path"),
+        ]),
+        &mut output,
+    )
+    .expect("template generation succeeds");
+
+    let output = String::from_utf8(output).expect("utf8 output");
+    assert!(output.contains("wrote "));
+    assert!(output.contains(verification_path.to_str().expect("utf8 path")));
+
+    let checklist = std::fs::read_to_string(verification_path).expect("checklist exists");
+    assert!(checklist.contains("target=\"root@current-target-address\""));
+    assert!(checklist.contains("findmnt -no SOURCE,FSTYPE /"));
+    assert!(checklist.contains("zfs get -H -o name,property,value"));
+    assert!(checklist.contains("root dataset: `zroot/root`"));
+    std::fs::remove_dir_all(&temp).expect("cleanup tempdir");
 }

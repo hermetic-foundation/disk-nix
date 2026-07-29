@@ -113,6 +113,7 @@ High-risk operator procedures live in [operator-runbooks.md](operator-runbooks.m
 | Btrfs replacement | real Btrfs filesystem device replacement. |
 | Swap identity | real loop-backed swap label mutation. |
 | ZFS property | real ZFS pool property mutation. |
+| ZFS dataset lifecycle | real encrypted-root ThinkPad updates toggled `zroot/root/home` `snapdir` from `hidden` to `visible` and back to `hidden` on `midi-thinkpad-250` and `midi-thinkpad-120`; both runs ended with healthy pools, available encryption keys, connected Wi-Fi, and zero failed systemd units. |
 | ZFS replacement | real ZFS pool device replacement. |
 | Backing files | real backing-file mode mutation. |
 | Loop devices | real loop-device read-only mutation. |

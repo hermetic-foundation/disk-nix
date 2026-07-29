@@ -36,7 +36,8 @@ disk-nix install template zfs-root \
   --encrypt \
   --swap-end 65GiB \
   --zfs-start 65GiB \
-  --out ./disk-nix-install.json
+  --out ./disk-nix-install.json \
+  --verification-out ./disk-nix-verify.md
 ```
 
 The default template creates:
@@ -49,6 +50,16 @@ The default template creates:
 | ZFS pool | `zroot` |
 | Root dataset | `zroot/root` |
 | Child datasets | `home`, `nix`, `var`, `log` under the root dataset |
+
+The template requires the install disk to use a stable `/dev/disk/by-id/...`
+path by default. Volatile names such as `/dev/sda`, `/dev/vda`, or
+`/dev/nvme0n1` can refer to a different disk after reboot or kexec. Use
+`--allow-unstable-disk` only for disposable test systems or after a separate
+operator check proves the name cannot change.
+
+`--verification-out` writes a companion checklist with read-only SSH commands
+for the first boot after installation. Keep that checklist with the reviewed
+install spec and apply receipt.
 
 Review and execute storage creation with the usual apply path:
 
