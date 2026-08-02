@@ -6,6 +6,7 @@ pub enum PlanDocumentError {
     UnsupportedVersion { found: u64, supported: u64 },
     InvalidVersion { location: &'static str },
     ConflictingVersions { top_level: u64, spec: u64 },
+    Solver(String),
 }
 
 impl fmt::Display for PlanDocumentError {
@@ -26,6 +27,7 @@ impl fmt::Display for PlanDocumentError {
                 formatter,
                 "conflicting disk-nix spec versions: top-level version {top_level}, spec.version {spec}"
             ),
+            Self::Solver(message) => formatter.write_str(message),
         }
     }
 }
@@ -36,7 +38,8 @@ impl Error for PlanDocumentError {
             Self::Json(error) => Some(error),
             Self::UnsupportedVersion { .. }
             | Self::InvalidVersion { .. }
-            | Self::ConflictingVersions { .. } => None,
+            | Self::ConflictingVersions { .. }
+            | Self::Solver(_) => None,
         }
     }
 }
@@ -706,7 +709,7 @@ pub struct BlockedSummary {
 pub fn plan_from_json_bytes(bytes: &[u8]) -> Result<Plan, PlanDocumentError> {
     let value: Value = serde_json::from_slice(bytes)?;
     validate_spec_version(&value)?;
-    Ok(plan_from_value(&value))
+    plan_from_value_checked(&value)
 }
 
 pub fn plan_and_policy_from_json_bytes(
@@ -714,7 +717,7 @@ pub fn plan_and_policy_from_json_bytes(
 ) -> Result<(Plan, ApplyPolicy), PlanDocumentError> {
     let value: Value = serde_json::from_slice(bytes)?;
     validate_spec_version(&value)?;
-    let plan = plan_from_value(&value);
+    let plan = plan_from_value_checked(&value)?;
     let policy = apply_policy_from_value(&value)?;
     Ok((plan, policy))
 }

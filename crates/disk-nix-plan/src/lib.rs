@@ -9,6 +9,7 @@ use std::{
 
 include!("sections/model.rs");
 include!("sections/dependencies.rs");
+include!("sections/solver.rs");
 include!("sections/topology_properties.rs");
 include!("sections/local_diagnostics.rs");
 include!("sections/mapping_diagnostics.rs");

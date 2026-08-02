@@ -306,6 +306,9 @@ let
   hasActiveMdRaids = hasActiveAttrs activeMdRaids;
   hasActiveMultipathMaps = hasActiveAttrs activeMultipathMaps;
   hasActiveCaches = hasActiveAttrs activeCaches;
+  hasActiveZfsRootFilesystem = lib.any (
+    filesystem: filesystem.mountpoint == "/" && filesystem.fsType == "zfs"
+  ) (lib.attrValues activeFilesystems);
   zfsPoolNameFromIdentity =
     identity: builtins.head (lib.splitString "/" (builtins.head (lib.splitString "@" identity)));
   zfsExtraPools = lib.unique (
@@ -653,6 +656,7 @@ in
     hasActiveMdRaids
     hasActiveMultipathMaps
     hasActiveCaches
+    hasActiveZfsRootFilesystem
     zfsExtraPools
     nfsExportLines
     iscsiDiscoverPortal

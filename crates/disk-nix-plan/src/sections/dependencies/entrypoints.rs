@@ -1,6 +1,18 @@
 #[must_use]
 pub fn plan_from_value(value: &Value) -> Plan {
+    plan_from_value_checked(value).expect("disk-nix solve layout should be valid")
+}
+
+pub fn plan_from_value_checked(value: &Value) -> Result<Plan, PlanDocumentError> {
+    let lowered_spec;
     let spec = value.get("spec").unwrap_or(value);
+    let spec = match lower_solved_layouts(spec)? {
+        Some(lowered) => {
+            lowered_spec = lowered;
+            &lowered_spec
+        }
+        None => spec,
+    };
     let mut actions = Vec::new();
 
     if let Some(filesystems) = spec.get("filesystems").and_then(Value::as_object) {
@@ -87,12 +99,12 @@ pub fn plan_from_value(value: &Value) -> Plan {
     }
     order_plan_actions(&mut actions);
 
-    Plan {
+    Ok(Plan {
         summary: plan_summary(&actions),
         dependency_order: dependency_order_for_actions(&actions),
         actions,
         topology_comparison: None,
-    }
+    })
 }
 
 #[must_use]

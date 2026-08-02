@@ -357,6 +357,18 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
             }
             Ok(())
         }
+        Command::Solve { spec } => {
+            let bytes = std::fs::read(&spec)?;
+            let lowered = lower_solved_document_from_json_bytes(&bytes)
+                .map_err(|error| AppError::Message(format!("failed to solve {spec}: {error}")))?;
+            writeln!(
+                output,
+                "{}",
+                serde_json::to_string_pretty(&lowered)
+                    .map_err(|error| AppError::Message(error.to_string()))?
+            )?;
+            Ok(())
+        }
         Command::Plan {
             spec,
             probe_current,
@@ -485,8 +497,8 @@ fn run(cli: Cli, output: &mut impl Write) -> Result<(), AppError> {
 
             Ok(())
         }
-        Command::Install { command } => match command {
-            InstallCommand::Template { command } => match command {
+        Command::Install { command } => match *command {
+            InstallCommand::Template { command } => match *command {
                 InstallTemplateCommand::ZfsRoot {
                     disk,
                     out,

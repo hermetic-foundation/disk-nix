@@ -434,6 +434,7 @@ let
     hasActiveMdRaids
     hasActiveMultipathMaps
     hasActiveCaches
+    hasActiveZfsRootFilesystem
     zfsExtraPools
     nfsExportLines
     iscsiDiscoverPortal
@@ -465,6 +466,7 @@ in
     environment.etc."disk-nix/spec.json".source = json.generate "disk-nix-spec.json" {
       version = 1;
       spec = cfg.spec // {
+        solve = (cfg.spec.solve or { }) // cfg.solve;
         filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec // typedNfsFilesystemSpec;
         swaps = (cfg.spec.swaps or { }) // typedSwapSpec;
         zram = (cfg.spec.zram or { }) // typedZramSpec;
@@ -542,7 +544,7 @@ in
 
     boot.zfs = lib.mkIf (zfsExtraPools != [ ]) {
       extraPools = lib.mkAfter zfsExtraPools;
-      forceImportRoot = lib.mkDefault false;
+      forceImportRoot = lib.mkDefault hasActiveZfsRootFilesystem;
     };
 
     boot.bcache.enable = lib.mkIf hasActiveCaches (lib.mkDefault true);

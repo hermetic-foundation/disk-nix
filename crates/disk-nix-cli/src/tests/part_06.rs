@@ -306,3 +306,138 @@ fn install_zfs_root_template_can_emit_verification_checklist() {
     assert!(checklist.contains("root dataset: `zroot/root`"));
     std::fs::remove_dir_all(&temp).expect("cleanup tempdir");
 }
+
+#[test]
+fn solve_command_emits_lowered_concrete_spec() {
+    let temp = std::env::temp_dir().join(format!("disk-nix-solve-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp);
+    std::fs::create_dir_all(&temp).expect("tempdir");
+    let spec_path = temp.join("solve.json");
+    std::fs::write(
+        &spec_path,
+        serde_json::to_string(&serde_json::json!({
+            "version": 1,
+            "spec": {
+                "solve": {
+                    "layouts": {
+                        "desktop": {
+                            "disks": {
+                                "a": {
+                                    "path": "/dev/disk/by-id/a",
+                                    "size": "201GiB",
+                                    "media": "ssd",
+                                    "primaryBoot": true
+                                },
+                                "b": {
+                                    "path": "/dev/disk/by-id/b",
+                                    "size": "201GiB",
+                                    "media": "ssd"
+                                }
+                            },
+                            "boot": { "type": "efi-replicated" },
+                            "swap": { "type": "tail" },
+                            "zfs": {
+                                "pool": "zroot",
+                                "sliceSize": "100GiB",
+                                "vdevs": {
+                                    "prefer": [ { "type": "mirror", "width": 2 } ],
+                                    "unassignedSlicePolicy": "forbid"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }))
+        .expect("json"),
+    )
+    .expect("write spec");
+    let mut output = Vec::new();
+
+    run(
+        Cli::parse_from([
+            "disk-nix",
+            "solve",
+            "--spec",
+            spec_path.to_str().expect("utf8 path"),
+        ]),
+        &mut output,
+    )
+    .expect("solve command succeeds");
+
+    let lowered: Value = serde_json::from_slice(&output).expect("lowered json");
+    assert_eq!(
+        lowered.pointer("/spec/partitions/desktop-a-efi/target"),
+        Some(&serde_json::json!("/dev/disk/by-id/a-part1"))
+    );
+    assert_eq!(
+        lowered.pointer("/spec/pools/zroot/devices"),
+        Some(&serde_json::json!([
+            "mirror",
+            "/dev/disk/by-id/a-part2",
+            "/dev/disk/by-id/b-part2",
+            "mirror",
+            "/dev/disk/by-id/a-part3",
+            "/dev/disk/by-id/b-part3"
+        ]))
+    );
+    std::fs::remove_dir_all(&temp).expect("cleanup tempdir");
+}
+
+#[test]
+fn solve_command_reports_unassigned_slice_policy_errors() {
+    let temp = std::env::temp_dir().join(format!(
+        "disk-nix-solve-error-test-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&temp);
+    std::fs::create_dir_all(&temp).expect("tempdir");
+    let spec_path = temp.join("solve.json");
+    std::fs::write(
+        &spec_path,
+        serde_json::to_string(&serde_json::json!({
+            "version": 1,
+            "spec": {
+                "solve": {
+                    "layouts": {
+                        "desktop": {
+                            "disks": {
+                                "a": { "path": "/dev/disk/by-id/a", "size": "101GiB" },
+                                "b": { "path": "/dev/disk/by-id/b", "size": "101GiB" },
+                                "c": { "path": "/dev/disk/by-id/c", "size": "101GiB" },
+                                "d": { "path": "/dev/disk/by-id/d", "size": "101GiB" }
+                            },
+                            "zfs": {
+                                "pool": "zroot",
+                                "sliceSize": "100GiB",
+                                "vdevs": {
+                                    "prefer": [ { "type": "raidz1", "width": 3 } ],
+                                    "unassignedSlicePolicy": "forbid"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }))
+        .expect("json"),
+    )
+    .expect("write spec");
+    let mut output = Vec::new();
+
+    let error = run(
+        Cli::parse_from([
+            "disk-nix",
+            "solve",
+            "--spec",
+            spec_path.to_str().expect("utf8 path"),
+        ]),
+        &mut output,
+    )
+    .expect_err("solve command should reject stranded slices");
+
+    assert!(error
+        .to_string()
+        .contains("leaves 1 full ZFS slice(s) unassigned"));
+    std::fs::remove_dir_all(&temp).expect("cleanup tempdir");
+}

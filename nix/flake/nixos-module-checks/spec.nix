@@ -10,6 +10,7 @@ let
   activation = import ./spec/activation.nix args;
   steadyState = import ./spec/steady-state.nix args;
   handoffZram = import ./spec/handoff-zram.nix args;
+  zfsRoot = import ./spec/zfs-root.nix args;
 in
 {
   nixosModuleSpec = pkgs.runCommand "disk-nix-nixos-module-spec-check" { } ''
@@ -17,6 +18,7 @@ in
     test -e ${activation}
     test -e ${steadyState}
     test -e ${handoffZram}
+    test -e ${zfsRoot}
     touch "$out"
   '';
 }

@@ -72,6 +72,55 @@
     '';
   };
 
+  solve = lib.mkOption {
+    type = json.type;
+    default = { };
+    description = ''
+      High-level deterministic layout solver inputs emitted under
+      spec.solve. The planner lowers these declarations into concrete
+      disks, partitions, filesystems, swaps, pools, and datasets before
+      planning.
+    '';
+    example = {
+      layouts.main = {
+        disks.nvme = {
+          path = "/dev/disk/by-id/nvme-system";
+          size = "232.9G";
+          media = "nvme";
+          primaryBoot = true;
+        };
+        boot = {
+          type = "efi-replicated";
+          size = "1GiB";
+          mountpoint = "/boot";
+        };
+        swap = {
+          type = "tail";
+          priorities = {
+            nvme = 10;
+            ssd = 5;
+            hdd = 1;
+          };
+        };
+        zfs = {
+          pool = "zroot";
+          sliceSize = "100GiB";
+          vdevs.prefer = [
+            {
+              type = "raidz1";
+              width = 3;
+            }
+            {
+              type = "mirror";
+              width = 2;
+            }
+          ];
+          vdevs.unassignedSlicePolicy = "allow";
+        };
+      };
+    };
+  };
+
   filesystems = lib.mkOption {
     type = lib.types.attrsOf (
       lib.types.submodule (

@@ -14,9 +14,9 @@ use clap_mangen::Man;
 use disk_nix_exec::{prepare_execution, ExecutionMode, ExecutionReport, ExecutionStatus};
 use disk_nix_model::{Node, NodeKind, StorageGraph};
 use disk_nix_plan::{
-    compare_plan_with_topology, default_capabilities, plan_and_policy_from_json_bytes,
-    plan_from_json_bytes, ApplyPolicy, Plan, TopologyComparison, TopologyDiagnosticLevel,
-    SUPPORTED_SPEC_VERSION,
+    compare_plan_with_topology, default_capabilities, lower_solved_document_from_json_bytes,
+    plan_and_policy_from_json_bytes, plan_from_json_bytes, ApplyPolicy, Plan, TopologyComparison,
+    TopologyDiagnosticLevel, SUPPORTED_SPEC_VERSION,
 };
 use disk_nix_probe::{
     adapter_remediation, LinuxProbe, ProbeAdapter, ProbeAdapterRemediation, ProbeIssueCategory,
@@ -264,6 +264,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Lower high-level solved layouts into the concrete desired storage spec.
+    Solve {
+        /// Desired storage specification path.
+        #[arg(long)]
+        spec: String,
+    },
     /// Plan desired storage changes from a JSON spec.
     Plan {
         /// Desired storage specification path.
@@ -324,7 +330,7 @@ enum Command {
     /// Prepare and install NixOS systems with disk-nix storage specs.
     Install {
         #[command(subcommand)]
-        command: InstallCommand,
+        command: Box<InstallCommand>,
     },
     /// Normalize a desired storage spec to the current supported contract version.
     Migrate {
@@ -351,7 +357,7 @@ enum InstallCommand {
     /// Render a reusable install storage spec template.
     Template {
         #[command(subcommand)]
-        command: InstallTemplateCommand,
+        command: Box<InstallTemplateCommand>,
     },
     /// Emit or run mount commands for an install spec.
     Mount {

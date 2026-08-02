@@ -81,6 +81,96 @@ overview.
 Raw `spec` remains available for domains whose typed NixOS options have not
 been implemented.
 
+## Deterministic Layout Solver
+
+`services.disk-nix.solve.layouts` declares high-level layout constraints. The
+planner lowers each layout into concrete `disks`, `partitions`, `filesystems`,
+`swaps`, `pools`, and `datasets` before planning.
+
+```nix
+services.disk-nix.solve.layouts.desktop = {
+  disks = {
+    nvme = {
+      path = "/dev/disk/by-id/nvme-system";
+      size = "232.9G";
+      media = "nvme";
+      primaryBoot = true;
+    };
+    ssd1 = {
+      path = "/dev/disk/by-id/ata-ssd-1";
+      size = "465.8G";
+      media = "ssd";
+    };
+    hdd = {
+      path = "/dev/disk/by-id/ata-hdd";
+      size = "931.5G";
+      media = "hdd";
+    };
+  };
+
+  boot = {
+    type = "efi-replicated";
+    size = "1GiB";
+    mountpoint = "/boot";
+  };
+
+  swap = {
+    type = "tail";
+    priorities = {
+      nvme = 10;
+      ssd = 5;
+      hdd = 1;
+    };
+  };
+
+  zfs = {
+    pool = "zroot";
+    sliceSize = "100GiB";
+    vdevs = {
+      requireRedundant = true;
+      unassignedSlicePolicy = "allow";
+      prefer = [
+        {
+          type = "raidz1";
+          width = 3;
+        }
+        {
+          type = "mirror";
+          width = 2;
+        }
+      ];
+    };
+    properties = {
+      ashift = "12";
+      autotrim = "on";
+      mountpoint = "none";
+    };
+    datasets."zroot/root" = {
+      operation = "create";
+      properties.mountpoint = "legacy";
+    };
+  };
+};
+```
+
+The current solver reserves the replicated EFI partition at the start of each
+disk, carves fixed-size ZFS slices after that reservation, assigns the tail to
+swap, and then chooses redundant ZFS vdev groups deterministically. It searches
+for the solution that uses the most slices, prefers earlier vdev shapes, and
+never places two members of one vdev on the same disk.
+
+Use `disk-nix solve --spec /etc/disk-nix/spec.json` to inspect the concrete
+lowered spec before planning or applying it. The output keeps the wrapper shape
+when the input has `{ version, spec, apply }`.
+
+Set `unassignedSlicePolicy = "forbid"` when every full ZFS slice must be placed
+into a redundant vdev. The solver then fails instead of silently leaving a full
+slice unused. Set it to `"allow"` when unused full slices are acceptable.
+
+Concrete specs still win where they define the same generated names. This keeps
+the solver additive: a host can combine high-level layout solving with explicit
+lifecycle declarations for resources that need hand-authored control.
+
 ## Steady-State JSON
 
 | Section | Records |

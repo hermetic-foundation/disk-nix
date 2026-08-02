@@ -22,6 +22,9 @@ fn spec_schema() -> serde_json::Value {
             "install": {
                 "$ref": "#/$defs/installSpec"
             },
+            "solve": {
+                "$ref": "#/$defs/solveSpec"
+            },
             "filesystems": {
                 "$ref": "#/$defs/filesystemMap"
             },
@@ -136,6 +139,7 @@ fn spec_schema() -> serde_json::Value {
                         "description": "Optional disk-nix spec contract version. Version 1 is the current supported contract."
                     },
                     "install": { "$ref": "#/$defs/installSpec" },
+                    "solve": { "$ref": "#/$defs/solveSpec" },
                     "filesystems": { "$ref": "#/$defs/filesystemMap" },
                     "swaps": { "$ref": "#/$defs/lifecycleMap" },
                     "zram": { "$ref": "#/$defs/zramSpec" },
@@ -175,6 +179,117 @@ fn spec_schema() -> serde_json::Value {
             "filesystemMap": {
                 "type": "object",
                 "additionalProperties": { "$ref": "#/$defs/filesystem" }
+            },
+            "solveSpec": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "layouts": {
+                        "type": "object",
+                        "additionalProperties": { "$ref": "#/$defs/solvedLayout" }
+                    }
+                }
+            },
+            "solvedLayout": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": ["disks", "zfs"],
+                "properties": {
+                    "disks": {
+                        "type": "object",
+                        "additionalProperties": { "$ref": "#/$defs/solvedDisk" }
+                    },
+                    "boot": { "$ref": "#/$defs/solvedBoot" },
+                    "swap": { "$ref": "#/$defs/solvedSwap" },
+                    "zfs": { "$ref": "#/$defs/solvedZfs" }
+                }
+            },
+            "solvedDisk": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": ["path", "size"],
+                "properties": {
+                    "path": { "type": "string" },
+                    "size": { "type": "string" },
+                    "media": { "type": "string" },
+                    "transport": { "type": "string" },
+                    "primaryBoot": { "type": "boolean" }
+                }
+            },
+            "solvedBoot": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": ["efi-replicated"]
+                    },
+                    "size": { "type": "string" },
+                    "mountpoint": { "type": "string" },
+                    "primaryDisk": { "type": "string" }
+                }
+            },
+            "solvedSwap": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": ["tail"]
+                    },
+                    "priorities": {
+                        "type": "object",
+                        "additionalProperties": { "type": "integer" }
+                    }
+                }
+            },
+            "solvedZfs": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": ["pool"],
+                "properties": {
+                    "pool": { "type": "string" },
+                    "sliceSize": { "type": "string" },
+                    "properties": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "datasets": {
+                        "type": "object",
+                        "additionalProperties": { "$ref": "#/$defs/lifecycleObject" }
+                    },
+                    "vdevs": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                            "requireRedundant": { "type": "boolean" },
+                            "unassignedSlicePolicy": {
+                                "type": "string",
+                                "enum": ["allow", "forbid", "forbid-full-slices"]
+                            },
+                            "prefer": {
+                                "type": "array",
+                                "items": { "$ref": "#/$defs/solvedVdevShape" }
+                            }
+                        }
+                    },
+                    "unassignedSlicePolicy": {
+                        "type": "string",
+                        "enum": ["allow", "forbid", "forbid-full-slices"]
+                    }
+                }
+            },
+            "solvedVdevShape": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": ["type", "width"],
+                "properties": {
+                    "type": { "type": "string" },
+                    "width": {
+                        "type": "integer",
+                        "minimum": 2
+                    }
+                }
             },
             "filesystem": {
                 "type": "object",

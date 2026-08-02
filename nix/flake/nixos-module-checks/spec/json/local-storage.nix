@@ -1,5 +1,17 @@
 ''
   .version == 1
+  and .spec.solve.layouts.desktop.disks.nvme.path == "/dev/disk/by-id/nvme-solver-os"
+  and .spec.solve.layouts.desktop.disks.nvme.primaryBoot == true
+  and .spec.solve.layouts.desktop.boot.type == "efi-replicated"
+  and .spec.solve.layouts.desktop.swap.type == "tail"
+  and .spec.solve.layouts.desktop.swap.priorities.nvme == 10
+  and .spec.solve.layouts.desktop.zfs.pool == "zroot"
+  and .spec.solve.layouts.desktop.zfs.sliceSize == "100GiB"
+  and .spec.solve.layouts.desktop.zfs.vdevs.prefer[0].type == "raidz1"
+  and .spec.solve.layouts.desktop.zfs.vdevs.prefer[0].width == 3
+  and .spec.solve.layouts.desktop.zfs.vdevs.prefer[1].type == "mirror"
+  and .spec.solve.layouts.desktop.zfs.vdevs.prefer[1].width == 2
+  and .spec.solve.layouts.desktop.zfs.vdevs.unassignedSlicePolicy == "allow"
   and .spec.filesystems.root.device == "/dev/disk/by-label/nixos-root"
   and .spec.filesystems.root.resizePolicy == "grow-only"
   and .spec.filesystems.root.desiredSize == "100%"

@@ -48,6 +48,13 @@ Use [NixOS module reference](nixos-module-reference.md) for the full typed-optio
 
 The module writes `/etc/disk-nix/spec.json` with top-level contract `version = 1`, installs the CLI and default storage tooling, and derives native NixOS storage options where declarations describe active steady state.
 
+For install-style hosts, `services.disk-nix.solve.layouts` can declare a
+deterministic high-level layout. The planner lowers replicated EFI boot
+partitions, tail swap, fixed-size ZFS slices, and preferred RAIDZ/mirror vdev
+shapes into the same concrete spec collections used by hand-authored layouts.
+Run `disk-nix solve --spec /etc/disk-nix/spec.json` to review the lowered
+concrete spec before planning or applying it.
+
 Imperative teardown, destructive, and under-specified lifecycle declarations stay in the disk-nix planner spec for reviewed apply instead of being re-added to native NixOS state.
 
 Generated review artifacts include `/etc/disk-nix/steady-state.json`, `/etc/disk-nix/declarative-handoff.nix`, and `/etc/disk-nix/declarative-handoff-import.patch`.
