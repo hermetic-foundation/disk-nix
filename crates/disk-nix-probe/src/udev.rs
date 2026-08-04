@@ -86,6 +86,7 @@ fn add_record(graph: &mut StorageGraph, record: UdevRecord) {
 
     for symlink in &record.symlinks {
         node = node.with_property("udev.symlink", symlink.clone());
+        node = node.with_property("udev.devlink", absolute_dev_path(symlink));
     }
 
     for (key, value) in &record.fields {
@@ -189,6 +190,14 @@ fn non_empty(value: &str) -> Option<String> {
         None
     } else {
         Some(value.to_string())
+    }
+}
+
+fn absolute_dev_path(value: &str) -> String {
+    if value.starts_with("/dev/") {
+        value.to_string()
+    } else {
+        format!("/dev/{value}")
     }
 }
 
@@ -296,6 +305,10 @@ E: DM_SUBSYSTEM_UDEV_FLAG0=1
         assert!(partition.properties.iter().any(|property| {
             property.key == "udev.symlink"
                 && property.value == "disk/by-id/ata-Samsung_SSD_SERIAL-part1"
+        }));
+        assert!(partition.properties.iter().any(|property| {
+            property.key == "udev.devlink"
+                && property.value == "/dev/disk/by-id/ata-Samsung_SSD_SERIAL-part1"
         }));
         assert!(partition
             .properties

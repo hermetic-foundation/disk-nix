@@ -576,6 +576,14 @@ fn topology_comparison_reconciles_partition_create_when_target_exists() {
     );
     graph.add_node(
         Node::new(
+            "zfs-vdev:tank:/dev/disk/by-partuuid/scratch",
+            NodeKind::ZfsVdev,
+            "/dev/disk/by-partuuid/scratch",
+        )
+        .with_path("/dev/disk/by-partuuid/scratch"),
+    );
+    graph.add_node(
+        Node::new(
             "block:/dev/disk/by-partuuid/wrong",
             NodeKind::PhysicalDisk,
             "/dev/disk/by-partuuid/wrong",
@@ -662,11 +670,12 @@ fn topology_comparison_reconciles_disk_create_from_partition_table() {
     let mut graph = StorageGraph::empty();
     graph.add_node(
         Node::new(
-            "block:/dev/disk/by-id/system",
+            "block:/dev/sda",
             NodeKind::PhysicalDisk,
-            "/dev/disk/by-id/system",
+            "/dev/sda",
         )
-        .with_path("/dev/disk/by-id/system")
+        .with_path("/dev/sda")
+        .with_property("udev.devlink", "/dev/disk/by-id/system")
         .with_property("partition.table", "gpt"),
     );
     graph.add_node(

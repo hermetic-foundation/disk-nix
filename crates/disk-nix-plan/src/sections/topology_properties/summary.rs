@@ -447,5 +447,19 @@ fn preferred_topology_node<'a>(action: &PlannedAction, matches: &'a [&'a Node]) 
         }
     }
 
+    if let Some(kind) = preferred_node_kind_for_collection(action.context.collection.as_deref()) {
+        if let Some(node) = matches.iter().copied().find(|node| node.kind == kind) {
+            return node;
+        }
+    }
+
     matches[0]
+}
+
+fn preferred_node_kind_for_collection(collection: Option<&str>) -> Option<NodeKind> {
+    match collection {
+        Some("disks") => Some(NodeKind::PhysicalDisk),
+        Some("partitions") => Some(NodeKind::Partition),
+        _ => None,
+    }
 }
