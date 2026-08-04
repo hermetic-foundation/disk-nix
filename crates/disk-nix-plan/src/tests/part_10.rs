@@ -366,6 +366,11 @@ fn topology_comparison_reconciles_zfs_pool_create() {
     .expect("plan should parse");
     let mut graph = StorageGraph::empty();
     graph.add_node(
+        Node::new("block:/dev/sda2", NodeKind::Partition, "tank")
+            .with_path("/dev/sda2")
+            .with_property("udev.devlink", "/dev/disk/by-id/pool-vdev0"),
+    );
+    graph.add_node(
         Node::new("zfs-pool:tank", NodeKind::ZfsPool, "tank")
             .with_property("zfs.state", "ONLINE")
             .with_property("zfs.health", "ONLINE")

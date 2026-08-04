@@ -458,8 +458,31 @@ fn preferred_topology_node<'a>(action: &PlannedAction, matches: &'a [&'a Node]) 
 
 fn preferred_node_kind_for_collection(collection: Option<&str>) -> Option<NodeKind> {
     match collection {
+        Some("btrfsQgroups") => Some(NodeKind::BtrfsQgroup),
+        Some("btrfsSubvolumes") => Some(NodeKind::BtrfsSubvolume),
+        Some("caches") => Some(NodeKind::CacheDevice),
+        Some("datasets") => Some(NodeKind::ZfsDataset),
         Some("disks") => Some(NodeKind::PhysicalDisk),
+        Some("dmMaps") => Some(NodeKind::DeviceMapper),
+        Some("filesystems") => Some(NodeKind::Filesystem),
+        Some("iscsiSessions") => Some(NodeKind::IscsiSession),
+        Some("luks.devices") => Some(NodeKind::LuksContainer),
+        Some("luns") => Some(NodeKind::Lun),
+        Some("mdRaids") => Some(NodeKind::MdRaid),
+        Some("multipathMaps") => Some(NodeKind::MultipathDevice),
+        Some("nfsExports") => Some(NodeKind::NfsExport),
+        Some("nfsMounts") => Some(NodeKind::NfsMount),
+        Some("nvmeNamespaces") => Some(NodeKind::NvmeNamespace),
         Some("partitions") => Some(NodeKind::Partition),
+        Some("physicalVolumes") => Some(NodeKind::LvmPhysicalVolume),
+        Some("pools") => Some(NodeKind::ZfsPool),
+        Some("swaps") => Some(NodeKind::Swap),
+        Some("thinPools") => Some(NodeKind::LvmThinPool),
+        Some("vdoVolumes") => Some(NodeKind::VdoVolume),
+        Some("volumeGroups") => Some(NodeKind::LvmVolumeGroup),
+        Some("volumes") => Some(NodeKind::LvmLogicalVolume),
+        Some("zram") => Some(NodeKind::ZramDevice),
+        Some("zvols") => Some(NodeKind::Zvol),
         _ => None,
     }
 }
