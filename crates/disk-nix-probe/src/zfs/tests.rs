@@ -17,11 +17,11 @@ tank\tdelegation\ton\n\
 tank\tfailmode\twait\n\
 tank\tlistsnapshots\toff\n\
 tank\tmultihost\toff\n";
-    const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\t-\tlz4\tnone\tnone\toff\t-\t-\t131072\toff\ton\t1\tstandard\tall\tall\ton\toff\thidden\toff\tsa\n\
-tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\tzstd\t1073741824\t268435456\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
-tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\tzstd\t-\t-\taes-256-gcm\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
-tank/vm\tvolume\t50\t950\t50\t-\t-\t-\tlz4\t-\t-\toff\t-\t85899345920\t-\ton\tfletcher4\t1\tstandard\tall\tnone\toff\toff\thidden\toff\ton\n\
-tank/vm@clean\tsnapshot\t5\t-\t5\t-\t-\t1\tlz4\t-\t-\toff\t-\t-\t-\ton\tfletcher4\t1\tstandard\tall\tnone\toff\toff\thidden\toff\ton\n";
+    const ZFS: &[u8] = b"tank\tfilesystem\t100\t900\t100\t/tank\t-\t-\tlz4\tnone\tnone\toff\t-\t-\t-\t-\t131072\toff\ton\t1\tstandard\tall\tall\ton\toff\thidden\toff\tsa\n\
+tank/home\tfilesystem\t200\t800\t200\t/home\t-\t-\tzstd\t1073741824\t268435456\taes-256-gcm\tpassphrase\tprompt\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
+tank/home@daily\tsnapshot\t10\t-\t10\t-\t-\t2\tzstd\t-\t-\taes-256-gcm\tpassphrase\tprompt\tavailable\t-\t1048576\toff\tsha512\t2\tdisabled\tmetadata\tall\toff\ton\tvisible\tposixacl\tsa\n\
+tank/vm\tvolume\t50\t950\t50\t-\t-\t-\tlz4\t-\t-\toff\t-\t-\t-\t85899345920\t-\ton\tfletcher4\t1\tstandard\tall\tnone\toff\toff\thidden\toff\ton\n\
+tank/vm@clean\tsnapshot\t5\t-\t5\t-\t-\t1\tlz4\t-\t-\toff\t-\t-\t-\t-\t-\ton\tfletcher4\t1\tstandard\tall\tnone\toff\toff\thidden\toff\ton\n";
     const ZFS_HOLDS: &[u8] = b"tank/home@daily\tdisk-nix-retain\tWed Jun 24 18:00 2026\n\
 tank/home@daily\tbackup-job\tWed Jun 24 18:01 2026\n";
     const ZPOOL_STATUS: &[u8] = br#"
@@ -42,6 +42,16 @@ config:
 
 errors: No known data errors
 "#;
+    const ZPOOL_IMPORT: &[u8] = br#"
+  pool: tank
+    id: 123456789
+ state: ONLINE
+action: The pool can be imported using its name or numeric identifier.
+config:
+
+        tank                              ONLINE
+          /dev/disk/by-id/disk-a-part1   ONLINE
+"#;
     const DEGRADED_ZPOOL_STATUS: &[u8] = br#"
   pool: tank
  state: DEGRADED
@@ -59,7 +69,7 @@ errors: No known data errors
 
     #[test]
     fn normalizes_zfs_pool_datasets_snapshots_and_zvols() {
-        let graph = normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, ZFS_HOLDS, ZPOOL_STATUS)
+        let graph = normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, ZFS_HOLDS, ZPOOL_STATUS, b"")
             .expect("fixture should parse");
 
         assert!(
@@ -239,7 +249,7 @@ errors: No known data errors
 
     #[test]
     fn normalizes_zpool_status_advisory_fields() {
-        let graph = normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, ZFS_HOLDS, DEGRADED_ZPOOL_STATUS)
+        let graph = normalize_zfs(ZPOOL, ZPOOL_GET, ZFS, ZFS_HOLDS, DEGRADED_ZPOOL_STATUS, b"")
             .expect("fixture should parse");
         let pool = graph
             .nodes
@@ -276,6 +286,29 @@ errors: No known data errors
         );
         assert!(pool.properties.iter().any(|property| {
             property.key == "zfs.pool-checksum-errors" && property.value == "6"
+        }));
+    }
+
+    #[test]
+    fn normalizes_importable_zfs_pool() {
+        let graph =
+            normalize_zfs(b"", b"", b"", b"", b"", ZPOOL_IMPORT).expect("fixture should parse");
+
+        let pool = graph
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::ZfsPool && node.name == "tank")
+            .expect("importable pool node exists");
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.importable" && property.value == "true"
+        }));
+        assert!(pool.properties.iter().any(|property| {
+            property.key == "zfs.state" && property.value == "ONLINE"
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from.0 == "zfs-pool:tank"
+                && edge.to.0 == "zfs-vdev:tank:/dev/disk/by-id/disk-a-part1"
+                && edge.relationship == Relationship::Contains
         }));
     }
 }

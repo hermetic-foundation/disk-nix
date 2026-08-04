@@ -130,6 +130,335 @@ fn solved_zfs_layout_uses_all_redundant_slices_for_mixed_disk_set() {
 }
 
 #[test]
+fn partition_create_actions_order_by_disk_offset_not_lexical_name() {
+    let spec = serde_json::json!({
+        "partitions": {
+            "desktop-disk-slice-1": {
+                "operation": "create",
+                "device": "/dev/disk/by-id/ata-test",
+                "partitionNumber": "2",
+                "partitionType": "primary",
+                "start": "1025MiB",
+                "end": "101GiB",
+                "target": "/dev/disk/by-id/ata-test-part2"
+            },
+            "desktop-disk-slice-10": {
+                "operation": "create",
+                "device": "/dev/disk/by-id/ata-test",
+                "partitionNumber": "11",
+                "partitionType": "primary",
+                "start": "901GiB",
+                "end": "1001GiB",
+                "target": "/dev/disk/by-id/ata-test-part11"
+            },
+            "desktop-disk-slice-2": {
+                "operation": "create",
+                "device": "/dev/disk/by-id/ata-test",
+                "partitionNumber": "3",
+                "partitionType": "primary",
+                "start": "101GiB",
+                "end": "201GiB",
+                "target": "/dev/disk/by-id/ata-test-part3"
+            },
+            "desktop-disk-swap": {
+                "operation": "create",
+                "device": "/dev/disk/by-id/ata-test",
+                "partitionNumber": "12",
+                "partitionType": "primary",
+                "start": "1001GiB",
+                "end": "100%",
+                "target": "/dev/disk/by-id/ata-test-part12"
+            }
+        }
+    });
+
+    let plan = plan_from_value(&spec);
+    let partition_actions: Vec<&str> = plan
+        .actions
+        .iter()
+        .filter(|action| action.context.collection.as_deref() == Some("partitions"))
+        .map(|action| action.id.as_str())
+        .collect();
+
+    assert_eq!(
+        partition_actions,
+        vec![
+            "partitions:desktop-disk-slice-1:create",
+            "partitions:desktop-disk-slice-2:create",
+            "partitions:desktop-disk-slice-10:create",
+            "partitions:desktop-disk-swap:create",
+        ]
+    );
+}
+
+#[test]
+fn zfs_dataset_create_actions_order_parents_before_children() {
+    let spec = serde_json::json!({
+        "datasets": {
+            "zpool/root/home": {
+                "operation": "create",
+                "properties": {
+                    "mountpoint": "legacy"
+                }
+            },
+            "zpool/root": {
+                "operation": "create",
+                "properties": {
+                    "mountpoint": "none"
+                }
+            },
+            "zpool/root/home/projects": {
+                "operation": "create",
+                "properties": {
+                    "mountpoint": "legacy"
+                }
+            }
+        }
+    });
+
+    let plan = plan_from_value(&spec);
+    let dataset_create_actions: Vec<&str> = plan
+        .actions
+        .iter()
+        .filter(|action| {
+            action.context.collection.as_deref() == Some("datasets")
+                && action.operation == Operation::Create
+        })
+        .map(|action| action.id.as_str())
+        .collect();
+
+    assert_eq!(
+        dataset_create_actions,
+        vec![
+            "datasets:zpool/root:create",
+            "datasets:zpool/root/home:create",
+            "datasets:zpool/root/home/projects:create",
+        ]
+    );
+}
+
+#[test]
+fn solved_zfs_layout_splits_fast_and_cold_pools_by_inferred_tier() {
+    let spec = serde_json::json!({
+        "solve": {
+            "layouts": {
+                "desktop": {
+                    "disks": {
+                        "nvme": {
+                            "path": "/dev/disk/by-id/nvme-system",
+                            "size": "201GiB",
+                            "primaryBoot": true
+                        },
+                        "ssd": {
+                            "path": "/dev/disk/by-id/ata-samsung-fast",
+                            "size": "201GiB",
+                            "solidState": true
+                        },
+                        "hdd1": {
+                            "path": "/dev/disk/by-id/ata-wd-cold-1",
+                            "size": "201GiB",
+                            "rotational": true
+                        },
+                        "hdd2": {
+                            "path": "/dev/disk/by-id/ata-wd-cold-2",
+                            "size": "201GiB",
+                            "media": "hdd"
+                        },
+                        "usb": {
+                            "path": "/dev/disk/by-id/usb-backup",
+                            "size": "201GiB"
+                        }
+                    },
+                    "boot": {
+                        "type": "efi-replicated",
+                        "size": "1GiB"
+                    },
+                    "swap": { "type": "tail" },
+                    "zfs": {
+                        "sliceSize": "100GiB",
+                        "vdevs": {
+                            "prefer": [ { "type": "mirror", "width": 2 } ],
+                            "requireRedundant": true,
+                            "unassignedSlicePolicy": "forbid"
+                        },
+                        "pools": {
+                            "fast": {
+                                "pool": "zfast",
+                                "tier": "fast",
+                                "properties": {
+                                    "autotrim": "on"
+                                }
+                            },
+                            "cold": {
+                                "pool": "zcold",
+                                "tier": "cold",
+                                "properties": {
+                                    "autotrim": "off"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let lowered = lower_solved_layouts(&spec)
+        .expect("solve layout should lower")
+        .expect("solve layout should be present");
+    let fast_devices = lowered
+        .pointer("/pools/zfast/devices")
+        .and_then(serde_json::Value::as_array)
+        .expect("fast pool devices should be generated");
+    let cold_devices = lowered
+        .pointer("/pools/zcold/devices")
+        .and_then(serde_json::Value::as_array)
+        .expect("cold pool devices should be generated");
+
+    assert_eq!(
+        fast_devices
+            .iter()
+            .filter(|device| device.as_str() == Some("mirror"))
+            .count(),
+        2
+    );
+    assert_eq!(
+        cold_devices
+            .iter()
+            .filter(|device| device.as_str() == Some("mirror"))
+            .count(),
+        2
+    );
+    assert!(fast_devices.iter().any(|device| device
+        .as_str()
+        .is_some_and(|device| device == "/dev/disk/by-id/nvme-system-part2")));
+    assert!(fast_devices.iter().any(|device| device
+        .as_str()
+        .is_some_and(|device| device == "/dev/disk/by-id/ata-samsung-fast-part2")));
+    assert!(!fast_devices.iter().any(|device| device
+        .as_str()
+        .is_some_and(|device| device.contains("wd-cold"))));
+    assert!(cold_devices.iter().any(|device| device
+        .as_str()
+        .is_some_and(|device| device == "/dev/disk/by-id/ata-wd-cold-1-part2")));
+    assert!(cold_devices.iter().any(|device| device
+        .as_str()
+        .is_some_and(|device| device == "/dev/disk/by-id/ata-wd-cold-2-part2")));
+    assert!(!cold_devices.iter().any(|device| device
+        .as_str()
+        .is_some_and(|device| device.contains("nvme-system"))));
+    assert_eq!(
+        lowered.pointer("/disks/nvme/properties/tier"),
+        Some(&serde_json::json!("fast"))
+    );
+    assert_eq!(
+        lowered.pointer("/disks/hdd1/properties/tier"),
+        Some(&serde_json::json!("cold"))
+    );
+    assert_eq!(
+        lowered.pointer("/partitions/desktop-nvme-fast-zfs-1/target"),
+        Some(&serde_json::json!("/dev/disk/by-id/nvme-system-part2"))
+    );
+    assert_eq!(
+        lowered.pointer("/partitions/desktop-hdd1-cold-zfs-1/target"),
+        Some(&serde_json::json!("/dev/disk/by-id/ata-wd-cold-1-part2"))
+    );
+    assert_eq!(
+        lowered.pointer("/partitions/desktop-usb-zfs-1"),
+        None
+    );
+    assert_eq!(
+        lowered.pointer("/partitions/desktop-usb-swap/target"),
+        Some(&serde_json::json!("/dev/disk/by-id/usb-backup-part2"))
+    );
+}
+
+#[test]
+fn solved_zfs_layout_rejects_disk_selected_by_multiple_pools() {
+    let document = serde_json::json!({
+        "version": 1,
+        "spec": {
+            "solve": {
+                "layouts": {
+                    "desktop": {
+                        "disks": {
+                            "a": { "path": "/dev/disk/by-id/a", "size": "201GiB", "tier": "fast" },
+                            "b": { "path": "/dev/disk/by-id/b", "size": "201GiB", "tier": "fast" }
+                        },
+                        "zfs": {
+                            "sliceSize": "100GiB",
+                            "vdevs": {
+                                "prefer": [ { "type": "mirror", "width": 2 } ]
+                            },
+                            "pools": {
+                                "left": { "tier": "fast" },
+                                "right": { "disks": [ "a" ] }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let error = plan_from_value_checked(&document).expect_err("overlap should be rejected");
+
+    assert!(error
+        .to_string()
+        .contains("disk a is selected by both zfs pools left and right"));
+}
+
+#[test]
+fn solved_zfs_layout_allows_single_member_pool_for_one_disk_cold_tier() {
+    let spec = serde_json::json!({
+        "solve": {
+            "layouts": {
+                "desktop": {
+                    "disks": {
+                        "hdd": {
+                            "path": "/dev/disk/by-id/ata-cold",
+                            "size": "301GiB",
+                            "rotational": true
+                        }
+                    },
+                    "boot": { "size": "1GiB" },
+                    "zfs": {
+                        "sliceSize": "100GiB",
+                        "pools": {
+                            "cold": {
+                                "pool": "zcold",
+                                "tier": "cold",
+                                "vdevs": {
+                                    "prefer": [ { "type": "single", "width": 1 } ],
+                                    "unassignedSlicePolicy": "forbid"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let lowered = lower_solved_layouts(&spec)
+        .expect("solve layout should lower")
+        .expect("solve layout should be present");
+    let cold_devices = lowered
+        .pointer("/pools/zcold/devices")
+        .and_then(serde_json::Value::as_array)
+        .expect("cold pool devices should be generated");
+
+    assert_eq!(cold_devices.len(), 3);
+    assert!(!cold_devices
+        .iter()
+        .any(|device| device.as_str() == Some("single")));
+    assert_eq!(
+        cold_devices.first(),
+        Some(&serde_json::json!("/dev/disk/by-id/ata-cold-part2"))
+    );
+}
+
+#[test]
 fn solved_zfs_layout_is_stable_independent_of_input_object_order() {
     let left = serde_json::json!({
         "solve": {

@@ -79,6 +79,15 @@ fn add_status_pool(graph: &mut StorageGraph, pool: ZpoolStatus) {
     }
 }
 
+fn add_importable_pool(graph: &mut StorageGraph, pool: ZpoolStatus) {
+    let name = pool.name.clone();
+    add_status_pool(graph, pool);
+    graph.add_node(
+        Node::new(pool_id(&name), NodeKind::ZfsPool, name)
+            .with_property("zfs.importable", "true"),
+    );
+}
+
 fn add_vdev(graph: &mut StorageGraph, pool_name: &str, vdev: ZpoolVdev) {
     let id = vdev_id(pool_name, &vdev.name);
     let mut node = Node::new(id.clone(), NodeKind::ZfsVdev, vdev.name.clone())
@@ -194,6 +203,8 @@ fn add_dataset(
         ("zfs.quota", dataset.quota),
         ("zfs.reservation", dataset.reservation),
         ("zfs.encryption", dataset.encryption),
+        ("zfs.keyformat", dataset.keyformat),
+        ("zfs.keylocation", dataset.keylocation),
         ("zfs.keystatus", dataset.keystatus),
         ("zfs.volsize", dataset.volsize),
         ("zfs.recordsize", dataset.recordsize),

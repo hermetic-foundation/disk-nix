@@ -127,6 +127,41 @@ fn install_mount_script_renders_zfs_handoff_commands() {
 }
 
 #[test]
+fn install_mount_script_imports_extra_zfs_pools_and_loads_their_keys() {
+    let mut spec = install_zfs_root_spec(&InstallZfsRootOptions {
+        disk: "/dev/disk/by-id/nvme-test".to_string(),
+        pool: "zfast".to_string(),
+        root_dataset: "zfast/root".to_string(),
+        boot_label: "ESP".to_string(),
+        swap_label: "swap0".to_string(),
+        efi_start: "1MiB".to_string(),
+        efi_end: "1025MiB".to_string(),
+        swap_start: "1025MiB".to_string(),
+        swap_end: "65GiB".to_string(),
+        zfs_start: "65GiB".to_string(),
+        part_prefix: Some("/dev/disk/by-id/nvme-test-part".to_string()),
+        encrypt: true,
+    });
+    spec["install"]["zfs"]["extraPools"] = serde_json::json!(["zcold"]);
+    spec["install"]["zfs"]["loadKeyDatasets"] = serde_json::json!(["zcold/root"]);
+    spec["install"]["zfs"]["datasets"]
+        .as_array_mut()
+        .expect("install datasets are an array")
+        .push(serde_json::json!({
+            "dataset": "zcold/root/home",
+            "mountpoint": "/home"
+        }));
+
+    let script = install_mount_script_from_spec(&spec, "/mnt").expect("mount script should render");
+
+    assert!(script.contains("zpool import -R \"$target\" 'zfast'"));
+    assert!(script.contains("zpool import -R \"$target\" 'zcold'"));
+    assert!(script.contains("zfs load-key 'zfast/root'"));
+    assert!(script.contains("zfs load-key 'zcold/root'"));
+    assert!(script.contains("mount -i -t zfs 'zcold/root/home' \"$target/home\""));
+}
+
+#[test]
 fn install_nixos_validation_rejects_live_iso_fstab_and_requires_target_entries() {
     let spec = install_zfs_root_spec(&InstallZfsRootOptions {
         disk: "/dev/disk/by-id/nvme-test".to_string(),

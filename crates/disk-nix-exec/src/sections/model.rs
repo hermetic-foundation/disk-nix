@@ -4,7 +4,7 @@ use std::{
 };
 
 use disk_nix_plan::{
-    evaluate_apply_policy, ApplyPolicy, ApplyReport, Operation, Plan, PlannedAction, RiskClass,
+    evaluate_apply_policy, ApplyMode, ApplyPolicy, ApplyReport, Operation, Plan, PlannedAction, RiskClass,
     TopologyComparison, TopologyDiagnosticKind,
 };
 use serde::{Deserialize, Serialize};
@@ -56,8 +56,10 @@ impl ExecutionReport {
         self.status == ExecutionStatus::DryRun
             && self.apply.can_execute()
             && graph_dependency_conflict_count(self.topology_comparison.as_ref()) == 0
-            && partially_suppressed_reconciliation_group_count(self.topology_comparison.as_ref())
-                == 0
+            && (allows_partially_suppressed_reconciliation_groups(&self.apply)
+                || partially_suppressed_reconciliation_group_count(
+                    self.topology_comparison.as_ref(),
+                ) == 0)
     }
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
@@ -68,10 +70,16 @@ impl ExecutionReport {
     pub fn to_shell_script(&self) -> Option<String> {
         (self.apply.can_execute()
             && graph_dependency_conflict_count(self.topology_comparison.as_ref()) == 0
-            && partially_suppressed_reconciliation_group_count(self.topology_comparison.as_ref())
-                == 0)
+            && (allows_partially_suppressed_reconciliation_groups(&self.apply)
+                || partially_suppressed_reconciliation_group_count(
+                    self.topology_comparison.as_ref(),
+                ) == 0))
             .then(|| render_shell_script(self))
     }
+}
+
+fn allows_partially_suppressed_reconciliation_groups(apply: &ApplyReport) -> bool {
+    apply.policy.mode == ApplyMode::Install
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]

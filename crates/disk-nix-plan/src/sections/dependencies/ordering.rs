@@ -2,18 +2,28 @@ fn order_plan_actions(actions: &mut [PlannedAction]) {
     actions.sort_by_key(action_order_key);
 }
 
-fn action_order_key(action: &PlannedAction) -> (u16, u16, u16) {
+fn action_order_key(
+    action: &PlannedAction,
+) -> (u16, u16, u16, String, u64, u64, u64, u64, String, String) {
     let rank = action_dependency_rank(action);
     let layer = if operation_runs_upper_layers_first(action.operation) {
         u16::MAX - rank
     } else {
         rank
     };
+    let partition = partition_order_key(action);
 
     (
         layer,
         action_dependency_subrank(action),
         operation_dependency_phase(action.operation),
+        partition.disk,
+        partition.start_mib,
+        partition.end_mib,
+        partition.number,
+        zfs_create_depth(action),
+        zfs_create_name(action),
+        action.id.clone(),
     )
 }
 
@@ -82,6 +92,89 @@ fn action_dependency_subrank(action: &PlannedAction) -> u16 {
     }
 
     0
+}
+
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct PartitionOrderKey {
+    disk: String,
+    start_mib: u64,
+    end_mib: u64,
+    number: u64,
+}
+
+fn partition_order_key(action: &PlannedAction) -> PartitionOrderKey {
+    if action.context.collection.as_deref() != Some("partitions")
+        || action.operation != Operation::Create
+    {
+        return PartitionOrderKey::default();
+    }
+
+    PartitionOrderKey {
+        disk: action.context.device.clone().unwrap_or_default(),
+        start_mib: partition_offset_mib(action.context.start.as_deref()).unwrap_or(u64::MAX),
+        end_mib: partition_offset_mib(action.context.end.as_deref()).unwrap_or(u64::MAX),
+        number: action
+            .context
+            .partition_number
+            .as_deref()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(u64::MAX),
+    }
+}
+
+fn partition_offset_mib(value: Option<&str>) -> Option<u64> {
+    let value = value?.trim();
+    if value == "100%" {
+        return Some(u64::MAX);
+    }
+
+    let number_len = value
+        .char_indices()
+        .take_while(|(_, character)| character.is_ascii_digit() || *character == '.')
+        .map(|(index, character)| index + character.len_utf8())
+        .last()?;
+    let number = value[..number_len].parse::<f64>().ok()?;
+    let unit = value[number_len..].trim().to_ascii_lowercase();
+    let mib = match unit.as_str() {
+        "" | "mib" | "mi" => number,
+        "g" | "gb" | "gib" | "gi" => number * 1024.0,
+        "t" | "tb" | "tib" | "ti" => number * 1024.0 * 1024.0,
+        "b" => number / 1024.0 / 1024.0,
+        "kb" | "kib" | "ki" => number / 1024.0,
+        _ => return None,
+    };
+
+    Some(mib.floor() as u64)
+}
+
+fn zfs_create_depth(action: &PlannedAction) -> u64 {
+    if !matches!(
+        action.context.collection.as_deref(),
+        Some("datasets" | "zvols")
+    ) || action.operation != Operation::Create
+    {
+        return 0;
+    }
+
+    zfs_create_name(action).split('/').count() as u64
+}
+
+fn zfs_create_name(action: &PlannedAction) -> String {
+    if !matches!(
+        action.context.collection.as_deref(),
+        Some("datasets" | "zvols")
+    ) || action.operation != Operation::Create
+    {
+        return String::new();
+    }
+
+    action
+        .context
+        .target
+        .as_deref()
+        .or(action.context.name.as_deref())
+        .unwrap_or_default()
+        .to_string()
 }
 
 fn looks_like_lvm_logical_volume_path(device: &str) -> bool {

@@ -4,8 +4,17 @@ struct SolveDisk {
     path: String,
     size_gib: u64,
     media: String,
+    tier: String,
     primary_boot: bool,
     slice_count: u64,
+}
+
+#[derive(Debug, Clone)]
+struct SolvePool {
+    key: String,
+    zfs: Map<String, Value>,
+    disk_indexes: Vec<usize>,
+    solution: VdevSolution,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,20 +139,6 @@ fn lower_layout(
         .and_then(|swap| swap.get("type"))
         .and_then(Value::as_str)
         == Some("tail");
-    let require_redundant = zfs
-        .get("vdevs")
-        .and_then(|vdevs| vdevs.get("requireRedundant"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let unassigned_slice_policy = zfs
-        .get("vdevs")
-        .and_then(|vdevs| vdevs.get("unassignedSlicePolicy"))
-        .or_else(|| zfs.get("unassignedSlicePolicy"))
-        .and_then(Value::as_str)
-        .map(parse_unassigned_slice_policy)
-        .transpose()?
-        .unwrap_or(UnassignedSlicePolicy::Allow);
-
     let mut disks = disks_value
         .iter()
         .map(|(disk_key, disk)| {
@@ -167,6 +162,12 @@ fn lower_layout(
                 .and_then(Value::as_str)
                 .unwrap_or("disk")
                 .to_string();
+            let tier = disk
+                .get("tier")
+                .or_else(|| disk.get("poolTier"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| infer_disk_tier(disk, path, &media));
             let primary_boot = primary_boot_disk.is_some_and(|primary| primary == disk_key)
                 || disk
                     .get("primaryBoot")
@@ -178,6 +179,7 @@ fn lower_layout(
                 path: path.to_string(),
                 size_gib,
                 media,
+                tier,
                 primary_boot,
                 slice_count: usable_gib / slice_size,
             })
@@ -197,78 +199,14 @@ fn lower_layout(
         )));
     }
 
-    let shapes = zfs
-        .get("vdevs")
-        .and_then(|vdevs| vdevs.get("prefer"))
-        .and_then(Value::as_array)
-        .map(|preferred| {
-            preferred
-                .iter()
-                .map(|shape| {
-                    let Some(kind) = shape.get("type").and_then(Value::as_str) else {
-                        return Err(solver_error(format!(
-                            "solve layout {layout_name} vdev shapes must declare type"
-                        )));
-                    };
-                    let Some(width) = shape.get("width").and_then(Value::as_u64) else {
-                        return Err(solver_error(format!(
-                            "solve layout {layout_name} vdev shape {kind} must declare width"
-                        )));
-                    };
-                    if width < 2 {
-                        return Err(solver_error(format!(
-                            "solve layout {layout_name} vdev shape {kind} width must be at least 2"
-                        )));
-                    }
-                    if require_redundant && !is_redundant_vdev_shape(kind) {
-                        return Err(solver_error(format!(
-                            "solve layout {layout_name} requires redundancy but vdev shape {kind} is not a redundant ZFS shape"
-                        )));
-                    }
-                    Ok(VdevShape {
-                        kind: kind.to_string(),
-                        width: width as usize,
-                    })
-                })
-                .collect::<Result<Vec<_>, PlanDocumentError>>()
-        })
-        .transpose()?
-        .filter(|shapes| !shapes.is_empty())
-        .unwrap_or_else(|| {
-            vec![
-                VdevShape {
-                    kind: "raidz1".to_string(),
-                    width: 3,
-                },
-                VdevShape {
-                    kind: "mirror".to_string(),
-                    width: 2,
-                },
-            ]
-        });
-
-    let counts = disks
-        .iter()
-        .map(|disk| disk.slice_count)
-        .collect::<Vec<_>>();
-    let solution = solve_vdevs(&counts, &shapes).unwrap_or(VdevSolution {
-        used_slices: 0,
-        preferred_shape_counts: vec![0; shapes.len()],
-        choices: Vec::new(),
-    });
-    validate_solution(
-        layout_name,
-        &counts,
-        &solution,
-        require_redundant,
-        unassigned_slice_policy,
-    )?;
+    let pools = solve_pools(layout_name, zfs, &disks)?;
 
     insert_generated_disks(generated, &disks);
     insert_generated_partitions(
         generated,
         layout_name,
         &disks,
+        &pools,
         boot_size,
         slice_size,
         replicated_boot,
@@ -281,9 +219,23 @@ fn lower_layout(
         replicated_boot,
         boot_mountpoint,
     );
-    insert_generated_swaps(generated, layout_name, &disks, swap, tail_swap);
-    insert_generated_pool(generated, zfs, &disks, &shapes, solution);
-    insert_generated_datasets(generated, zfs);
+    insert_generated_swaps(generated, layout_name, &disks, &pools, swap, tail_swap);
+    for pool in pools {
+        let pool_shapes = parse_vdev_shapes(layout_name, &pool.zfs)?;
+        let selected_disks = pool
+            .disk_indexes
+            .iter()
+            .map(|index| disks[*index].clone())
+            .collect::<Vec<_>>();
+        insert_generated_pool(
+            generated,
+            &pool.zfs,
+            &selected_disks,
+            &pool_shapes,
+            pool.solution,
+        );
+        insert_generated_datasets(generated, &pool.zfs);
+    }
     Ok(())
 }
 
@@ -299,6 +251,7 @@ fn insert_generated_disks(generated: &mut Map<String, Value>, disks: &[SolveDisk
             "properties".to_string(),
             object_value([
                 ("media", Value::String(disk.media.clone())),
+                ("tier", Value::String(disk.tier.clone())),
                 ("size", Value::String(format!("{}GiB", disk.size_gib))),
                 ("byId", Value::String(disk.path.clone())),
             ]),
@@ -311,6 +264,7 @@ fn insert_generated_partitions(
     generated: &mut Map<String, Value>,
     layout_name: &str,
     disks: &[SolveDisk],
+    pools: &[SolvePool],
     boot_size: u64,
     slice_size: u64,
     replicated_boot: bool,
@@ -334,11 +288,22 @@ fn insert_generated_partitions(
             );
         }
 
-        for slice_index in 0..disk.slice_count {
+        let pool_key = pools
+            .iter()
+            .find(|pool| pool.disk_indexes.iter().any(|index| disks[*index].key == disk.key))
+            .map(|pool| pool.key.as_str());
+        let zfs_slice_count = pool_key.map_or(0, |_| disk.slice_count);
+        let zfs_partition_prefix = pool_key
+            .filter(|_| pools.len() > 1)
+            .map_or_else(
+                || format!("{layout_name}-{}-zfs", disk.key),
+                |pool_key| format!("{layout_name}-{}-{pool_key}-zfs", disk.key),
+            );
+        for slice_index in 0..zfs_slice_count {
             let partition_number = slice_index + 2;
             let end_gib = boot_size + (slice_index + 1) * slice_size;
             partitions.insert(
-                format!("{layout_name}-{}-zfs-{}", disk.key, slice_index + 1),
+                format!("{zfs_partition_prefix}-{}", slice_index + 1),
                 partition_object(
                     &disk.path,
                     partition_number,
@@ -352,8 +317,8 @@ fn insert_generated_partitions(
         }
 
         if tail_swap {
-            let partition_number = disk.slice_count + 2;
-            let start_gib = boot_size + disk.slice_count * slice_size;
+            let partition_number = zfs_slice_count + 2;
+            let start_gib = boot_size + zfs_slice_count * slice_size;
             partitions.insert(
                 format!("{layout_name}-{}-swap", disk.key),
                 partition_object(
@@ -432,6 +397,7 @@ fn insert_generated_swaps(
     generated: &mut Map<String, Value>,
     layout_name: &str,
     disks: &[SolveDisk],
+    pools: &[SolvePool],
     swap: Option<&Map<String, Value>>,
     tail_swap: bool,
 ) {
@@ -444,7 +410,7 @@ fn insert_generated_swaps(
         .and_then(|swap| swap.get("priorities"))
         .and_then(Value::as_object);
     for disk in disks {
-        let partition_number = disk.slice_count + 2;
+        let partition_number = zfs_slice_count_for_disk(disks, pools, disk) + 2;
         let priority = priorities
             .and_then(|priorities| priorities.get(&disk.key))
             .or_else(|| priorities.and_then(|priorities| priorities.get(&disk.media)))
@@ -469,6 +435,18 @@ fn insert_generated_swaps(
     }
 }
 
+fn zfs_slice_count_for_disk(disks: &[SolveDisk], pools: &[SolvePool], disk: &SolveDisk) -> u64 {
+    pools
+        .iter()
+        .any(|pool| {
+            pool.disk_indexes
+                .iter()
+                .any(|index| disks[*index].key == disk.key)
+        })
+        .then_some(disk.slice_count)
+        .unwrap_or(0)
+}
+
 fn insert_generated_pool(
     generated: &mut Map<String, Value>,
     zfs: &Map<String, Value>,
@@ -484,7 +462,9 @@ fn insert_generated_pool(
     let mut devices = Vec::new();
     for choice in solution.choices {
         let shape = &shapes[choice.shape_index];
-        devices.push(Value::String(shape.kind.clone()));
+        if !is_single_vdev_shape(&shape.kind) {
+            devices.push(Value::String(shape.kind.clone()));
+        }
         for disk_index in choice.disk_indexes {
             next_slice_by_disk[disk_index] += 1;
             devices.push(Value::String(format!(
@@ -530,6 +510,248 @@ fn validate_solution(
     Ok(())
 }
 
+fn solve_pools(
+    layout_name: &str,
+    zfs: &Map<String, Value>,
+    disks: &[SolveDisk],
+) -> Result<Vec<SolvePool>, PlanDocumentError> {
+    let pool_specs = zfs
+        .get("pools")
+        .and_then(Value::as_object)
+        .map(|pools| {
+            pools
+                .iter()
+                .map(|(pool_key, pool_value)| {
+                    let Some(pool_object) = pool_value.as_object() else {
+                        return Err(solver_error(format!(
+                            "solve layout {layout_name} zfs pool {pool_key} must be an object"
+                        )));
+                    };
+                    let mut merged = zfs.clone();
+                    merged.remove("pool");
+                    merged.remove("pools");
+                    merge_spec_objects(&mut merged, pool_object);
+                    merged
+                        .entry("pool".to_string())
+                        .or_insert_with(|| Value::String(pool_key.clone()));
+                    Ok((pool_key.clone(), merged))
+                })
+                .collect::<Result<Vec<_>, PlanDocumentError>>()
+        })
+        .transpose()?
+        .unwrap_or_else(|| {
+            vec![(
+                zfs.get("pool")
+                    .and_then(Value::as_str)
+                    .unwrap_or("zroot")
+                    .to_string(),
+                zfs.clone(),
+            )]
+        });
+
+    let mut owner_by_disk = vec![None::<String>; disks.len()];
+    let mut pools = Vec::new();
+    for (pool_key, pool_zfs) in pool_specs {
+        let disk_indexes = select_pool_disks(layout_name, &pool_key, &pool_zfs, disks)?;
+        if disk_indexes.is_empty() {
+            return Err(solver_error(format!(
+                "solve layout {layout_name} zfs pool {pool_key} selected no disks"
+            )));
+        }
+        for disk_index in &disk_indexes {
+            if let Some(owner) = &owner_by_disk[*disk_index] {
+                return Err(solver_error(format!(
+                    "solve layout {layout_name} disk {} is selected by both zfs pools {owner} and {pool_key}",
+                    disks[*disk_index].key
+                )));
+            }
+            owner_by_disk[*disk_index] = Some(pool_key.clone());
+        }
+
+        let shapes = parse_vdev_shapes(layout_name, &pool_zfs)?;
+        let counts = disk_indexes
+            .iter()
+            .map(|disk_index| disks[*disk_index].slice_count)
+            .collect::<Vec<_>>();
+        let solution = solve_vdevs(&counts, &shapes).unwrap_or(VdevSolution {
+            used_slices: 0,
+            preferred_shape_counts: vec![0; shapes.len()],
+            choices: Vec::new(),
+        });
+        validate_solution(
+            layout_name,
+            &counts,
+            &solution,
+            pool_zfs
+                .get("vdevs")
+                .and_then(|vdevs| vdevs.get("requireRedundant"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            pool_zfs
+                .get("vdevs")
+                .and_then(|vdevs| vdevs.get("unassignedSlicePolicy"))
+                .or_else(|| pool_zfs.get("unassignedSlicePolicy"))
+                .and_then(Value::as_str)
+                .map(parse_unassigned_slice_policy)
+                .transpose()?
+                .unwrap_or(UnassignedSlicePolicy::Allow),
+        )?;
+        pools.push(SolvePool {
+            key: pool_key,
+            zfs: pool_zfs,
+            disk_indexes,
+            solution,
+        });
+    }
+    Ok(pools)
+}
+
+fn select_pool_disks(
+    layout_name: &str,
+    pool_key: &str,
+    zfs: &Map<String, Value>,
+    disks: &[SolveDisk],
+) -> Result<Vec<usize>, PlanDocumentError> {
+    if let Some(disks_value) = zfs.get("disks") {
+        let Some(selected) = disks_value.as_array() else {
+            return Err(solver_error(format!(
+                "solve layout {layout_name} zfs pool {pool_key} disks must be an array"
+            )));
+        };
+        return selected
+            .iter()
+            .map(|disk| {
+                let Some(disk_key) = disk.as_str() else {
+                    return Err(solver_error(format!(
+                        "solve layout {layout_name} zfs pool {pool_key} disks entries must be disk keys"
+                    )));
+                };
+                disks
+                    .iter()
+                    .position(|candidate| candidate.key == disk_key)
+                    .ok_or_else(|| {
+                        solver_error(format!(
+                            "solve layout {layout_name} zfs pool {pool_key} references unknown disk {disk_key}"
+                        ))
+                    })
+            })
+            .collect();
+    }
+
+    if let Some(tier) = zfs
+        .get("tier")
+        .or_else(|| zfs.get("mediaTier"))
+        .and_then(Value::as_str)
+    {
+        return Ok(disks
+            .iter()
+            .enumerate()
+            .filter_map(|(index, disk)| (disk.tier == tier).then_some(index))
+            .collect());
+    }
+
+    Ok((0..disks.len()).collect())
+}
+
+fn parse_vdev_shapes(
+    layout_name: &str,
+    zfs: &Map<String, Value>,
+) -> Result<Vec<VdevShape>, PlanDocumentError> {
+    let require_redundant = zfs
+        .get("vdevs")
+        .and_then(|vdevs| vdevs.get("requireRedundant"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    zfs.get("vdevs")
+        .and_then(|vdevs| vdevs.get("prefer"))
+        .and_then(Value::as_array)
+        .map(|preferred| {
+            preferred
+                .iter()
+                .map(|shape| {
+                    let Some(kind) = shape.get("type").and_then(Value::as_str) else {
+                        return Err(solver_error(format!(
+                            "solve layout {layout_name} vdev shapes must declare type"
+                        )));
+                    };
+                    let Some(width) = shape.get("width").and_then(Value::as_u64) else {
+                        return Err(solver_error(format!(
+                            "solve layout {layout_name} vdev shape {kind} must declare width"
+                        )));
+                    };
+                    if width == 0 {
+                        return Err(solver_error(format!(
+                            "solve layout {layout_name} vdev shape {kind} width must be at least 1"
+                        )));
+                    }
+                    if require_redundant && !is_redundant_vdev_shape(kind) {
+                        return Err(solver_error(format!(
+                            "solve layout {layout_name} requires redundancy but vdev shape {kind} is not a redundant ZFS shape"
+                        )));
+                    }
+                    Ok(VdevShape {
+                        kind: kind.to_string(),
+                        width: width as usize,
+                    })
+                })
+                .collect::<Result<Vec<_>, PlanDocumentError>>()
+        })
+        .transpose()?
+        .filter(|shapes| !shapes.is_empty())
+        .map_or_else(
+            || {
+                Ok(vec![
+                    VdevShape {
+                        kind: "raidz1".to_string(),
+                        width: 3,
+                    },
+                    VdevShape {
+                        kind: "mirror".to_string(),
+                        width: 2,
+                    },
+                ])
+            },
+            Ok,
+        )
+}
+
+fn infer_disk_tier(disk: &Value, path: &str, media: &str) -> String {
+    if disk
+        .get("rotational")
+        .and_then(Value::as_bool)
+        .is_some_and(|rotational| rotational)
+    {
+        return "cold".to_string();
+    }
+    if disk
+        .get("solidState")
+        .and_then(Value::as_bool)
+        .is_some_and(|solid_state| solid_state)
+    {
+        return "fast".to_string();
+    }
+
+    let haystack = format!(
+        "{} {} {}",
+        media,
+        disk.get("transport").and_then(Value::as_str).unwrap_or(""),
+        path
+    )
+    .to_ascii_lowercase();
+    if haystack.contains("nvme")
+        || haystack.contains("ssd")
+        || haystack.contains("solid")
+        || haystack.contains("flash")
+    {
+        "fast".to_string()
+    } else if haystack.contains("hdd") || haystack.contains("rotational") {
+        "cold".to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
 fn insert_generated_datasets(generated: &mut Map<String, Value>, zfs: &Map<String, Value>) {
     let Some(datasets) = zfs.get("datasets").and_then(Value::as_object) else {
         return;
@@ -561,9 +783,6 @@ fn solve_vdevs_inner(
     });
 
     for (shape_index, shape) in shapes.iter().enumerate() {
-        if shape.width < 2 {
-            continue;
-        }
         for disk_indexes in disk_combinations(&counts, shape.width) {
             let mut remaining = counts.clone();
             for disk_index in &disk_indexes {
@@ -632,6 +851,10 @@ fn disk_combinations(counts: &[u64], width: usize) -> Vec<Vec<usize>> {
 
 fn is_redundant_vdev_shape(kind: &str) -> bool {
     matches!(kind, "mirror" | "raidz1" | "raidz2" | "raidz3")
+}
+
+fn is_single_vdev_shape(kind: &str) -> bool {
+    matches!(kind, "single" | "disk")
 }
 
 fn parse_unassigned_slice_policy(value: &str) -> Result<UnassignedSlicePolicy, PlanDocumentError> {

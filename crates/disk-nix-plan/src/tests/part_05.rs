@@ -651,6 +651,10 @@ fn topology_comparison_reconciles_disk_create_from_partition_table() {
                 "/dev/disk/by-id/default-gpt": {
                   "operation": "create"
                 },
+                "/dev/disk/by-id/nvme-system": {
+                  "operation": "create",
+                  "partitionType": "gpt"
+                },
                 "/dev/disk/by-id/legacy": {
                   "operation": "create",
                   "partitionType": "gpt"
@@ -689,6 +693,16 @@ fn topology_comparison_reconciles_disk_create_from_partition_table() {
     );
     graph.add_node(
         Node::new(
+            "nvme-namespace:/dev/nvme0n1",
+            NodeKind::NvmeNamespace,
+            "/dev/nvme0n1",
+        )
+        .with_path("/dev/nvme0n1")
+        .with_property("udev.devlink", "/dev/disk/by-id/nvme-system")
+        .with_property("partition.table", "gpt"),
+    );
+    graph.add_node(
+        Node::new(
             "block:/dev/disk/by-id/legacy",
             NodeKind::PhysicalDisk,
             "/dev/disk/by-id/legacy",
@@ -719,9 +733,9 @@ fn topology_comparison_reconciles_disk_create_from_partition_table() {
         .as_ref()
         .expect("comparison should be present");
 
-    assert_eq!(comparison.summary.action_count, 5);
-    assert_eq!(comparison.summary.already_satisfied_count, 2);
-    assert_eq!(comparison.summary.suppressed_action_count, 2);
+    assert_eq!(comparison.summary.action_count, 6);
+    assert_eq!(comparison.summary.already_satisfied_count, 3);
+    assert_eq!(comparison.summary.suppressed_action_count, 3);
     assert_eq!(plan.summary.action_count, 3);
     assert!(plan
         .actions
@@ -731,6 +745,10 @@ fn topology_comparison_reconciles_disk_create_from_partition_table() {
         .actions
         .iter()
         .all(|action| action.id != "disks:/dev/disk/by-id/default-gpt:create"));
+    assert!(plan
+        .actions
+        .iter()
+        .all(|action| action.id != "disks:/dev/disk/by-id/nvme-system:create"));
     assert!(plan.actions.iter().any(|action| {
         action.id == "disks:/dev/disk/by-id/legacy:create" && action.operation == Operation::Create
     }));
@@ -748,6 +766,11 @@ fn topology_comparison_reconciles_disk_create_from_partition_table() {
     assert!(comparison.diagnostics.iter().any(|diagnostic| {
         diagnostic.action_id == "disks:/dev/disk/by-id/default-gpt:create"
             && diagnostic.kind == TopologyDiagnosticKind::DiskCreateAlreadySatisfied
+    }));
+    assert!(comparison.diagnostics.iter().any(|diagnostic| {
+        diagnostic.action_id == "disks:/dev/disk/by-id/nvme-system:create"
+            && diagnostic.kind == TopologyDiagnosticKind::DiskCreateAlreadySatisfied
+            && diagnostic.message.contains("partition table gpt")
     }));
     assert!(comparison.diagnostics.iter().any(|diagnostic| {
         diagnostic.action_id == "disks:/dev/disk/by-id/legacy:create"

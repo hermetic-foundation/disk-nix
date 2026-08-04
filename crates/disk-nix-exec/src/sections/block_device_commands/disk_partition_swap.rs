@@ -247,13 +247,44 @@ fn zfs_pool_create_command(
             "create a ZFS pool after selecting the vdev topology",
         )
     } else {
-        let argv = zfs_pool_create_argv(target, devices, property_assignments);
         command_vec(
-            argv,
+            vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                zfs_pool_create_or_import_script(target, devices, property_assignments),
+            ],
             true,
-            "create a ZFS pool on the reviewed vdev device set with declared pool properties",
+            "create the reviewed ZFS pool or import the existing pool if it is already present",
         )
     }
+}
+
+fn zfs_pool_create_or_import_script(
+    target: &str,
+    devices: &[String],
+    property_assignments: &[String],
+) -> String {
+    let target_quoted = shell_quote(target);
+    let create = zfs_pool_create_argv(target, devices, property_assignments)
+        .iter()
+        .map(|arg| shell_quote(arg))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let wipes = devices
+        .iter()
+        .filter(|device| device.starts_with('/'))
+        .map(|device| format!("wipefs --all --force {}", shell_quote(device)))
+        .collect::<Vec<_>>()
+        .join("; ");
+    let wipe_prefix = if wipes.is_empty() {
+        String::new()
+    } else {
+        format!("{wipes}; ")
+    };
+
+    format!(
+        "zpool_online() {{ [ \"$(zpool list -H -o health \"$1\" 2>/dev/null)\" = ONLINE ]; }}; if zpool list -H {target_quoted} >/dev/null 2>&1; then if zpool_online {target_quoted}; then exit 0; fi; zpool destroy -f {target_quoted}; fi; if zpool import -N {target_quoted} >/dev/null 2>&1; then if zpool_online {target_quoted}; then exit 0; fi; zpool destroy -f {target_quoted}; fi; {wipe_prefix}{create}"
+    )
 }
 
 fn zfs_pool_import_command(target: &str, read_only: bool) -> ExecutionCommand {
@@ -290,11 +321,6 @@ fn zfs_pool_preflight_commands(devices: &[String]) -> Vec<ExecutionCommand> {
                 vec!["disk-nix", "inspect", device],
                 false,
                 "inspect vdev device identity before creating the ZFS pool",
-            ));
-            commands.push(command_vec(
-                vec!["wipefs", "--all", "--force", device],
-                true,
-                "clear stale signatures from the reviewed vdev before ZFS pool creation",
             ));
         }
         commands

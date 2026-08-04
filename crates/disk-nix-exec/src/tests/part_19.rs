@@ -214,55 +214,30 @@ fn pool_actions_report_domain_specific_commands() {
     assert_eq!(report.status, ExecutionStatus::DryRun);
     assert!(report.command_plan.iter().any(|step| {
         step.commands.iter().any(|command| {
-            command.argv
-                == [
-                    "zpool",
-                    "create",
-                    "newtank",
-                    "/dev/disk/by-id/new-pool-vdev",
-                ]
+            command.argv.len() == 3
+                && command.argv[0] == "sh"
+                && command.argv[1] == "-c"
+                && command.argv[2].contains("zpool list -H newtank")
+                && command.argv[2].contains("zpool import -N newtank")
+                && command.argv[2].contains("zpool destroy -f newtank")
+                && command.argv[2].contains("wipefs --all --force /dev/disk/by-id/new-pool-vdev")
+                && command.argv[2].contains("zpool create newtank /dev/disk/by-id/new-pool-vdev")
                 && command.readiness == CommandReadiness::Ready
         })
-    }));
-    assert!(report.command_plan.iter().any(|step| {
-        step.action_id == "pools:newtank:create"
-            && step.commands.iter().any(|command| {
-                command.argv == ["wipefs", "--all", "--force", "/dev/disk/by-id/new-pool-vdev"]
-                    && command.readiness == CommandReadiness::Ready
-            })
     }));
     assert!(report.command_plan.iter().any(|step| {
         step.commands.iter().any(|command| {
-            command.argv
-                == [
-                    "zpool",
-                    "create",
-                    "-o",
-                    "ashift=12",
-                    "-o",
-                    "autotrim=on",
-                    "-O",
-                    "com.sun:auto-snapshot=false",
-                    "-O",
-                    "compression=zstd",
-                    "mirrorpool",
-                    "mirror",
-                    "/dev/disk/by-id/mirror-a",
-                    "/dev/disk/by-id/mirror-b",
-                ]
+            command.argv.len() == 3
+                && command.argv[0] == "sh"
+                && command.argv[1] == "-c"
+                && command.argv[2].contains("zpool list -H mirrorpool")
+                && command.argv[2].contains("zpool import -N mirrorpool")
+                && command.argv[2].contains("zpool destroy -f mirrorpool")
+                && command.argv[2].contains("wipefs --all --force /dev/disk/by-id/mirror-a")
+                && command.argv[2].contains("wipefs --all --force /dev/disk/by-id/mirror-b")
+                && command.argv[2].contains("zpool create -o ashift=12 -o autotrim=on -O com.sun:auto-snapshot=false -O compression=zstd mirrorpool mirror /dev/disk/by-id/mirror-a /dev/disk/by-id/mirror-b")
                 && command.readiness == CommandReadiness::Ready
         })
-    }));
-    assert!(report.command_plan.iter().any(|step| {
-        step.action_id == "pools:mirrorpool:create"
-            && step.commands.iter().any(|command| {
-                command.argv == ["wipefs", "--all", "--force", "/dev/disk/by-id/mirror-a"]
-                    && command.readiness == CommandReadiness::Ready
-            })
-            && step.commands.iter().any(|command| {
-                command.argv == ["wipefs", "--all", "--force", "/dev/disk/by-id/mirror-b"]
-                    && command.readiness == CommandReadiness::Ready
-            })
     }));
     assert!(report.command_plan.iter().any(|step| {
         step.action_id == "pools:mirrorpool:create"

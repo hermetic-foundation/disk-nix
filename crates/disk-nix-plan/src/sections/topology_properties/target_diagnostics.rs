@@ -107,7 +107,7 @@ fn disk_create_diagnostic(
 
     let desired_table = action.context.partition_type.as_deref().unwrap_or("gpt");
 
-    if node.kind != NodeKind::PhysicalDisk {
+    if !disk_initialization_target_kind(node.kind) {
         return Some(TopologyDiagnostic {
             action_id: action.id.clone(),
             level: TopologyDiagnosticLevel::Warning,
@@ -158,6 +158,10 @@ fn disk_create_diagnostic(
         message,
         current: Some(current_node_summary(node)),
     })
+}
+
+fn disk_initialization_target_kind(kind: NodeKind) -> bool {
+    matches!(kind, NodeKind::PhysicalDisk | NodeKind::NvmeNamespace)
 }
 
 fn partition_create_diagnostic(

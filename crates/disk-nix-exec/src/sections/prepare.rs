@@ -30,6 +30,8 @@ fn prepare_execution_with_runner_and_tool_checker(
         summarize_tool_requirements(&command_plan, &verification_plan, tool_exists);
     let partially_suppressed_group_count =
         partially_suppressed_reconciliation_group_count(topology_comparison.as_ref());
+    let partially_suppressed_groups_need_review = partially_suppressed_group_count > 0
+        && !allows_partially_suppressed_reconciliation_groups(&apply);
     if !apply.can_execute() {
         let blocked_count = apply.blocked_count;
         return attach_recovery_actions(ExecutionReport {
@@ -56,9 +58,13 @@ fn prepare_execution_with_runner_and_tool_checker(
                 command_plan.len(),
                 verification_plan.len()
             )];
-            if partially_suppressed_group_count > 0 {
+            if partially_suppressed_groups_need_review {
                 messages.push(format!(
                     "dry run requires reconciliation review before execution: {partially_suppressed_group_count} partially suppressed reconciliation group(s) need fresh-topology review or plan splitting"
+                ));
+            } else if partially_suppressed_group_count > 0 {
+                messages.push(format!(
+                    "install mode allows {partially_suppressed_group_count} partially suppressed reconciliation group(s) so interrupted installs can be resumed"
                 ));
             }
             attach_recovery_actions(ExecutionReport {
@@ -119,7 +125,7 @@ fn prepare_execution_with_runner_and_tool_checker(
                     )],
                 });
             }
-            if partially_suppressed_group_count > 0 {
+            if partially_suppressed_groups_need_review {
                 return attach_recovery_actions(ExecutionReport {
                     apply,
                     status: ExecutionStatus::NotReady,

@@ -103,7 +103,6 @@
           };
         };
         zfs = {
-          pool = "zroot";
           sliceSize = "100GiB";
           vdevs.prefer = [
             {
@@ -116,6 +115,18 @@
             }
           ];
           vdevs.unassignedSlicePolicy = "allow";
+          pools = {
+            fast = {
+              pool = "zfast";
+              tier = "fast";
+              properties.autotrim = "on";
+            };
+            cold = {
+              pool = "zcold";
+              tier = "cold";
+              properties.autotrim = "off";
+            };
+          };
         };
       };
     };

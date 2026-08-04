@@ -790,6 +790,78 @@ fn zfs_create_wrapper_preserves_failed_create_status() {
 }
 
 #[test]
+fn zfs_create_wrapper_accepts_canonical_acltype_value() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = std::env::temp_dir().join(format!(
+        "disk-nix-zfs-wrapper-acltype-test-{}",
+        std::process::id()
+    ));
+    std::fs::remove_dir_all(&temp_dir).ok();
+    std::fs::create_dir_all(&temp_dir).expect("temp dir can be created");
+    let fake_zfs = temp_dir.join("zfs");
+    let bash = std::env::var_os("PATH")
+        .and_then(|path| {
+            std::env::split_paths(&path)
+                .map(|entry| entry.join("bash"))
+                .find(|candidate| candidate.is_file())
+        })
+        .expect("bash should be available on PATH");
+    std::fs::write(
+        &fake_zfs,
+        format!(
+            "#!{}\ncase \"$1\" in\n  list) exit 0 ;;\n  get) case \"$6\" in acltype) printf 'posix\\n' ;; compression) printf 'zstd\\n' ;; *) exit 1 ;; esac ;;\n  create) exit 41 ;;\n  *) exit 99 ;;\nesac\n",
+            bash.display()
+        ),
+    )
+    .expect("fake zfs can be written");
+    let mut permissions = std::fs::metadata(&fake_zfs)
+        .expect("fake zfs metadata is available")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&fake_zfs, permissions).expect("fake zfs can be executable");
+
+    let (plan, policy) = plan_and_policy_from_json_bytes(
+        br#"{
+              "spec": {
+                "datasets": {
+                  "root": {
+                    "target": "tank/root",
+                    "operation": "create",
+                    "properties": {
+                      "acltype": "posixacl",
+                      "compression": "zstd"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "allowDestructive": true
+              }
+            }"#,
+    )
+    .expect("document parses");
+    let report = prepare_execution(&plan, policy, ExecutionMode::DryRun);
+    let create = report
+        .command_plan
+        .iter()
+        .flat_map(|step| &step.commands)
+        .find(|command| command.argv.get(3).is_some_and(|arg| arg == "disk-nix-zfs-create"))
+        .expect("dataset create command should be rendered");
+    let (program, args) = create.argv.split_first().expect("command has program");
+    let old_path = std::env::var("PATH").unwrap_or_default();
+    let status = std::process::Command::new(program)
+        .args(args)
+        .env("PATH", format!("{}:{old_path}", temp_dir.display()))
+        .status()
+        .expect("wrapper command can run");
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+
+    assert_eq!(status.code(), Some(0));
+}
+
+#[test]
 fn md_raid_lifecycle_reports_mdadm_commands() {
     let (plan, policy) = plan_and_policy_from_json_bytes(
         br#"{

@@ -369,6 +369,19 @@ fn zfs_pool_create_diagnostic(
         });
     }
 
+    if property_value_from_node(node, "zfs.importable").is_some_and(|value| value == "true") {
+        return Some(TopologyDiagnostic {
+            action_id: action.id.clone(),
+            level: TopologyDiagnosticLevel::Warning,
+            kind: TopologyDiagnosticKind::ZfsPoolCreateRequired,
+            query: query.to_string(),
+            message: format!(
+                "ZFS pool {query} exists but is not imported; import it instead of recreating it"
+            ),
+            current: Some(current_node_summary(node)),
+        });
+    }
+
     let state = property_value_from_node(node, "zfs.state");
     let health = property_value_from_node(node, "zfs.health");
     let online =

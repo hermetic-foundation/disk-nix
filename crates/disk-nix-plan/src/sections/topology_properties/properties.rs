@@ -97,6 +97,8 @@ fn current_property_value(action: &PlannedAction, node: &Node, property: &str) -
             "quota" => &["zfs.quota", property],
             "reservation" => &["zfs.reservation", property],
             "encryption" => &["zfs.encryption", property],
+            "keyformat" | "key-format" => &["zfs.keyformat", property],
+            "keylocation" | "key-location" => &["zfs.keylocation", property],
             "keystatus" | "key-status" => &["zfs.keystatus", property],
             "volsize" | "vol-size" => &["zfs.volsize", property],
             "recordsize" | "record-size" => &["zfs.recordsize", property],
@@ -691,12 +693,21 @@ fn normalize_zfs_property_value(property: &str, normalized_value: &str, raw_valu
         "primarycache" | "primary-cache" | "secondarycache" | "secondary-cache" => {
             normalized_value.to_string()
         }
-        "mountpoint" | "compression" | "quota" | "reservation" | "encryption" | "keystatus"
-        | "key-status" | "volsize" | "vol-size" | "recordsize" | "record-size" | "checksum"
-        | "copies" | "sync" | "snapdir" | "snap-dir" | "acltype" | "acl-type" | "xattr" => {
+        "acltype" | "acl-type" => normalize_zfs_acltype_property_value(normalized_value),
+        "mountpoint" | "compression" | "quota" | "reservation" | "encryption" | "keyformat"
+        | "key-format" | "keylocation" | "key-location" | "keystatus" | "key-status"
+        | "volsize" | "vol-size" | "recordsize" | "record-size" | "checksum" | "copies"
+        | "sync" | "snapdir" | "snap-dir" | "xattr" => {
             normalized_value.to_string()
         }
         _ => raw_value.to_string(),
+    }
+}
+
+fn normalize_zfs_acltype_property_value(value: &str) -> String {
+    match value {
+        "posixacl" => "posix".to_string(),
+        _ => value.to_string(),
     }
 }
 

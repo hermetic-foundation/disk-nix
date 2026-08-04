@@ -319,6 +319,7 @@ fn nixos_zfs_root_mount_script(install: &Value, target: &str) -> Result<String, 
         .get("zfs")
         .ok_or_else(|| AppError::Message("install.zfs is missing from spec".to_string()))?;
     let pool = required_install_str(zfs, "pool")?;
+    let extra_pools = optional_install_str_array(zfs, "extraPools")?;
     let boot_device = install
         .get("boot")
         .and_then(|boot| boot.get("device"))
@@ -337,6 +338,7 @@ fn nixos_zfs_root_mount_script(install: &Value, target: &str) -> Result<String, 
         .and_then(|swap| swap.get("fallbackDevice"))
         .and_then(Value::as_str);
     let load_key_dataset = zfs.get("loadKeyDataset").and_then(Value::as_str);
+    let load_key_datasets = optional_install_str_array(zfs, "loadKeyDatasets")?;
     let datasets = zfs
         .get("datasets")
         .and_then(Value::as_array)
@@ -365,7 +367,20 @@ fn nixos_zfs_root_mount_script(install: &Value, target: &str) -> Result<String, 
         format!("zpool export {} 2>/dev/null || true", shell_quote(pool)),
         format!("zpool import -R \"$target\" {}", shell_quote(pool)),
     ];
+    for extra_pool in extra_pools {
+        lines.push(format!(
+            "zpool export {} 2>/dev/null || true",
+            shell_quote(extra_pool)
+        ));
+        lines.push(format!(
+            "zpool import -R \"$target\" {}",
+            shell_quote(extra_pool)
+        ));
+    }
     if let Some(load_key_dataset) = load_key_dataset {
+        lines.push(format!("zfs load-key {}", shell_quote(load_key_dataset)));
+    }
+    for load_key_dataset in load_key_datasets {
         lines.push(format!("zfs load-key {}", shell_quote(load_key_dataset)));
     }
     lines.extend([
@@ -561,6 +576,27 @@ fn required_install_str<'a>(value: &'a Value, key: &str) -> Result<&'a str, AppE
         .get(key)
         .and_then(Value::as_str)
         .ok_or_else(|| AppError::Message(format!("install metadata field {key} is missing")))
+}
+
+fn optional_install_str_array<'a>(value: &'a Value, key: &str) -> Result<Vec<&'a str>, AppError> {
+    let Some(items) = value.get(key) else {
+        return Ok(Vec::new());
+    };
+    let items = items.as_array().ok_or_else(|| {
+        AppError::Message(format!(
+            "install metadata field {key} must be an array of strings"
+        ))
+    })?;
+    items
+        .iter()
+        .map(|item| {
+            item.as_str().ok_or_else(|| {
+                AppError::Message(format!(
+                    "install metadata field {key} must be an array of strings"
+                ))
+            })
+        })
+        .collect()
 }
 
 fn install_device_command_with_fallback(

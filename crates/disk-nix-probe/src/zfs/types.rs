@@ -31,6 +31,8 @@ struct ZfsRow {
     quota: Option<String>,
     reservation: Option<String>,
     encryption: Option<String>,
+    keyformat: Option<String>,
+    keylocation: Option<String>,
     keystatus: Option<String>,
     volsize: Option<String>,
     recordsize: Option<String>,

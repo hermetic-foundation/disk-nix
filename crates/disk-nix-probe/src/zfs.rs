@@ -15,6 +15,7 @@ pub fn normalize_zfs(
     zfs_list: &[u8],
     zfs_holds: &[u8],
     zpool_status: &[u8],
+    zpool_import: &[u8],
 ) -> Result<StorageGraph, ProbeError> {
     let mut graph = StorageGraph::empty();
 
@@ -34,6 +35,9 @@ pub fn normalize_zfs(
     }
     for pool in parse_zpool_status(zpool_status)? {
         add_status_pool(&mut graph, pool);
+    }
+    for pool in parse_zpool_status(zpool_import)? {
+        add_importable_pool(&mut graph, pool);
     }
 
     Ok(graph)

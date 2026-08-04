@@ -52,6 +52,11 @@ For install-style hosts, `services.disk-nix.solve.layouts` can declare a
 deterministic high-level layout. The planner lowers replicated EFI boot
 partitions, tail swap, fixed-size ZFS slices, and preferred RAIDZ/mirror vdev
 shapes into the same concrete spec collections used by hand-authored layouts.
+
+Layouts can also declare multiple generated ZFS pools, such as `fast` and
+`cold`. Each pool is solved independently from automatically classified NVMe,
+SSD, and rotational HDD devices.
+
 Run `disk-nix solve --spec /etc/disk-nix/spec.json` to review the lowered
 concrete spec before planning or applying it.
 

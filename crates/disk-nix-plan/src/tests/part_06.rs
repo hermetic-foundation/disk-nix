@@ -75,7 +75,10 @@ fn topology_comparison_reconciles_zfs_dataset_property_aliases() {
                   "properties": {
                     "compression": "zstd",
                     "mountpoint": "/home",
-                    "atime": true
+                    "atime": true,
+                    "acltype": "posixacl",
+                    "keyformat": "passphrase",
+                    "keylocation": "prompt"
                   }
                 },
                 "tank/archive": {
@@ -92,7 +95,10 @@ fn topology_comparison_reconciles_zfs_dataset_property_aliases() {
         Node::new("zfs:dataset:tank/home", NodeKind::ZfsDataset, "tank/home")
             .with_property("zfs.compression", "zstd")
             .with_property("zfs.mountpoint", "/home")
-            .with_property("zfs.atime", "on"),
+            .with_property("zfs.atime", "on")
+            .with_property("zfs.acltype", "posix")
+            .with_property("zfs.keyformat", "passphrase")
+            .with_property("zfs.keylocation", "prompt"),
     );
     graph.add_node(
         Node::new(
@@ -109,10 +115,10 @@ fn topology_comparison_reconciles_zfs_dataset_property_aliases() {
         .as_ref()
         .expect("comparison should be present");
 
-    assert_eq!(comparison.summary.action_count, 4);
-    assert_eq!(comparison.summary.matched_count, 4);
-    assert_eq!(comparison.summary.already_satisfied_count, 3);
-    assert_eq!(comparison.summary.suppressed_action_count, 3);
+    assert_eq!(comparison.summary.action_count, 7);
+    assert_eq!(comparison.summary.matched_count, 7);
+    assert_eq!(comparison.summary.already_satisfied_count, 6);
+    assert_eq!(comparison.summary.suppressed_action_count, 6);
     assert_eq!(plan.actions.len(), 1);
     assert!(plan.actions.iter().any(|action| {
         action.id == "datasets:tank/archive:set-property:compression"
@@ -128,6 +134,18 @@ fn topology_comparison_reconciles_zfs_dataset_property_aliases() {
     }));
     assert!(comparison.diagnostics.iter().any(|diagnostic| {
         diagnostic.action_id == "datasets:tank/home:set-property:atime"
+            && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+    }));
+    assert!(comparison.diagnostics.iter().any(|diagnostic| {
+        diagnostic.action_id == "datasets:tank/home:set-property:acltype"
+            && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+    }));
+    assert!(comparison.diagnostics.iter().any(|diagnostic| {
+        diagnostic.action_id == "datasets:tank/home:set-property:keyformat"
+            && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
+    }));
+    assert!(comparison.diagnostics.iter().any(|diagnostic| {
+        diagnostic.action_id == "datasets:tank/home:set-property:keylocation"
             && diagnostic.kind == TopologyDiagnosticKind::PropertyAlreadySatisfied
     }));
     assert!(comparison.diagnostics.iter().any(|diagnostic| {

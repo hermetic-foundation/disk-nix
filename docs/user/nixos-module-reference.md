@@ -124,7 +124,6 @@ services.disk-nix.solve.layouts.desktop = {
   };
 
   zfs = {
-    pool = "zroot";
     sliceSize = "100GiB";
     vdevs = {
       requireRedundant = true;
@@ -142,12 +141,27 @@ services.disk-nix.solve.layouts.desktop = {
     };
     properties = {
       ashift = "12";
-      autotrim = "on";
       mountpoint = "none";
     };
-    datasets."zroot/root" = {
-      operation = "create";
-      properties.mountpoint = "legacy";
+    pools = {
+      fast = {
+        pool = "zfast";
+        tier = "fast";
+        properties.autotrim = "on";
+        datasets."zfast/root" = {
+          operation = "create";
+          properties.mountpoint = "legacy";
+        };
+      };
+      cold = {
+        pool = "zcold";
+        tier = "cold";
+        properties.autotrim = "off";
+        datasets."zcold/archive" = {
+          operation = "create";
+          properties.mountpoint = "/archive";
+        };
+      };
     };
   };
 };
@@ -158,6 +172,18 @@ disk, carves fixed-size ZFS slices after that reservation, assigns the tail to
 swap, and then chooses redundant ZFS vdev groups deterministically. It searches
 for the solution that uses the most slices, prefers earlier vdev shapes, and
 never places two members of one vdev on the same disk.
+
+Use `zfs.pools.<name>.tier = "fast"` or `"cold"` to build separate pools from
+automatically classified devices. `fast` includes NVMe and SSD-style devices;
+`cold` includes rotational HDD-style devices. The solver infers this from
+`tier`, `poolTier`, `rotational`, `solidState`, `media`, `transport`, and stable
+path hints, in that order. Set `tier` on a disk when the automatic result is not
+what you intend.
+
+Each generated pool is solved independently. A disk can be selected by only one
+generated ZFS pool, either by `tier` or an explicit `disks = [ "disk-key" ]`
+selector. This keeps fast and cold vdevs from accidentally sharing the same
+physical device.
 
 Use `disk-nix solve --spec /etc/disk-nix/spec.json` to inspect the concrete
 lowered spec before planning or applying it. The output keeps the wrapper shape

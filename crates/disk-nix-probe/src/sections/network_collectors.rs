@@ -293,7 +293,7 @@ fn collect_zfs(result: &mut ProbeResult) {
             "-t",
             "filesystem,volume,snapshot",
             "-o",
-            "name,type,used,available,referenced,mountpoint,origin,userrefs,compression,quota,reservation,encryption,keystatus,volsize,recordsize,dedup,checksum,copies,sync,primarycache,secondarycache,atime,relatime,snapdir,acltype,xattr",
+            "name,type,used,available,referenced,mountpoint,origin,userrefs,compression,quota,reservation,encryption,keyformat,keylocation,keystatus,volsize,recordsize,dedup,checksum,copies,sync,primarycache,secondarycache,atime,relatime,snapdir,acltype,xattr",
         ],
     );
     let zpool_get = run_report(
@@ -307,9 +307,16 @@ fn collect_zfs(result: &mut ProbeResult) {
         ],
     );
     let zpool_status = run_report("zpool", &["status", "-P"]);
+    let zpool_import = run_report("zpool", &["import"]);
 
-    match (zpool_list, zpool_get, zfs_list, zpool_status) {
-        (Ok(zpool_list), Ok(zpool_get), Ok(zfs_list), Ok(zpool_status)) => {
+    match (zpool_list, zpool_get, zfs_list, zpool_status, zpool_import) {
+        (
+            Ok(zpool_list),
+            Ok(zpool_get),
+            Ok(zfs_list),
+            Ok(zpool_status),
+            Ok(zpool_import),
+        ) => {
             let zfs_holds = collect_zfs_holds(&zfs_list);
             match zfs::normalize_zfs(
                 &zpool_list,
@@ -317,6 +324,7 @@ fn collect_zfs(result: &mut ProbeResult) {
                 &zfs_list,
                 &zfs_holds,
                 &zpool_status,
+                &zpool_import,
             ) {
                 Ok(graph) => {
                     let node_count = graph.nodes.len();
@@ -336,10 +344,46 @@ fn collect_zfs(result: &mut ProbeResult) {
                 }),
             }
         }
-        (Err(message), _, _, _)
-        | (_, Err(message), _, _)
-        | (_, _, Err(message), _)
-        | (_, _, _, Err(message)) => {
+        (zpool_list, zpool_get, zfs_list, zpool_status, Ok(zpool_import))
+            if !zpool_import.is_empty() =>
+        {
+            let empty = Vec::new();
+            let zpool_list = zpool_list.as_deref().unwrap_or(&empty);
+            let zpool_get = zpool_get.as_deref().unwrap_or(&empty);
+            let zfs_list = zfs_list.as_deref().unwrap_or(&empty);
+            let zpool_status = zpool_status.as_deref().unwrap_or(&empty);
+            let zfs_holds = collect_zfs_holds(zfs_list);
+            match zfs::normalize_zfs(
+                zpool_list,
+                zpool_get,
+                zfs_list,
+                &zfs_holds,
+                zpool_status,
+                &zpool_import,
+            ) {
+                Ok(graph) => {
+                    let node_count = graph.nodes.len();
+                    merge_graph(&mut result.graph, graph);
+                    result.reports.push(ProbeReport {
+                        adapter: "zfs".to_string(),
+                        status: ProbeStatus::Partial,
+                        message: Some(format!(
+                            "normalized {node_count} graph nodes from importable ZFS pools"
+                        )),
+                    });
+                }
+                Err(error) => result.reports.push(ProbeReport {
+                    adapter: "zfs".to_string(),
+                    status: ProbeStatus::Failed,
+                    message: Some(error.to_string()),
+                }),
+            }
+        }
+        (Err(message), _, _, _, _)
+        | (_, Err(message), _, _, _)
+        | (_, _, Err(message), _, _)
+        | (_, _, _, Err(message), _)
+        | (_, _, _, _, Err(message)) => {
             result.reports.push(ProbeReport {
                 adapter: "zfs".to_string(),
                 status: if message.contains("not found") {

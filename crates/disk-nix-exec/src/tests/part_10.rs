@@ -764,6 +764,82 @@ fn execute_refuses_partially_suppressed_reconciliation_groups_before_running_com
 }
 
 #[test]
+fn execute_allows_partially_suppressed_reconciliation_groups_in_install_mode() {
+    let (plan, policy) = plan_and_policy_from_json_bytes(
+        br#"{
+              "spec": {
+                "exports": {
+                  "/srv/share": {
+                    "operation": "export",
+                    "client": "192.0.2.0/24",
+                    "options": "rw,sync,no_subtree_check"
+                  }
+                },
+                "nfs": {
+                  "mounts": {
+                    "/mnt/share": {
+                      "operation": "mount",
+                      "source": "nas.example.com:/srv/share",
+                      "fsType": "nfs4"
+                    }
+                  }
+                }
+              },
+              "apply": {
+                "mode": "install"
+              }
+            }"#,
+    )
+    .expect("document parses");
+    let mut graph = StorageGraph::empty();
+    graph.add_node(
+        Node::new(
+            "nfs-export:/srv/share:192.0.2.0/24",
+            NodeKind::NfsExport,
+            "/srv/share",
+        )
+        .with_property("nfs.export", "/srv/share")
+        .with_property("nfs.export-client", "192.0.2.0/24")
+        .with_property("nfs.exportfs", "true")
+        .with_property("nfs.export-option-rw", "true")
+        .with_property("nfs.export-option-sync", "true")
+        .with_property("nfs.export-option-no-subtree-check", "true"),
+    );
+    let plan = compare_plan_with_topology(plan, &graph);
+    let dry_run = prepare_execution(&plan, policy.clone(), ExecutionMode::DryRun);
+
+    assert_eq!(dry_run.status, ExecutionStatus::DryRun);
+    assert_eq!(
+        dry_run
+            .topology_comparison
+            .as_ref()
+            .map(|comparison| comparison.summary.partially_suppressed_group_count),
+        Some(1)
+    );
+    assert!(dry_run.can_apply());
+    assert!(dry_run.to_shell_script().is_some());
+    assert!(dry_run.messages.iter().any(|message| {
+        message.contains("install mode allows")
+            && message.contains("partially suppressed reconciliation group")
+    }));
+
+    let mut ran_commands = false;
+    let report = prepare_execution_with_runner(&plan, policy, ExecutionMode::Execute, |_| {
+        ran_commands = true;
+        CommandRunResult {
+            success: true,
+            status_code: Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+        }
+    });
+
+    assert_eq!(report.status, ExecutionStatus::Succeeded);
+    assert!(ran_commands);
+    assert!(!report.execution_results.is_empty());
+}
+
+#[test]
 fn execute_runs_ready_commands_and_verification_with_runner() {
     let (plan, policy) = plan_and_policy_from_json_bytes(
         br#"{
