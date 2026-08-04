@@ -86,7 +86,11 @@
         bootBefore=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleBootModeTest.config.systemd.services.disk-nix-plan.before)}
         printf '%s\n' "$bootBefore" | jq -e 'index("multi-user.target") != null'
         installSpec=${nixosModuleInstallModeTest.config.environment.etc."disk-nix/spec.json".source}
-        jq -e '.apply.mode == "install"' "$installSpec"
+        jq -e '
+          .apply.mode == "install"
+          and .spec.filesystems.boot.operation == "format"
+          and (.spec.filesystems | has("root") | not)
+        ' "$installSpec"
         installScript='${nixosModuleInstallModeTest.config.systemd.services.disk-nix-plan.serviceConfig.ExecStart}'
         grep -- 'apply' "$installScript"
         installWantedBy=${pkgs.lib.escapeShellArg (builtins.toJSON nixosModuleInstallModeTest.config.systemd.services.disk-nix-plan.wantedBy)}

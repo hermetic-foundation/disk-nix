@@ -77,6 +77,21 @@
       services.disk-nix = {
         enable = true;
         apply.mode = "install";
+        filesystems = {
+          boot = {
+            operation = "format";
+            device = "/dev/disk/by-label/BOOT";
+            fsType = "vfat";
+            mountpoint = "/boot";
+            preserveData = false;
+          };
+          root = {
+            operation = "rescan";
+            device = "zroot/root";
+            fsType = "zfs";
+            mountpoint = "/";
+          };
+        };
       };
     }
   ];

@@ -236,6 +236,15 @@ let
       size
       ;
   }) cfg.filesystems;
+  installModeFilesystemSpec = lib.filterAttrs (
+    _: filesystem:
+    let
+      action = if filesystem.operation != null then filesystem.operation else filesystem.action;
+    in
+    action == "format"
+  ) typedFilesystemSpec;
+  applyFilesystemSpec =
+    if cfg.apply.mode == "install" then installModeFilesystemSpec else typedFilesystemSpec;
   typedNfsMountSpec = lib.mapAttrs (_: mount: {
     inherit (mount)
       source
@@ -467,7 +476,7 @@ in
       version = 1;
       spec = cfg.spec // {
         solve = (cfg.spec.solve or { }) // cfg.solve;
-        filesystems = (cfg.spec.filesystems or { }) // typedFilesystemSpec // typedNfsFilesystemSpec;
+        filesystems = (cfg.spec.filesystems or { }) // applyFilesystemSpec // typedNfsFilesystemSpec;
         swaps = (cfg.spec.swaps or { }) // typedSwapSpec;
         zram = (cfg.spec.zram or { }) // typedZramSpec;
         luks = (cfg.spec.luks or { }) // {
